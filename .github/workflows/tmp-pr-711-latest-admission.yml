@@ -1,0 +1,602 @@
+name: Temporary PR 711 latest-admission publisher
+
+on:
+  push:
+    branches:
+      - fix/686-pending-create-ordering-20260915
+
+permissions:
+  contents: write
+
+jobs:
+  publish-latest-admission-repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: fix/686-pending-create-ordering-20260915
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Add stale-admission regressions first
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          handler_path = Path("tests/pending-decision-handlers.test.ts")
+          handlers = handler_path.read_text(encoding="utf-8")
+          start = handlers.index(
+            '  it("preserves same-scope create admission order across delayed context resolution"'
+          )
+          end = handlers.index('  it("binds token', start)
+          replacement = dedent('''\
+            it("keeps only the latest same-scope admission across delayed context resolution", async () => {
+              const harness = createHarness();
+              let releaseFirstResolution!: () => void;
+              const firstResolutionGate = new Promise<void>((resolve) => {
+                releaseFirstResolution = resolve;
+              });
+              harness.getAllFrames.mockImplementationOnce(async (tabId) => {
+                await firstResolutionGate;
+                return frameSnapshots(harness.frames, tabId);
+              });
+
+              const firstCreate = harness.broker.handle(createMessage(), contentSender());
+              await vi.waitFor(() => expect(harness.getAllFrames).toHaveBeenCalledTimes(1));
+              const latestCreate = harness.broker.handle(
+                createMessage(LATEST_DESTINATION_URL),
+                contentSender(),
+              );
+
+              try {
+                expect(harness.getAllFrames).toHaveBeenCalledTimes(1);
+              } finally {
+                releaseFirstResolution();
+              }
+              const [firstResult, latestResult] = await Promise.all([firstCreate, latestCreate]);
+              expect(firstResult).toEqual({
+                ok: false,
+                operation: "create",
+                status: "context-changed",
+              });
+              expect(latestResult).toMatchObject({
+                ok: true,
+                operation: "create",
+                status: "created",
+              });
+              expect(latestResult).not.toHaveProperty("replacedDecisionId");
+
+              const listed = await harness.broker.handle(
+                { type: "ns-pending-decision-list" },
+                extensionSender(),
+              );
+              expect(listed).toMatchObject({ ok: true, operation: "list", status: "pending" });
+              if (
+                !latestResult ||
+                !latestResult.ok ||
+                latestResult.operation !== "create" ||
+                !listed ||
+                !listed.ok ||
+                listed.operation !== "list" ||
+                listed.decisions.length !== 1
+              ) {
+                throw new Error("Expected the latest same-scope decision to remain live");
+              }
+              const decision = listed.decisions[0]!;
+              expect(decision.id).toBe(latestResult.id);
+              expect(decision.destinationOrigin).toBe("https://latest.test");
+
+              harness.deliverDecision.mockResolvedValueOnce({
+                ok: true,
+                status: "released",
+                destinationUrl: LATEST_DESTINATION_URL,
+              });
+              expect(
+                await harness.broker.handle(consumeMessage(decision), extensionSender()),
+              ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+              expect(harness.createTab).toHaveBeenCalledWith({
+                url: LATEST_DESTINATION_URL,
+                windowId: 2,
+                active: true,
+              });
+              expect(
+                await harness.broker.handle(consumeMessage(decision), extensionSender()),
+              ).toEqual({ ok: false, operation: "consume", status: "missing" });
+            });
+
+            it("retires an older live decision while a newer same-scope admission is unresolved", async () => {
+              const harness = createHarness();
+              const previous = await createAndList(harness);
+              const baselineFrameCalls = harness.getAllFrames.mock.calls.length;
+              let releaseLatestResolution!: () => void;
+              const latestResolutionGate = new Promise<void>((resolve) => {
+                releaseLatestResolution = resolve;
+              });
+              harness.getAllFrames.mockImplementationOnce(async (tabId) => {
+                await latestResolutionGate;
+                return frameSnapshots(harness.frames, tabId);
+              });
+
+              const latestCreate = harness.broker.handle(
+                createMessage(LATEST_DESTINATION_URL),
+                contentSender(),
+              );
+              await vi.waitFor(() =>
+                expect(harness.getAllFrames).toHaveBeenCalledTimes(baselineFrameCalls + 1),
+              );
+
+              expect(
+                await harness.broker.handle(
+                  { type: "ns-pending-decision-list" },
+                  extensionSender(),
+                ),
+              ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+              expect(
+                await harness.broker.handle(consumeMessage(previous), extensionSender()),
+              ).toEqual({ ok: false, operation: "consume", status: "missing" });
+              expect(harness.deliverDecision).not.toHaveBeenCalled();
+              expect(harness.createTab).not.toHaveBeenCalled();
+
+              harness.frames.set(frameKey(7, 0), {
+                frameId: 0,
+                url: SOURCE_URL,
+                documentId: "replacement-document",
+                documentLifecycle: "active",
+                errorOccurred: false,
+              });
+              releaseLatestResolution();
+              expect(await latestCreate).toEqual({
+                ok: false,
+                operation: "create",
+                status: "context-changed",
+              });
+
+              harness.frames.set(frameKey(7, 0), {
+                frameId: 0,
+                url: SOURCE_URL,
+                documentId: TOP_DOCUMENT_ID,
+                documentLifecycle: "active",
+                errorOccurred: false,
+              });
+              expect(
+                await harness.broker.handle(
+                  { type: "ns-pending-decision-list" },
+                  extensionSender(),
+                ),
+              ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+            });
+
+          ''')
+          handler_path.write_text(handlers[:start] + replacement + handlers[end:], encoding="utf-8")
+
+          client_path = Path("tests/pending-navigation-decision.test.ts")
+          clients = client_path.read_text(encoding="utf-8")
+          anchor = '  it("invalidates a create response that arrives after pagehide"'
+          at = clients.index(anchor)
+          new_test = dedent('''\
+            it("burns an unreleased raw slot as soon as a newer create is admitted", async () => {
+              const harness = createHarness();
+              expect(await harness.create()).toBe(true);
+              expect(harness.client.pendingCountForTest).toBe(1);
+
+              let resolveResponse: ((value: unknown) => void) | undefined;
+              harness.responses.push(
+                new Promise((resolve) => {
+                  resolveResponse = resolve;
+                }),
+              );
+              const superseding = harness.client.create({
+                destinationUrl: DESTINATION_URL,
+                score: 82,
+                signals: ["cross_site", "NRS-high"],
+                onProceed: harness.onProceed,
+              });
+
+              expect(harness.client.pendingCountForTest).toBe(0);
+              expect(
+                harness.deliver({
+                  type: "ns-pending-decision-release",
+                  id: FIRST_ID,
+                  action: "proceed-once",
+                }),
+              ).toEqual({ ok: false, status: "rejected" });
+              resolveResponse?.(undefined);
+              await expect(superseding).resolves.toBe(false);
+              expect(harness.client.pendingCountForTest).toBe(0);
+              expect(harness.timers.size).toBe(0);
+            });
+
+          ''')
+          client_path.write_text(clients[:at] + new_test + clients[at:], encoding="utf-8")
+          PY
+      - name: Prove regressions are red before implementation
+        shell: bash
+        run: |
+          set +e
+          npx vitest run tests/pending-decision-handlers.test.ts tests/pending-navigation-decision.test.ts --reporter=verbose 2>&1 | tee /tmp/pr711-red.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "Expected stale-admission regressions to fail before implementation" >&2
+            exit 1
+          fi
+          grep -F "keeps only the latest same-scope admission" /tmp/pr711-red.log
+          grep -F "retires an older live decision" /tmp/pr711-red.log
+          grep -F "burns an unreleased raw slot" /tmp/pr711-red.log
+      - name: Implement latest-admission authority and update architecture
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+            if text.count(old) != 1:
+              raise SystemExit(f"expected one {label}, found {text.count(old)}")
+            return text.replace(old, new)
+
+          client_path = Path("extension/src/content/pending_navigation_decision.ts")
+          client = client_path.read_text(encoding="utf-8")
+          client = replace_once(
+            client,
+            """  async create(request: PendingBlankNavigationRequest): Promise<boolean> {
+              if (!isExactHttpUrl(request.destinationUrl)) return false;
+              const generation = ++this.requestGeneration;
+          """,
+            """  async create(request: PendingBlankNavigationRequest): Promise<boolean> {
+              if (!isExactHttpUrl(request.destinationUrl)) return false;
+              // A newer intent supersedes every unreleased raw-URL capability in
+              // this document/frame immediately, before the worker can await any
+              // browser context or persistence boundary.
+              for (const id of [...this.pending.keys()]) this.clearRecord(id);
+              const generation = ++this.requestGeneration;
+          """,
+            "content create admission block",
+          )
+          client_path.write_text(client, encoding="utf-8")
+
+          store_path = Path("extension/src/sw/pending_decision_store.ts")
+          store = store_path.read_text(encoding="utf-8")
+          if "export type PendingDecisionScopeRemovalStatus" not in store:
+            type_anchor = "\ninterface StoredPendingDecisions {"
+            scope_type = dedent('''\
+
+              export type PendingDecisionScopeRemovalStatus =
+                | { status: "missing"; removedCount: 0; removedDecisionIds: [] }
+                | { status: "removed"; removedCount: number; removedDecisionIds: string[] };
+            ''')
+            store = replace_once(store, type_anchor, scope_type + type_anchor, "scope removal type anchor")
+          if "async removeForScope(" not in store:
+            method_anchor = "  async create(\n"
+            method = dedent('''\
+                async removeForScope(
+                  tabId: number,
+                  scope: Pick<PendingDecision, "documentId" | "frameId" | "kind">,
+                ): Promise<PendingDecisionScopeRemovalStatus> {
+                  if (
+                    !isTabId(tabId) ||
+                    !isTabId(scope.frameId) ||
+                    typeof scope.documentId !== "string" ||
+                    scope.documentId.length === 0
+                  ) {
+                    throw new TypeError("Invalid pending-decision scope removal request");
+                  }
+                  const scopeKey = pendingDecisionScopeKey(scope);
+                  await this.hydrate();
+
+                  return this.runSerialized(async () => {
+                    const current = this.recordsByTab.get(tabId);
+                    if (!current) {
+                      return { status: "missing", removedCount: 0, removedDecisionIds: [] };
+                    }
+                    const removed = current.filter(
+                      (record) => pendingDecisionScopeKey(record) === scopeKey,
+                    );
+                    if (removed.length === 0) {
+                      return { status: "missing", removedCount: 0, removedDecisionIds: [] };
+                    }
+                    const retained = current.filter(
+                      (record) => pendingDecisionScopeKey(record) !== scopeKey,
+                    );
+                    await this.replaceTabWithRollback(tabId, retained);
+                    return {
+                      status: "removed",
+                      removedCount: removed.length,
+                      removedDecisionIds: removed.map((record) => record.id),
+                    };
+                  });
+                }
+
+            ''')
+            store = replace_once(store, method_anchor, method + method_anchor, "store create method anchor")
+          store_path.write_text(store, encoding="utf-8")
+
+          handler_path = Path("extension/src/sw/pending_decision_handlers.ts")
+          handler = handler_path.read_text(encoding="utf-8")
+          handler = replace_once(
+            handler,
+            """  parsePendingDecisionSemantics,
+              toPendingDecisionView,
+          """,
+            """  parsePendingDecisionSemantics,
+              pendingDecisionScopeKey,
+              toPendingDecisionView,
+          """,
+            "pendingDecisionScopeKey import",
+          )
+          if "function createAdmissionScopeKey" not in handler:
+            helper_anchor = "\nexport class PendingDecisionRuntimeBroker {"
+            helper = dedent('''\
+
+              function createAdmissionScopeKey(
+                tabId: number,
+                scope: Pick<PendingDecision, "documentId" | "frameId" | "kind">,
+              ): string {
+                return `${tabId}\\u0000${pendingDecisionScopeKey(scope)}`;
+              }
+            ''')
+            handler = replace_once(handler, helper_anchor, helper + helper_anchor, "broker helper anchor")
+          handler = replace_once(
+            handler,
+            """  private readonly dependencies: PendingDecisionRuntimeBrokerDependencies;
+              private readonly createTailsByScope = new Map<string, Promise<void>>();
+          """,
+            """  private readonly dependencies: PendingDecisionRuntimeBrokerDependencies;
+              private readonly createTailsByScope = new Map<string, Promise<void>>();
+              private readonly latestCreateAdmissionsByScope = new Map<string, symbol>();
+          """,
+            "broker field block",
+          )
+
+          create_start = handler.index(
+            "    const lifecycleGeneration = this.dependencies.getLifecycleGeneration(tabId);",
+            handler.index("  private async handleCreate("),
+          )
+          create_end = handler.index("\n  private runCreateInScopeOrder", create_start)
+          create_replacement = dedent('''\
+                const frameId = sender.frameId;
+                const documentId = sender.documentId;
+                if (!isBrowserId(frameId) || !isDocumentId(documentId)) {
+                  return failure("create", "unauthorized");
+                }
+                const lifecycleGeneration = this.dependencies.getLifecycleGeneration(tabId);
+                const scope = {
+                  documentId,
+                  frameId,
+                  kind: semantics.kind,
+                } satisfies Pick<PendingDecision, "documentId" | "frameId" | "kind">;
+                const scopeKey = createAdmissionScopeKey(tabId, scope);
+                const admission = Symbol(scopeKey);
+                this.latestCreateAdmissionsByScope.set(scopeKey, admission);
+
+                try {
+                  return await this.runCreateInScopeOrder(scopeKey, async () => {
+                    const isAdmissionCurrent = () =>
+                      this.latestCreateAdmissionsByScope.get(scopeKey) === admission &&
+                      this.dependencies.getLifecycleGeneration(tabId) === lifecycleGeneration;
+                    if (!isAdmissionCurrent()) return failure("create", "context-changed");
+
+                    const invalidated = await this.store.removeForScope(tabId, scope);
+                    if (!isAdmissionCurrent()) return failure("create", "context-changed");
+
+                    const verifiedContext = await this.resolveContentContext(sender);
+                    if (!verifiedContext || !isAdmissionCurrent()) {
+                      return failure("create", "context-changed");
+                    }
+                    const created = await this.store.create(
+                      verifiedContext,
+                      semantics,
+                      isAdmissionCurrent,
+                    );
+                    if (created.status === "context-changed") {
+                      return failure("create", "context-changed");
+                    }
+                    if (created.status === "rejected-capacity") {
+                      return failure("create", "rejected-capacity");
+                    }
+                    const replacedDecisionId =
+                      created.replacedDecisionId ??
+                      (invalidated.status === "removed"
+                        ? invalidated.removedDecisionIds[0]
+                        : undefined);
+                    return {
+                      ok: true,
+                      operation: "create",
+                      status: "created",
+                      id: created.decision.id,
+                      expiresAt: created.decision.expiresAt,
+                      ...(replacedDecisionId ? { replacedDecisionId } : {}),
+                    };
+                  });
+                } finally {
+                  if (this.latestCreateAdmissionsByScope.get(scopeKey) === admission) {
+                    this.latestCreateAdmissionsByScope.delete(scopeKey);
+                  }
+                }
+              }
+          ''')
+          handler = handler[:create_start] + create_replacement + handler[create_end:]
+
+          if "private hasActiveCreateAdmission" not in handler:
+            list_anchor = "  private async handleList(\n"
+            helper = dedent('''\
+                private hasActiveCreateAdmission(
+                  decision: Pick<PendingDecision, "tabId" | "documentId" | "frameId" | "kind">,
+                ): boolean {
+                  return this.latestCreateAdmissionsByScope.has(
+                    createAdmissionScopeKey(decision.tabId, decision),
+                  );
+                }
+
+            ''')
+            handler = replace_once(handler, list_anchor, helper + list_anchor, "handleList anchor")
+          handler = replace_once(
+            handler,
+            """        listed.decisions.map(async (decision) => {
+                      const frame = activeConfirmed.liveFrames.get(decision.frameId);
+          """,
+            """        listed.decisions.map(async (decision) => {
+                      if (this.hasActiveCreateAdmission(decision)) return null;
+                      const frame = activeConfirmed.liveFrames.get(decision.frameId);
+          """,
+            "list admission filter",
+          )
+          handler = replace_once(
+            handler,
+            """    const liveDecisions = verifiedDecisions
+                  .filter(({ frame }) => liveFramesEqual(frame, activeAfter.liveFrames.get(frame.frameId)))
+                  .map(({ decision }) => decision);
+          """,
+            """    const liveDecisions = verifiedDecisions
+                  .filter(
+                    ({ decision, frame }) =>
+                      !this.hasActiveCreateAdmission(decision) &&
+                      liveFramesEqual(frame, activeAfter.liveFrames.get(frame.frameId)),
+                  )
+                  .map(({ decision }) => decision);
+          """,
+            "final list admission filter",
+          )
+          handler = replace_once(
+            handler,
+            """    if (!decision) return failure("consume", "missing");
+                if (
+          """,
+            """    if (!decision) return failure("consume", "missing");
+                if (this.hasActiveCreateAdmission(decision)) {
+                  return failure("consume", "context-changed");
+                }
+                if (
+          """,
+            "initial consume admission guard",
+          )
+          handler = replace_once(
+            handler,
+            """    const consumed = await this.store.consume(
+          """,
+            """    if (this.hasActiveCreateAdmission(decision)) {
+                  return failure("consume", "context-changed");
+                }
+
+                const consumed = await this.store.consume(
+          """,
+            "pre-consume admission guard",
+          )
+          handler = replace_once(
+            handler,
+            """    try {
+                  await this.dependencies.createTab({
+          """,
+            """    if (this.hasActiveCreateAdmission(consumed.decision)) {
+                  return failure("consume", "context-changed");
+                }
+
+                try {
+                  await this.dependencies.createTab({
+          """,
+            "pre-createTab admission guard",
+          )
+          handler_path.write_text(handler, encoding="utf-8")
+
+          doc = dedent('''\
+            # Pending-decision create ordering (#686)
+
+            ## Problem
+
+            Browser context resolution originally happened before the store mutation queue. Two
+            same-scope creates could therefore complete out of order and leave the popup listing a
+            worker decision for which the content client no longer held the raw destination.
+
+            The first FIFO repair ordered successful creates, but review found two remaining
+            fail-closed availability races:
+
+            1. an older create could become live, then a newer admission could fail context
+               resolution; the content client ignored the older response while the worker retained it;
+            2. a previously live decision remained listable and consumable while a superseding
+               same-scope create was unresolved.
+
+            ## Latest-admission authority contract
+
+            Scope is `(tab, frame, document, decision kind)`. A structurally valid, authorized
+            create synchronously becomes that scope's latest admission. FIFO tails still serialize
+            side effects, but an older operation must prove that its admission token is still current
+            after every asynchronous authority-producing boundary.
+
+            A new admission performs three fail-closed actions:
+
+            - the content client burns every unreleased raw-URL slot in its document/frame before
+              awaiting the worker;
+            - the worker removes and persists removal of any prior same-scope record before resolving
+              the new browser context;
+            - list and consume paths suppress a scope while its replacement admission is active.
+
+            If the latest admission later fails, the predecessor stays retired. The product does not
+            resurrect an intent the page has already superseded. A successful replacement may still
+            report the retired opaque ID through the existing optional `replacedDecisionId` response.
+
+            Different tabs, frames, documents, and kinds keep independent admission tokens and FIFO
+            tails. Store writes remain globally serialized for session-state integrity.
+
+            ## Lifecycle, delivery, and failure behavior
+
+            Admission currency is combined with the existing tab lifecycle generation. Either a
+            superseding admission or a tab lifecycle change produces `context-changed` before a stale
+            record can be written. Scope removal rolls back in memory if persistence fails.
+
+            Consume rechecks active replacement admission before destructive consumption and again
+            immediately before tab creation. The content boundary independently burns the raw URL on
+            supersession, so a restart or storage failure still fails closed rather than releasing an
+            obsolete destination.
+
+            Exact URL hashes, source/top origins, document binding, opaque tokens, expiry, one-shot
+            consumption, post-release browser-context checks, and destination-hash verification are
+            unchanged.
+
+            ## Regression proof
+
+            Focused tests now prove:
+
+            - delayed A plus admitted B rejects A and leaves only B releasable exactly once;
+            - a prior live record disappears while B is unresolved and remains retired when B's live
+              context later fails;
+            - the content client rejects delivery of the prior raw URL immediately when B is admitted;
+            - a second consume remains `missing` and the later exact URL is the only created tab.
+
+            The publication workflow runs those new tests against the pre-amendment code first and
+            requires a red result before applying the implementation. Hosted repository CI remains the
+            source of truth for the complete unit, build, package, performance, and browser suites.
+
+            ## Scope
+
+            No permission, endpoint, telemetry, storage schema, retention, score, prompt policy, or
+            destination authority is added. This is an in-process latest-intent and persistence-ordering
+            boundary, not a cross-worker transaction guarantee.
+          ''')
+          Path("docs/development-architecture/PENDING_DECISION_CREATE_ORDERING_686.md").write_text(
+            doc,
+            encoding="utf-8",
+          )
+          PY
+      - name: Verify implementation
+        shell: bash
+        run: |
+          npx eslint extension/src/content/pending_navigation_decision.ts extension/src/sw/pending_decision_handlers.ts extension/src/sw/pending_decision_store.ts tests/pending-decision-handlers.test.ts tests/pending-navigation-decision.test.ts
+          npm run typecheck
+          npx vitest run tests/pending-decision-handlers.test.ts tests/pending-navigation-decision.test.ts tests/pending-decision-store.test.ts
+          git diff --check
+      - name: Publish and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-pr-711-latest-admission.yml
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add extension/src/content/pending_navigation_decision.ts extension/src/sw/pending_decision_handlers.ts extension/src/sw/pending_decision_store.ts tests/pending-decision-handlers.test.ts tests/pending-navigation-decision.test.ts docs/development-architecture/PENDING_DECISION_CREATE_ORDERING_686.md .github/workflows/tmp-pr-711-latest-admission.yml
+          git commit -m "fix: make pending decisions latest-admission-wins"
+          git push origin HEAD:fix/686-pending-create-ordering-20260915
