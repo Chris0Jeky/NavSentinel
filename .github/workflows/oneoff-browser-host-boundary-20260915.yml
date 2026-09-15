@@ -37,56 +37,58 @@ jobs:
                   raise SystemExit(f"{path}: expected one replacement target, found {count}")
               file.write_text(text.replace(old, new), encoding="utf-8")
 
-          replace_once(
-              "extension/src/shared/storage.ts",
-              '''  try {
-            const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);
-            if (isIPAddress(canonical)) return canonical;
-          } catch {
-            // The value already passed hostname grammar. This probe is IPv4-only.
-          }
-          return normalized;
-          ''',
-              '''  try {
-            const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);
-            if (isIPAddress(canonical)) return canonical;
-            return normalized;
-          } catch {
-            // Lexically hostname-shaped values rejected by WHATWG parsing cannot
-            // be authoritative web page hosts, so omit them rather than guessing.
-            return undefined;
-          }
-          ''',
+          old_storage = (
+              "  try {\n"
+              "    const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);\n"
+              "    if (isIPAddress(canonical)) return canonical;\n"
+              "  } catch {\n"
+              "    // The value already passed hostname grammar. This probe is IPv4-only.\n"
+              "  }\n"
+              "  return normalized;\n"
           )
-          replace_once(
-              "experiments/vision-lab/shared/evidence.js",
-              '''  let parsed;
-            try{parsed=new URL('https://'+value+'/').hostname;}
-            catch{if(/^\\d+(?:\\.\\d+){3}$/.test(value))return invalid();return value;}
-            if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
-            return value;
-          ''',
-              '''  let parsed;
-            try{parsed=new URL('https://'+value+'/').hostname;}
-            catch{return invalid();}
-            if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
-            return value;
-          ''',
+          new_storage = (
+              "  try {\n"
+              "    const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);\n"
+              "    if (isIPAddress(canonical)) return canonical;\n"
+              "    return normalized;\n"
+              "  } catch {\n"
+              "    // Lexically hostname-shaped values rejected by WHATWG parsing cannot\n"
+              "    // be authoritative web page hosts, so omit them rather than guessing.\n"
+              "    return undefined;\n"
+              "  }\n"
           )
-          replace_once(
-              "docs/vision-overhaul/EVIDENCE_EXPORT_BOUNDARIES.md",
-              '''Short, integer and hexadecimal WHATWG IPv4 spellings are canonicalized by the
-          extension and rejected on imported evidence unless already dotted-decimal. IPv6
-          is serialized without brackets, matching the stored hostname contract. The
-          ''',
-              '''Short, integer and hexadecimal WHATWG IPv4 spellings are canonicalized by the
-          extension and rejected on imported evidence unless already dotted-decimal.
-          Lexically hostname-shaped values that browser parsing rejects, including
-          overflow and numeric-final forms, are omitted by the extension and rejected on
-          import. IPv6 is serialized without brackets, matching the stored hostname
-          contract. The
-          ''',
+          replace_once("extension/src/shared/storage.ts", old_storage, new_storage)
+
+          old_consumer = (
+              "  let parsed;\n"
+              "  try{parsed=new URL('https://'+value+'/').hostname;}\n"
+              "  catch{if(/^\\d+(?:\\.\\d+){3}$/.test(value))return invalid();return value;}\n"
+              "  if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();\n"
+              "  return value;\n"
           )
+          new_consumer = (
+              "  let parsed;\n"
+              "  try{parsed=new URL('https://'+value+'/').hostname;}\n"
+              "  catch{return invalid();}\n"
+              "  if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();\n"
+              "  return value;\n"
+          )
+          replace_once("experiments/vision-lab/shared/evidence.js", old_consumer, new_consumer)
+
+          old_docs = (
+              "Short, integer and hexadecimal WHATWG IPv4 spellings are canonicalized by the\n"
+              "extension and rejected on imported evidence unless already dotted-decimal. IPv6\n"
+              "is serialized without brackets, matching the stored hostname contract. The\n"
+          )
+          new_docs = (
+              "Short, integer and hexadecimal WHATWG IPv4 spellings are canonicalized by the\n"
+              "extension and rejected on imported evidence unless already dotted-decimal.\n"
+              "Lexically hostname-shaped values that browser parsing rejects, including\n"
+              "overflow and numeric-final forms, are omitted by the extension and rejected on\n"
+              "import. IPv6 is serialized without brackets, matching the stored hostname\n"
+              "contract. The\n"
+          )
+          replace_once("docs/vision-overhaul/EVIDENCE_EXPORT_BOUNDARIES.md", old_docs, new_docs)
           PY
       - name: Install exact lockfile dependencies
         run: npm ci
