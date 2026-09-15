@@ -2,11 +2,17 @@
 
 ## Scope and source
 
-Based on `main` commit `476301ad1c4b56fc83ed335ac83e343dc93d675e`.
-The uploaded checkout's tracked bytes and modes reconstructed its exact tree,
-`1407915095e9fb3f09080de5aa806e9b5b482d50`. The live open-PR review found
-#681, #662, #572 and #599; their navigation, bridge and naming changes are not
-included here. This is export-boundary work, not a detector/scoring change.
+The implementation began from `main` commit
+`476301ad1c4b56fc83ed335ac83e343dc93d675e`. Before final qualification it was
+integrated with current `main` `a00ae443b83342ce82bc556506110c112995e868`
+through the real two-parent merge `ec364c216ccf00baecbbdb3062adbafe0b0a2446`.
+That merge added only the test-side bounded MutationObserver delivery repair from
+#697; it did not synthesize or resolve any export-boundary file.
+
+The live open-PR review found #681, #662, #572 and #599; their navigation,
+bridge and naming changes are not included here. This is export-boundary work,
+not a detector/scoring change. It adds no permission, endpoint, telemetry,
+runtime dependency or retention field.
 
 ## Contracts
 
@@ -27,12 +33,11 @@ extension and rejected on imported evidence unless already dotted-decimal.
 Lexically hostname-shaped values that browser parsing rejects, including
 overflow and numeric-final forms, are omitted by the extension and rejected on
 import. IPv6 is serialized without brackets, matching the stored hostname
-contract. The
-Lab and desktop's shared importer accepts that canonical spelling, but rejects
-URLs, user information, ports, bracketed/noncanonical IPv6 and zone identifiers.
-Schema 1, the allowlist, reason caps and `recorded` outcome do not change. Neither
-an imported observation nor a user assessment proves prevention or grants action
-authority.
+contract. The Lab and desktop shared importer accepts that canonical spelling,
+but rejects URLs, user information, ports, bracketed/noncanonical IPv6 and zone
+identifiers. Schema 1, the allowlist, reason caps and `recorded` outcome do not
+change. Neither an imported observation nor a user assessment proves prevention
+or grants action authority.
 
 **Ordering.** Select the last 5,000 retained records by insertion first. Drop
 invalid kinds and timestamps, project fresh allowlisted objects, then stably sort
@@ -49,26 +54,41 @@ older prepared snapshot. Tests use bounded JSON plus legal trailing whitespace
 at the exact boundary rather than inflating an unbounded event fixture. A
 multibyte control distinguishes byte count from UTF-16 string length.
 
-## Validation and limits
+## Regression construction and hosted evidence
 
-Executed locally on Node 22.16.0:
+The browser-host repairs were developed test-first against unchanged production
+code. The failing runs are retained because they prove the new cases exercised
+the intended gaps rather than merely passing after implementation:
 
-- `npm run vision:test`: 129 tests passed, zero skipped, including 15 evidence
-  importer/workspace tests and canonical-IP round trips.
-- An out-of-tree actual-source Node assertion runner reproduced four original
-  boundary behaviors, then passed 29 patched contracts. It used the locally
-  available TypeScript 5.8.3 transpiler to execute source modules. This is **not**
-  Vitest, a typecheck, a Vite build, browser evidence or independent review.
-- `npm run vision:build`: rebuilt all three hash-pinned, network-disabled standalone previews.
-- `git diff --check` passed.
+- At `86f2b38715f8cd23b78b13b8ae58bdff7862e2f6`, CI run
+  `34911689090` failed exactly the five new producer assertions for short,
+  integer and hexadecimal WHATWG IPv4 forms while 3,338 existing tests passed.
+  Vision Lab run `34911689039` failed exactly the new shared-import assertion
+  while 128 of 129 tests passed.
+- At `167ab60b5a0176bd2a3733bc6cd42f73deb33607`, CI run
+  `34912637040` failed exactly five newly added browser-invalid host controls
+  while 3,344 existing tests passed. Vision Lab run `34912637045` failed exactly
+  the new overflow-host assertion while 130 of 131 tests passed.
 
-The sandbox could not install the lockfile dependency graph: the offline cache
-was empty and registry/DNS access was unavailable. Therefore the new Vitest
-cases, full unit suite, lint, repository typecheck, both profile builds/budgets,
-package checks and Playwright were not run locally. Keep this candidate draft
-until exact-head automated qualification and the applicable reviews are recorded.
-Do not infer completion of any existing owner check or extend the named
-D-2026-09-12-P waiver to this new PR.
+The fail-closed repair job `34913021410` checked out exact source head
+`5b74ea50fab1ea97047adf4b8b8b8ccc5bdac972`, applied only the reviewed producer,
+consumer and contract edits, and then passed:
+
+- focused Vitest: 2 files, 53 tests;
+- the complete Vision Lab Node suite: 131 tests;
+- deterministic generation of all three hash-pinned, network-disabled previews;
+- working-tree and staged `git diff --check`.
+
+It published `32d74323628238238ece11f84fbd3461d9ba840d` and removed its temporary
+workflow before the commit. The final pull-request path list contains no workflow
+or permission change. The generated standalone sizes at that receipt were
+185,111 bytes (Browser), 185,110 bytes (Desktop) and 185,104 bytes (Intent Relay).
+
+Because that self-cleanup commit was authored by `github-actions[bot]`, GitHub
+recorded normal CI runs `34913275988` and `34913276012` as `action_required`
+without starting jobs. This owner-authored receipt commit exists to trigger the
+normal exact-head CI and Vision Lab workflows. Their result must be read from the
+new commit; the focused green repair run is not a substitute for full CI.
 
 Run the normal repository gates, plus the focused regression set:
 
@@ -78,21 +98,21 @@ npm run vision:test
 npm run vision:build
 ```
 
-The served Lab, native shell and regenerated checked-in self-contained HTML
-previews all contain the changed importer. The generator preserves hash-pinned
-inline scripts and the no-network CSP. Old downloaded previews are not evidence
-for this new contract. Initial hosted qualification found a DOM-library mismatch
-in a new test and stale previews; both were corrected. The branch-scoped one-off
-generation job removed itself after publishing the deterministic outputs, leaving
-no workflow or permission change in the final diff. Current hosted results belong
-to the exact heads recorded in the PR, not to the earlier failing head.
+## Owner acceptance and limits
 
-Before owner acceptance, follow [EXPORT_REVIEW.md](EXPORT_REVIEW.md) and add a
-synthetic legacy URL-shaped `pageSite`, IPv4 and IPv6, out-of-order imported dates,
-equal timestamps, preview/refresh/download byte equality and Cancel/Escape. Verify
-both the full Options backup and the minimized evidence file, and import the
-latter into the rebuilt Lab/native shell. Record exact commit, profile and Chrome
-version; no live browsing sample or sensitive value is needed.
+Automated tests do not prove that branded Chrome loaded the rebuilt artifact or
+that the review/download interaction is understandable. Before owner acceptance,
+follow [EXPORT_REVIEW.md](EXPORT_REVIEW.md) and add synthetic legacy URL-shaped
+`pageSite` values, canonical/noncanonical IPv4 and IPv6, browser-invalid numeric
+hosts, out-of-order imported dates, equal timestamps, preview/refresh/download
+byte equality and Cancel/Escape. Verify both the full Options backup and the
+minimized evidence file, then import the latter into the rebuilt Lab/native shell.
+Record exact commit, profile and Chrome version; no live browsing sample or
+sensitive value is needed.
+
+Do not infer completion of any existing owner check or extend the named
+`D-2026-09-12-P` waiver to this pull request. Old downloaded standalone previews
+are not evidence for the new contract.
 
 ## Primary design reference
 
