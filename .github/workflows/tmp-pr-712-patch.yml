@@ -27,44 +27,26 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          script_path = Path('scripts/release-input-integrity.mjs')
-          script = script_path.read_text(encoding='utf-8')
-          helper_needle = '''function isExcludedProjectPath(relativePath, excludedPrefixes) {
-            const segments = relativePath.split("/");
-            if (segments.some((segment) => DEFAULT_EXCLUDED_SEGMENTS.has(segment))) return true;
-            return excludedPrefixes.some(
-              (prefix) => relativePath === prefix || relativePath.startsWith(`${prefix}/`),
-            );
-          }
-          '''
-          helper_replacement = helper_needle + '''
+          script_path = Path("scripts/release-input-integrity.mjs")
+          script = script_path.read_text(encoding="utf-8")
+
+          helper_anchor = "\nfunction assertContainedRealPath(repositoryRoot, absolutePath, relativePath) {"
+          helper = """
           function isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes) {
             return excludedPrefixes.some((prefix) => prefix.startsWith(`${relativePath}/`));
           }
-          '''
-          if script.count(helper_needle) != 1:
-            raise SystemExit('expected one exclusion helper block')
-          script = script.replace(helper_needle, helper_replacement)
+          """
+          if "function isAncestorOfExcludedProjectPath" not in script:
+            if script.count(helper_anchor) != 1:
+              raise SystemExit("expected one helper insertion anchor")
+            script = script.replace(helper_anchor, "\n" + helper.strip() + helper_anchor)
 
-          visit_needle = '''      if (trackedDirectories.has(relativePath)) {
-                if (!stats.isDirectory()) {
-                  throw integrityError(`tracked directory '${relativePath}' is not a directory`);
-                }
-                assertContainedRealPath(repositoryRoot, absolutePath, relativePath);
-                visit(relativePath);
-                continue;
+          walker_anchor = """      if (!stats.isFile() && !stats.isDirectory()) {
+                throw integrityError(`unsupported special filesystem entry '${relativePath}'`);
               }
-              if (!stats.isFile() && !stats.isDirectory()) {
-          '''
-          visit_replacement = '''      if (trackedDirectories.has(relativePath)) {
-                if (!stats.isDirectory()) {
-                  throw integrityError(`tracked directory '${relativePath}' is not a directory`);
-                }
-                assertContainedRealPath(repositoryRoot, absolutePath, relativePath);
-                visit(relativePath);
-                continue;
-              }
-              if (
+              throw integrityError(`untracked or ignored project input '${relativePath}' is present`);
+          """
+          walker_replacement = """      if (
                 stats.isDirectory() &&
                 isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)
               ) {
@@ -73,20 +55,26 @@ jobs:
                 continue;
               }
               if (!stats.isFile() && !stats.isDirectory()) {
-          '''
-          if script.count(visit_needle) != 1:
-            raise SystemExit('expected one untracked-directory decision block')
-          script = script.replace(visit_needle, visit_replacement)
-          script_path.write_text(script, encoding='utf-8')
+                throw integrityError(`unsupported special filesystem entry '${relativePath}'`);
+              }
+              throw integrityError(`untracked or ignored project input '${relativePath}' is present`);
+          """
+          if "isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)" not in script.split("function assertNoUntrackedProjectInputs", 1)[1]:
+            if script.count(walker_anchor) != 1:
+              raise SystemExit("expected one untracked-input terminal block")
+            script = script.replace(walker_anchor, walker_replacement)
+          script_path.write_text(script, encoding="utf-8")
 
-          test_path = Path('tests/release-input-integrity.test.ts')
-          tests = test_path.read_text(encoding='utf-8')
-          test_needle = '''    fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\\n");
+          test_path = Path("tests/release-input-integrity.test.ts")
+          tests = test_path.read_text(encoding="utf-8")
+          test_anchor = """    fs.mkdirSync(path.join(root, "extension", "dist"), { recursive: true });
+              fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\\n");
 
               expect(() => assertExactCommittedInputs(root)).not.toThrow();
             });
-          '''
-          test_replacement = '''    fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\\n");
+          """
+          test_replacement = """    fs.mkdirSync(path.join(root, "extension", "dist"), { recursive: true });
+              fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\\n");
 
               expect(() => assertExactCommittedInputs(root)).not.toThrow();
 
@@ -95,11 +83,12 @@ jobs:
                 /untracked or ignored project input/i,
               );
             });
-          '''
-          if tests.count(test_needle) != 1:
-            raise SystemExit('expected one generated-output regression block')
-          tests = tests.replace(test_needle, test_replacement)
-          test_path.write_text(tests, encoding='utf-8')
+          """
+          if "extension\", \"unexpected.txt" not in tests:
+            if tests.count(test_anchor) != 1:
+              raise SystemExit("expected one excluded-root regression block")
+            tests = tests.replace(test_anchor, test_replacement)
+          test_path.write_text(tests, encoding="utf-8")
           PY
       - name: Install and verify focused repair
         run: |
