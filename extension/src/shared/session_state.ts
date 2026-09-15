@@ -1,3 +1,4 @@
+import { isFormNavigationEntry, type FormNavigationEntry } from "./form_intent";
 /**
  * SessionStateManager: write-through cache for ephemeral SW state.
  *
@@ -168,6 +169,7 @@ const KEYS = {
   gestureUntil: `${PREFIX}gestureUntil`,
   allowStarted: `${PREFIX}allowStarted`,
   allowTarget: `${PREFIX}allowTarget`,
+  formNavigation: `${PREFIX}formNavigation`,
   userNavContextUntil: `${PREFIX}userNavContextUntil`,
   suppressUntil: `${PREFIX}suppressUntil`,
   typedOrigin: `${PREFIX}typedOrigin`,
@@ -234,6 +236,7 @@ export class SessionStateManager {
   readonly gestureUntilByTab = new Map<number, number>();
   readonly allowStartedByTab = new Map<number, string>();
   readonly allowTargetByTab = new Map<number, AllowTargetEntry>();
+  readonly formNavigationByTab = new Map<number, FormNavigationEntry>();
   readonly userNavContextUntilByTab = new Map<number, number>();
   readonly suppressUntilByTab = new Map<number, number>();
   readonly typedOriginByTab = new Map<number, TypedOriginEntry>();
@@ -309,6 +312,7 @@ export class SessionStateManager {
     this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil], isFiniteNumber);
     this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted], isString);
     this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget], isValidAllowTarget);
+    this._restoreMap(this.formNavigationByTab, data[KEYS.formNavigation], isFormNavigationEntry);
     this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil], isFiniteNumber);
     this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil], isFiniteNumber);
     this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin], isValidTypedOrigin);
@@ -354,6 +358,7 @@ export class SessionStateManager {
       [KEYS.gestureUntil]: mapToObj(this.gestureUntilByTab),
       [KEYS.allowStarted]: mapToObj(this.allowStartedByTab),
       [KEYS.allowTarget]: mapToObj(this.allowTargetByTab),
+      [KEYS.formNavigation]: mapToObj(this.formNavigationByTab),
       [KEYS.userNavContextUntil]: mapToObj(this.userNavContextUntilByTab),
       [KEYS.suppressUntil]: mapToObj(this.suppressUntilByTab),
       [KEYS.typedOrigin]: mapToObj(this.typedOriginByTab),
@@ -381,6 +386,7 @@ export class SessionStateManager {
     this.gestureUntilByTab.delete(tabId);
     this.allowStartedByTab.delete(tabId);
     this.allowTargetByTab.delete(tabId);
+    this.formNavigationByTab.delete(tabId);
     this.userNavContextUntilByTab.delete(tabId);
     this.suppressUntilByTab.delete(tabId);
     this.typedOriginByTab.delete(tabId);

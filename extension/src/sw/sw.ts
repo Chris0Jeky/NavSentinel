@@ -1,3 +1,5 @@
+import { handleChildFormMessage } from "./form_navigation";
+import { formNavigationDeadline, startFormNavigation, consumeFormNavigation } from "../shared/form_intent";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import {
   getReputationStatus,
@@ -96,6 +98,7 @@ const allowUntilByTab = swState.allowUntilByTab;
 const gestureUntilByTab = swState.gestureUntilByTab;
 const allowStartedByTab = swState.allowStartedByTab;
 const allowTargetByTab = swState.allowTargetByTab;
+const formNavigationByTab = swState.formNavigationByTab;
 const userNavContextUntilByTab = swState.userNavContextUntilByTab;
 const suppressUntilByTab = swState.suppressUntilByTab;
 const typedOriginByTab = swState.typedOriginByTab;
@@ -722,11 +725,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
+  if (message.type === "ns-form-intent" || message.type === "ns-form-intent-cancel") {
+    return runWhenHydrated(() => {
+      sendResponse?.({ ok: handleChildFormMessage(message, sender, rememberUserNavigationContext) });
+    });
+  }
+
   if (message.type === "ns-allow-nav") {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;
       if (typeof tabId === "number") {
         const ttl = clampTtl(message.ttlMs, NAV_ALLOW_TTL_MS);
+        formNavigationByTab.delete(tabId);
+        swState.persistMap(formNavigationByTab, "formNavigation");
         allowUntilByTab.set(tabId, Date.now() + ttl);
         swState.persistMap(allowUntilByTab, "allowUntil");
       }
@@ -740,6 +751,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (typeof tabId === "number") {
         const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
         const now = Date.now();
+        formNavigationByTab.delete(tabId);
         gestureUntilByTab.set(tabId, now + ttl);
         const topUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
         if (topUrl) {
@@ -1043,7 +1055,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
-  if (details.frameId !== 0) return;
+  if (details.frameId !== 0) {
+    const invalidate = () => {
+      const entry = formNavigationByTab.get(details.tabId);
+      if (entry?.sourceFrameId === details.frameId) {
+        entry.phase = "spent";
+        delete entry.startedUrl;
+        swState.persistMap(formNavigationByTab, "formNavigation");
+      }
+    };
+    if (!swState.hydrated) void hydrateReady.then(invalidate);
+    else invalidate();
+    return;
+  }
   advancePendingDecisionLifecycleGeneration(details.tabId);
   void loadPendingDecisionRuntime()
     .then((runtime) => runtime.removeForTabLifecycle(details.tabId))
@@ -1054,6 +1078,8 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   onBeforeNavigateHandler(details);
 });
 function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationParentedCallbackDetails): void {
+  const form = formNavigationByTab.get(details.tabId);
+  if (form) startFormNavigation(form, details.url, Date.now());
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =
@@ -1099,6 +1125,9 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
   rollbackReturnByTab.delete(details.tabId);
   const now = Date.now();
+  const form = formNavigationByTab.get(details.tabId);
+  const formObserved = !!form && now < formNavigationDeadline(form);
+  const formAllowed = !!form && consumeFormNavigation(form, details.url, details.transitionType, details.transitionQualifiers ?? [], now);
   const targetAllowance = allowTargetByTab.get(details.tabId);
   const targetAllowed =
     !!targetAllowance &&
@@ -1135,7 +1164,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     details.transitionType === "typed" ||
     details.transitionType === "auto_bookmark" ||
     qualifiers.includes("from_address_bar");
-  const isLinkish = details.transitionType === "link";
+  const isLinkish = details.transitionType === "link" || details.transitionType === "form_submit";
 
   // These are explicit user-navigation boundaries. Clear the previous chain
   // before any processing so a restored or unrelated redirect sequence cannot
@@ -1198,7 +1227,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const inTypedOriginWindow = typedOriginEntry !== null && typedOriginEntry !== undefined
     && now - typedOriginEntry.ts < TYPED_ORIGIN_TTL_MS
     && now < typedOriginEntry.deadline;
-  if (inTypedOriginWindow) {
+  if (inTypedOriginWindow && !formObserved) {
     if (isRedirect) {
       typedOriginByTab.set(details.tabId, { ts: now, deadline: typedOriginEntry.deadline });
     }
@@ -1209,7 +1238,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const allowUntil = allowUntilByTab.get(details.tabId) ?? 0;
   const startedUrl = allowStartedByTab.get(details.tabId);
   const startedAllowed = startedUrl === details.url;
-  const allowedAtCommit = now <= allowUntil || startedAllowed || targetAllowed;
+  const allowedAtCommit = formAllowed || (!formObserved && (now <= allowUntil || startedAllowed || targetAllowed));
   allowStartedByTab.delete(details.tabId);
   const recentUserNavigationContext = hasRecentUserNavigationContext(details.tabId, now);
   pruneExpiredGesture(details.tabId, now);
@@ -1303,6 +1332,8 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   onErrorOccurredHandler(details);
 });
 function onErrorOccurredHandler(details: { tabId: number; frameId: number; url?: string }): void {
+  const form = formNavigationByTab.get(details.tabId);
+  if (form) { form.phase = "spent"; delete form.startedUrl; }
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =

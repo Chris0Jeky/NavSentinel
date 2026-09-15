@@ -68,6 +68,13 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
+              // Keep form authority statically linked: MV3 disallows import().
+              name: "form-navigation-runtime",
+              test: /[\\/]src[\\/]sw[\\/]form_navigation\.ts$/,
+              entriesAware: true,
+              priority: 10
+            },
+            {
               // Keep Options presentation/operation helpers separate as the
               // settings editor grows; total-dist budget still covers both.
               name: "options-model",
