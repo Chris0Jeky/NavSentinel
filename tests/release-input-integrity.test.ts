@@ -148,6 +148,11 @@ describe("release input integrity", () => {
     fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\n");
 
     expect(() => assertExactCommittedInputs(root)).not.toThrow();
+
+    fs.writeFileSync(path.join(root, "extension", "unexpected.txt"), "unexpected\n");
+    expect(() => assertExactCommittedInputs(root)).toThrow(
+      /untracked or ignored project input/i,
+    );
   });
 
   it("rejects tracked and untracked symbolic links", () => {

@@ -329,6 +329,10 @@ function isExcludedProjectPath(relativePath, excludedPrefixes) {
   );
 }
 
+function isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes) {
+  return excludedPrefixes.some((prefix) => prefix.startsWith(`${relativePath}/`));
+}
+
 function assertContainedRealPath(repositoryRoot, absolutePath, relativePath) {
   const realPath = fs.realpathSync.native(absolutePath);
   const rootWithSeparator = repositoryRoot.endsWith(path.sep)
@@ -425,6 +429,14 @@ function assertNoUntrackedProjectInputs(repositoryRoot, entries, excludedPrefixe
         if (!stats.isDirectory()) {
           throw integrityError(`tracked directory '${relativePath}' is not a directory`);
         }
+        assertContainedRealPath(repositoryRoot, absolutePath, relativePath);
+        visit(relativePath);
+        continue;
+      }
+      if (
+        stats.isDirectory() &&
+        isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)
+      ) {
         assertContainedRealPath(repositoryRoot, absolutePath, relativePath);
         visit(relativePath);
         continue;
