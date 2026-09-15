@@ -2,67 +2,78 @@
 
 ## Problem
 
-A pending-decision create previously resolved browser tab/frame context before entering the
-store's serialized mutation queue. Two creates for the same live document and decision kind
-could therefore resolve out of order:
+Browser context resolution originally happened before the store mutation queue. Two
+same-scope creates could therefore complete out of order and leave the popup listing a
+worker decision for which the content client no longer held the raw destination.
 
-1. request A begins first and stalls during browser-context resolution;
-2. request B resolves and stores its decision;
-3. request A resumes and replaces B;
-4. the content client retains B's ID while the popup lists A.
+The first FIFO repair ordered successful creates, but review found two remaining
+fail-closed availability races:
 
-The release path still failed closed, but the legitimate prompt became stranded.
+1. an older create could become live, then a newer admission could fail context
+   resolution; the content client ignored the older response while the worker retained it;
+2. a previously live decision remained listable and consumable while a superseding
+   same-scope create was unresolved.
 
-## Authority and ordering contract
+## Latest-admission authority contract
 
-The service-worker broker now admits creates through a FIFO tail keyed by:
+Scope is `(tab, frame, document, decision kind)`. A structurally valid, authorized
+create synchronously becomes that scope's latest admission. FIFO tails still serialize
+side effects, but an older operation must prove that its admission token is still current
+after every asynchronous authority-producing boundary.
 
-- browser tab ID;
-- sender frame ID;
-- sender document ID;
-- decision kind.
+A new admission performs three fail-closed actions:
 
-For one key, admission order covers the complete authority-producing path:
+- the content client burns every unreleased raw-URL slot in its document/frame before
+  awaiting the worker;
+- the worker removes and persists removal of any prior same-scope record before resolving
+  the new browser context;
+- list and consume paths suppress a scope while its replacement admission is active.
 
-1. re-resolve the sender against the browser's current tab/frame snapshot;
-2. fingerprint the verified context and exact destination inside the existing store queue;
-3. replace or create the one live record for that scope;
-4. persist the resulting bounded record.
+If the latest admission later fails, the predecessor stays retired. The product does not
+resurrect an intent the page has already superseded. A successful replacement may still
+report the retired opaque ID through the existing optional `replacedDecisionId` response.
 
-A later same-scope create cannot begin context resolution until the earlier admitted create has
-settled. Different tabs, frames, documents, and decision kinds retain independent tails.
+If durable retirement itself fails, the worker retains an in-memory tombstone so the old
+record is not listable or releasable. A later same-scope create retries retirement; tab
+lifecycle cleanup removes the tombstone. A worker restart remains fail-closed because the
+content client has already destroyed the raw URL capability.
 
-## Lifecycle and failure behavior
+Different tabs, frames, documents, and kinds keep independent admission tokens and FIFO
+tails. Store writes remain globally serialized for session-state integrity.
 
-The tab lifecycle generation is captured when the request is admitted, before it waits. If the
-tab lifecycle changes while a request is queued or while hashing runs, the existing generation
-guard returns `context-changed` and no record is written. A failed create is converted to a
-settled queue tail, so it cannot poison subsequent requests. Empty tails remove themselves from
-the broker map.
+## Lifecycle, delivery, and failure behavior
 
-No release authority moved into the broker queue. Exact URL hashes, source/top origins,
-document binding, delivery tokens, expiry, one-shot consumption, post-release context checks,
-and fail-closed delivery remain owned by the existing store and consume path.
+Admission currency is combined with the existing tab lifecycle generation. Either a
+superseding admission or a tab lifecycle change produces `context-changed` before a stale
+record can be written. Scope removal rolls back in memory if persistence fails.
+
+Consume rechecks active replacement admission before destructive consumption and again
+immediately before tab creation. The content boundary independently burns the raw URL on
+supersession, so a restart or storage failure still fails closed rather than releasing an
+obsolete destination.
+
+Exact URL hashes, source/top origins, document binding, opaque tokens, expiry, one-shot
+consumption, post-release browser-context checks, and destination-hash verification are
+unchanged.
 
 ## Regression proof
 
-`tests/pending-decision-handlers.test.ts` deterministically holds request A's first
-`getAllFrames` call, starts request B for the same scope, and proves:
+Focused tests prove:
 
-- B does not start browser-context resolution while A is held;
-- A creates first and B reports A as its replaced decision;
-- the extension-origin list contains only B and its destination origin;
-- B releases the exact later URL once;
-- a second consume returns `missing`.
+- delayed A plus admitted B rejects A and leaves only B releasable exactly once;
+- a prior live record disappears while B is unresolved and remains retired when B's live
+  context later fails;
+- a failed retirement stays tombstoned and a clean retry converges on the latest intent;
+- the content client rejects delivery of the prior raw URL immediately when B is admitted;
+- a second consume remains `missing` and the later exact URL is the only created tab.
 
-A dependency-free Node 22 harness using the real TypeScript sources reproduced the pre-fix
-failure (`getAllFrames` was called twice before A was released) and passes after the repair,
-including replacement identity and exactly-once release. Repository Vitest, lint, typecheck,
-build, package, E2E, and performance-budget qualification remain required in hosted CI because
-the supplied offline checkout did not contain a complete npm cache.
+Hosted run `34984683176` proved the first three stale-admission regressions red against the
+FIFO-only implementation while all 24 pre-existing focused tests passed. Normal exact-head
+CI remains the source of truth for the complete unit, build, package, performance, and
+browser suites.
 
 ## Scope
 
-This change does not add permissions, endpoints, telemetry, storage fields, retention, scoring,
-UI, or navigation policy. It orders pending-decision creation within one service-worker broker
-instance; it is not a general cross-context transaction primitive.
+No permission, endpoint, telemetry, storage schema, retention, score, prompt policy, or
+destination authority is added. This is an in-process latest-intent and persistence-ordering
+boundary, not a cross-worker transaction guarantee.
