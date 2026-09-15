@@ -1,6 +1,7 @@
 import { getEventLog, getSuiteSettings } from "../shared/storage";
 import { explainReasonCode } from "../shared/explanations";
-import { createEvidenceExport, eventTitle, filterEvidence, projectEvidence, summarizeEvidence, type EvidenceCategory, type EvidenceEvent } from "./evidence_model";
+import { eventTitle, filterEvidence, projectEvidence, summarizeEvidence, type EvidenceCategory, type EvidenceEvent } from "./evidence_model";
+import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, type EvidenceExportSnapshot } from "./evidence_export";
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const status = byId("status");
@@ -13,7 +14,7 @@ const previous = byId<HTMLButtonElement>("previous");
 const next = byId<HTMLButtonElement>("next");
 const exportDialog = byId<HTMLDialogElement>("exportDialog");
 const exportPreview = byId<HTMLTextAreaElement>("exportPreview");
-let preparedExport: { text: string; filename: string; count: number } | null = null;
+let preparedExport: EvidenceExportSnapshot | null = null;
 let events: EvidenceEvent[] = [];
 let visible: EvidenceEvent[] = [];
 let page = 0;
@@ -30,7 +31,7 @@ function render(): void {
   visible = filterEvidence(events, search.value, category.value as EvidenceCategory, scoredOnly.checked);
   const pages = Math.max(1, Math.ceil(visible.length / pageSize));
   page = Math.min(page, pages - 1);
-  byId("results").textContent = `${visible.length} of ${events.length} retained events match. Newest first. Export includes all matching events.`;
+  byId("results").textContent = `${visible.length} of ${events.length} retained events match. Newest timestamp first; ties show later-retained events first. Export includes all matching events, oldest first.`;
   byId("pageLabel").textContent = `Page ${page + 1} of ${pages}`;
   previous.disabled = page === 0;
   next.disabled = page >= pages - 1;
@@ -85,17 +86,20 @@ previous.addEventListener("click", () => { page--; render(); });
 next.addEventListener("click", () => { page++; render(); });
 refreshButton.addEventListener("click", () => { void refresh(); });
 exportButton.addEventListener("click", () => {
-  // Filter displays newest first; retain chronological ordering in the portable file.
-  const payload = createEvidenceExport(visible.slice().reverse());
-  const text = JSON.stringify(payload, null, 2);
-  const bytes = new Blob([text]).size;
-  if (bytes > 8 * 1024 * 1024) {
-    status.textContent = "This export exceeds 8 MiB. Narrow the journal filters and preview again.";
+  // Undo the newest-first view; the export projection independently orders it.
+  // A failed preparation must not leave an older snapshot downloadable.
+  preparedExport = null;
+  exportPreview.value = "";
+  try {
+    preparedExport = prepareEvidenceExport(visible.slice().reverse());
+  } catch (error) {
+    status.textContent = error instanceof RangeError
+      ? EVIDENCE_EXPORT_LIMIT_MESSAGE
+      : "Could not prepare local evidence. Refresh the journal and try again.";
     return;
   }
-  preparedExport = { text, filename: `navsentinel-evidence-${payload.exportedAt.slice(0, 10)}.json`, count: payload.events.length };
-  exportPreview.value = text;
-  byId("exportSummary").textContent = `${payload.events.length} recorded observations · ${bytes.toLocaleString()} bytes · Prepared ${new Date(payload.exportedAt).toLocaleString()}`;
+  exportPreview.value = preparedExport.text;
+  byId("exportSummary").textContent = `${preparedExport.count} recorded observations · ${preparedExport.bytes.toLocaleString()} bytes · Prepared ${new Date(preparedExport.exportedAt).toLocaleString()}`;
   exportDialog.showModal();
 });
 byId("cancelExport").addEventListener("click", () => exportDialog.close());
