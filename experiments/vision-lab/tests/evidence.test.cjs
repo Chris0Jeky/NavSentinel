@@ -17,7 +17,7 @@ test('canonical IPv6 survives import, saved history and review export without ac
   }
 });
 test('IP support rejects noncanonical addresses, ports, zones and URL-shaped metadata',()=>{
-  for(const sourceSite of ['[::1]','[::1]:443','::1?secret','fe80::1%eth0','1::2::3','2001:0db8::1','::ffff:192.0.2.128','999.0.0.1','127.000.000.001','https://[::1]/private','::1\n']){
+  for(const sourceSite of ['[::1]','[::1]:443','::1?secret','fe80::1%eth0','1::2::3','2001:0db8::1','::ffff:192.0.2.128','999.0.0.1','127.000.000.001','127.1','2130706433','0x7f000001','0x7f.0.0.1','1.2.3','https://[::1]/private','::1\n']){
     assert.throws(()=>E.envelope(file([row({sourceSite})])),/canonical hostnames/);
   }
 });
