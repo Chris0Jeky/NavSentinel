@@ -15,6 +15,8 @@ import {
 const SOURCE_URL = "https://source.test/private/page?session=source-secret#source-fragment";
 const DESTINATION_URL =
   "https://destination.test/private/continue?token=destination-secret#dest-fragment";
+const LATEST_DESTINATION_URL =
+  "https://latest.test/private/continue?token=latest-secret#latest-fragment";
 const TOP_DOCUMENT_ID = "document-top-7";
 const CHILD_SOURCE_URL = "https://child.test/private/frame?session=child-secret";
 const CHILD_DOCUMENT_ID = "document-child-7";
@@ -195,14 +197,14 @@ function installChildFrame(harness: ReturnType<typeof createHarness>, url = CHIL
   });
 }
 
-function createMessage(): PendingDecisionRuntimeMessage {
+function createMessage(destinationUrl = DESTINATION_URL): PendingDecisionRuntimeMessage {
   return {
     type: "ns-pending-decision-create",
     semantics: {
       kind: "navigation",
       reason: "blank-target-blocked",
       actions: ["proceed-once"],
-      destinationUrl: DESTINATION_URL,
+      destinationUrl,
       score: 81,
       signals: ["cross_site"],
     },
@@ -566,6 +568,84 @@ describe("PendingDecisionRuntimeBroker", () => {
       status: "context-changed",
     });
     expect(harness.storage.data[PENDING_DECISION_STORAGE_KEY]).toBeUndefined();
+  });
+
+  it("preserves same-scope create admission order across delayed context resolution", async () => {
+    const harness = createHarness();
+    let releaseFirstResolution!: () => void;
+    const firstResolutionGate = new Promise<void>((resolve) => {
+      releaseFirstResolution = resolve;
+    });
+    harness.getAllFrames.mockImplementationOnce(async (tabId) => {
+      await firstResolutionGate;
+      return frameSnapshots(harness.frames, tabId);
+    });
+
+    const firstCreate = harness.broker.handle(createMessage(), contentSender());
+    await vi.waitFor(() => expect(harness.getAllFrames).toHaveBeenCalledTimes(1));
+    const latestCreate = harness.broker.handle(
+      createMessage(LATEST_DESTINATION_URL),
+      contentSender(),
+    );
+
+    try {
+      expect(harness.getAllFrames).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseFirstResolution();
+    }
+    const [firstResult, latestResult] = await Promise.all([firstCreate, latestCreate]);
+    expect(firstResult).toMatchObject({
+      ok: true,
+      operation: "create",
+      status: "created",
+    });
+    expect(firstResult).not.toHaveProperty("replacedDecisionId");
+    if (!firstResult || !firstResult.ok || firstResult.operation !== "create") {
+      throw new Error("Expected the first admitted create to succeed");
+    }
+    expect(latestResult).toMatchObject({
+      ok: true,
+      operation: "create",
+      status: "created",
+      replacedDecisionId: firstResult.id,
+    });
+
+    const listed = await harness.broker.handle(
+      { type: "ns-pending-decision-list" },
+      extensionSender(),
+    );
+    expect(listed).toMatchObject({ ok: true, operation: "list", status: "pending" });
+    if (
+      !latestResult ||
+      !latestResult.ok ||
+      latestResult.operation !== "create" ||
+      !listed ||
+      !listed.ok ||
+      listed.operation !== "list" ||
+      listed.decisions.length !== 1
+    ) {
+      throw new Error("Expected the latest same-scope decision to remain live");
+    }
+    const decision = listed.decisions[0]!;
+    expect(decision.id).toBe(latestResult.id);
+    expect(decision.destinationOrigin).toBe("https://latest.test");
+
+    harness.deliverDecision.mockResolvedValueOnce({
+      ok: true,
+      status: "released",
+      destinationUrl: LATEST_DESTINATION_URL,
+    });
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+    expect(harness.createTab).toHaveBeenCalledWith({
+      url: LATEST_DESTINATION_URL,
+      windowId: 2,
+      active: true,
+    });
+    expect(
+      await harness.broker.handle(consumeMessage(decision), extensionSender()),
+    ).toEqual({ ok: false, operation: "consume", status: "missing" });
   });
 
   it("binds token and action while rejecting a caller-supplied raw destination", async () => {
