@@ -85,12 +85,10 @@ jobs:
             }
             return value;
           ''',
-              '''  try{
-              const parsed=new URL('https://'+value+'/').hostname;
-              if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
-            }catch{
-              if(/^\\d+(?:\\.\\d+){3}$/.test(value))return invalid();
-            }
+              '''  let parsed;
+            try{parsed=new URL('https://'+value+'/').hostname;}
+            catch{if(/^\\d+(?:\\.\\d+){3}$/.test(value))return invalid();return value;}
+            if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
             return value;
           ''',
           )
