@@ -1,0 +1,154 @@
+name: Temporary PR 711 formatting publisher
+
+on:
+  push:
+    branches:
+      - fix/686-pending-create-ordering-20260915
+
+permissions:
+  contents: write
+
+jobs:
+  format-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: fix/686-pending-create-ordering-20260915
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+      - name: Normalize inserted TypeScript indentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def indent_range(text: str, start_marker: str, end_marker: str, prefix: str) -> str:
+            start = text.index(start_marker)
+            end = text.index(end_marker, start)
+            segment = text[start:end]
+            indented = "".join(
+              prefix + line if line.strip() else line
+              for line in segment.splitlines(keepends=True)
+            )
+            return text[:start] + indented + text[end:]
+
+          client_path = Path("extension/src/content/pending_navigation_decision.ts")
+          client = client_path.read_text(encoding="utf-8")
+          client = indent_range(
+            client,
+            "// A newer intent supersedes every unreleased raw-URL capability",
+            "    const generation = ++this.requestGeneration;",
+            "    ",
+          )
+          client_path.write_text(client, encoding="utf-8")
+
+          handler_path = Path("extension/src/sw/pending_decision_handlers.ts")
+          handler = handler_path.read_text(encoding="utf-8")
+          handler = indent_range(
+            handler,
+            "removeForTabLifecycle(tabId: number)",
+            "\n  async handle(",
+            "  ",
+          )
+          handler = indent_range(
+            handler,
+            "private async handleCreate(",
+            "\n  private runCreateInScopeOrder",
+            "  ",
+          )
+          handler = indent_range(
+            handler,
+            "private hasActiveCreateAdmission(",
+            "\n  private async handleList(",
+            "  ",
+          )
+          handler = handler.replace(
+            """.filter(
+  ({ decision, frame }) =>
+    !this.hasActiveCreateAdmission(decision) &&
+    liveFramesEqual(frame, activeAfter.liveFrames.get(frame.frameId)),
+)
+""",
+            """      .filter(
+        ({ decision, frame }) =>
+          !this.hasActiveCreateAdmission(decision) &&
+          liveFramesEqual(frame, activeAfter.liveFrames.get(frame.frameId)),
+      )
+""",
+            1,
+          )
+          decision_guard = """if (this.hasActiveCreateAdmission(decision)) {
+  return failure("consume", "context-changed");
+}
+"""
+          if handler.count(decision_guard) != 2:
+            raise SystemExit(f"expected two unindented decision guards, found {handler.count(decision_guard)}")
+          handler = handler.replace(
+            decision_guard,
+            """    if (this.hasActiveCreateAdmission(decision)) {
+      return failure("consume", "context-changed");
+    }
+""",
+          )
+          consumed_guard = """if (this.hasActiveCreateAdmission(consumed.decision)) {
+  return failure("consume", "context-changed");
+}
+"""
+          if handler.count(consumed_guard) != 1:
+            raise SystemExit("expected one unindented consumed-decision guard")
+          handler = handler.replace(
+            consumed_guard,
+            """    if (this.hasActiveCreateAdmission(consumed.decision)) {
+      return failure("consume", "context-changed");
+    }
+""",
+            1,
+          )
+          handler_path.write_text(handler, encoding="utf-8")
+
+          store_path = Path("extension/src/sw/pending_decision_store.ts")
+          store = store_path.read_text(encoding="utf-8")
+          store = indent_range(store, "async removeForScope(", "\n  async create(", "  ")
+          store_path.write_text(store, encoding="utf-8")
+
+          handler_test_path = Path("tests/pending-decision-handlers.test.ts")
+          handler_tests = handler_test_path.read_text(encoding="utf-8")
+          handler_tests = indent_range(
+            handler_tests,
+            'it("keeps only the latest same-scope admission',
+            '\n  it("binds token',
+            "  ",
+          )
+          handler_test_path.write_text(handler_tests, encoding="utf-8")
+
+          client_test_path = Path("tests/pending-navigation-decision.test.ts")
+          client_tests = client_test_path.read_text(encoding="utf-8")
+          client_tests = indent_range(
+            client_tests,
+            'it("burns an unreleased raw slot',
+            '\n  it("invalidates a create response',
+            "  ",
+          )
+          client_test_path.write_text(client_tests, encoding="utf-8")
+          PY
+      - name: Verify formatted implementation
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npx vitest run tests/pending-decision-handlers.test.ts tests/pending-navigation-decision.test.ts tests/pending-decision-store.test.ts
+          git diff --check
+      - name: Publish and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-pr-711-format.yml
+          git config user.name "OpenAI"
+          git config user.email "noreply@openai.com"
+          git add extension/src/content/pending_navigation_decision.ts extension/src/sw/pending_decision_handlers.ts extension/src/sw/pending_decision_store.ts tests/pending-decision-handlers.test.ts tests/pending-navigation-decision.test.ts .github/workflows/tmp-pr-711-format.yml
+          git commit -m "style: normalize pending decision admission patch"
+          git push origin HEAD:fix/686-pending-create-ordering-20260915
