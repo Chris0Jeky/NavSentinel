@@ -733,10 +733,12 @@ export function normalizeEventPageSite(value: unknown): string | undefined {
   try {
     const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);
     if (isIPAddress(canonical)) return canonical;
+    return normalized;
   } catch {
-    // The value already passed hostname grammar. This probe is IPv4-only.
+    // Lexically hostname-shaped values rejected by WHATWG parsing cannot
+    // be authoritative web page hosts, so omit them rather than guessing.
+    return undefined;
   }
-  return normalized;
 }
 
 function isEventLogEntry(value: unknown): value is EventLogEntry {

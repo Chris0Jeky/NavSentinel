@@ -24,7 +24,7 @@ function site(value){
   if(!value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)))return invalid();
   let parsed;
   try{parsed=new URL('https://'+value+'/').hostname;}
-  catch{if(/^\d+(?:\.\d+){3}$/.test(value))return invalid();return value;}
+  catch{return invalid();}
   if(/^\d+(?:\.\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
   return value;
 }
