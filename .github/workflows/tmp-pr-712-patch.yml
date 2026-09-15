@@ -30,64 +30,52 @@ jobs:
           script_path = Path("scripts/release-input-integrity.mjs")
           script = script_path.read_text(encoding="utf-8")
 
-          helper_anchor = "\nfunction assertContainedRealPath(repositoryRoot, absolutePath, relativePath) {"
-          helper = """
-          function isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes) {
-            return excludedPrefixes.some((prefix) => prefix.startsWith(`${relativePath}/`));
-          }
-          """
           if "function isAncestorOfExcludedProjectPath" not in script:
+            helper_anchor = "\nfunction assertContainedRealPath(repositoryRoot, absolutePath, relativePath) {"
             if script.count(helper_anchor) != 1:
               raise SystemExit("expected one helper insertion anchor")
-            script = script.replace(helper_anchor, "\n" + helper.strip() + helper_anchor)
+            helper = (
+              "\nfunction isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes) {\n"
+              "  return excludedPrefixes.some((prefix) => prefix.startsWith(`${relativePath}/`));\n"
+              "}\n"
+            )
+            script = script.replace(helper_anchor, helper + helper_anchor)
 
-          walker_anchor = """      if (!stats.isFile() && !stats.isDirectory()) {
-                throw integrityError(`unsupported special filesystem entry '${relativePath}'`);
-              }
-              throw integrityError(`untracked or ignored project input '${relativePath}' is present`);
-          """
-          walker_replacement = """      if (
-                stats.isDirectory() &&
-                isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)
-              ) {
-                assertContainedRealPath(repositoryRoot, absolutePath, relativePath);
-                visit(relativePath);
-                continue;
-              }
-              if (!stats.isFile() && !stats.isDirectory()) {
-                throw integrityError(`unsupported special filesystem entry '${relativePath}'`);
-              }
-              throw integrityError(`untracked or ignored project input '${relativePath}' is present`);
-          """
-          if "isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)" not in script.split("function assertNoUntrackedProjectInputs", 1)[1]:
-            if script.count(walker_anchor) != 1:
-              raise SystemExit("expected one untracked-input terminal block")
-            script = script.replace(walker_anchor, walker_replacement)
+          walker_marker = "isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)"
+          walker_start = script.index("function assertNoUntrackedProjectInputs")
+          if walker_marker not in script[walker_start:]:
+            terminal = "      if (!stats.isFile() && !stats.isDirectory()) {"
+            terminal_at = script.index(terminal, walker_start)
+            insertion = (
+              "      if (\n"
+              "        stats.isDirectory() &&\n"
+              "        isAncestorOfExcludedProjectPath(relativePath, excludedPrefixes)\n"
+              "      ) {\n"
+              "        assertContainedRealPath(repositoryRoot, absolutePath, relativePath);\n"
+              "        visit(relativePath);\n"
+              "        continue;\n"
+              "      }\n"
+            )
+            script = script[:terminal_at] + insertion + script[terminal_at:]
           script_path.write_text(script, encoding="utf-8")
 
           test_path = Path("tests/release-input-integrity.test.ts")
           tests = test_path.read_text(encoding="utf-8")
-          test_anchor = """    fs.mkdirSync(path.join(root, "extension", "dist"), { recursive: true });
-              fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\\n");
-
-              expect(() => assertExactCommittedInputs(root)).not.toThrow();
-            });
-          """
-          test_replacement = """    fs.mkdirSync(path.join(root, "extension", "dist"), { recursive: true });
-              fs.writeFileSync(path.join(root, "extension", "dist", "generated.js"), "generated\\n");
-
-              expect(() => assertExactCommittedInputs(root)).not.toThrow();
-
-              fs.writeFileSync(path.join(root, "extension", "unexpected.txt"), "unexpected\\n");
-              expect(() => assertExactCommittedInputs(root)).toThrow(
-                /untracked or ignored project input/i,
-              );
-            });
-          """
-          if "extension\", \"unexpected.txt" not in tests:
-            if tests.count(test_anchor) != 1:
-              raise SystemExit("expected one excluded-root regression block")
-            tests = tests.replace(test_anchor, test_replacement)
+          test_start = tests.index(
+            'it("excludes dependency and generated-output roots from the project-input claim"'
+          )
+          sibling_marker = 'path.join(root, "extension", "unexpected.txt")'
+          if sibling_marker not in tests[test_start:]:
+            assertion = "    expect(() => assertExactCommittedInputs(root)).not.toThrow();"
+            assertion_at = tests.index(assertion, test_start) + len(assertion)
+            insertion = (
+              "\n\n"
+              '    fs.writeFileSync(path.join(root, "extension", "unexpected.txt"), "unexpected\\n");\n'
+              "    expect(() => assertExactCommittedInputs(root)).toThrow(\n"
+              "      /untracked or ignored project input/i,\n"
+              "    );"
+            )
+            tests = tests[:assertion_at] + insertion + tests[assertion_at:]
           test_path.write_text(tests, encoding="utf-8")
           PY
       - name: Install and verify focused repair
