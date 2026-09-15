@@ -1,0 +1,134 @@
+name: One-off canonical IP evidence repair
+
+on:
+  push:
+    branches: [fix/export-privacy-boundaries-20260912]
+    paths: [.github/workflows/oneoff-canonical-ip-evidence-20260915.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    if: github.repository == 'Chris0Jeky/NavSentinel' && github.ref == 'refs/heads/fix/export-privacy-boundaries-20260912'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply the lexical-host canonicalization repair
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
+              file.write_text(text.replace(old, new), encoding="utf-8")
+
+          replace_once(
+              "extension/src/shared/storage.ts",
+              ''' * `pageSite` is a hostname-only field. In particular, do not prepend a scheme
+           * and parse arbitrary input here: doing that would turn a persisted path,
+           * query, or fragment into an apparently valid host. IP literals are passed
+           * through the URL parser only after they have been identified as addresses so
+           * accepted values get the same canonical hostname spelling as the browser.
+          ''',
+              ''' * `pageSite` is a hostname-only field. In particular, do not prepend a scheme
+           * and parse arbitrary input here: doing that would turn a persisted path,
+           * query, or fragment into an apparently valid host. URL parsing is used only
+           * after strict IP recognition or hostname lexical validation, never to extract
+           * a hostname from arbitrary input. Accepted IP values use browser-canonical
+           * spelling, including WHATWG short, integer, and hexadecimal IPv4 forms.
+          ''',
+          )
+          replace_once(
+              "extension/src/shared/storage.ts",
+              '''  const labels = normalized.split(".");
+            if (labels.some((label) => !EVENT_HOST_LABEL_RE.test(label))) return undefined;
+            return normalized;
+          }
+          ''',
+              '''  const labels = normalized.split(".");
+            if (labels.some((label) => !EVENT_HOST_LABEL_RE.test(label))) return undefined;
+
+            // WHATWG host parsing also accepts short, integer, and hexadecimal IPv4
+            // spellings that the strict address classifier intentionally leaves alone.
+            // Probe only after hostname lexical validation, then retain canonical IP
+            // output so equivalent page associations cannot split into distinct sites.
+            try {
+              const canonical = normalizeHost(new URL(`https://${normalized}/`).hostname);
+              if (isIPAddress(canonical)) return canonical;
+            } catch {
+              // The value already passed hostname grammar. This probe is IPv4-only.
+            }
+            return normalized;
+          }
+          ''',
+          )
+          replace_once(
+              "experiments/vision-lab/shared/evidence.js",
+              '''  if(/^\\d+(?:\\.\\d+){3}$/.test(value)){
+            try{if(new URL('https://'+value+'/').hostname!==value)return invalid();}
+            catch{return invalid();}
+            }
+            return value;
+          ''',
+              '''  try{
+              const parsed=new URL('https://'+value+'/').hostname;
+              if(/^\\d+(?:\\.\\d+){3}$/.test(parsed)&&parsed!==value)return invalid();
+            }catch{
+              if(/^\\d+(?:\\.\\d+){3}$/.test(value))return invalid();
+            }
+            return value;
+          ''',
+          )
+          replace_once(
+              "docs/vision-overhaul/EVIDENCE_EXPORT_BOUNDARIES.md",
+              '''IPv4 and IPv6 are validated and canonicalized
+          using browser-compatible URL host parsing only after a hostname/IP lexical fence.
+          IPv6 is serialized without brackets, matching the stored hostname contract. The
+          ''',
+              '''IPv4 and IPv6 are validated and canonicalized
+          using browser-compatible URL host parsing only after a hostname/IP lexical fence.
+          Short, integer and hexadecimal WHATWG IPv4 spellings are canonicalized by the
+          extension and rejected on imported evidence unless already dotted-decimal. IPv6
+          is serialized without brackets, matching the stored hostname contract. The
+          ''',
+          )
+          PY
+      - name: Install exact lockfile dependencies
+        run: npm ci
+      - name: Verify the focused producer and consumer regressions
+        run: |
+          set -euo pipefail
+          npx vitest run tests/evidence-boundaries.test.ts tests/storage-export-privacy.test.ts
+          npm run vision:test
+      - name: Regenerate hash-pinned standalone previews
+        run: npm run vision:build
+      - name: Publish only the verified repair and generated previews
+        run: |
+          set -euo pipefail
+          git diff --check
+          git add -- \
+            extension/src/shared/storage.ts \
+            experiments/vision-lab/shared/evidence.js \
+            experiments/vision-lab/NavSentinel-Browser.html \
+            experiments/vision-lab/NavSentinel-Desktop.html \
+            experiments/vision-lab/NavSentinel-Intent-Relay.html \
+            docs/vision-overhaul/EVIDENCE_EXPORT_BOUNDARIES.md
+          git rm -- .github/workflows/oneoff-canonical-ip-evidence-20260915.yml
+          git diff --cached --check
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: canonicalize WHATWG IPv4 evidence hosts'
+          git push origin HEAD:refs/heads/fix/export-privacy-boundaries-20260912
