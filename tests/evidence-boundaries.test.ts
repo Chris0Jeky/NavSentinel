@@ -29,7 +29,8 @@ describe("portable evidence hostname and ordering boundaries (#691, #689)", () =
 
   it.each([
     "https://[::1]/private?token=secret", "[::1]:443", "[::1]/path", "::1?secret",
-    "fe80::1%eth0", "1::2::3", "999.0.0.1", "user@source.test", "source.test/private",
+    "fe80::1%eth0", "1::2::3", "999.0.0.1", "4294967296", "0x100000000",
+    "1.2.3.999", "example.999", "a.1", "08", "user@source.test", "source.test/private",
     " source.test", "source.test\n", "[source.test]", "", undefined, null,
   ])("never extracts hosts from malformed metadata %j", value => {
     expect(evidenceHostname(value)).toBeNull();
