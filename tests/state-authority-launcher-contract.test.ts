@@ -7,6 +7,18 @@ import { afterEach, describe, expect, it } from "vitest";
 const repositoryRoot = path.resolve(process.cwd());
 const temporaryPaths: string[] = [];
 
+type LauncherModule = {
+  sanitizedEnvironment: (source: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
+};
+
+async function loadLauncherModule(): Promise<LauncherModule> {
+  // The committed launcher is plain ESM JavaScript and deliberately has no
+  // declaration file; the runtime shape is asserted by these contracts.
+  // @ts-expect-error -- committed launcher has no declaration file
+  const module = await import("../scripts/run-state-authority-campaign.mjs");
+  return module as unknown as LauncherModule;
+}
+
 function git(args: string[]): string {
   return execFileSync("git", args, {
     cwd: repositoryRoot,
@@ -46,16 +58,40 @@ afterEach(() => {
 });
 
 describe("state-authority launcher replay boundary", () => {
-  it("emits a non-consumable preflight summary without launch credentials", () => {
+  it("scrubs every sensitive environment spelling case-insensitively", async () => {
+    const { sanitizedEnvironment } = await loadLauncherModule();
+    const environment = sanitizedEnvironment({
+      PATH: process.env.PATH ?? "",
+      Git_DIR: "/tmp/alternate-git-dir",
+      navsentinel_state_authority_key: "caller-key",
+      nOdE_oPtIoNs: "--require=caller-preload.cjs",
+      node_path: "/tmp/caller-modules",
+      extension_path: "/tmp/caller-extension",
+      SAFE_VALUE: "retained",
+    });
+
+    expect(environment).toMatchObject({
+      SAFE_VALUE: "retained",
+      GIT_NO_REPLACE_OBJECTS: "1",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+    });
+    const normalizedKeys = Object.keys(environment).map((key) => key.toUpperCase());
+    expect(normalizedKeys.some((key) => key.startsWith("NAVSENTINEL_STATE_AUTHORITY_"))).toBe(false);
+    expect(normalizedKeys.some((key) => key.startsWith("GIT_") && ![
+      "GIT_NO_REPLACE_OBJECTS",
+      "GIT_NO_LAZY_FETCH",
+      "GIT_OPTIONAL_LOCKS",
+    ].includes(key))).toBe(false);
+    expect(normalizedKeys).not.toContain("NODE_OPTIONS");
+    expect(normalizedKeys).not.toContain("NODE_PATH");
+    expect(normalizedKeys).not.toContain("EXTENSION_PATH");
+  });
+
+  it("emits a non-consumable preflight summary without launch credentials on the Node floor", async () => {
     const { launcherOid, launcherPath } = extractCommittedLauncher();
-    const environment = { ...process.env };
-    delete environment.NODE_OPTIONS;
-    delete environment.NODE_PATH;
-    for (const key of Object.keys(environment)) {
-      if (key.startsWith("NAVSENTINEL_STATE_AUTHORITY_")) {
-        delete environment[key];
-      }
-    }
+    const { sanitizedEnvironment } = await loadLauncherModule();
+    const environment = sanitizedEnvironment(process.env);
     environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;
 
     const result = spawnSync(
@@ -93,13 +129,9 @@ describe("state-authority launcher replay boundary", () => {
     );
   });
 
-  it("rejects direct worktree loading before Playwright can list tests", () => {
-    const environment = { ...process.env };
-    for (const key of Object.keys(environment)) {
-      if (key.startsWith("NAVSENTINEL_STATE_AUTHORITY_")) {
-        delete environment[key];
-      }
-    }
+  it("rejects direct worktree loading before Playwright can list tests", async () => {
+    const { sanitizedEnvironment } = await loadLauncherModule();
+    const environment = sanitizedEnvironment(process.env);
     const playwrightCli = path.join(
       repositoryRoot,
       "node_modules",
@@ -134,7 +166,7 @@ describe("state-authority launcher replay boundary", () => {
     );
   });
 
-  it("keeps authoritative receipt issuance in the committed launcher", () => {
+  it("keeps authoritative receipt issuance and signing in the committed launcher", () => {
     const launcher = fs.readFileSync(
       path.join(repositoryRoot, "scripts", "run-state-authority-campaign.mjs"),
       "utf8",
@@ -150,10 +182,17 @@ describe("state-authority launcher replay boundary", () => {
     expect(campaign).not.toContain('authority: "committed-launcher-finalized"');
     expect(campaign).not.toContain("NAVSENTINEL_STATE_AUTHORITY_FINALIZATION_KEY");
 
+    expect(launcher).toContain("function transpileCommittedTypeScriptModule");
+    expect(launcher).toContain("typescript.transpileModule");
+    expect(launcher).not.toContain("--experimental-strip-types");
     expect(launcher).toContain("function finalizeCandidateReceipts");
     expect(launcher).toContain('authority: "committed-launcher-finalized"');
     expect(launcher).toContain("finalized_after_child_exit: true");
     expect(launcher).toContain("const finalizationKey = randomBytes(32)");
+    expect(launcher).toContain("generateKeyPairSync(\"ed25519\")");
+    expect(launcher).toContain("function verifyFinalReceiptSignature");
+    expect(launcher).toContain("delete unsigned.launcher_signature");
+    expect(launcher).toContain("signingPublicKeySha256");
     expect(launcher).toContain("finalization_key_commitment_sha256");
     expect(launcher).not.toContain(
       "childEnvironment.NAVSENTINEL_STATE_AUTHORITY_FINALIZATION_KEY",

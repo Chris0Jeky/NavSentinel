@@ -4,10 +4,15 @@ import { spawnSync } from "node:child_process";
 import {
   createHash,
   createHmac,
+  createPublicKey,
+  generateKeyPairSync,
   randomBytes,
   randomUUID,
+  sign as signPayload,
+  verify as verifyPayload,
 } from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -69,20 +74,22 @@ function fail(code, message) {
   throw error;
 }
 
-function sanitizedEnvironment(source = process.env) {
+export function sanitizedEnvironment(source = process.env) {
   const environment = {};
   for (const [key, value] of Object.entries(source)) {
+    const normalizedKey = key.toUpperCase();
     if (
       value === undefined
-      || key.toUpperCase().startsWith("GIT_")
-      || key.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
+      || normalizedKey.startsWith("GIT_")
+      || normalizedKey.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
+      || normalizedKey === "NODE_OPTIONS"
+      || normalizedKey === "NODE_PATH"
+      || normalizedKey === "EXTENSION_PATH"
     ) {
       continue;
     }
     environment[key] = value;
   }
-  delete environment.NODE_OPTIONS;
-  delete environment.NODE_PATH;
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_OPTIONAL_LOCKS = "0";
@@ -244,6 +251,93 @@ function writePrivateFile(target, content) {
   fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   fs.writeFileSync(target, content, { mode: 0o600, flag: "wx" });
   if (process.platform !== "win32") fs.chmodSync(target, 0o600);
+}
+
+function loadTrustedTypeScript(repositoryRoot) {
+  const requireFromRepository = createRequire(
+    path.join(repositoryRoot, "package.json"),
+  );
+  let typescript;
+  try {
+    typescript = requireFromRepository("typescript");
+  } catch (error) {
+    fail(
+      "TOOLCHAIN_UNAVAILABLE",
+      `TypeScript compiler is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (
+    !typescript
+    || typeof typescript.transpileModule !== "function"
+    || !typescript.ScriptTarget
+    || !typescript.ModuleKind
+    || !typescript.DiagnosticCategory
+  ) {
+    fail(
+      "TOOLCHAIN_UNAVAILABLE",
+      "installed TypeScript compiler does not expose the required transpilation API",
+    );
+  }
+  return typescript;
+}
+
+function formatTypeScriptDiagnostics(typescript, diagnostics) {
+  return diagnostics.map((diagnostic) => {
+    const message = typescript.flattenDiagnosticMessageText(
+      diagnostic.messageText,
+      "\n",
+    );
+    if (!diagnostic.file || typeof diagnostic.start !== "number") {
+      return message;
+    }
+    const location = diagnostic.file.getLineAndCharacterOfPosition(
+      diagnostic.start,
+    );
+    return `${diagnostic.file.fileName}:${location.line + 1}:${
+      location.character + 1
+    }: ${message}`;
+  }).join("; ");
+}
+
+function transpileCommittedTypeScriptModule({
+  typescript,
+  relativePath,
+  source,
+  runtimeRoot,
+}) {
+  const transpiled = typescript.transpileModule(
+    source.toString("utf8"),
+    {
+      compilerOptions: {
+        target: typescript.ScriptTarget.ES2022,
+        module: typescript.ModuleKind.ES2022,
+        verbatimModuleSyntax: true,
+      },
+      fileName: relativePath,
+      reportDiagnostics: true,
+    },
+  );
+  const errors = (transpiled.diagnostics ?? []).filter(
+    (diagnostic) =>
+      diagnostic.category === typescript.DiagnosticCategory.Error,
+  );
+  if (errors.length > 0) {
+    fail(
+      "TRUSTED_HELPER_TRANSPILE",
+      formatTypeScriptDiagnostics(typescript, errors),
+    );
+  }
+  const outputPath = path.join(
+    runtimeRoot,
+    `${path.basename(relativePath, path.extname(relativePath))}.mjs`,
+  );
+  writePrivateFile(
+    outputPath,
+    Buffer.from(transpiled.outputText, "utf8"),
+  );
+  return pathToFileURL(outputPath).href;
 }
 
 function materializeCampaign(
@@ -595,9 +689,97 @@ function verifyFinalReceiptMac(receipt, finalizationKey) {
     },
   };
   delete unsigned.launcher_finalization.mac_sha256;
+  delete unsigned.launcher_signature;
   const expected = authenticateFinalReceipt(unsigned, finalizationKey);
   if (supplied !== expected) {
     fail("FINAL_RECEIPT_AUTHENTICATION", "launcher finalization MAC mismatch");
+  }
+}
+
+function exportSigningPublicKey(publicKey) {
+  const exported = publicKey.export({ type: "spki", format: "der" });
+  return Buffer.isBuffer(exported) ? exported : Buffer.from(exported);
+}
+
+function signFinalReceipt(
+  receipt,
+  signingPrivateKey,
+  signingPublicKeyDer,
+  signingPublicKeySha256,
+) {
+  const signature = signPayload(
+    null,
+    Buffer.from(JSON.stringify(receipt), "utf8"),
+    signingPrivateKey,
+  );
+  return {
+    ...receipt,
+    launcher_signature: {
+      algorithm: "ed25519",
+      signed_payload: "receipt-without-launcher-signature-v1",
+      public_key_spki_der_base64: signingPublicKeyDer.toString("base64"),
+      public_key_sha256: signingPublicKeySha256,
+      signature_base64: signature.toString("base64"),
+    },
+  };
+}
+
+function verifyFinalReceiptSignature(receipt, expectedPublicKeySha256) {
+  const signature = receipt.launcher_signature;
+  if (
+    !isRecord(signature)
+    || signature.algorithm !== "ed25519"
+    || signature.signed_payload
+      !== "receipt-without-launcher-signature-v1"
+    || typeof signature.public_key_spki_der_base64 !== "string"
+    || typeof signature.public_key_sha256 !== "string"
+    || typeof signature.signature_base64 !== "string"
+  ) {
+    fail("FINAL_RECEIPT_SIGNATURE", "launcher signature is missing or malformed");
+  }
+  const publicKeyDer = Buffer.from(
+    signature.public_key_spki_der_base64,
+    "base64",
+  );
+  const suppliedSignature = Buffer.from(signature.signature_base64, "base64");
+  if (
+    publicKeyDer.toString("base64")
+      !== signature.public_key_spki_der_base64
+    || suppliedSignature.toString("base64") !== signature.signature_base64
+  ) {
+    fail("FINAL_RECEIPT_SIGNATURE", "launcher signature encoding is invalid");
+  }
+  const publicKeySha256 = sha256Hex(publicKeyDer);
+  if (
+    publicKeySha256 !== signature.public_key_sha256
+    || publicKeySha256 !== expectedPublicKeySha256
+  ) {
+    fail("FINAL_RECEIPT_SIGNATURE", "launcher public key fingerprint mismatch");
+  }
+  const unsigned = { ...receipt };
+  delete unsigned.launcher_signature;
+  let publicKey;
+  try {
+    publicKey = createPublicKey({
+      key: publicKeyDer,
+      format: "der",
+      type: "spki",
+    });
+  } catch (error) {
+    fail(
+      "FINAL_RECEIPT_SIGNATURE",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (
+    !verifyPayload(
+      null,
+      Buffer.from(JSON.stringify(unsigned), "utf8"),
+      publicKey,
+      suppliedSignature,
+    )
+  ) {
+    fail("FINAL_RECEIPT_SIGNATURE", "launcher signature verification failed");
   }
 }
 
@@ -616,6 +798,9 @@ function finalizeCandidateReceipts({
   runId,
   finalizationKey,
   finalizationKeyCommitment,
+  signingPrivateKey,
+  signingPublicKeyDer,
+  signingPublicKeySha256,
   initialBuildInputs,
   initialCampaignGitSha256,
   initialCampaignExecutedSha256,
@@ -761,7 +946,7 @@ function finalizeCandidateReceipts({
       claim_boundary: "Synthetic bundled-Chromium regression only; not branded-Chrome, open-web efficacy, sleep, crash, or service-worker-restart proof.",
       launcher_finalization: launcherFinalization,
     };
-    const receipt = {
+    const authenticatedReceipt = {
       ...unsignedReceipt,
       launcher_finalization: {
         ...launcherFinalization,
@@ -771,7 +956,14 @@ function finalizeCandidateReceipts({
         ),
       },
     };
-    verifyFinalReceiptMac(receipt, finalizationKey);
+    verifyFinalReceiptMac(authenticatedReceipt, finalizationKey);
+    const receipt = signFinalReceipt(
+      authenticatedReceipt,
+      signingPrivateKey,
+      signingPublicKeyDer,
+      signingPublicKeySha256,
+    );
+    verifyFinalReceiptSignature(receipt, signingPublicKeySha256);
     const filename =
       `${candidate.scenario.journey.toLowerCase()}-state-authority-receipt.json`;
     const serialized = Buffer.from(
@@ -783,12 +975,16 @@ function finalizeCandidateReceipts({
       fs.readFileSync(path.join(finalDirectory, filename), "utf8"),
     );
     verifyFinalReceiptMac(persisted, finalizationKey);
+    verifyFinalReceiptSignature(persisted, signingPublicKeySha256);
     manifestReceipts.push({
       filename,
       scenario_id: candidate.scenario.scenarioId,
       journey: candidate.scenario.journey,
       sha256: sha256Hex(serialized),
       mac_sha256: receipt.launcher_finalization.mac_sha256,
+      signature_sha256: sha256Hex(
+        Buffer.from(receipt.launcher_signature.signature_base64, "base64"),
+      ),
     });
   }
 
@@ -800,19 +996,24 @@ function finalizeCandidateReceipts({
     launcher_oid: committedLauncher.oid,
     launch_run_id: runId,
     finalization_key_commitment_sha256: finalizationKeyCommitment,
+    signature_algorithm: "ed25519",
+    signing_public_key_spki_der_base64: signingPublicKeyDer.toString("base64"),
+    signing_public_key_sha256: signingPublicKeySha256,
     receipt_count: manifestReceipts.length,
     receipts: manifestReceipts,
   };
+  const finalizationManifestBytes = Buffer.from(
+    `${JSON.stringify(finalizationManifest, null, 2)}\n`,
+    "utf8",
+  );
   writePrivateFile(
     path.join(finalDirectory, "manifest.json"),
-    Buffer.from(
-      `${JSON.stringify(finalizationManifest, null, 2)}\n`,
-      "utf8",
-    ),
+    finalizationManifestBytes,
   );
   return {
     finalDirectory,
     finalizationManifest,
+    finalizationManifestSha256: sha256Hex(finalizationManifestBytes),
   };
 }
 
@@ -931,15 +1132,25 @@ async function main() {
       campaignRoot,
     );
 
+    const runtimeRoot = path.join(temporaryRoot, "launcher-runtime");
+    fs.mkdirSync(runtimeRoot, { mode: 0o700 });
+    if (process.platform !== "win32") fs.chmodSync(runtimeRoot, 0o700);
+    const typescript = loadTrustedTypeScript(repositoryRoot);
     const provenanceModule = await import(
-      pathToFileURL(
-        path.join(campaignRoot, ...HELPER_REPOSITORY_PATH.split("/")),
-      ).href
+      transpileCommittedTypeScriptModule({
+        typescript,
+        relativePath: HELPER_REPOSITORY_PATH,
+        source: helper.content,
+        runtimeRoot,
+      }),
     );
     const materializedModule = await import(
-      pathToFileURL(
-        path.join(campaignRoot, ...MATERIALIZER_REPOSITORY_PATH.split("/")),
-      ).href
+      transpileCommittedTypeScriptModule({
+        typescript,
+        relativePath: MATERIALIZER_REPOSITORY_PATH,
+        source: materializer.content,
+        runtimeRoot,
+      }),
     );
     const buildInputs = provenanceModule.assertCurrentHeadBuildInputs(
       repositoryRoot,
@@ -1002,6 +1213,12 @@ async function main() {
     }
     const finalizationKey = randomBytes(32);
     const finalizationKeyCommitment = sha256Hex(finalizationKey);
+    const {
+      privateKey: signingPrivateKey,
+      publicKey: signingPublicKey,
+    } = generateKeyPairSync("ed25519");
+    const signingPublicKeyDer = exportSigningPublicKey(signingPublicKey);
+    const signingPublicKeySha256 = sha256Hex(signingPublicKeyDer);
     const runId = randomUUID();
     const issuedAt = new Date();
     const expiresAt = new Date(issuedAt.getTime() + 10 * 60 * 1000);
@@ -1059,7 +1276,6 @@ async function main() {
       );
     }
     const childEnvironment = sanitizedEnvironment(process.env);
-    delete childEnvironment.EXTENSION_PATH;
     childEnvironment.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION =
       attestationPath;
     childEnvironment.NAVSENTINEL_STATE_AUTHORITY_KEY = key.toString("hex");
@@ -1107,6 +1323,9 @@ async function main() {
       runId,
       finalizationKey,
       finalizationKeyCommitment,
+      signingPrivateKey,
+      signingPublicKeyDer,
+      signingPublicKeySha256,
       initialBuildInputs: buildInputs,
       initialCampaignGitSha256: campaignGitSha256,
       initialCampaignExecutedSha256: campaignExecutedSha256,
@@ -1123,6 +1342,10 @@ async function main() {
         repositoryHead: finalization.finalizationManifest.repository_head,
         launcherOid: finalization.finalizationManifest.launcher_oid,
         receiptCount: finalization.finalizationManifest.receipt_count,
+        signatureAlgorithm: "ed25519",
+        signingPublicKeySha256,
+        signingPublicKeySpkiDerBase64: signingPublicKeyDer.toString("base64"),
+        manifestSha256: finalization.finalizationManifestSha256,
         outputDirectory: path.relative(
           repositoryRoot,
           finalization.finalDirectory,
@@ -1134,4 +1357,9 @@ async function main() {
   }
 }
 
-await main();
+const modulePath = path.resolve(fileURLToPath(import.meta.url));
+const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
+const directExecution = process.platform === "win32"
+  ? modulePath.toLowerCase() === entryPath.toLowerCase()
+  : modulePath === entryPath;
+if (directExecution) await main();

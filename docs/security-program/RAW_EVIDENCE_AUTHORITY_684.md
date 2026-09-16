@@ -53,7 +53,7 @@ identity for one bundled-Chromium regression campaign. It does not establish
 dependency integrity, compiler or runner integrity, reproducible builds,
 protection from a concurrent hostile local process, branded-Chrome Gate-3
 acceptance, open-web efficacy, or release eligibility. `node_modules`, Node.js,
-Git, Playwright, Chromium, the operating system, and the runner remain trusted
+Git, TypeScript, Playwright, Chromium, the operating system, and the runner remain trusted
 local toolchain inputs.
 
 
@@ -71,7 +71,7 @@ The repaired boundary now:
   selected blob; the `cat-file` header is not treated as authentication;
 - rejects every supported alternate Vite config name and invokes Vite with the
   committed `vite.config.ts` explicitly;
-- scrubs inherited Git variables case-insensitively, which matters on Windows;
+- scrubs inherited Git, state-authority, Node preload/module-path, and extension-path variables case-insensitively before constructing child environments;
 - requires a launcher extracted from the committed launcher blob, runs full
   object-store integrity checking, extracts the verifier and manifest from Git
   objects, and validates the complete campaign input manifest before Playwright
@@ -83,8 +83,11 @@ A direct `playwright test` invocation cannot emit this receipt: the stress hook
 fails `TEST_INVALID [EXTERNAL_PREFLIGHT_REQUIRED]` before any campaign arm runs.
 The authoritative hosted command first extracts
 `scripts/run-state-authority-campaign.mjs` from `HEAD`, supplies its object ID via
-`NAVSENTINEL_EXPECTED_LAUNCHER_OID`, and executes that exact blob with Node's
-TypeScript stripping enabled.
+`NAVSENTINEL_EXPECTED_LAUNCHER_OID`, and executes that exact blob with plain
+Node. The launcher uses the repository's installed TypeScript compiler to
+transpile only the two already-authenticated authority helpers into a private
+runtime directory. Those generated modules are trusted-toolchain output, not an
+expansion of the committed project-source claim.
 
 ## Replay-resistant campaign execution
 
@@ -137,3 +140,30 @@ This makes modified direct Playwright execution unable to self-issue the final
 receipt accepted by the campaign. The remaining ceiling is unchanged: the
 runner, Node/Git/npm/Playwright toolchain, and a non-hostile concurrent same-user
 environment remain trusted.
+
+
+## Portable launcher, environment, and artifact verification
+
+The committed launcher runs with plain Node across the repository engine floor.
+Only the two authenticated TypeScript authority helpers are transpiled, using the
+already-installed compiler, into a private runtime directory outside the
+materialized campaign source tree. Their original committed and materialized
+TypeScript bytes remain the receipt authority; generated JavaScript is an
+explicit trusted-toolchain output.
+
+Inherited environment keys are classified through `key.toUpperCase()` before a
+child environment is built. Every spelling of `GIT_*`,
+`NAVSENTINEL_STATE_AUTHORITY_*`, `NODE_OPTIONS`, `NODE_PATH`, and
+`EXTENSION_PATH` is removed before trusted uppercase values are added. This does
+not claim that JavaScript can neutralize code already preloaded into the launcher
+process itself: the launcher must be started by a trusted external workflow or
+owner shell with Node preload authority cleared. Inherited pre-launch Node code
+and a hostile same-user process remain outside this bounded claim.
+
+Launcher-finalized receipts retain their launcher-only HMAC for immediate
+read-back checks and additionally carry an Ed25519 signature. The launcher logs
+the signing public-key fingerprint and SPKI bytes after finalization; the trusted
+GitHub Actions run binds that key to the exact launcher execution. The uploaded
+bundle can then be checked with `scripts/verify-state-authority-receipts.mjs`
+using the fingerprint from the independent run log. An embedded replacement key
+alone is not trusted.

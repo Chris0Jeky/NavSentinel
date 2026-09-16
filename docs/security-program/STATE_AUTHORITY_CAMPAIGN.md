@@ -14,8 +14,7 @@ sink.
 | RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | one fixed timer boundary |
 | RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | one authored churn ordering |
 
-The executable receipt emitted by
-`tests/e2e/state-authority-sink.spec.ts` is authoritative for a run. Do not turn
+The Playwright spec emits non-authoritative candidates; only the exact committed launcher may finalize authoritative receipts for a run. Do not turn
 this table into a manual pass claim: promotion requires immutable commit/tree
 resolution, raw Git-blob versus filesystem-byte equality, exact index modes and
 object IDs, zero undeclared or special build inputs, the fixed-output hash,
@@ -118,3 +117,25 @@ never receives the launcher finalization key and contains no final-receipt write
 Qualification must retain the three launcher-finalized schema-5 receipts and the
 launcher manifest as the evidence artifact. Candidate files are diagnostic input
 and are deleted with the private launch directory.
+
+
+## Node-floor and external-verification checkpoint
+
+The exact launcher must execute with plain Node on the repository's supported
+engine floor. It transpiles only the two authenticated TypeScript authority
+helpers into a private runtime directory with the repository's installed
+compiler, while every campaign/source hash continues to cover the original
+committed TypeScript bytes.
+
+Child environments remove all case variants of Git, state-authority, Node
+preload/module-path, and extension-path variables. The launcher process itself
+still trusts the external workflow or owner shell to clear Node preload authority
+before Node starts; that pre-process boundary is explicit rather than silently
+claimed by in-process cleanup.
+
+Each finalized receipt is signed with a launcher-only Ed25519 key. The exact run
+log publishes the public-key fingerprint and SPKI bytes, and the retained artifact
+is verified against that independently bound fingerprint with
+`scripts/verify-state-authority-receipts.mjs`. The internal HMAC remains only a
+same-process/read-back control and is not presented as long-term artifact
+authentication.
