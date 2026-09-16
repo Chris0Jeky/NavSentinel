@@ -61,6 +61,23 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          spec = Path("tests/e2e/state-authority-sink.spec.ts")
+          lines = spec.read_text(encoding="utf-8").splitlines()
+          matches = [
+              index
+              for index, line in enumerate(lines)
+              if "relativePath.includes(" in line
+          ]
+          if len(matches) != 1:
+              raise SystemExit(
+                  f"expected one campaign-path backslash guard, found {len(matches)}"
+              )
+          slash = chr(92)
+          lines[matches[0]] = (
+              f'      || relativePath.includes("{slash}{slash}")'
+          )
+          spec.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
           for name in (
               "docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md",
               "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md",
@@ -98,6 +115,7 @@ jobs:
         run: |
           node --check scripts/run-state-authority-campaign.mjs
           node -e 'JSON.parse(require("node:fs").readFileSync("tests/e2e/state-authority-campaign-inputs.json", "utf8"))'
+          npx eslint tests/e2e/state-authority-sink.spec.ts
 
       - name: Lint
         run: npm run lint
