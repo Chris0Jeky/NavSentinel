@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import defaultPlaywrightConfig from "../playwright.config";
+import livePlaywrightConfig from "../playwright.live.config";
+import rollbackPlaywrightConfig from "../playwright.rollback.config";
 import stressPlaywrightConfig from "../playwright.stress.config";
 
 function patterns(value: string | RegExp | Array<string | RegExp> | undefined): Array<string | RegExp> {
@@ -8,8 +10,12 @@ function patterns(value: string | RegExp | Array<string | RegExp> | undefined): 
 }
 
 describe("state-authority Playwright collection boundary", () => {
-  it("excludes the launcher-only authority spec from ordinary E2E", () => {
-    expect(patterns(defaultPlaywrightConfig.testIgnore)).toContain(
+  it.each([
+    ["default", defaultPlaywrightConfig],
+    ["rollback", rollbackPlaywrightConfig],
+    ["live", livePlaywrightConfig],
+  ])("excludes the launcher-only authority spec from %s E2E", (_name, config) => {
+    expect(patterns(config.testIgnore)).toContain(
       "**/state-authority-sink.spec.ts",
     );
   });
