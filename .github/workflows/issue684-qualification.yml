@@ -10,329 +10,39 @@ permissions:
 
 jobs:
   qualify:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout candidate branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           ref: fix/684-raw-evidence-inputs-20260916
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
 
-      - name: Wire raw attestation into the campaign
+      - name: Materialize exact-head candidate
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          target = Path("tests/e2e/state-authority-sink.spec.ts")
-          text = target.read_text(encoding="utf-8")
-
-          def replace_once(old: str, new: str) -> None:
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected one state-authority replacement, found {count}: {old[:80]!r}")
-              text = text.replace(old, new, 1)
-
-          replace_once(
-              'import { createHash, randomUUID } from "node:crypto";',
-              'import { randomUUID } from "node:crypto";',
-          )
-          replace_once(
-              '''import {
-            assertCurrentHeadBuildInputs,
-            hashCanonicalWorktreeFiles,
-            hashGitFiles,
-            trackedBuildInputs,
-          } from "./extension_build_provenance";''',
-              '''import {
-            assertCurrentHeadBuildInputs,
-            assertExtensionBuildOutputHash,
-            hashCanonicalWorktreeFiles,
-            hashExtensionBuildOutput,
-            hashGitFiles,
-            resetExtensionBuildOutput,
-            type BuildOutputAttestation,
-          } from "./extension_build_provenance";''',
-          )
-          replace_once(
-              '''type ExtensionProvenance = {
-            repositoryHead: string;
-            gitSourceSha256: string;
-            executedSourceSha256: string;
-            buildSha256: string;
-            trackedInputCount: number;
-          };''',
-              '''type ExtensionProvenance = {
-            repositoryHead: string;
-            repositoryTree: string;
-            objectFormat: string;
-            comparisonMode: "raw-blob-byte-equality";
-            gitSourceSha256: string;
-            executedSourceSha256: string;
-            buildOutput: BuildOutputAttestation;
-            trackedInputCount: number;
-            unexpectedInputCount: number;
-            specialInputCount: number;
-          };''',
-          )
-          replace_once(
-              '''function hashFiles(files: string[]): string {
-            const hash = createHash("sha256");
-            for (const file of [...files].sort()) {
-              hash.update(path.relative(process.cwd(), file).replaceAll("\\\\", "/"));
-              hash.update("\\0");
-              hash.update(fs.readFileSync(file));
-              hash.update("\\0");
-            }
-            return hash.digest("hex");
-          }
-
-          function hashDirectory(root: string): string {
-            const files: string[] = [];
-            const visit = (directory: string): void => {
-              for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-                const target = path.join(directory, entry.name);
-                if (entry.isDirectory()) visit(target);
-                else if (entry.isFile()) files.push(target);
-              }
-            };
-            visit(root);
-            return hashFiles(files);
-          }
-
-          ''',
-              '',
-          )
-          replace_once(
-              '''function prepareCurrentHeadExtension(): ExtensionProvenance {
-            if (process.env.EXTENSION_PATH && path.resolve(process.env.EXTENSION_PATH) !== extensionPath) {
-              throw new Error("State-authority evidence rejects EXTENSION_PATH outside the current worktree build.");
-            }
-            const repositoryHead = execFileSync("git", ["rev-parse", "HEAD"], {
-              cwd: repositoryRoot,
-              encoding: "utf8",
-            }).trim();
-            const buildInputs = assertCurrentHeadBuildInputs(repositoryRoot, repositoryHead);
-
-            const buildEnvironment = { ...process.env };
-            delete buildEnvironment.EXTENSION_PATH;
-            execFileSync(process.execPath, [path.join(repositoryRoot, "scripts", "build-extension.mjs")], {
-              cwd: repositoryRoot,
-              env: buildEnvironment,
-              stdio: "inherit",
-            });
-            if (!fs.existsSync(path.join(extensionPath, "manifest.json"))) {
-              throw new Error("Current-head extension build did not produce extension/dist/manifest.json.");
-            }
-            return {
-              repositoryHead,
-              gitSourceSha256: buildInputs.gitSha256,
-              executedSourceSha256: buildInputs.executedSha256,
-              buildSha256: hashDirectory(extensionPath),
-              trackedInputCount: buildInputs.files.length,
-            };
-          }''',
-              '''function prepareCurrentHeadExtension(): ExtensionProvenance {
-            if (process.env.EXTENSION_PATH && path.resolve(process.env.EXTENSION_PATH) !== extensionPath) {
-              throw new Error("State-authority evidence rejects EXTENSION_PATH outside the current worktree build.");
-            }
-            const requestedHead = execFileSync("git", ["rev-parse", "HEAD"], {
-              cwd: repositoryRoot,
-              encoding: "utf8",
-            }).trim();
-            const buildInputs = assertCurrentHeadBuildInputs(repositoryRoot, requestedHead);
-            resetExtensionBuildOutput(repositoryRoot, extensionPath);
-
-            const buildEnvironment = { ...process.env };
-            delete buildEnvironment.EXTENSION_PATH;
-            execFileSync(process.execPath, [path.join(repositoryRoot, "scripts", "build-extension.mjs")], {
-              cwd: repositoryRoot,
-              env: buildEnvironment,
-              stdio: "inherit",
-            });
-            if (!fs.existsSync(path.join(extensionPath, "manifest.json"))) {
-              throw new Error("Current-head extension build did not produce extension/dist/manifest.json.");
-            }
-
-            const postBuildInputs = assertCurrentHeadBuildInputs(
-              repositoryRoot,
-              buildInputs.repositoryCommit,
-            );
-            if (
-              postBuildInputs.repositoryTree !== buildInputs.repositoryTree
-              || postBuildInputs.gitSha256 !== buildInputs.gitSha256
-              || postBuildInputs.executedSha256 !== buildInputs.executedSha256
-            ) {
-              throw new Error("State-authority build inputs changed while producing the extension artifact.");
-            }
-            return {
-              repositoryHead: buildInputs.repositoryCommit,
-              repositoryTree: buildInputs.repositoryTree,
-              objectFormat: buildInputs.objectFormat,
-              comparisonMode: buildInputs.comparisonMode,
-              gitSourceSha256: buildInputs.gitSha256,
-              executedSourceSha256: buildInputs.executedSha256,
-              buildOutput: hashExtensionBuildOutput(repositoryRoot, extensionPath),
-              trackedInputCount: buildInputs.trackedInputCount,
-              unexpectedInputCount: buildInputs.unexpectedInputCount,
-              specialInputCount: buildInputs.specialInputCount,
-            };
-          }''',
-          )
-          replace_once(
-              '''  const campaignFiles = [
-            path.join(gymRoot, scenario.fixture),
-            path.join(gymRoot, "local-fixture-targets.js"),
-            path.resolve(process.cwd(), "tests", "e2e", "state-authority-sink.spec.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "extension_build_provenance.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "local_fixture_target_bootstrap.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "proving_ground_fake_sink.ts"),
-            path.resolve(process.cwd(), "playwright.stress.config.ts"),
-          ];
-            const gitSourceSha256 = hashGitFiles(repositoryRoot, campaignFiles, repositoryHead);
-            const executedSourceSha256 = hashCanonicalWorktreeFiles(repositoryRoot, campaignFiles);
-            expect(executedSourceSha256, "Campaign sources must match the recorded Git head").toBe(gitSourceSha256);
-            expect(repositoryHead, "Repository head must not change after the extension build").toBe(extensionProvenance.repositoryHead);
-            const currentBuildInputs = trackedBuildInputs(repositoryRoot, repositoryHead);
-            expect(
-              hashCanonicalWorktreeFiles(repositoryRoot, currentBuildInputs),
-              "Extension sources must not change after the current-head build",
-            ).toBe(extensionProvenance.executedSourceSha256);
-            expect(hashDirectory(extensionPath), "Loaded extension bytes must match the current-head build").toBe(
-              extensionProvenance.buildSha256,
-            );''',
-              '''  const campaignFiles = [
-            path.join(gymRoot, scenario.fixture),
-            path.join(gymRoot, "local-fixture-targets.js"),
-            path.resolve(process.cwd(), "tests", "e2e", "state-authority-sink.spec.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "extension_build_provenance.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "extension_test_utils.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "local_fixture_target_bootstrap.ts"),
-            path.resolve(process.cwd(), "tests", "e2e", "proving_ground_fake_sink.ts"),
-            path.resolve(process.cwd(), "playwright.stress.config.ts"),
-          ];
-            const currentBuildInputs = assertCurrentHeadBuildInputs(repositoryRoot, repositoryHead);
-            const gitSourceSha256 = hashGitFiles(repositoryRoot, campaignFiles, repositoryHead);
-            const executedSourceSha256 = hashCanonicalWorktreeFiles(
-              repositoryRoot,
-              campaignFiles,
-              repositoryHead,
-            );
-            expect(executedSourceSha256, "Campaign sources must match raw committed bytes").toBe(gitSourceSha256);
-            expect(currentBuildInputs.repositoryCommit, "Repository head must not change after the build").toBe(
-              extensionProvenance.repositoryHead,
-            );
-            expect(currentBuildInputs.repositoryTree, "Repository tree must not change after the build").toBe(
-              extensionProvenance.repositoryTree,
-            );
-            expect(currentBuildInputs.objectFormat).toBe(extensionProvenance.objectFormat);
-            expect(currentBuildInputs.comparisonMode).toBe(extensionProvenance.comparisonMode);
-            expect(currentBuildInputs.gitSha256).toBe(extensionProvenance.gitSourceSha256);
-            expect(currentBuildInputs.executedSha256).toBe(extensionProvenance.executedSourceSha256);
-            const currentBuildOutput = assertExtensionBuildOutputHash(
-              repositoryRoot,
-              extensionPath,
-              extensionProvenance.buildOutput,
-            );''',
-          )
-          replace_once("    schema_version: 1,", "    schema_version: 2,")
-          replace_once(
-              "    extension_build_sha256: extensionProvenance.buildSha256,",
-              "    extension_build_sha256: extensionProvenance.buildOutput.sha256,",
-          )
-          replace_once(
-              '''    extension_build_provenance: {
-              build_command: "node scripts/build-extension.mjs",
-              fixed_path: "extension/dist",
-              repository_head: extensionProvenance.repositoryHead,
-              git_source_sha256: extensionProvenance.gitSourceSha256,
-              executed_source_sha256: extensionProvenance.executedSourceSha256,
-              exact_head_match: true,
-              tracked_input_count: extensionProvenance.trackedInputCount,
-            },''',
-              '''    extension_build_provenance: {
-              build_command: "node scripts/build-extension.mjs",
-              fixed_path: "extension/dist",
-              repository_head: extensionProvenance.repositoryHead,
-              repository_tree: extensionProvenance.repositoryTree,
-              object_format: extensionProvenance.objectFormat,
-              comparison_mode: extensionProvenance.comparisonMode,
-              git_source_sha256: extensionProvenance.gitSourceSha256,
-              executed_source_sha256: extensionProvenance.executedSourceSha256,
-              exact_head_match: true,
-              tracked_input_count: extensionProvenance.trackedInputCount,
-              unexpected_input_count: extensionProvenance.unexpectedInputCount,
-              special_input_count: extensionProvenance.specialInputCount,
-              build_output_file_count: currentBuildOutput.fileCount,
-            },''',
-          )
-          replace_once(
-              '''    campaign_source: {
-              git_sha256: gitSourceSha256,
-              executed_sha256: executedSourceSha256,
-              exact_head_match: true,
-            },''',
-              '''    campaign_source: {
-              repository_tree: extensionProvenance.repositoryTree,
-              object_format: extensionProvenance.objectFormat,
-              comparison_mode: extensionProvenance.comparisonMode,
-              git_sha256: gitSourceSha256,
-              executed_sha256: executedSourceSha256,
-              exact_head_match: true,
-            },''',
-          )
-
-          target.write_text(text, encoding="utf-8")
-          PY
-
-      - name: Add receipt-integrity architecture
-        shell: bash
-        run: |
-          cat > docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md <<'EOF'
-          # Raw evidence authority for issue 684
-
-          This slice hardens only the state-authority campaign stacked on PR #681. It does not change extension runtime behavior and it does not yet migrate every NavSentinel receipt producer.
-
-          ## Authority chain
-
-          1. Resolve the requested worktree's real top-level and require an ordinary directory, including detached linked worktrees whose `.git` entry is a file.
-          2. Sanitize inherited `GIT_*` overrides, disable replacement objects and lazy fetching, and reject shallow, promisor, alternate-object, and replace-ref authority.
-          3. Resolve and retain full `HEAD^{commit}`, `HEAD^{tree}`, and object format identifiers.
-          4. Enumerate the immutable build tree with NUL-delimited `git ls-tree`; accept only regular `100644` or `100755` blobs.
-          5. Require the live index's stage-zero modes and object IDs to equal the immutable tree.
-          6. Read committed bytes with `git cat-file --batch`, then compare them directly with `fs.readFileSync`. Git attributes, clean filters, text conversion, and status output have no authority.
-          7. Walk each build root without following links. Ordinary-untracked, ignored-untracked, missing, case-colliding, linked, junction, device, and other special inputs invalidate the run.
-          8. Frame SHA-256 inputs with repository-relative path, Git mode, an eight-byte byte length, and the raw bytes.
-
-          ## Fixed output boundary
-
-          Only `extension/dist` is test-owned. A stale ordinary directory is removed before the build. A linked or special output path is rejected. After the build, every output entry must be a regular file beneath the fixed root; the path, effective mode, byte length, and bytes are hashed and rechecked immediately before a receipt is attached.
-
-          ## Receipt lifecycle
-
-          Source authority is checked before the build, after the build, and again at receipt time. The receipt is suppressed by any commit, tree, index, raw-source, unexpected-input, special-input, or output-hash change. The campaign source closure now includes `extension_test_utils.ts`, a direct runtime import that the earlier receipt omitted.
-
-          Successful receipts record the commit, tree, object format, `raw-blob-byte-equality` comparison mode, zero unexpected/special inputs, tracked input count, output file count, source hashes, and fixed-output hash.
-
-          ## Explicit ceiling
-
-          This establishes exact committed project-source and fixed local build-output identity for one bundled-Chromium regression campaign. It does not establish dependency integrity, compiler or runner integrity, reproducible builds, protection from a concurrent hostile local process, branded-Chrome Gate-3 acceptance, open-web efficacy, or release eligibility. `node_modules`, Node.js, Git, Playwright, Chromium, the operating system, and the runner remain trusted local toolchain inputs.
-          EOF
-
-      - name: Commit the candidate locally
-        shell: bash
-        run: |
+          python scripts/issue684-wire-campaign.py
           git config user.name "NavSentinel Qualification"
           git config user.email "navsentinel-qualification@example.invalid"
-          git add tests/e2e/state-authority-sink.spec.ts docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md
-          git rm .github/workflows/issue684-qualification.yml
+          git add \
+            tests/e2e/state-authority-sink.spec.ts \
+            docs/security-program/STATE_AUTHORITY_CAMPAIGN.md \
+            docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md
+          git rm \
+            .github/workflows/issue684-qualification.yml \
+            scripts/issue684-wire-campaign.py
+          git diff --cached --check
           git commit -m "test: bind state-authority receipts to raw inputs"
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
 
       - name: Install dependencies
         run: npm ci
@@ -352,6 +62,6 @@ jobs:
       - name: Typed-harm state-authority campaign
         run: xvfb-run -a npm run test:e2e:stress -- --grep "independent harm oracle"
 
-      - name: Push qualified candidate
+      - name: Publish qualified candidate
         shell: bash
         run: git push origin HEAD:fix/684-raw-evidence-inputs-20260916
