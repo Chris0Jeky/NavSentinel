@@ -554,7 +554,7 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
         events: [
           {
             id: "active-site-risk",
-            ts: 1_710_000_000_000,
+            ts: Date.now() - 3_000,
             kind: "nav_click_block",
             site: "127.0.0.1",
             score: 55,
@@ -562,7 +562,7 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
           },
           {
             id: "other-site-high-risk",
-            ts: 1_710_000_000_001,
+            ts: Date.now() - 2_000,
             kind: "nav_click_block",
             site: "other-site.example",
             score: 95,
@@ -570,7 +570,7 @@ test("popup renders only active-site risk, signal classes, and ClickFix shield i
           },
           {
             id: "active-site-clickfix",
-            ts: 1_710_000_000_002,
+            ts: Date.now() - 1_000,
             kind: "clickfix_detected",
             site: "127.0.0.1"
           }
