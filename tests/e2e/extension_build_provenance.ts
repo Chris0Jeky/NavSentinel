@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const EXPECTED_VITE_CONFIG = "vite.config.ts";
+const VITE_PROJECT_ROOT = "extension";
 const VITE_CONFIG_CANDIDATES = [
   "vite.config.js",
   "vite.config.mjs",
@@ -31,7 +32,12 @@ const POSTCSS_CONFIG_CANDIDATES = [
   "postcss.config.mts",
   "postcss.config.cts",
 ] as const;
-const POSTCSS_CONFIG_PATHS = new Set<string>(POSTCSS_CONFIG_CANDIDATES);
+const POSTCSS_CONFIG_PATHS = new Set<string>([
+  ...POSTCSS_CONFIG_CANDIDATES,
+  ...POSTCSS_CONFIG_CANDIDATES.map(
+    (candidate) => `${VITE_PROJECT_ROOT}/${candidate}`,
+  ),
+]);
 
 const BUILD_INPUT_PATHS = [
   "extension",
@@ -757,6 +763,13 @@ function assertNoUnexpectedBuildInputs(
       throw integrityError("SPECIAL_INPUT", `symbolic link or junction at '${relativePath}'`);
     }
     assertContainedDirectPath(authority.root, absolutePath, relativePath);
+
+    if (POSTCSS_CONFIG_PATHS.has(relativePath)) {
+      throw integrityError(
+        "AUTO_DISCOVERED_POSTCSS_CONFIG",
+        `auto-discovered PostCSS configuration '${relativePath}' is not allowed`,
+      );
+    }
 
     if (relativePath === FIXED_OUTPUT_RELATIVE_PATH) {
       if (!stats.isDirectory()) {

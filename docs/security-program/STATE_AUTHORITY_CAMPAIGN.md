@@ -142,6 +142,10 @@ authentication.
 
 ## Retained-set and default-runner boundary
 
+Because the committed Vite project root is `extension/`, build authority rejects
+every supported `.postcssrc*` and `postcss.config.*` candidate at both the
+repository root and `extension/`, whether tracked or untracked.
+
 The external verifier requires the trusted run's manifest SHA-256 before it will
 parse or accept the retained set. It then enforces the exact unique journey set
 `RW-21` / `RW-24` / `RW-25` and binds each canonical filename to the signed
