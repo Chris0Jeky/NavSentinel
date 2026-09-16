@@ -26,6 +26,10 @@ function git(args: string[]): string {
   }).trim();
 }
 
+function repositoryIsShallow(): boolean {
+  return git(["rev-parse", "--is-shallow-repository"]) === "true";
+}
+
 function extractCommittedLauncher(): {
   launcherOid: string;
   launcherPath: string;
@@ -88,7 +92,7 @@ describe("state-authority launcher replay boundary", () => {
     expect(normalizedKeys).not.toContain("EXTENSION_PATH");
   });
 
-  it("emits a non-consumable preflight summary without launch credentials on the Node floor", async () => {
+  it("fails closed in shallow checkouts and emits a non-consumable preflight summary from full history", async () => {
     const { launcherOid, launcherPath } = extractCommittedLauncher();
     const { sanitizedEnvironment } = await loadLauncherModule();
     const environment = sanitizedEnvironment(process.env);
@@ -109,6 +113,14 @@ describe("state-authority launcher replay boundary", () => {
         maxBuffer: 128 * 1024 * 1024,
       },
     );
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    if (repositoryIsShallow()) {
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("TEST_INVALID [SHALLOW_REPOSITORY]");
+      expect(result.stdout).not.toContain("NAVSENTINEL_STATE_AUTHORITY_KEY");
+      return;
+    }
 
     expect(result.status, result.stderr).toBe(0);
     const summary = JSON.parse(result.stdout) as Record<string, unknown>;
