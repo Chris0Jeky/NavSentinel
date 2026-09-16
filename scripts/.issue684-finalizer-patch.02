@@ -1,0 +1,300 @@
+      finalization_key_commitment_sha256: finalizationKeyCommitment,
+      candidate_filename: candidate.filename,
+      candidate_sha256: candidate.candidateSha256,
+      finalized_at: new Date().toISOString(),
+    };
+    const unsignedReceipt = {
+      schema_version: 5,
+      authority: "committed-launcher-finalized",
+      launcher_finalized: true,
+      repository_head: currentBuildInputs.repositoryCommit,
+      extension_build_sha256: currentBuildOutput.sha256,
+      extension_build_provenance: {
+        build_command: "node scripts/build-extension.mjs",
+        fixed_path: "extension/dist",
+        repository_head: currentBuildInputs.repositoryCommit,
+        repository_tree: currentBuildInputs.repositoryTree,
+        object_format: currentBuildInputs.objectFormat,
+        comparison_mode: currentBuildInputs.comparisonMode,
+        git_source_sha256: currentBuildInputs.gitSha256,
+        executed_source_sha256: currentBuildInputs.executedSha256,
+        exact_head_match: true,
+        tracked_input_count: currentBuildInputs.trackedInputCount,
+        unexpected_input_count: currentBuildInputs.unexpectedInputCount,
+        special_input_count: currentBuildInputs.specialInputCount,
+        build_output_file_count: currentBuildOutput.fileCount,
+      },
+      campaign_source: {
+        repository_tree: currentBuildInputs.repositoryTree,
+        object_format: currentBuildInputs.objectFormat,
+        comparison_mode: currentBuildInputs.comparisonMode,
+        git_sha256: currentCampaignGitSha256,
+        executed_sha256: currentCampaignExecutedSha256,
+        materialized_sha256: currentCampaignMaterializedSha256,
+        exact_head_match: true,
+        verified_before_module_import: true,
+        attestation_consumed: true,
+        playwright_output_authority: "candidate-only",
+        launcher_mode: "git-object-materialized-campaign",
+        launcher_oid: committedLauncher.oid,
+        helper_oid: helper.oid,
+        materializer_oid: materializer.oid,
+        manifest_oid: manifest.oid,
+        manifest_input_count: campaignFiles.length,
+      },
+      scenario_id: candidate.scenario.scenarioId,
+      journey: candidate.scenario.journey,
+      model: candidate.scenario.model,
+      browser: candidate.browser,
+      adverse_condition: "Chromium launched with --disable-popup-blocking",
+      egress_boundary: "A pre-launch deny proxy blocks browser background egress; authored fixture HTTP(S) traffic must remain loopback-only.",
+      oracle: "typed loopback fake-sink receipt independent of NavSentinel UI and event logs",
+      target_authority: "one use per arm, role, and consequence; final sink revalidates run, scenario, role, consequence, target id, and inert sentinel",
+      expected: {
+        baseline: "harm receipt present",
+        protected: "zero harm receipts",
+        benign: "one benign receipt and zero harm receipts",
+        mixed: "benign consequence succeeds and harm receipt remains absent",
+      },
+      observations: candidate.observations,
+      claim_boundary: "Synthetic bundled-Chromium regression only; not branded-Chrome, open-web efficacy, sleep, crash, or service-worker-restart proof.",
+      launcher_finalization: launcherFinalization,
+    };
+    const receipt = {
+      ...unsignedReceipt,
+      launcher_finalization: {
+        ...launcherFinalization,
+        mac_sha256: authenticateFinalReceipt(
+          unsignedReceipt,
+          finalizationKey,
+        ),
+      },
+    };
+    verifyFinalReceiptMac(receipt, finalizationKey);
+    const filename =
+      `${candidate.scenario.journey.toLowerCase()}-state-authority-receipt.json`;
+    const serialized = Buffer.from(
+      `${JSON.stringify(receipt, null, 2)}\n`,
+      "utf8",
+    );
+    writePrivateFile(path.join(finalDirectory, filename), serialized);
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(finalDirectory, filename), "utf8"),
+    );
+    verifyFinalReceiptMac(persisted, finalizationKey);
+    manifestReceipts.push({
+      filename,
+      scenario_id: candidate.scenario.scenarioId,
+      journey: candidate.scenario.journey,
+      sha256: sha256Hex(serialized),
+      mac_sha256: receipt.launcher_finalization.mac_sha256,
+    });
+  }
+
+  const finalizationManifest = {
+    schema_version: 1,
+    authority: "committed-launcher-finalization-manifest",
+    repository_head: currentBuildInputs.repositoryCommit,
+    repository_tree: currentBuildInputs.repositoryTree,
+    launcher_oid: committedLauncher.oid,
+    launch_run_id: runId,
+    finalization_key_commitment_sha256: finalizationKeyCommitment,
+    receipt_count: manifestReceipts.length,
+    receipts: manifestReceipts,
+  };
+  writePrivateFile(
+    path.join(finalDirectory, "manifest.json"),
+    Buffer.from(
+      `${JSON.stringify(finalizationManifest, null, 2)}\n`,
+      "utf8",
+    ),
+  );
+  return {
+    finalDirectory,
+    finalizationManifest,
+  };
+}
+'''
+
+
+def patch_launcher() -> None:
+    target = ROOT / "scripts/run-state-authority-campaign.mjs"
+    text = target.read_text(encoding="utf-8")
+    text = replace_once(
+        text,
+        "]);\n\nfunction fail(code, message) {",
+        "]);\n\n" + LAUNCHER_CONSTANTS.strip() + "\n\nfunction fail(code, message) {",
+        "launcher constants",
+    )
+    text = replace_once(
+        text,
+        "  return { schemaVersion: 2, payload, mac };",
+        "  return { schemaVersion: 3, payload, mac };",
+        "envelope schema",
+    )
+    text = replace_once(
+        text,
+        "\nasync function main() {",
+        "\n\n" + LAUNCHER_FINALIZER.strip() + "\n\nasync function main() {",
+        "launcher finalizer",
+    )
+    text = replace_once(
+        text,
+        "            schemaVersion: 2,\n            mode: \"non-consumable-preflight-summary\",",
+        "            schemaVersion: 3,\n            mode: \"non-consumable-preflight-summary\",",
+        "preflight schema",
+    )
+    text = replace_once(
+        text,
+        "    linkTrustedToolchain(repositoryRoot, campaignRoot);\n    const runId = randomUUID();",
+        "    linkTrustedToolchain(repositoryRoot, campaignRoot);\n"
+        "    const candidateReceiptDirectory = path.join(temporaryRoot, \"candidates\");\n"
+        "    fs.mkdirSync(candidateReceiptDirectory, { mode: 0o700 });\n"
+        "    if (process.platform !== \"win32\") {\n"
+        "      fs.chmodSync(candidateReceiptDirectory, 0o700);\n"
+        "    }\n"
+        "    const finalizationKey = randomBytes(32);\n"
+        "    const finalizationKeyCommitment = sha256Hex(finalizationKey);\n"
+        "    const runId = randomUUID();",
+        "candidate and finalization authority",
+    )
+    text = replace_once(
+        text,
+        "      schemaVersion: 2,\n      runId,",
+        "      schemaVersion: 3,\n      runId,",
+        "payload schema",
+    )
+    text = replace_once(
+        text,
+        "      campaignExecutionRoot,\n      repositoryCommit:",
+        "      campaignExecutionRoot,\n"
+        "      candidateReceiptDirectory:\n"
+        "        fs.realpathSync.native(candidateReceiptDirectory),\n"
+        "      repositoryCommit:",
+        "candidate directory payload",
+    )
+    text = replace_once(
+        text,
+        "      manifestOid: manifest.oid,\n      issuedAt:",
+        "      manifestOid: manifest.oid,\n"
+        "      finalizationKeyCommitment,\n"
+        "      issuedAt:",
+        "finalization commitment payload",
+    )
+    old_tail = r'''    key.fill(0);
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exitCode = result.status ?? 1;'''
+    new_tail = r'''    key.fill(0);
+    if (result.error) {
+      finalizationKey.fill(0);
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      finalizationKey.fill(0);
+      process.exitCode = result.status ?? 1;
+      return;
+    }
+    const finalization = finalizeCandidateReceipts({
+      repositoryRoot,
+      repositoryCommit,
+      committedLauncher,
+      helper,
+      materializer,
+      manifest,
+      campaignFiles,
+      campaignAbsolutePaths,
+      campaignRoot,
+      candidateReceiptDirectory,
+      attestationPath,
+      runId,
+      finalizationKey,
+      finalizationKeyCommitment,
+      initialBuildInputs: buildInputs,
+      initialCampaignGitSha256: campaignGitSha256,
+      initialCampaignExecutedSha256: campaignExecutedSha256,
+      initialCampaignMaterializedSha256: campaignMaterializedSha256,
+      provenanceModule,
+      materializedModule,
+    });
+    finalizationKey.fill(0);
+    process.stdout.write(
+      `${JSON.stringify({
+        schemaVersion: 1,
+        mode: "committed-launcher-finalization-complete",
+        authority: finalization.finalizationManifest.authority,
+        repositoryHead: finalization.finalizationManifest.repository_head,
+        launcherOid: finalization.finalizationManifest.launcher_oid,
+        receiptCount: finalization.finalizationManifest.receipt_count,
+        outputDirectory: path.relative(
+          repositoryRoot,
+          finalization.finalDirectory,
+        ).split(path.sep).join("/"),
+      })}\n`,
+    );'''
+    text = replace_once(text, old_tail, new_tail, "launcher post-child finalization")
+    target.write_text(text, encoding="utf-8")
+
+
+RAW_DOC = r'''
+## Committed-launcher receipt finalization
+
+The Playwright child no longer emits an authoritative positive receipt. It can
+write only three schema-1 `playwright-candidate-only` files into a private
+launcher-created directory, and every candidate explicitly records
+`launcher_finalized: false`. The HMAC launch envelope remains a one-shot
+transport-integrity control; it is not the receipt trust root and a direct caller
+that supplies both envelope and transport key can produce at most a candidate.
+
+The exact committed launcher retains a separate random finalization key that is
+never placed in the child environment or filesystem. After Playwright exits
+successfully, the launcher requires the one-shot attestation to be deleted,
+re-runs strict Git integrity and all raw build/campaign/materialized-tree checks,
+re-hashes the fixed extension output, validates the complete four-arm typed-sink
+matrix for all three journeys, and safely recreates the fixed final-output
+directory. Only then does it construct schema-5
+`committed-launcher-finalized` receipts and authenticate each with the retained
+key. It reads the persisted bytes back and verifies the launcher MAC before
+writing the finalization manifest.
+
+This makes modified direct Playwright execution unable to self-issue the final
+receipt accepted by the campaign. The remaining ceiling is unchanged: the
+runner, Node/Git/npm/Playwright toolchain, and a non-hostile concurrent same-user
+environment remain trusted.
+'''
+
+STATE_DOC = r'''
+## Launcher-owned final receipt checkpoint
+
+Positive evidence is now a two-stage protocol. The committed campaign process
+produces non-authoritative behavior candidates only. The exact committed launcher
+keeps the finalization key outside the child, waits for a successful child exit,
+revalidates source, materialized campaign, object store, and fixed build output,
+then reconstructs and authenticates the final receipts itself. A caller-created
+HMAC launch envelope cannot cross that boundary because the Playwright process
+never receives the launcher finalization key and contains no final-receipt writer.
+
+Qualification must retain the three launcher-finalized schema-5 receipts and the
+launcher manifest as the evidence artifact. Candidate files are diagnostic input
+and are deleted with the private launch directory.
+'''
+
+
+def patch_docs() -> None:
+    append_once(
+        ROOT / "docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md",
+        "## Committed-launcher receipt finalization",
+        RAW_DOC,
+    )
+    append_once(
+        ROOT / "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md",
+        "## Launcher-owned final receipt checkpoint",
+        STATE_DOC,
+    )
+
+
+def patch_production() -> None:
+    patch_spec()
+    patch_launcher()
+    patch_docs()
+
+
