@@ -62,10 +62,11 @@ jobs:
             scripts/run-state-authority-campaign.mjs \
             scripts/verify-state-authority-receipts.mjs \
             tests/state-authority-launcher-contract.test.ts
-          git rm \
+          git rm -f \
             .github/workflows/issue684-portability-integrity-repair.yml \
             scripts/issue684-portability-integrity-repair.py \
             scripts/issue684-repair-script-fix.py
+          git diff --cached --check
           git commit -m "fix: make state-authority evidence portable and verifiable"
           test -z "$(git status --porcelain)"
           git rev-parse HEAD
