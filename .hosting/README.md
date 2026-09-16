@@ -6,7 +6,11 @@ The extension stays local. Its browser service worker is not a Cloudflare Worker
 
 ## Existing owner: AI-19
 
-Continue the established AI-19 naming task rather than opening a competing decision process. The requested direction is rename preparation. Keep unregistered candidate names/domain quotes private until chosen and secured; this PR does not adopt a name.
+Continue the established AI-19 naming task rather than opening a competing
+decision process. AI-19 still leaves the owner a choice between preparing a
+rename and retaining/formally clearing the working name; this PR records no
+choice. Keep unregistered candidate names/domain quotes private until chosen and
+secured; this PR does not adopt a name.
 
 Inventory display strings, manifest labels, icons, screenshots, privacy/support URLs and store copy separately from extension IDs, signing/store identity, storage keys, permissions, package coordinates and saved settings. A broad search-and-replace is not an acceptable migration. Preserve the interaction-only release profile, local storage, trusted-domain controls and existing browser behavior.
 
