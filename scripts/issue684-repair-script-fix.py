@@ -107,4 +107,18 @@ replacement = r"""    regex_once(
 """
 
 text = text[:start] + replacement + text[end:]
+
+old_import = """  const module = await import(
+    \"../scripts/run-state-authority-campaign.mjs\"
+  );"""
+new_import = """  // @ts-expect-error -- committed launcher has no declaration file
+  const module = await import(
+    \"../scripts/run-state-authority-campaign.mjs\"
+  );"""
+if text.count(old_import) != 1:
+    raise SystemExit(
+        f"expected one launcher import boundary, found {text.count(old_import)}"
+    )
+text = text.replace(old_import, new_import, 1)
+
 path.write_text(text, encoding="utf-8")
