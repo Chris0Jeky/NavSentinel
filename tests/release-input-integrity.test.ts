@@ -153,6 +153,20 @@ describe("release input integrity", () => {
     expect(() => assertExactCommittedInputs(root)).toThrow(/raw filesystem bytes differ/i);
   });
 
+  it("accepts a normal Windows autocrlf checkout", () => {
+    const root = createRepository("windows-autocrlf", {
+      ".gitattributes": "line.txt text eol=lf\n",
+      "line.txt": "line one\nline two\n",
+    });
+    runGit(root, ["config", "core.autocrlf", "true"]);
+    runGit(root, ["config", "core.eol", "native"]);
+    fs.rmSync(path.join(root, "line.txt"));
+    runGit(root, ["checkout-index", "--force", "--all"]);
+
+    expect(runGit(root, ["ls-files", "--eol", "--", "line.txt"])).toMatch(/i\/lf\s+w\/lf/);
+    expect(() => assertExactCommittedInputs(root)).not.toThrow();
+  });
+
   it.each([
     ["ordinary", "extra.txt"],
     ["ignored", "ignored.txt"],
