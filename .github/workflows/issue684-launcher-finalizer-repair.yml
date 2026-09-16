@@ -1,0 +1,167 @@
+name: Issue 684 launcher-owned receipt repair
+
+on:
+  push:
+    branches:
+      - fix/684-raw-evidence-inputs-20260916
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-684-launcher-finalizer-repair
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/684-raw-evidence-inputs-20260916
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Reconstruct verified repair program
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cat scripts/.issue684-finalizer-patch.* > scripts/issue684-finalizer-patch.py
+          actual_size="$(wc -c < scripts/issue684-finalizer-patch.py)"
+          echo "Reconstructed patch bytes: $actual_size"
+          test "$actual_size" -eq 36285
+          echo "6003fd6b0bc83a186b38713a9b7c15b751cc57dc9b45a663bc7dfbbd0b403ab2  scripts/issue684-finalizer-patch.py" | sha256sum --check
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python -m py_compile scripts/issue684-finalizer-patch.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prove launcher-finalization contract is red first
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python -B scripts/issue684-finalizer-patch.py tests
+          set +e
+          npm run test -- --run tests/state-authority-launcher-contract.test.ts \
+            -t "keeps authoritative receipt issuance in the committed launcher"
+          red_status=$?
+          set -e
+          if [ "$red_status" -eq 0 ]; then
+            echo "::error::Expected launcher-authority regression to fail before implementation"
+            exit 1
+          fi
+          echo "Observed expected pre-implementation failure: $red_status"
+
+      - name: Materialize final implementation commit
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python -B scripts/issue684-finalizer-patch.py production
+          rm scripts/issue684-finalizer-patch.py
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add \
+            docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md \
+            docs/security-program/STATE_AUTHORITY_CAMPAIGN.md \
+            scripts/run-state-authority-campaign.mjs \
+            tests/e2e/state-authority-sink.spec.ts \
+            tests/state-authority-launcher-contract.test.ts
+          git rm \
+            .github/workflows/issue684-launcher-finalizer-repair.yml \
+            scripts/.issue684-finalizer-patch.*
+          git diff --cached --check
+          git commit -m "fix: finalize state-authority receipts in launcher"
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+
+      - name: Verify syntax, lint, and types
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          node --check scripts/run-state-authority-campaign.mjs
+          npm run lint
+          npm run typecheck
+
+      - name: Run provenance and launcher contracts
+        run: >
+          npm run test -- --run
+          tests/extension-build-provenance.test.ts
+          tests/state-authority-launcher-contract.test.ts
+
+      - name: Verify Git object store
+        run: git fsck --full --strict --no-reflogs --no-progress HEAD
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run exact committed launcher campaign
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          launcher_oid="$(git rev-parse HEAD:scripts/run-state-authority-campaign.mjs)"
+          launcher_path="$RUNNER_TEMP/run-state-authority-campaign.mjs"
+          git cat-file blob "$launcher_oid" > "$launcher_path"
+          chmod 600 "$launcher_path"
+          env -u NODE_OPTIONS -u NODE_PATH \
+            NAVSENTINEL_EXPECTED_LAUNCHER_OID="$launcher_oid" \
+            xvfb-run -a node --experimental-strip-types "$launcher_path" \
+              --repository "$GITHUB_WORKSPACE"
+
+      - name: Validate launcher-finalized evidence
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          root = Path("test-results/state-authority-launcher-receipts")
+          manifest_path = root / "manifest.json"
+          if not manifest_path.is_file():
+              raise SystemExit("launcher finalization manifest is missing")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          if manifest.get("schema_version") != 1:
+              raise SystemExit("unexpected manifest schema")
+          if manifest.get("authority") != "committed-launcher-finalization-manifest":
+              raise SystemExit("unexpected manifest authority")
+          if manifest.get("receipt_count") != 3:
+              raise SystemExit("expected exactly three finalized receipts")
+          receipt_files = sorted(root.glob("rw*-state-authority-receipt.json"))
+          if len(receipt_files) != 3:
+              raise SystemExit(f"expected three receipt files, found {len(receipt_files)}")
+          for receipt_path in receipt_files:
+              receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+              if receipt.get("schema_version") != 5:
+                  raise SystemExit(f"{receipt_path.name}: unexpected schema")
+              if receipt.get("authority") != "committed-launcher-finalized":
+                  raise SystemExit(f"{receipt_path.name}: unexpected authority")
+              if receipt.get("launcher_finalized") is not True:
+                  raise SystemExit(f"{receipt_path.name}: not launcher finalized")
+              finalization = receipt.get("launcher_finalization", {})
+              if finalization.get("finalized_after_child_exit") is not True:
+                  raise SystemExit(f"{receipt_path.name}: not finalized after child exit")
+              if finalization.get("authenticated_in_committed_launcher") is not True:
+                  raise SystemExit(f"{receipt_path.name}: launcher authentication missing")
+              mac = finalization.get("mac_sha256", "")
+              if not re.fullmatch(r"[0-9a-f]{64}", mac):
+                  raise SystemExit(f"{receipt_path.name}: malformed launcher MAC")
+          if list(root.glob("*candidate*")):
+              raise SystemExit("candidate files leaked into final evidence output")
+          print("Validated 3 launcher-finalized schema-5 receipts and manifest")
+          PY
+          node scripts/check-perf-budget.mjs
+
+      - name: Upload launcher-finalized receipts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: issue-684-launcher-finalized-receipts
+          path: test-results/state-authority-launcher-receipts/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Push qualified exact head
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: git push origin HEAD:fix/684-raw-evidence-inputs-20260916
