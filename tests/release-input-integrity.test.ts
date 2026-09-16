@@ -13,6 +13,16 @@ import {
   createSanitizedGitEnvironment,
 } from "../scripts/release-input-integrity.mjs";
 
+type ReleaseIntegrityModule = typeof import("../scripts/release-input-integrity.mjs") & {
+  resolveReleaseCommand?: (
+    command: string,
+    args: readonly string[],
+    options?: { platform?: NodeJS.Platform; comspec?: string },
+  ) => { command: string; args: readonly string[] };
+};
+
+const releaseIntegrityModule = (await import("../scripts/release-input-integrity.mjs")) as ReleaseIntegrityModule;
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(__dirname, "..");
 const tempRoots: string[] = [];
@@ -207,6 +217,12 @@ describe("release input integrity", () => {
       GIT_CONFIG_COUNT: "1",
       GIT_CONFIG_KEY_0: "core.worktree",
       GIT_CONFIG_VALUE_0: "/tmp/attacker-config-worktree",
+      git_dir: "/tmp/lowercase-attacker-git-dir",
+      Git_Work_Tree: "/tmp/mixed-case-attacker-work-tree",
+      git_index_file: "/tmp/lowercase-attacker-index",
+      Git_Config_Count: "1",
+      git_config_key_0: "core.worktree",
+      Git_Config_Value_0: "/tmp/mixed-case-attacker-config-worktree",
     });
 
     expect(environment.GIT_DIR).toBeUndefined();
@@ -215,9 +231,35 @@ describe("release input integrity", () => {
     expect(environment.GIT_OBJECT_DIRECTORY).toBeUndefined();
     expect(environment.GIT_ALTERNATE_OBJECT_DIRECTORIES).toBeUndefined();
     expect(environment.GIT_CONFIG_COUNT).toBeUndefined();
+    expect(environment.git_dir).toBeUndefined();
+    expect(environment.Git_Work_Tree).toBeUndefined();
+    expect(environment.git_index_file).toBeUndefined();
+    expect(environment.Git_Config_Count).toBeUndefined();
+    expect(environment.git_config_key_0).toBeUndefined();
+    expect(environment.Git_Config_Value_0).toBeUndefined();
     expect(environment.GIT_NO_REPLACE_OBJECTS).toBe("1");
     expect(environment.GIT_NO_LAZY_FETCH).toBe("1");
     expect(() => assertExactCommittedInputs(root, { environment })).not.toThrow();
+  });
+
+  it("selects a Windows command interpreter for npm while preserving fixed arguments", () => {
+    const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
+    expect(resolveReleaseCommand).toEqual(expect.any(Function));
+
+    expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+      platform: "win32",
+      comspec: "C:\\Windows\\System32\\cmd.exe",
+    })).toEqual({
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "npm", "install", "--package-lock-only", "--ignore-scripts"],
+    });
+
+    expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+      platform: "linux",
+    })).toEqual({
+      command: "npm",
+      args: ["install", "--package-lock-only", "--ignore-scripts"],
+    });
   });
 
   it("attests a detached linked worktree without trusting its .git indirection file", () => {

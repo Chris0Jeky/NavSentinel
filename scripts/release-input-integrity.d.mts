@@ -64,6 +64,22 @@ export function createSanitizedGitEnvironment(
   source?: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv;
 
+export interface ReleaseCommandOptions {
+  readonly platform?: NodeJS.Platform;
+  readonly comspec?: string;
+}
+
+export interface ReleaseCommandInvocation {
+  readonly command: string;
+  readonly args: readonly string[];
+}
+
+export function resolveReleaseCommand(
+  command: string,
+  args: readonly string[],
+  options?: ReleaseCommandOptions,
+): ReleaseCommandInvocation;
+
 export function runReleaseGit(
   repositoryRoot: string,
   args: readonly string[],

@@ -77,7 +77,8 @@ export function createSanitizedGitEnvironment(source = process.env) {
   const environment = {};
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined) continue;
-    if (key.startsWith("GIT_") && !PRESERVED_GIT_IDENTITY_KEYS.has(key)) continue;
+    const normalizedKey = key.toUpperCase();
+    if (normalizedKey.startsWith("GIT_") && !PRESERVED_GIT_IDENTITY_KEYS.has(normalizedKey)) continue;
     environment[key] = value;
   }
 
@@ -87,6 +88,17 @@ export function createSanitizedGitEnvironment(source = process.env) {
   environment.LC_ALL = "C";
   environment.LANG = "C";
   return environment;
+}
+
+export function resolveReleaseCommand(command, args, options = {}) {
+  if ((options.platform ?? process.platform) !== "win32") {
+    return { command, args: [...args] };
+  }
+
+  return {
+    command: options.comspec ?? process.env.ComSpec ?? process.env.COMSPEC ?? "cmd.exe",
+    args: ["/d", "/s", "/c", command, ...args],
+  };
 }
 
 function gitInvocation(repositoryRoot, args, options = {}) {

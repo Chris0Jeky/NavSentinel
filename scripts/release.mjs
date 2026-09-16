@@ -25,6 +25,7 @@ import {
   assertReleaseCommitScope,
   capturePreparedReleaseChanges,
   createSanitizedGitEnvironment,
+  resolveReleaseCommand,
   runReleaseGit,
 } from "./release-input-integrity.mjs";
 
@@ -37,7 +38,8 @@ const root = path.resolve(__dirname, "..");
 // ---------------------------------------------------------------------------
 
 function runCommand(command, args, opts = {}) {
-  return execFileSync(command, args, {
+  const invocation = resolveReleaseCommand(command, args);
+  return execFileSync(invocation.command, invocation.args, {
     cwd: root,
     encoding: "utf8",
     // npm may invoke Git for git-backed dependencies. Scrub the same inherited
