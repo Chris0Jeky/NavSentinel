@@ -113,11 +113,17 @@ old_mac_payload = """  delete unsigned.launcher_finalization.mac_sha256;
 new_mac_payload = """  delete unsigned.launcher_finalization.mac_sha256;
   delete unsigned.launcher_signature;
   const expected = authenticateFinalReceipt(unsigned, finalizationKey);"""
-if text.count(old_mac_payload) != 1:
+mac_count = text.count(old_mac_payload)
+if mac_count != 2:
     raise SystemExit(
-        f"expected one final receipt MAC payload, found {text.count(old_mac_payload)}"
+        f"expected original and replacement MAC payloads, found {mac_count}"
     )
-text = text.replace(old_mac_payload, new_mac_payload, 1)
+mac_position = text.rfind(old_mac_payload)
+text = (
+    text[:mac_position]
+    + new_mac_payload
+    + text[mac_position + len(old_mac_payload):]
+)
 
 old_import = """  const module = await import(
     \"../scripts/run-state-authority-campaign.mjs\"
