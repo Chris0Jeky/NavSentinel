@@ -34,19 +34,28 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           target = Path("tests/e2e/suite-ui.spec.ts")
           text = target.read_text(encoding="utf-8")
-          replacements = {
-              "ts: 1_710_000_000_000,": "ts: Date.now() - 3_000,",
-              "ts: 1_710_000_000_001,": "ts: Date.now() - 2_000,",
-              "ts: 1_710_000_000_002,": "ts: Date.now() - 1_000,",
-          }
-          for old, new in replacements.items():
-              count = text.count(old)
+          replacements = [
+              (
+                  r'(id: "active-site-risk",\n\s+ts:) 1_710_000_000_000,',
+                  r'\1 Date.now() - 3_000,',
+              ),
+              (
+                  r'(id: "other-site-high-risk",\n\s+ts:) 1_710_000_000_001,',
+                  r'\1 Date.now() - 2_000,',
+              ),
+              (
+                  r'(id: "active-site-clickfix",\n\s+ts:) 1_710_000_000_002,',
+                  r'\1 Date.now() - 1_000,',
+              ),
+          ]
+          for pattern, replacement in replacements:
+              text, count = re.subn(pattern, replacement, text, count=1)
               if count != 1:
-                  raise SystemExit(f"expected exactly one {old!r}, found {count}")
-              text = text.replace(old, new, 1)
+                  raise SystemExit(f"expected exactly one named popup fixture for {pattern!r}, found {count}")
           target.write_text(text, encoding="utf-8")
           PY
           git config user.name "NavSentinel Qualification"
