@@ -48,6 +48,7 @@ function pickCurrentPageEvent<T extends EventLogEntry>(
 
   const oldestAcceptedTs = now - POPUP_CURRENT_PAGE_MAX_EVENT_AGE_MS;
   const entries = log ?? [];
+  let newest: T | null = null;
   for (let i = entries.length - 1; i >= 0; i--) {
     const event = entries[i];
     if (!event || !match(event)) continue;
@@ -61,10 +62,15 @@ function pickCurrentPageEvent<T extends EventLogEntry>(
 
     const eventHost =
       normalizeEventPageSite(event.pageSite) ?? normalizeEventPageSite(event.site);
-    if (eventHost === host) return event;
+    if (eventHost !== host) continue;
+
+    // Imported backups preserve payload order, and delayed delivery can append an
+    // older-created event later. Timestamp is the evidence clock; reverse array
+    // order is used only as a deterministic tie-breaker for equal timestamps.
+    if (!newest || event.ts > newest.ts) newest = event;
   }
 
-  return null;
+  return newest;
 }
 
 /**
