@@ -20,7 +20,7 @@ const EXPLANATIONS: Record<string, string> = {
   nrs_new_tab_window: "Navigation opens a new tab or window",
   nrs_cross_site: "Navigation goes to a different website",
   nrs_fast_attempt: "Navigation triggered unusually quickly after click",
-  nrs_user_activation_active: "The browser still considered a user gesture active when navigation began",
+  nrs_user_activation_active: "The browser still considered a user gesture active when navigation was attempted",
   nrs_multiple_attempts: "Multiple navigation attempts from a single click",
   nrs_allowlisted: "Destination is on your allowlist",
   nrs_explicit_new_tab_intent: "You explicitly opened this in a new tab",
@@ -50,7 +50,7 @@ const EXPLANATIONS: Record<string, string> = {
   overlay_injected: "A suspicious overlay was injected after the page loaded",
   form_action_changed: "A form's submission target was changed after page load",
   password_injected: "A password field was injected into an existing form",
-  suspicious_iframe: "A suspicious iframe was injected after the page loaded",
+  suspicious_iframe: "A suspicious iframe was injected after page load",
 
   // Other event-related codes used in toasts
   clickfix_detected: "Fake verification dialog with clipboard hijack detected",
