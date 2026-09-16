@@ -1,0 +1,91 @@
+name: Issue 684 independent review repair
+
+on:
+  push:
+    branches:
+      - fix/684-raw-evidence-inputs-20260916
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          ref: fix/684-raw-evidence-inputs-20260916
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Materialize exact-head review repair
+        shell: bash
+        run: |
+          gzip -dc scripts/issue684-review-repair.py.gz > "$RUNNER_TEMP/issue684-review-repair.py"
+          python "$RUNNER_TEMP/issue684-review-repair.py"
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add \
+            docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md \
+            docs/security-program/STATE_AUTHORITY_CAMPAIGN.md \
+            scripts/build-extension.mjs \
+            scripts/run-state-authority-campaign.mjs \
+            tests/e2e/extension_build_provenance.ts \
+            tests/e2e/state-authority-campaign-inputs.json \
+            tests/e2e/state-authority-sink.spec.ts \
+            tests/extension-build-provenance.test.ts
+          git rm \
+            .github/workflows/issue684-review-repair.yml \
+            scripts/issue684-review-repair.py.gz
+          git diff --cached --check
+          git commit -m "fix: authenticate state-authority campaign preflight"
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check JavaScript launch and build entrypoints
+        run: |
+          node --check scripts/build-extension.mjs
+          node --check scripts/run-state-authority-campaign.mjs
+          node -e 'JSON.parse(require("node:fs").readFileSync("tests/e2e/state-authority-campaign-inputs.json", "utf8"))'
+
+      - name: Focused lint
+        run: npx eslint tests/e2e/extension_build_provenance.ts tests/e2e/state-authority-sink.spec.ts tests/extension-build-provenance.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Raw authority adversarial tests
+        run: npm run test -- --run tests/extension-build-provenance.test.ts
+
+      - name: Authenticate repository object store
+        run: git fsck --full --strict --no-reflogs --no-progress HEAD
+
+      - name: Install bundled Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run campaign through committed external launcher
+        shell: bash
+        run: |
+          launcher_oid="$(git rev-parse HEAD:scripts/run-state-authority-campaign.mjs)"
+          launcher_path="$RUNNER_TEMP/run-state-authority-campaign.mjs"
+          git cat-file blob "$launcher_oid" > "$launcher_path"
+          chmod 600 "$launcher_path"
+          env -u NODE_OPTIONS -u NODE_PATH \
+            NAVSENTINEL_EXPECTED_LAUNCHER_OID="$launcher_oid" \
+            xvfb-run -a node --experimental-strip-types "$launcher_path" \
+              --repository "$GITHUB_WORKSPACE"
+
+      - name: Publish qualified candidate
+        shell: bash
+        run: git push origin HEAD:fix/684-raw-evidence-inputs-20260916
