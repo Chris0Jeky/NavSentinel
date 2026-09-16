@@ -3,7 +3,7 @@ import type { EventLogEntry } from "../extension/src/shared/storage";
 import {
   POPUP_CURRENT_PAGE_MAX_EVENT_AGE_MS,
   derivePopupCurrentPageRisk,
-} from "../extension/src/popup/popup_model";
+} from "../extension/src/popup/popup_current_page_risk";
 
 const NOW = 1_800_000_000_000;
 
