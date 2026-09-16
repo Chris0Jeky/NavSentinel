@@ -37,6 +37,7 @@ jobs:
           echo "Reconstructed patch bytes: $actual_size"
           test "$actual_size" -eq 21307
           sha256sum scripts/issue684-replay-patch.py
+          nl -ba scripts/issue684-replay-patch.py | sed -n '96,136p'
           PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python -m py_compile scripts/issue684-replay-patch.py
           python -B scripts/issue684-replay-patch.py
           rm scripts/issue684-replay-patch.py
