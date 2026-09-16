@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { deflateSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 
 const repositoryRoot = path.resolve(process.cwd());
@@ -13,6 +14,7 @@ type LauncherModule = {
 
 type BootstrapModule = {
   sanitizedBootstrapEnvironment: (source: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
+  gitObjectId: (type: string, content: Buffer, objectFormat: string) => string;
 };
 
 async function loadLauncherModule(): Promise<LauncherModule> {
@@ -72,6 +74,92 @@ afterEach(() => {
 });
 
 describe("state-authority launcher replay boundary", () => {
+  it("recomputes the extracted launcher's Git object ID before execution", async () => {
+    const { gitObjectId } = await loadBootstrapModule();
+    const launcherBytes = Buffer.from("console.log('trusted launcher');\n", "utf8");
+    const expectedOid = execFileSync("git", ["hash-object", "--stdin"], {
+      cwd: repositoryRoot,
+      input: launcherBytes,
+      encoding: "utf8",
+    }).trim();
+
+    expect(gitObjectId("blob", launcherBytes, "sha1")).toBe(expectedOid);
+    expect(() => gitObjectId("blob", launcherBytes, "md5")).toThrow(
+      /unsupported Git object format/u,
+    );
+  });
+
+  it("rejects a substituted loose launcher object before Node executes it", () => {
+    const temporaryRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "navsentinel-bootstrap-object-integrity-"),
+    );
+    temporaryPaths.push(temporaryRoot);
+    fs.mkdirSync(path.join(temporaryRoot, "scripts"));
+    const launcherPath = path.join(
+      temporaryRoot,
+      "scripts",
+      "run-state-authority-campaign.mjs",
+    );
+    fs.writeFileSync(launcherPath, "process.exitCode = 0;\n", "utf8");
+    execFileSync("git", ["init"], { cwd: temporaryRoot });
+    execFileSync("git", ["add", "."], { cwd: temporaryRoot });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=NavSentinel Test",
+        "-c",
+        "user.email=navsentinel-test@example.invalid",
+        "commit",
+        "-m",
+        "fixture",
+      ],
+      { cwd: temporaryRoot },
+    );
+    const launcherOid = execFileSync(
+      "git",
+      ["rev-parse", "HEAD:scripts/run-state-authority-campaign.mjs"],
+      { cwd: temporaryRoot, encoding: "utf8" },
+    ).trim();
+    const markerPath = path.join(temporaryRoot, "substituted-launcher-ran.txt");
+    const substitutedBytes = Buffer.from(
+      `import fs from "node:fs"; fs.writeFileSync(process.env.MARKER_PATH, "executed");\n`,
+      "utf8",
+    );
+    const looseObjectPath = path.join(
+      temporaryRoot,
+      ".git",
+      "objects",
+      launcherOid.slice(0, 2),
+      launcherOid.slice(2),
+    );
+    fs.chmodSync(looseObjectPath, 0o600);
+    fs.writeFileSync(
+      looseObjectPath,
+      deflateSync(Buffer.concat([
+        Buffer.from(`blob ${substitutedBytes.length}\0`, "utf8"),
+        substitutedBytes,
+      ])),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(repositoryRoot, "scripts", "launch-state-authority-campaign.mjs"),
+        "--preflight-only",
+      ],
+      {
+        cwd: temporaryRoot,
+        env: { ...process.env, MARKER_PATH: markerPath },
+        encoding: "utf8",
+      },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(fs.existsSync(markerPath)).toBe(false);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/corrupt|mismatch/u);
+  });
+
   it("scrubs preload and repository authority before extracting the launcher", async () => {
     const { sanitizedBootstrapEnvironment } = await loadBootstrapModule();
     const environment = sanitizedBootstrapEnvironment({

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +34,19 @@ export function sanitizedBootstrapEnvironment(source = process.env) {
   return environment;
 }
 
+export function gitObjectId(type, content, objectFormat) {
+  if (!Buffer.isBuffer(content)) {
+    fail("Git object content must be a Buffer");
+  }
+  if (objectFormat !== "sha1" && objectFormat !== "sha256") {
+    fail(`unsupported Git object format '${objectFormat}'`);
+  }
+  return createHash(objectFormat)
+    .update(Buffer.from(`${type} ${content.length}\0`, "utf8"))
+    .update(content)
+    .digest("hex");
+}
+
 function git(args, { cwd, environment, encoding } = {}) {
   return execFileSync("git", args, {
     cwd,
@@ -54,6 +68,23 @@ export function main(args = process.argv.slice(2)) {
       encoding: "utf8",
     }).trim(),
   );
+  git(
+    [
+      "-C",
+      repositoryRoot,
+      "fsck",
+      "--full",
+      "--strict",
+      "--no-reflogs",
+      "--no-progress",
+      "HEAD",
+    ],
+    { environment },
+  );
+  const objectFormat = git(
+    ["-C", repositoryRoot, "rev-parse", "--show-object-format"],
+    { environment, encoding: "utf8" },
+  ).trim();
   const launcherOid = git(
     ["-C", repositoryRoot, "rev-parse", `HEAD:${LAUNCHER_REPOSITORY_PATH}`],
     { environment, encoding: "utf8" },
@@ -65,6 +96,9 @@ export function main(args = process.argv.slice(2)) {
     ["-C", repositoryRoot, "cat-file", "blob", launcherOid],
     { environment },
   );
+  if (gitObjectId("blob", launcherBytes, objectFormat) !== launcherOid) {
+    fail("extracted launcher bytes do not match the committed object ID");
+  }
   const temporaryRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
   );
