@@ -117,9 +117,10 @@ change the tag target.
 - end-to-end `release.mjs --dry-run` refusal when filter-aware Git cleanliness
   hides raw worktree changes.
 
-A dependency-free Node contract additionally exercises the same boundaries
-without Vitest. A disposable real release with a no-dependency package proves
-the complete bump, lock refresh, commit attestation, and explicit tag path.
+The focused suite does not execute a non-dry-run release, refresh a real lock,
+create a release commit, or create a tag. Those steps remain release-time gates;
+the tests cover their attestation helpers and refusal boundaries, while the
+integration case stops at `release.mjs --dry-run` before mutation.
 
 ## Non-goals
 
