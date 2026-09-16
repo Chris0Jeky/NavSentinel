@@ -36,7 +36,10 @@ jobs:
 
       - name: Run stress tests
         timeout-minutes: 30
-        run: xvfb-run -a npm run test:e2e:stress
+        # The state-authority sink in the same Playwright config is restricted to
+        # the committed campaign launcher. The generic nightly lane runs only the
+        # ordinary stress spec.
+        run: xvfb-run -a npm run test:e2e:stress -- tests/e2e/navsentinel.stress.spec.ts
 
       - name: Upload traces on failure
         if: failure()
