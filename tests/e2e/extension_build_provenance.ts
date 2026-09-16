@@ -13,6 +13,25 @@ const VITE_CONFIG_CANDIDATES = [
   "vite.config.cts",
 ] as const;
 const VITE_CONFIG_PATHS = new Set<string>(VITE_CONFIG_CANDIDATES);
+const POSTCSS_CONFIG_CANDIDATES = [
+  ".postcssrc",
+  ".postcssrc.json",
+  ".postcssrc.yaml",
+  ".postcssrc.yml",
+  ".postcssrc.js",
+  ".postcssrc.mjs",
+  ".postcssrc.cjs",
+  ".postcssrc.ts",
+  ".postcssrc.mts",
+  ".postcssrc.cts",
+  "postcss.config.js",
+  "postcss.config.mjs",
+  "postcss.config.cjs",
+  "postcss.config.ts",
+  "postcss.config.mts",
+  "postcss.config.cts",
+] as const;
+const POSTCSS_CONFIG_PATHS = new Set<string>(POSTCSS_CONFIG_CANDIDATES);
 
 const BUILD_INPUT_PATHS = [
   "extension",
@@ -21,6 +40,7 @@ const BUILD_INPUT_PATHS = [
   "package.json",
   "package-lock.json",
   ...VITE_CONFIG_CANDIDATES,
+  ...POSTCSS_CONFIG_CANDIDATES,
   "tsconfig.json",
 ] as const;
 
@@ -767,6 +787,12 @@ function assertNoUnexpectedBuildInputs(
       throw integrityError(
         "ALTERNATE_VITE_CONFIG",
         `alternate Vite configuration '${rootPath}' is not allowed`,
+      );
+    }
+    if (POSTCSS_CONFIG_PATHS.has(rootPath)) {
+      throw integrityError(
+        "AUTO_DISCOVERED_POSTCSS_CONFIG",
+        `auto-discovered PostCSS configuration '${rootPath}' is not allowed`,
       );
     }
     visit(absolutePath, rootPath);

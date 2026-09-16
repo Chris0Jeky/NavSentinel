@@ -5,6 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const EXPECTED_JOURNEYS = ["RW-21", "RW-24", "RW-25"];
+const EXPECTED_JOURNEY_SET = new Set(EXPECTED_JOURNEYS);
+
 function fail(message) {
   throw new Error(`State-authority receipt verification failed: ${message}`);
 }
@@ -20,6 +23,7 @@ function isRecord(value) {
 function parseArguments(argv) {
   let directory = "";
   let expectedPublicKeySha256 = "";
+  let expectedManifestSha256 = "";
   let expectedRepositoryHead = "";
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -30,6 +34,9 @@ function parseArguments(argv) {
     } else if (argument === "--expected-public-key-sha256" && value) {
       expectedPublicKeySha256 = value;
       index += 1;
+    } else if (argument === "--expected-manifest-sha256" && value) {
+      expectedManifestSha256 = value;
+      index += 1;
     } else if (argument === "--expected-repository-head" && value) {
       expectedRepositoryHead = value;
       index += 1;
@@ -37,12 +44,19 @@ function parseArguments(argv) {
       fail(`unsupported or incomplete argument '${argument}'`);
     }
   }
-  if (!directory || !/^[0-9a-f]{64}$/u.test(expectedPublicKeySha256)) {
-    fail("directory and expected public-key SHA-256 are required");
+  if (
+    !directory
+    || !/^[0-9a-f]{64}$/u.test(expectedPublicKeySha256)
+    || !/^[0-9a-f]{64}$/u.test(expectedManifestSha256)
+  ) {
+    fail(
+      "directory, expected public-key SHA-256, and expected manifest SHA-256 are required",
+    );
   }
   return {
     directory: path.resolve(directory),
     expectedPublicKeySha256,
+    expectedManifestSha256,
     expectedRepositoryHead,
   };
 }
@@ -97,13 +111,25 @@ function verifySignedReceipt(receipt, expectedPublicKeySha256) {
   return receipt;
 }
 
+function expectedReceiptFilename(journey) {
+  return `${journey.toLowerCase()}-state-authority-receipt.json`;
+}
+
 export function verifyReceiptDirectory({
   directory,
   expectedPublicKeySha256,
+  expectedManifestSha256,
   expectedRepositoryHead = "",
 }) {
+  if (!/^[0-9a-f]{64}$/u.test(expectedManifestSha256 ?? "")) {
+    fail("trusted manifest SHA-256 is required");
+  }
   const manifestPath = path.join(directory, "manifest.json");
   const manifestBytes = fs.readFileSync(manifestPath);
+  const manifestSha256 = sha256Hex(manifestBytes);
+  if (manifestSha256 !== expectedManifestSha256) {
+    fail("manifest SHA-256 does not match the trusted run digest");
+  }
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   if (
     !isRecord(manifest)
@@ -111,6 +137,7 @@ export function verifyReceiptDirectory({
     || manifest.signature_algorithm !== "ed25519"
     || manifest.signing_public_key_sha256 !== expectedPublicKeySha256
     || !Array.isArray(manifest.receipts)
+    || manifest.receipts.length !== EXPECTED_JOURNEYS.length
     || manifest.receipts.length !== manifest.receipt_count
   ) {
     fail("manifest identity is invalid");
@@ -121,16 +148,32 @@ export function verifyReceiptDirectory({
   ) {
     fail("manifest repository head does not match the trusted run");
   }
+
   const verified = [];
+  const seenFilenames = new Set();
+  const seenJourneys = new Set();
   for (const entry of manifest.receipts) {
     if (
       !isRecord(entry)
       || typeof entry.filename !== "string"
       || typeof entry.sha256 !== "string"
+      || typeof entry.journey !== "string"
+      || typeof entry.scenario_id !== "string"
       || path.basename(entry.filename) !== entry.filename
     ) {
       fail("manifest receipt entry is malformed");
     }
+    if (
+      !EXPECTED_JOURNEY_SET.has(entry.journey)
+      || entry.filename !== expectedReceiptFilename(entry.journey)
+      || seenJourneys.has(entry.journey)
+      || seenFilenames.has(entry.filename)
+    ) {
+      fail("manifest has a duplicate or unexpected journey set");
+    }
+    seenJourneys.add(entry.journey);
+    seenFilenames.add(entry.filename);
+
     const receiptBytes = fs.readFileSync(path.join(directory, entry.filename));
     if (sha256Hex(receiptBytes) !== entry.sha256) {
       fail(`${entry.filename} digest does not match the manifest`);
@@ -141,18 +184,26 @@ export function verifyReceiptDirectory({
     );
     if (
       receipt.repository_head !== manifest.repository_head
+      || receipt.scenario_id !== entry.scenario_id
+      || receipt.journey !== entry.journey
       || receipt.launcher_finalization?.launcher_oid !== manifest.launcher_oid
       || receipt.launcher_finalization?.launch_run_id !== manifest.launch_run_id
     ) {
-      fail(`${entry.filename} is not bound to the manifest run`);
+      fail(`${entry.filename} is not bound to the manifest run and journey`);
     }
     verified.push(entry.filename);
+  }
+  if (
+    seenJourneys.size !== EXPECTED_JOURNEYS.length
+    || EXPECTED_JOURNEYS.some((journey) => !seenJourneys.has(journey))
+  ) {
+    fail("manifest does not contain the exact expected journeys");
   }
   return {
     authority: manifest.authority,
     repositoryHead: manifest.repository_head,
     signingPublicKeySha256: expectedPublicKeySha256,
-    manifestSha256: sha256Hex(manifestBytes),
+    manifestSha256,
     receiptCount: verified.length,
     receipts: verified,
   };
