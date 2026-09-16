@@ -150,6 +150,10 @@ No claim should inherit a higher level because a neighboring feature reached it.
 
 ### Gate 4 — privacy and recovery
 
+- before installation, the store listing and Privacy Practices disclose every
+  handled data category and purpose with affirmative install-consent evidence;
+- after installation, a fresh install remains passive until in-product
+  disclosure and explicit activation, with tested revocation and reset;
 - local storage inventory, retention, export, deletion, and recovery are complete enough for beta users;
 - exported artifacts cannot leak secrets, private page content, or unreviewed intellectual property;
 - no remote telemetry or reputation lookup appears in the default product;

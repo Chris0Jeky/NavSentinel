@@ -152,7 +152,9 @@ Start with [docs/README.md](docs/README.md), then read:
 - no runtime network lookup in the research reputation profile;
 - no password-value storage;
 - clipboard content is inspected transiently in the page’s main world only to derive ClickFix metadata, and is not bridged, stored, or transmitted;
-- configuration, decisions, and bounded logs remain in `chrome.storage.local`;
+- persistent configuration, bounded event history, and prompt outcomes remain in
+  `chrome.storage.local`; short-lived pending decisions and per-tab security state
+  use `chrome.storage.session` and clear when the browser closes;
 - the MessagePort challenge proves possession/liveness, not a hard authenticated identity boundary;
 - local history, export, deletion, and retention limitations are documented rather than implied away.
 
