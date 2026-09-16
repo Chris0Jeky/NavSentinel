@@ -30,6 +30,7 @@ jobs:
         shell: bash
         run: |
           python scripts/issue684-lint-fixes.py
+          python scripts/issue684-type-fixes.py
           python scripts/issue684-wire-campaign.py
           git config user.name "NavSentinel Qualification"
           git config user.email "navsentinel-qualification@example.invalid"
@@ -41,6 +42,7 @@ jobs:
           git rm \
             .github/workflows/issue684-qualification.yml \
             scripts/issue684-lint-fixes.py \
+            scripts/issue684-type-fixes.py \
             scripts/issue684-wire-campaign.py
           git diff --cached --check
           git commit -m "test: bind state-authority receipts to raw inputs"
