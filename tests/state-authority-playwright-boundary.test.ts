@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import defaultPlaywrightConfig from "../playwright.config";
+import livePlaywrightConfig from "../playwright.live.config";
+import rollbackPlaywrightConfig from "../playwright.rollback.config";
 import stressPlaywrightConfig from "../playwright.stress.config";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -13,8 +15,12 @@ function patterns(value: string | RegExp | Array<string | RegExp> | undefined): 
 }
 
 describe("state-authority Playwright collection boundary", () => {
-  it("excludes the launcher-only authority spec from ordinary E2E", () => {
-    expect(patterns(defaultPlaywrightConfig.testIgnore)).toContain(
+  it.each([
+    ["default", defaultPlaywrightConfig],
+    ["rollback", rollbackPlaywrightConfig],
+    ["live", livePlaywrightConfig],
+  ])("excludes the launcher-only authority spec from %s E2E", (_name, config) => {
+    expect(patterns(config.testIgnore)).toContain(
       "**/state-authority-sink.spec.ts",
     );
   });

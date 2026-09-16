@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const EXPECTED_VITE_CONFIG = "vite.config.ts";
+const VITE_PROJECT_ROOT = "extension";
 const VITE_CONFIG_CANDIDATES = [
   "vite.config.js",
   "vite.config.mjs",
@@ -36,7 +37,9 @@ const ROOT_POSTCSS_CONFIG_KEYS = new Set<string>(
 );
 const POSTCSS_CONFIG_PATH_KEYS = new Set<string>([
   ...POSTCSS_CONFIG_CANDIDATES,
-  ...POSTCSS_CONFIG_CANDIDATES.map((candidate) => `extension/${candidate}`),
+  ...POSTCSS_CONFIG_CANDIDATES.map(
+    (candidate) => `${VITE_PROJECT_ROOT}/${candidate}`,
+  ),
 ].map((candidate) => candidate.normalize("NFC").toLowerCase()));
 
 const BUILD_INPUT_PATHS = [

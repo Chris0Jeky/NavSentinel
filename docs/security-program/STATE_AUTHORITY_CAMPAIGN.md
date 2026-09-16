@@ -142,12 +142,17 @@ authentication.
 
 ## Retained-set and default-runner boundary
 
+Because the committed Vite project root is `extension/`, build authority rejects
+every supported `.postcssrc*` and `postcss.config.*` candidate at both the
+repository root and `extension/`, whether tracked or untracked.
+
 The external verifier requires the trusted run's manifest SHA-256 before it will
 parse or accept the retained set. It then enforces the exact unique journey set
 `RW-21` / `RW-24` / `RW-25` and binds each canonical filename to the signed
 journey and scenario fields.
 
-`state-authority-sink.spec.ts` is excluded from ordinary Playwright collection.
-It remains available only through `playwright.stress.config.ts` and the committed
-launcher, so the default E2E lane neither bypasses the authority boundary nor
-fails merely by importing a launcher-only module.
+`state-authority-sink.spec.ts` is excluded from every broad ordinary
+Playwright collection: default, rollback, and live. It remains available only
+through `playwright.stress.config.ts` and the committed launcher, so ordinary
+E2E lanes neither bypass the authority boundary nor fail merely by importing a
+launcher-only module.

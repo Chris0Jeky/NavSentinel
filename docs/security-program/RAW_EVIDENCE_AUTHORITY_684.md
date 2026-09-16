@@ -170,9 +170,10 @@ alone is not trusted.
 
 ## Auto-discovered build configuration and manifest-set binding
 
-The build-input verifier rejects every supported root PostCSS configuration
-candidate (`.postcssrc*` and `postcss.config.*`) because this release build has
-no declared PostCSS configuration. The committed `package.json` remains part of
+The build-input verifier rejects every supported PostCSS configuration
+candidate (`.postcssrc*` and `postcss.config.*`) at both the repository root
+and the committed Vite project root `extension/`, because this release build
+has no declared PostCSS configuration. The committed `package.json` remains part of
 the authenticated input closure, so a package-level `postcss` field cannot drift
 without invalidating raw-byte equality. Configuration found above the repository
 root remains part of the explicitly trusted runner/toolchain boundary.
