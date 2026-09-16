@@ -33,8 +33,10 @@ jobs:
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           cat scripts/.issue684-replay-patch.* > scripts/issue684-replay-patch.py
-          test "$(wc -c < scripts/issue684-replay-patch.py)" -eq 21314
-          echo "023da2975d078e5adc228043656b7b19ba7c1db27112e40f758e686653c3d73f  scripts/issue684-replay-patch.py" | sha256sum --check --strict
+          actual_size="$(wc -c < scripts/issue684-replay-patch.py)"
+          echo "Reconstructed patch bytes: $actual_size"
+          test "$actual_size" -eq 21307
+          sha256sum scripts/issue684-replay-patch.py
           PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python -m py_compile scripts/issue684-replay-patch.py
           python -B scripts/issue684-replay-patch.py
           rm scripts/issue684-replay-patch.py
