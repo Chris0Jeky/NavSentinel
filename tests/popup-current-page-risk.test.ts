@@ -63,6 +63,20 @@ describe("derivePopupCurrentPageRisk (#215)", () => {
     expect(derivePopupCurrentPageRisk(log, "https://app.example.com/", NOW).tabRisk).toBe(20);
   });
 
+  it("uses timestamps when qualifying imported rows are stored out of order", () => {
+    const log = [
+      scored("new", "app.example.com", 20, 1_000),
+      scored("old-appended-later", "app.example.com", 80, 5_000),
+    ];
+
+    expect(derivePopupCurrentPageRisk(log, "https://app.example.com/", NOW)).toEqual({
+      tabRisk: 20,
+      reasons: ["score-20"],
+      state: "scored",
+      threatKind: undefined,
+    });
+  });
+
   it("uses browser-derived pageSite rather than the emitting child-frame host", () => {
     const childEvent: EventLogEntry = {
       id: "child",
