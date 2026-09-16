@@ -1,0 +1,94 @@
+name: Issue 215 current-page fixture repair
+
+on:
+  push:
+    branches:
+      - fix/215-current-page-gauge-20260916
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-215-fixture-repair
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/215-current-page-gauge-20260916
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Commit bounded-live fixture repair
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path("tests/e2e/suite-ui.spec.ts")
+          text = target.read_text(encoding="utf-8")
+          replacements = {
+              "ts: 1_710_000_000_000,": "ts: Date.now() - 3_000,",
+              "ts: 1_710_000_000_001,": "ts: Date.now() - 2_000,",
+              "ts: 1_710_000_000_002,": "ts: Date.now() - 1_000,",
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one {old!r}, found {count}")
+              text = text.replace(old, new, 1)
+          target.write_text(text, encoding="utf-8")
+          PY
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add tests/e2e/suite-ui.spec.ts
+          git rm .github/workflows/issue215-fixture-repair.yml
+          git diff --cached --check
+          git commit -m "test: keep popup risk fixture inside live window"
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: Run focused unit regressions
+        run: >
+          npm run test -- --run
+          tests/popup-current-page-risk.test.ts
+          tests/popup-model.test.ts
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run focused popup journey
+        run: >
+          xvfb-run -a npx playwright test
+          tests/e2e/suite-ui.spec.ts
+          --grep "popup renders only active-site risk"
+          --workers=1
+          --retries=0
+
+      - name: Check bundle budgets
+        run: node scripts/check-perf-budget.mjs
+
+      - name: Push qualified exact head
+        run: git push origin HEAD:fix/215-current-page-gauge-20260916
