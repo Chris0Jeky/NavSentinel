@@ -1,8 +1,8 @@
 # Raw evidence authority for issue 684
 
-This slice hardens only the state-authority campaign stacked on PR #681. It does
-not change extension runtime behavior and it does not yet migrate every
-NavSentinel receipt producer.
+This slice supersedes and incorporates PR #681's state-authority campaign on
+current `main`. It does not change extension runtime behavior and it does not
+yet migrate every NavSentinel receipt producer.
 
 ## Authority chain
 
@@ -79,12 +79,14 @@ The repaired boundary now:
 - passes a short-lived private launch attestation into the one-worker campaign,
   then rechecks build inputs, campaign inputs, and fixed output before receipts.
 
-A direct `playwright test` invocation cannot emit this receipt: the stress hook
-fails `TEST_INVALID [EXTERNAL_PREFLIGHT_REQUIRED]` before any campaign arm runs.
-The authoritative hosted command first extracts
-`scripts/run-state-authority-campaign.mjs` from `HEAD`, supplies its object ID via
-`NAVSENTINEL_EXPECTED_LAUNCHER_OID`, and executes that exact blob with plain
-Node. The launcher uses the repository's installed TypeScript compiler to
+A direct `playwright test` invocation cannot emit this receipt: worktree loading
+fails `TEST_INVALID [COMMITTED_CAMPAIGN_EXECUTION_REQUIRED]` before any campaign
+arm runs. `npm run test:e2e:state-authority` and an explicit `Stress Tests`
+workflow dispatch use the dependency-free bootstrap to extract
+`scripts/run-state-authority-campaign.mjs` from `HEAD`, supply its object ID via
+`NAVSENTINEL_EXPECTED_LAUNCHER_OID`, and execute that exact blob with plain Node.
+The hosted workflow checks out full history and retains the signed receipts for
+30 days. The launcher uses the repository's installed TypeScript compiler to
 transpile only the two already-authenticated authority helpers into a private
 runtime directory. Those generated modules are trusted-toolchain output, not an
 expansion of the committed project-source claim.

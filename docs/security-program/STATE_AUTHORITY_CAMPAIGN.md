@@ -10,9 +10,9 @@ sink.
 
 | Slice | Scenario | Attack vector | Candidate state | Evidence ceiling |
 | --- | --- | --- | --- | --- |
-| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | local bundled-Chromium regression |
-| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | one fixed timer boundary |
-| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | one authored churn ordering |
+| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | behavior proved on PR #681; PR #714 adds reviewed raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending hosted qualification | local bundled-Chromium regression |
+| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | behavior proved on PR #681; PR #714 adds reviewed raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending hosted qualification | one fixed timer boundary |
+| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | behavior proved on PR #681; PR #714 adds reviewed raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending hosted qualification | one authored churn ordering |
 
 The Playwright spec emits non-authoritative candidates; only the exact committed launcher may finalize authoritative receipts for a run. Do not turn
 this table into a manual pass claim: promotion requires immutable commit/tree
@@ -57,11 +57,12 @@ attempts are recorded separately from authored-fixture traffic.
 - [ ] normal hosted CI on the pushed head
 - [x] one issue-scoped independent review of PR #714
 
-PR #714 is stacked directly on PR #681 and supplies the bounded #684 closure.
-Its publication gate runs the raw-authority unit suite and all three typed-harm
-journeys against the exact candidate commit before pushing it. Merge remains
-blocked on normal hosted CI and one issue-scoped independent review; broader
-receipt migration stays separate from this state-authority slice.
+PR #714 supersedes and incorporates PR #681 on current `main` and supplies the
+bounded #684 closure. Its publication gate runs the raw-authority unit suite and
+all three typed-harm journeys against the exact candidate commit before pushing
+it. Merge remains blocked on normal hosted CI and the exact-head hosted
+qualification; broader receipt migration stays separate from this
+state-authority slice.
 
 Any missing attack-baseline receipt, any protected or mixed harm receipt, an
 invalid sink request, a source/hash mismatch, or authored-fixture external
