@@ -49,6 +49,7 @@ jobs:
       - name: Materialize final repair commit
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
+          python scripts/issue684-repair-script-fix.py
           python scripts/issue684-portability-integrity-repair.py
           node --check scripts/run-state-authority-campaign.mjs
           node --check scripts/verify-state-authority-receipts.mjs
@@ -63,7 +64,8 @@ jobs:
             tests/state-authority-launcher-contract.test.ts
           git rm \
             .github/workflows/issue684-portability-integrity-repair.yml \
-            scripts/issue684-portability-integrity-repair.py
+            scripts/issue684-portability-integrity-repair.py \
+            scripts/issue684-repair-script-fix.py
           git commit -m "fix: make state-authority evidence portable and verifiable"
           test -z "$(git status --porcelain)"
           git rev-parse HEAD
