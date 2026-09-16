@@ -1,0 +1,104 @@
+name: Issue 217 presentation expectation repair
+
+on:
+  push:
+    branches:
+      - fix/217-user-activation-semantics-20260916
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-217-presentation-repair
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/217-user-activation-semantics-20260916
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Commit expectation repair
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path("tests/popup-model.test.ts")
+          text = target.read_text(encoding="utf-8")
+
+          green_old = '''      "nrs_allowlisted",
+              "nrs_user_activation_active",
+              "nrs_explicit_new_tab_intent",'''
+          green_new = '''      "nrs_allowlisted",
+              "nrs_explicit_new_tab_intent",'''
+          green_count = text.count(green_old)
+          if green_count != 2:
+              raise SystemExit(f"expected two green user-activation entries, found {green_count}")
+          text = text.replace(green_old, green_new)
+
+          warn_old = '''      "clickfix_command_with_overlay",
+              "nav_anomaly",'''
+          warn_new = '''      "nrs_user_activation_active",
+              "clickfix_command_with_overlay",
+              "nav_anomaly",'''
+          warn_count = text.count(warn_old)
+          if warn_count != 1:
+              raise SystemExit(f"expected one warning list insertion point, found {warn_count}")
+          text = text.replace(warn_old, warn_new, 1)
+
+          comment_old = '''    // user_activation is matched EXACTLY, keyboard_/legit_ via startsWith — so a
+              // hypothetical spoof/fake variant stays a warning (no false reassurance).'''
+          comment_new = '''    // User activation remains a positive NRS factor, so it and spoofed variants
+              // stay warnings; keyboard_/legit_ prefix matches are reserved for mitigations.'''
+          comment_count = text.count(comment_old)
+          if comment_count != 1:
+              raise SystemExit(f"expected one user-activation comment, found {comment_count}")
+          text = text.replace(comment_old, comment_new, 1)
+
+          target.write_text(text, encoding="utf-8")
+          PY
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add tests/popup-model.test.ts
+          git rm .github/workflows/issue217-test-repair.yml
+          git diff --cached --check
+          git commit -m "test: align user-activation presentation expectations"
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: Run presentation regressions
+        run: >
+          npm run test -- --run
+          tests/reason-codes.test.ts
+          tests/popup-model.test.ts
+          tests/explanations.test.ts
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Check performance budgets
+        run: node scripts/check-perf-budget.mjs
+
+      - name: Push qualified head
+        run: git push origin HEAD:fix/217-user-activation-semantics-20260916
