@@ -10,7 +10,6 @@ import {
   test,
   type BrowserContext,
   type Page,
-  type TestInfo,
 } from "@playwright/test";
 import {
   startGymServer,
@@ -97,11 +96,12 @@ type ExtensionProvenance = {
 };
 
 type StateAuthorityLaunchAttestation = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   runId: string;
   launcherMode: "git-object-materialized-campaign";
   repositoryRoot: string;
   campaignExecutionRoot: string;
+  candidateReceiptDirectory: string;
   repositoryCommit: string;
   repositoryTree: string;
   objectFormat: string;
@@ -116,6 +116,7 @@ type StateAuthorityLaunchAttestation = {
   helperOid: string;
   materializerOid: string;
   manifestOid: string;
+  finalizationKeyCommitment: string;
   issuedAt: string;
   expiresAt: string;
 };
@@ -260,6 +261,57 @@ function requiredString(record: Record<string, unknown>, key: string): string {
   return value;
 }
 
+function resolveCandidateReceiptDirectory(configured: string): string {
+  const requested = path.resolve(configured);
+  let stats: fs.Stats;
+  try {
+    stats = fs.lstatSync(requested);
+  } catch (error) {
+    throw launchIntegrityError(
+      "CANDIDATE_DIRECTORY",
+      `candidate receipt directory is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw launchIntegrityError(
+      "CANDIDATE_DIRECTORY",
+      "candidate receipt path is linked or not an ordinary directory",
+    );
+  }
+  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) {
+    throw launchIntegrityError(
+      "CANDIDATE_DIRECTORY",
+      "candidate receipt directory permissions are too broad",
+    );
+  }
+  const realDirectory = fs.realpathSync.native(requested);
+  if (!sameNativePath(requested, realDirectory)) {
+    throw launchIntegrityError(
+      "CANDIDATE_DIRECTORY",
+      "candidate receipt directory resolves through a link",
+    );
+  }
+  for (const forbiddenRoot of [repositoryRoot, campaignExecutionRoot]) {
+    const relative = path.relative(forbiddenRoot, realDirectory);
+    if (
+      relative === ""
+      || (
+        !relative.startsWith(`..${path.sep}`)
+        && relative !== ".."
+        && !path.isAbsolute(relative)
+      )
+    ) {
+      throw launchIntegrityError(
+        "CANDIDATE_DIRECTORY",
+        "candidate receipt directory must be outside repository and campaign trees",
+      );
+    }
+  }
+  return realDirectory;
+}
+
 function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
   const attestationPathValue =
     process.env.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION?.trim();
@@ -327,7 +379,7 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
   }
   if (
     !isRecord(parsed)
-    || parsed.schemaVersion !== 2
+    || parsed.schemaVersion !== 3
     || !isRecord(parsed.payload)
     || typeof parsed.mac !== "string"
     || !/^[0-9a-f]{64}$/u.test(parsed.mac)
@@ -356,7 +408,7 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
   }
 
   const payload = parsed.payload;
-  if (payload.schemaVersion !== 2) {
+  if (payload.schemaVersion !== 3) {
     throw launchIntegrityError(
       "LAUNCH_ATTESTATION",
       "unsupported launch attestation payload schema",
@@ -397,7 +449,7 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
   }
 
   const attestation: StateAuthorityLaunchAttestation = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     runId: requiredString(payload, "runId"),
     launcherMode: requiredString(
       payload,
@@ -407,6 +459,9 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
     campaignExecutionRoot: requiredString(
       payload,
       "campaignExecutionRoot",
+    ),
+    candidateReceiptDirectory: resolveCandidateReceiptDirectory(
+      requiredString(payload, "candidateReceiptDirectory"),
     ),
     repositoryCommit: requiredString(payload, "repositoryCommit"),
     repositoryTree: requiredString(payload, "repositoryTree"),
@@ -437,6 +492,10 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
     helperOid: requiredString(payload, "helperOid"),
     materializerOid: requiredString(payload, "materializerOid"),
     manifestOid: requiredString(payload, "manifestOid"),
+    finalizationKeyCommitment: requiredString(
+      payload,
+      "finalizationKeyCommitment",
+    ),
     issuedAt: requiredString(payload, "issuedAt"),
     expiresAt: requiredString(payload, "expiresAt"),
   };
@@ -505,6 +564,7 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
     || !sha256Pattern.test(attestation.campaignGitSha256)
     || !sha256Pattern.test(attestation.campaignExecutedSha256)
     || !sha256Pattern.test(attestation.campaignMaterializedSha256)
+    || !sha256Pattern.test(attestation.finalizationKeyCommitment)
   ) {
     throw launchIntegrityError(
       "LAUNCH_ATTESTATION",
@@ -817,21 +877,20 @@ function observation(arm: Arm, armId: ArmId, outcome: ArmObservation["outcome"])
   };
 }
 
-async function attachReceipt(
-  testInfo: TestInfo,
+function writeReceiptCandidate(
   scenario: ScenarioDefinition,
   observations: ArmObservation[],
   browserVersion: string,
-): Promise<void> {
+): void {
   if (!launchAttestation || !extensionProvenance) {
     throw new Error("External launch and current-head extension provenance were not established.");
   }
   const currentSnapshot = assertLaunchSnapshotCurrent(launchAttestation);
-  const repositoryHead = currentSnapshot.buildInputs.repositoryCommit;
   const currentBuildInputs = currentSnapshot.buildInputs;
-  const gitSourceSha256 = currentSnapshot.campaignGitSha256;
-  const executedSourceSha256 = currentSnapshot.campaignExecutedSha256;
-  expect(executedSourceSha256, "Campaign sources must match raw committed bytes").toBe(gitSourceSha256);
+  expect(
+    currentSnapshot.campaignExecutedSha256,
+    "Campaign sources must match raw committed bytes",
+  ).toBe(currentSnapshot.campaignGitSha256);
   expect(currentBuildInputs.repositoryCommit, "Repository head must not change after the build").toBe(
     extensionProvenance.repositoryHead,
   );
@@ -847,64 +906,34 @@ async function attachReceipt(
     extensionPath,
     extensionProvenance.buildOutput,
   );
-  const receipt = {
-    schema_version: 4,
-    repository_head: repositoryHead,
-    extension_build_sha256: extensionProvenance.buildOutput.sha256,
-    extension_build_provenance: {
-      build_command: "node scripts/build-extension.mjs",
-      fixed_path: "extension/dist",
-      repository_head: extensionProvenance.repositoryHead,
-      repository_tree: extensionProvenance.repositoryTree,
-      object_format: extensionProvenance.objectFormat,
-      comparison_mode: extensionProvenance.comparisonMode,
-      git_source_sha256: extensionProvenance.gitSourceSha256,
-      executed_source_sha256: extensionProvenance.executedSourceSha256,
-      exact_head_match: true,
-      tracked_input_count: extensionProvenance.trackedInputCount,
-      unexpected_input_count: extensionProvenance.unexpectedInputCount,
-      special_input_count: extensionProvenance.specialInputCount,
-      build_output_file_count: currentBuildOutput.fileCount,
-    },
-    campaign_source: {
-      repository_tree: extensionProvenance.repositoryTree,
-      object_format: extensionProvenance.objectFormat,
-      comparison_mode: extensionProvenance.comparisonMode,
-      git_sha256: gitSourceSha256,
-      executed_sha256: executedSourceSha256,
-      materialized_sha256: currentSnapshot.campaignMaterializedSha256,
-      exact_head_match: true,
-      verified_before_module_import: true,
-      attestation_consumed: true,
-      launch_run_id: launchAttestation.runId,
-      launcher_mode: launchAttestation.launcherMode,
-      launcher_oid: launchAttestation.launcherOid,
-      helper_oid: launchAttestation.helperOid,
-      materializer_oid: launchAttestation.materializerOid,
-      manifest_oid: launchAttestation.manifestOid,
-      manifest_input_count: launchAttestation.campaignFiles.length,
-    },
+  const candidate = {
+    schema_version: 1,
+    authority: "playwright-candidate-only",
+    launcher_finalized: false,
+    launch_run_id: launchAttestation.runId,
+    finalization_key_commitment_sha256:
+      launchAttestation.finalizationKeyCommitment,
+    extension_build_sha256: currentBuildOutput.sha256,
+    extension_build_file_count: currentBuildOutput.fileCount,
+    campaign_materialized_sha256:
+      currentSnapshot.campaignMaterializedSha256,
     scenario_id: scenario.id,
     journey: scenario.rw,
     model: scenario.label,
     browser: `Playwright bundled Chromium ${browserVersion}`,
-    adverse_condition: "Chromium launched with --disable-popup-blocking",
-    egress_boundary: "A pre-launch deny proxy blocks browser background egress; authored fixture HTTP(S) traffic must remain loopback-only.",
-    oracle: "typed loopback fake-sink receipt independent of NavSentinel UI and event logs",
-    target_authority: "one use per arm, role, and consequence; final sink revalidates run, scenario, role, consequence, target id, and inert sentinel",
-    expected: {
-      baseline: "harm receipt present",
-      protected: "zero harm receipts",
-      benign: "one benign receipt and zero harm receipts",
-      mixed: "benign consequence succeeds and harm receipt remains absent",
-    },
     observations,
-    claim_boundary: "Synthetic bundled-Chromium regression only; not branded-Chrome, open-web efficacy, sleep, crash, or service-worker-restart proof.",
   };
-  await testInfo.attach(`${scenario.rw.toLowerCase()}-state-authority-receipt.json`, {
-    body: Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf8"),
-    contentType: "application/json",
-  });
+  const candidatePath = path.join(
+    launchAttestation.candidateReceiptDirectory,
+    `${scenario.rw.toLowerCase()}-state-authority-candidate.json`,
+  );
+  fs.writeFileSync(
+    candidatePath,
+    `${JSON.stringify(candidate, null, 2)}
+`,
+    { encoding: "utf8", mode: 0o600, flag: "wx" },
+  );
+  if (process.platform !== "win32") fs.chmodSync(candidatePath, 0o600);
 }
 
 test.beforeAll(() => {
@@ -913,7 +942,7 @@ test.beforeAll(() => {
 });
 
 for (const scenario of scenarios) {
-  test(`${scenario.rw} ${scenario.label} has an independent harm oracle under adverse popup policy @stress`, async ({}, testInfo) => {
+  test(`${scenario.rw} ${scenario.label} has an independent harm oracle under adverse popup policy @stress`, async () => {
     const observations: ArmObservation[] = [];
 
     const baseline = await openArm(scenario, "baseline");
@@ -972,6 +1001,6 @@ for (const scenario of scenarios) {
       await mixed.cleanup();
     }
 
-    await attachReceipt(testInfo, scenario, observations, browserVersion);
+    writeReceiptCandidate(scenario, observations, browserVersion);
   });
 }

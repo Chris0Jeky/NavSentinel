@@ -112,3 +112,28 @@ This repair prevents a positive receipt from crediting campaign modules that
 were merely checked before import but were not the bytes Playwright executed.
 It does not turn the local toolchain or a hostile concurrent same-user process
 into trusted evidence; those remain outside this bounded receipt.
+
+## Committed-launcher receipt finalization
+
+The Playwright child no longer emits an authoritative positive receipt. It can
+write only three schema-1 `playwright-candidate-only` files into a private
+launcher-created directory, and every candidate explicitly records
+`launcher_finalized: false`. The HMAC launch envelope remains a one-shot
+transport-integrity control; it is not the receipt trust root and a direct caller
+that supplies both envelope and transport key can produce at most a candidate.
+
+The exact committed launcher retains a separate random finalization key that is
+never placed in the child environment or filesystem. After Playwright exits
+successfully, the launcher requires the one-shot attestation to be deleted,
+re-runs strict Git integrity and all raw build/campaign/materialized-tree checks,
+re-hashes the fixed extension output, validates the complete four-arm typed-sink
+matrix for all three journeys, and safely recreates the fixed final-output
+directory. Only then does it construct schema-5
+`committed-launcher-finalized` receipts and authenticate each with the retained
+key. It reads the persisted bytes back and verifies the launcher MAC before
+writing the finalization manifest.
+
+This makes modified direct Playwright execution unable to self-issue the final
+receipt accepted by the campaign. The remaining ceiling is unchanged: the
+runner, Node/Git/npm/Playwright toolchain, and a non-hostile concurrent same-user
+environment remain trusted.

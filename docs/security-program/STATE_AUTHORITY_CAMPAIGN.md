@@ -104,3 +104,17 @@ campaign tests.
 
 Promotion still requires an exact-head hosted run of all three typed-harm
 journeys and a fresh independent review of this repaired execution boundary.
+
+## Launcher-owned final receipt checkpoint
+
+Positive evidence is now a two-stage protocol. The committed campaign process
+produces non-authoritative behavior candidates only. The exact committed launcher
+keeps the finalization key outside the child, waits for a successful child exit,
+revalidates source, materialized campaign, object store, and fixed build output,
+then reconstructs and authenticates the final receipts itself. A caller-created
+HMAC launch envelope cannot cross that boundary because the Playwright process
+never receives the launcher finalization key and contains no final-receipt writer.
+
+Qualification must retain the three launcher-finalized schema-5 receipts and the
+launcher manifest as the evidence artifact. Candidate files are diagnostic input
+and are deleted with the private launch directory.

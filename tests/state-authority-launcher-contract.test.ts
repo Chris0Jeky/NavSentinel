@@ -78,7 +78,7 @@ describe("state-authority launcher replay boundary", () => {
     expect(result.status, result.stderr).toBe(0);
     const summary = JSON.parse(result.stdout) as Record<string, unknown>;
     expect(summary).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       mode: "non-consumable-preflight-summary",
       consumable: false,
       materializedInputCount: expect.any(Number),
@@ -87,6 +87,8 @@ describe("state-authority launcher replay boundary", () => {
     expect(summary.expiresAt).toBeUndefined();
     expect(summary.attestationPath).toBeUndefined();
     expect(summary.campaignExecutionRoot).toBeUndefined();
+    expect(summary.candidateReceiptDirectory).toBeUndefined();
+    expect(summary.finalizationKeyCommitment).toBeUndefined();
     expect(result.stdout).not.toContain(
       "NAVSENTINEL_STATE_AUTHORITY_KEY",
     );
@@ -132,4 +134,31 @@ describe("state-authority launcher replay boundary", () => {
       "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
     );
   });
+
+  it("keeps authoritative receipt issuance in the committed launcher", () => {
+    const launcher = fs.readFileSync(
+      path.join(repositoryRoot, "scripts", "run-state-authority-campaign.mjs"),
+      "utf8",
+    );
+    const campaign = fs.readFileSync(
+      path.join(repositoryRoot, "tests", "e2e", "state-authority-sink.spec.ts"),
+      "utf8",
+    );
+
+    expect(campaign).toContain('authority: "playwright-candidate-only"');
+    expect(campaign).toContain("launcher_finalized: false");
+    expect(campaign).not.toContain("testInfo.attach(");
+    expect(campaign).not.toContain('authority: "committed-launcher-finalized"');
+    expect(campaign).not.toContain("NAVSENTINEL_STATE_AUTHORITY_FINALIZATION_KEY");
+
+    expect(launcher).toContain("function finalizeCandidateReceipts");
+    expect(launcher).toContain('authority: "committed-launcher-finalized"');
+    expect(launcher).toContain("finalized_after_child_exit: true");
+    expect(launcher).toContain("const finalizationKey = randomBytes(32)");
+    expect(launcher).toContain("finalization_key_commitment_sha256");
+    expect(launcher).not.toContain(
+      "childEnvironment.NAVSENTINEL_STATE_AUTHORITY_FINALIZATION_KEY",
+    );
+  });
+
 });

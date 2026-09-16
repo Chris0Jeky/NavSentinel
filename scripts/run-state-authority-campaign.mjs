@@ -38,6 +38,29 @@ const REQUIRED_CAMPAIGN_INPUTS = new Set([
   "gym/rw25-rapid-close-reopen.html",
 ]);
 
+const FINAL_RECEIPT_RELATIVE_DIRECTORY =
+  "test-results/state-authority-launcher-receipts";
+const EXPECTED_SCENARIOS = Object.freeze([
+  {
+    scenarioId: "NS-ADV-WIN-005",
+    journey: "RW-21",
+    model: "allow-once double spend",
+    mainActionReachesBenign: true,
+  },
+  {
+    scenarioId: "NS-ADV-EVADE-003",
+    journey: "RW-24",
+    model: "idle-resume time bomb",
+    mainActionReachesBenign: false,
+  },
+  {
+    scenarioId: "NS-ADV-STATE-008",
+    journey: "RW-25",
+    model: "rapid close/reopen stale authority",
+    mainActionReachesBenign: false,
+  },
+]);
+
 function fail(code, message) {
   const error = new Error(
     `State-authority launch TEST_INVALID [${code}]: ${message}`,
@@ -274,7 +297,523 @@ function createEnvelope(payload, key) {
   const mac = createHmac("sha256", key)
     .update(JSON.stringify(payload))
     .digest("hex");
-  return { schemaVersion: 2, payload, mac };
+  return { schemaVersion: 3, payload, mac };
+}
+
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sha256Hex(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function assertPrivateDirectory(target, code) {
+  let stats;
+  try {
+    stats = fs.lstatSync(target);
+  } catch (error) {
+    fail(
+      code,
+      `directory is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    fail(code, "path is linked or not an ordinary directory");
+  }
+  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) {
+    fail(code, "directory permissions are too broad");
+  }
+  const real = fs.realpathSync.native(target);
+  if (path.resolve(target) !== path.resolve(real)) {
+    fail(code, "directory resolves through a link");
+  }
+  return real;
+}
+
+function resetFinalReceiptDirectory(repositoryRoot) {
+  const parent = path.join(repositoryRoot, "test-results");
+  if (fs.existsSync(parent)) {
+    const stats = fs.lstatSync(parent);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      fail(
+        "FINAL_RECEIPT_OUTPUT",
+        "test-results is linked or not an ordinary directory",
+      );
+    }
+    if (fs.realpathSync.native(parent) !== path.resolve(parent)) {
+      fail("FINAL_RECEIPT_OUTPUT", "test-results resolves through a link");
+    }
+  } else {
+    fs.mkdirSync(parent, { mode: 0o700 });
+  }
+
+  const target = path.join(
+    repositoryRoot,
+    ...FINAL_RECEIPT_RELATIVE_DIRECTORY.split("/"),
+  );
+  if (fs.existsSync(target)) {
+    const stats = fs.lstatSync(target);
+    if (stats.isSymbolicLink() || !stats.isDirectory()) {
+      fail(
+        "FINAL_RECEIPT_OUTPUT",
+        "final receipt output is linked or not an ordinary directory",
+      );
+    }
+    fs.rmSync(target, { recursive: true, force: false });
+  }
+  fs.mkdirSync(target, { mode: 0o700 });
+  if (process.platform !== "win32") fs.chmodSync(target, 0o700);
+  return fs.realpathSync.native(target);
+}
+
+function candidateString(candidate, key) {
+  const value = candidate[key];
+  if (typeof value !== "string" || !value) {
+    fail("RECEIPT_CANDIDATE", `missing string field '${key}'`);
+  }
+  return value;
+}
+
+function candidateInteger(candidate, key) {
+  const value = candidate[key];
+  if (!Number.isInteger(value) || value < 0) {
+    fail("RECEIPT_CANDIDATE", `invalid non-negative integer '${key}'`);
+  }
+  return value;
+}
+
+function validateObservationMatrix(candidate, scenario) {
+  const observations = candidate.observations;
+  if (!Array.isArray(observations) || observations.length !== 4) {
+    fail(
+      "RECEIPT_CANDIDATE",
+      `${scenario.journey} must contain exactly four arm observations`,
+    );
+  }
+  const expectedOutcomes = new Map([
+    ["baseline", "HARM_REACHED"],
+    ["protected", "BLOCKED_PRE_HARM"],
+    ["benign", "BENIGN_REACHED"],
+    ["mixed", "BENIGN_REACHED_HARM_BLOCKED"],
+  ]);
+  const seen = new Set();
+  const sanitized = [];
+  for (const observation of observations) {
+    if (!isRecord(observation)) {
+      fail("RECEIPT_CANDIDATE", "observation must be an object");
+    }
+    const arm = candidateString(observation, "arm");
+    const expectedOutcome = expectedOutcomes.get(arm);
+    if (!expectedOutcome || seen.has(arm)) {
+      fail("RECEIPT_CANDIDATE", `invalid or duplicate arm '${arm}'`);
+    }
+    seen.add(arm);
+    const outcome = candidateString(observation, "outcome");
+    if (outcome !== expectedOutcome) {
+      fail(
+        "RECEIPT_CANDIDATE",
+        `${scenario.journey} ${arm} outcome '${outcome}' is not '${expectedOutcome}'`,
+      );
+    }
+    const harmReceipts = candidateInteger(observation, "harmReceipts");
+    const benignReceipts = candidateInteger(observation, "benignReceipts");
+    const invalidAttempts = candidateInteger(observation, "invalidAttempts");
+    const browserBackgroundAttemptsDenied = candidateInteger(
+      observation,
+      "browserBackgroundAttemptsDenied",
+    );
+    const expectedHarm = arm === "baseline" ? 1 : 0;
+    const expectedBenign = arm === "benign" || arm === "mixed"
+      ? 1
+      : scenario.mainActionReachesBenign
+        ? 1
+        : 0;
+    if (
+      harmReceipts !== expectedHarm
+      || benignReceipts !== expectedBenign
+      || invalidAttempts !== 0
+    ) {
+      fail(
+        "RECEIPT_CANDIDATE",
+        `${scenario.journey} ${arm} typed-sink observation is invalid`,
+      );
+    }
+    sanitized.push({
+      arm,
+      outcome,
+      harmReceipts,
+      benignReceipts,
+      invalidAttempts,
+      browserBackgroundAttemptsDenied,
+    });
+  }
+  return sanitized;
+}
+
+function loadCandidateReceipts(
+  candidateReceiptDirectory,
+  runId,
+  finalizationKeyCommitment,
+) {
+  const realDirectory = assertPrivateDirectory(
+    candidateReceiptDirectory,
+    "CANDIDATE_DIRECTORY",
+  );
+  const entries = fs.readdirSync(realDirectory, { withFileTypes: true });
+  const expectedNames = EXPECTED_SCENARIOS.map(
+    (scenario) =>
+      `${scenario.journey.toLowerCase()}-state-authority-candidate.json`,
+  ).sort();
+  const actualNames = entries.map((entry) => entry.name).sort();
+  if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
+    fail(
+      "RECEIPT_CANDIDATE",
+      `candidate set ${JSON.stringify(actualNames)} does not equal ${JSON.stringify(expectedNames)}`,
+    );
+  }
+
+  return EXPECTED_SCENARIOS.map((scenario) => {
+    const filename =
+      `${scenario.journey.toLowerCase()}-state-authority-candidate.json`;
+    const candidatePath = path.join(realDirectory, filename);
+    const stats = fs.lstatSync(candidatePath);
+    if (stats.isSymbolicLink() || !stats.isFile() || stats.size > 1024 * 1024) {
+      fail(
+        "RECEIPT_CANDIDATE",
+        `${filename} is linked, not a regular file, or too large`,
+      );
+    }
+    if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) {
+      fail("RECEIPT_CANDIDATE", `${filename} permissions are too broad`);
+    }
+    const raw = fs.readFileSync(candidatePath);
+    let candidate;
+    try {
+      candidate = JSON.parse(raw.toString("utf8"));
+    } catch (error) {
+      fail(
+        "RECEIPT_CANDIDATE",
+        `${filename} is not JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    if (
+      !isRecord(candidate)
+      || candidate.schema_version !== 1
+      || candidate.authority !== "playwright-candidate-only"
+      || candidate.launcher_finalized !== false
+      || candidateString(candidate, "launch_run_id") !== runId
+      || candidateString(
+        candidate,
+        "finalization_key_commitment_sha256",
+      ) !== finalizationKeyCommitment
+      || candidateString(candidate, "scenario_id") !== scenario.scenarioId
+      || candidateString(candidate, "journey") !== scenario.journey
+      || candidateString(candidate, "model") !== scenario.model
+    ) {
+      fail("RECEIPT_CANDIDATE", `${filename} identity is invalid`);
+    }
+    const browser = candidateString(candidate, "browser");
+    if (!browser.startsWith("Playwright bundled Chromium ")) {
+      fail("RECEIPT_CANDIDATE", `${filename} browser identity is invalid`);
+    }
+    const extensionBuildSha256 = candidateString(
+      candidate,
+      "extension_build_sha256",
+    );
+    const campaignMaterializedSha256 = candidateString(
+      candidate,
+      "campaign_materialized_sha256",
+    );
+    if (
+      !/^[0-9a-f]{64}$/u.test(extensionBuildSha256)
+      || !/^[0-9a-f]{64}$/u.test(campaignMaterializedSha256)
+    ) {
+      fail("RECEIPT_CANDIDATE", `${filename} contains malformed hashes`);
+    }
+    return {
+      scenario,
+      filename,
+      candidateSha256: sha256Hex(raw),
+      browser,
+      extensionBuildSha256,
+      extensionBuildFileCount: candidateInteger(
+        candidate,
+        "extension_build_file_count",
+      ),
+      campaignMaterializedSha256,
+      observations: validateObservationMatrix(candidate, scenario),
+    };
+  });
+}
+
+function assertSameBuildInputs(initial, current) {
+  for (const key of [
+    "repositoryCommit",
+    "repositoryTree",
+    "objectFormat",
+    "comparisonMode",
+    "gitSha256",
+    "executedSha256",
+    "trackedInputCount",
+    "unexpectedInputCount",
+    "specialInputCount",
+  ]) {
+    if (current[key] !== initial[key]) {
+      fail(
+        "POST_RUN_AUTHORITY",
+        `build input '${key}' changed during the Playwright child`,
+      );
+    }
+  }
+}
+
+function authenticateFinalReceipt(unsignedReceipt, finalizationKey) {
+  return createHmac("sha256", finalizationKey)
+    .update(JSON.stringify(unsignedReceipt))
+    .digest("hex");
+}
+
+function verifyFinalReceiptMac(receipt, finalizationKey) {
+  const finalization = receipt.launcher_finalization;
+  if (!isRecord(finalization)) {
+    fail("FINAL_RECEIPT_AUTHENTICATION", "launcher finalization is missing");
+  }
+  const supplied = finalization.mac_sha256;
+  if (typeof supplied !== "string" || !/^[0-9a-f]{64}$/u.test(supplied)) {
+    fail("FINAL_RECEIPT_AUTHENTICATION", "launcher finalization MAC is malformed");
+  }
+  const unsigned = {
+    ...receipt,
+    launcher_finalization: {
+      ...finalization,
+    },
+  };
+  delete unsigned.launcher_finalization.mac_sha256;
+  const expected = authenticateFinalReceipt(unsigned, finalizationKey);
+  if (supplied !== expected) {
+    fail("FINAL_RECEIPT_AUTHENTICATION", "launcher finalization MAC mismatch");
+  }
+}
+
+function finalizeCandidateReceipts({
+  repositoryRoot,
+  repositoryCommit,
+  committedLauncher,
+  helper,
+  materializer,
+  manifest,
+  campaignFiles,
+  campaignAbsolutePaths,
+  campaignRoot,
+  candidateReceiptDirectory,
+  attestationPath,
+  runId,
+  finalizationKey,
+  finalizationKeyCommitment,
+  initialBuildInputs,
+  initialCampaignGitSha256,
+  initialCampaignExecutedSha256,
+  initialCampaignMaterializedSha256,
+  provenanceModule,
+  materializedModule,
+}) {
+  if (fs.existsSync(attestationPath)) {
+    fail(
+      "ATTESTATION_NOT_CONSUMED",
+      "Playwright child did not consume and delete the one-shot attestation",
+    );
+  }
+  git(repositoryRoot, [
+    "fsck",
+    "--full",
+    "--strict",
+    "--no-reflogs",
+    "--no-progress",
+    "HEAD",
+  ]);
+  const currentBuildInputs = provenanceModule.assertCurrentHeadBuildInputs(
+    repositoryRoot,
+    repositoryCommit,
+  );
+  assertSameBuildInputs(initialBuildInputs, currentBuildInputs);
+  const currentCampaignGitSha256 = provenanceModule.hashGitFiles(
+    repositoryRoot,
+    campaignAbsolutePaths,
+    repositoryCommit,
+  );
+  const currentCampaignExecutedSha256 =
+    provenanceModule.hashCanonicalWorktreeFiles(
+      repositoryRoot,
+      campaignAbsolutePaths,
+      repositoryCommit,
+    );
+  const currentCampaignMaterializedSha256 =
+    materializedModule.hashMaterializedCampaign(campaignRoot, campaignFiles);
+  if (
+    currentCampaignGitSha256 !== initialCampaignGitSha256
+    || currentCampaignExecutedSha256 !== initialCampaignExecutedSha256
+    || currentCampaignGitSha256 !== currentCampaignExecutedSha256
+    || currentCampaignMaterializedSha256
+      !== initialCampaignMaterializedSha256
+  ) {
+    fail(
+      "POST_RUN_AUTHORITY",
+      "campaign source authority changed during the Playwright child",
+    );
+  }
+
+  const extensionPath = path.join(repositoryRoot, "extension", "dist");
+  const currentBuildOutput = provenanceModule.hashExtensionBuildOutput(
+    repositoryRoot,
+    extensionPath,
+  );
+  const candidates = loadCandidateReceipts(
+    candidateReceiptDirectory,
+    runId,
+    finalizationKeyCommitment,
+  );
+  const finalDirectory = resetFinalReceiptDirectory(repositoryRoot);
+  const manifestReceipts = [];
+
+  for (const candidate of candidates) {
+    if (
+      candidate.extensionBuildSha256 !== currentBuildOutput.sha256
+      || candidate.extensionBuildFileCount !== currentBuildOutput.fileCount
+      || candidate.campaignMaterializedSha256
+        !== currentCampaignMaterializedSha256
+    ) {
+      fail(
+        "RECEIPT_CANDIDATE",
+        `${candidate.scenario.journey} candidate does not match launcher post-run authority`,
+      );
+    }
+    const launcherFinalization = {
+      finalized_by: LAUNCHER_REPOSITORY_PATH,
+      finalized_after_child_exit: true,
+      authenticated_in_committed_launcher: true,
+      launch_run_id: runId,
+      launcher_oid: committedLauncher.oid,
+      finalization_key_commitment_sha256: finalizationKeyCommitment,
+      candidate_filename: candidate.filename,
+      candidate_sha256: candidate.candidateSha256,
+      finalized_at: new Date().toISOString(),
+    };
+    const unsignedReceipt = {
+      schema_version: 5,
+      authority: "committed-launcher-finalized",
+      launcher_finalized: true,
+      repository_head: currentBuildInputs.repositoryCommit,
+      extension_build_sha256: currentBuildOutput.sha256,
+      extension_build_provenance: {
+        build_command: "node scripts/build-extension.mjs",
+        fixed_path: "extension/dist",
+        repository_head: currentBuildInputs.repositoryCommit,
+        repository_tree: currentBuildInputs.repositoryTree,
+        object_format: currentBuildInputs.objectFormat,
+        comparison_mode: currentBuildInputs.comparisonMode,
+        git_source_sha256: currentBuildInputs.gitSha256,
+        executed_source_sha256: currentBuildInputs.executedSha256,
+        exact_head_match: true,
+        tracked_input_count: currentBuildInputs.trackedInputCount,
+        unexpected_input_count: currentBuildInputs.unexpectedInputCount,
+        special_input_count: currentBuildInputs.specialInputCount,
+        build_output_file_count: currentBuildOutput.fileCount,
+      },
+      campaign_source: {
+        repository_tree: currentBuildInputs.repositoryTree,
+        object_format: currentBuildInputs.objectFormat,
+        comparison_mode: currentBuildInputs.comparisonMode,
+        git_sha256: currentCampaignGitSha256,
+        executed_sha256: currentCampaignExecutedSha256,
+        materialized_sha256: currentCampaignMaterializedSha256,
+        exact_head_match: true,
+        verified_before_module_import: true,
+        attestation_consumed: true,
+        playwright_output_authority: "candidate-only",
+        launcher_mode: "git-object-materialized-campaign",
+        launcher_oid: committedLauncher.oid,
+        helper_oid: helper.oid,
+        materializer_oid: materializer.oid,
+        manifest_oid: manifest.oid,
+        manifest_input_count: campaignFiles.length,
+      },
+      scenario_id: candidate.scenario.scenarioId,
+      journey: candidate.scenario.journey,
+      model: candidate.scenario.model,
+      browser: candidate.browser,
+      adverse_condition: "Chromium launched with --disable-popup-blocking",
+      egress_boundary: "A pre-launch deny proxy blocks browser background egress; authored fixture HTTP(S) traffic must remain loopback-only.",
+      oracle: "typed loopback fake-sink receipt independent of NavSentinel UI and event logs",
+      target_authority: "one use per arm, role, and consequence; final sink revalidates run, scenario, role, consequence, target id, and inert sentinel",
+      expected: {
+        baseline: "harm receipt present",
+        protected: "zero harm receipts",
+        benign: "one benign receipt and zero harm receipts",
+        mixed: "benign consequence succeeds and harm receipt remains absent",
+      },
+      observations: candidate.observations,
+      claim_boundary: "Synthetic bundled-Chromium regression only; not branded-Chrome, open-web efficacy, sleep, crash, or service-worker-restart proof.",
+      launcher_finalization: launcherFinalization,
+    };
+    const receipt = {
+      ...unsignedReceipt,
+      launcher_finalization: {
+        ...launcherFinalization,
+        mac_sha256: authenticateFinalReceipt(
+          unsignedReceipt,
+          finalizationKey,
+        ),
+      },
+    };
+    verifyFinalReceiptMac(receipt, finalizationKey);
+    const filename =
+      `${candidate.scenario.journey.toLowerCase()}-state-authority-receipt.json`;
+    const serialized = Buffer.from(
+      `${JSON.stringify(receipt, null, 2)}\n`,
+      "utf8",
+    );
+    writePrivateFile(path.join(finalDirectory, filename), serialized);
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(finalDirectory, filename), "utf8"),
+    );
+    verifyFinalReceiptMac(persisted, finalizationKey);
+    manifestReceipts.push({
+      filename,
+      scenario_id: candidate.scenario.scenarioId,
+      journey: candidate.scenario.journey,
+      sha256: sha256Hex(serialized),
+      mac_sha256: receipt.launcher_finalization.mac_sha256,
+    });
+  }
+
+  const finalizationManifest = {
+    schema_version: 1,
+    authority: "committed-launcher-finalization-manifest",
+    repository_head: currentBuildInputs.repositoryCommit,
+    repository_tree: currentBuildInputs.repositoryTree,
+    launcher_oid: committedLauncher.oid,
+    launch_run_id: runId,
+    finalization_key_commitment_sha256: finalizationKeyCommitment,
+    receipt_count: manifestReceipts.length,
+    receipts: manifestReceipts,
+  };
+  writePrivateFile(
+    path.join(finalDirectory, "manifest.json"),
+    Buffer.from(
+      `${JSON.stringify(finalizationManifest, null, 2)}\n`,
+      "utf8",
+    ),
+  );
+  return {
+    finalDirectory,
+    finalizationManifest,
+  };
 }
 
 async function main() {
@@ -436,7 +975,7 @@ async function main() {
       process.stdout.write(
         `${JSON.stringify(
           {
-            schemaVersion: 2,
+            schemaVersion: 3,
             mode: "non-consumable-preflight-summary",
             consumable: false,
             repositoryCommit: buildInputs.repositoryCommit,
@@ -456,6 +995,13 @@ async function main() {
     }
 
     linkTrustedToolchain(repositoryRoot, campaignRoot);
+    const candidateReceiptDirectory = path.join(temporaryRoot, "candidates");
+    fs.mkdirSync(candidateReceiptDirectory, { mode: 0o700 });
+    if (process.platform !== "win32") {
+      fs.chmodSync(candidateReceiptDirectory, 0o700);
+    }
+    const finalizationKey = randomBytes(32);
+    const finalizationKeyCommitment = sha256Hex(finalizationKey);
     const runId = randomUUID();
     const issuedAt = new Date();
     const expiresAt = new Date(issuedAt.getTime() + 10 * 60 * 1000);
@@ -465,11 +1011,13 @@ async function main() {
     );
     const campaignExecutionRoot = fs.realpathSync.native(campaignRoot);
     const payload = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       runId,
       launcherMode: "git-object-materialized-campaign",
       repositoryRoot,
       campaignExecutionRoot,
+      candidateReceiptDirectory:
+        fs.realpathSync.native(candidateReceiptDirectory),
       repositoryCommit: buildInputs.repositoryCommit,
       repositoryTree: buildInputs.repositoryTree,
       objectFormat: buildInputs.objectFormat,
@@ -484,6 +1032,7 @@ async function main() {
       helperOid: helper.oid,
       materializerOid: materializer.oid,
       manifestOid: manifest.oid,
+      finalizationKeyCommitment,
       issuedAt: issuedAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
     };
@@ -534,8 +1083,52 @@ async function main() {
       },
     );
     key.fill(0);
-    if (result.error) throw result.error;
-    if (result.status !== 0) process.exitCode = result.status ?? 1;
+    if (result.error) {
+      finalizationKey.fill(0);
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      finalizationKey.fill(0);
+      process.exitCode = result.status ?? 1;
+      return;
+    }
+    const finalization = finalizeCandidateReceipts({
+      repositoryRoot,
+      repositoryCommit,
+      committedLauncher,
+      helper,
+      materializer,
+      manifest,
+      campaignFiles,
+      campaignAbsolutePaths,
+      campaignRoot,
+      candidateReceiptDirectory,
+      attestationPath,
+      runId,
+      finalizationKey,
+      finalizationKeyCommitment,
+      initialBuildInputs: buildInputs,
+      initialCampaignGitSha256: campaignGitSha256,
+      initialCampaignExecutedSha256: campaignExecutedSha256,
+      initialCampaignMaterializedSha256: campaignMaterializedSha256,
+      provenanceModule,
+      materializedModule,
+    });
+    finalizationKey.fill(0);
+    process.stdout.write(
+      `${JSON.stringify({
+        schemaVersion: 1,
+        mode: "committed-launcher-finalization-complete",
+        authority: finalization.finalizationManifest.authority,
+        repositoryHead: finalization.finalizationManifest.repository_head,
+        launcherOid: finalization.finalizationManifest.launcher_oid,
+        receiptCount: finalization.finalizationManifest.receipt_count,
+        outputDirectory: path.relative(
+          repositoryRoot,
+          finalization.finalDirectory,
+        ).split(path.sep).join("/"),
+      })}\n`,
+    );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }
