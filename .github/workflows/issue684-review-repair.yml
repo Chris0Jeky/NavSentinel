@@ -31,7 +31,16 @@ jobs:
         run: |
           cat \
             scripts/issue684-review-repair.b64.00 \
-            scripts/issue684-review-repair.b64.01 \
+            scripts/issue684-review-repair.b64.01.0 \
+            scripts/issue684-review-repair.b64.01.1.0 \
+            scripts/issue684-review-repair.b64.01.1.1 \
+            scripts/issue684-review-repair.b64.01.1.2.0 \
+            scripts/issue684-review-repair.b64.01.1.2.1 \
+            scripts/issue684-review-repair.b64.01.1.2.2 \
+            scripts/issue684-review-repair.b64.01.1.2.3 \
+            scripts/issue684-review-repair.b64.01.1.2.4 \
+            scripts/issue684-review-repair.b64.01.1.3 \
+            scripts/issue684-review-repair.b64.01.2 \
             scripts/issue684-review-repair.b64.02 \
             scripts/issue684-review-repair.b64.03 \
             scripts/issue684-review-repair.b64.04 \
@@ -66,6 +75,16 @@ jobs:
             scripts/issue684-review-repair.py.gz \
             scripts/issue684-review-repair.b64.00 \
             scripts/issue684-review-repair.b64.01 \
+            scripts/issue684-review-repair.b64.01.0 \
+            scripts/issue684-review-repair.b64.01.1.0 \
+            scripts/issue684-review-repair.b64.01.1.1 \
+            scripts/issue684-review-repair.b64.01.1.2.0 \
+            scripts/issue684-review-repair.b64.01.1.2.1 \
+            scripts/issue684-review-repair.b64.01.1.2.2 \
+            scripts/issue684-review-repair.b64.01.1.2.3 \
+            scripts/issue684-review-repair.b64.01.1.2.4 \
+            scripts/issue684-review-repair.b64.01.1.3 \
+            scripts/issue684-review-repair.b64.01.2 \
             scripts/issue684-review-repair.b64.02 \
             scripts/issue684-review-repair.b64.03 \
             scripts/issue684-review-repair.b64.04 \
