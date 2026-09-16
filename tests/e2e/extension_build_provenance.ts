@@ -31,10 +31,13 @@ const POSTCSS_CONFIG_CANDIDATES = [
   "postcss.config.mts",
   "postcss.config.cts",
 ] as const;
-const POSTCSS_CONFIG_PATHS = new Set<string>([
+const ROOT_POSTCSS_CONFIG_KEYS = new Set<string>(
+  POSTCSS_CONFIG_CANDIDATES.map((candidate) => candidate.normalize("NFC").toLowerCase()),
+);
+const POSTCSS_CONFIG_PATH_KEYS = new Set<string>([
   ...POSTCSS_CONFIG_CANDIDATES,
   ...POSTCSS_CONFIG_CANDIDATES.map((candidate) => `extension/${candidate}`),
-]);
+].map((candidate) => candidate.normalize("NFC").toLowerCase()));
 
 const BUILD_INPUT_PATHS = [
   "extension",
@@ -744,6 +747,16 @@ function assertNoUnexpectedBuildInputs(
   for (const directory of trackedDirectories) registerCanonicalPath(canonicalPaths, directory);
   for (const entry of entries) registerCanonicalPath(canonicalPaths, entry.path);
 
+  for (const name of fs.readdirSync(authority.root)) {
+    const key = canonicalPathKey(name);
+    if (ROOT_POSTCSS_CONFIG_KEYS.has(key)) {
+      throw integrityError(
+        "AUTO_DISCOVERED_POSTCSS_CONFIG",
+        `auto-discovered PostCSS configuration '${name}' is not allowed`,
+      );
+    }
+  }
+
   const visit = (absolutePath: string, relativePath: string): void => {
     let stats: fs.Stats;
     try {
@@ -756,7 +769,7 @@ function assertNoUnexpectedBuildInputs(
     }
     assertValidRelativePath(relativePath);
     registerCanonicalPath(canonicalPaths, relativePath);
-    if (POSTCSS_CONFIG_PATHS.has(relativePath)) {
+    if (POSTCSS_CONFIG_PATH_KEYS.has(canonicalPathKey(relativePath))) {
       throw integrityError(
         "AUTO_DISCOVERED_POSTCSS_CONFIG",
         `auto-discovered PostCSS configuration '${relativePath}' is not allowed`,
@@ -798,7 +811,7 @@ function assertNoUnexpectedBuildInputs(
         `alternate Vite configuration '${rootPath}' is not allowed`,
       );
     }
-    if (POSTCSS_CONFIG_PATHS.has(rootPath)) {
+    if (ROOT_POSTCSS_CONFIG_KEYS.has(canonicalPathKey(rootPath))) {
       throw integrityError(
         "AUTO_DISCOVERED_POSTCSS_CONFIG",
         `auto-discovered PostCSS configuration '${rootPath}' is not allowed`,

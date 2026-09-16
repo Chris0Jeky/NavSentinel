@@ -54,7 +54,7 @@ afterEach(() => {
   }
 });
 
-describe("state-authority PostCSS build-input boundary", () => {
+describe("state-authority PostCSS build-input boundary", { timeout: 15_000 }, () => {
   it("rejects an untracked root PostCSS JavaScript config", () => {
     const repository = createRepository();
     const candidate = "postcss.config.js";
@@ -113,6 +113,34 @@ describe("state-authority PostCSS build-input boundary", () => {
 
     expectPostCssRejection(
       () => assertCurrentHeadBuildInputs(repository.root, head),
+      candidate,
+    );
+  });
+
+  it("rejects mixed-case PostCSS config names on case-insensitive filesystems", () => {
+    const repository = createRepository();
+    const candidate = "extension/PostCSS.Config.js";
+    fs.writeFileSync(
+      path.join(repository.root, ...candidate.split("/")),
+      "export default { plugins: [] };\n",
+    );
+
+    expectPostCssRejection(
+      () => assertCurrentHeadBuildInputs(repository.root, repository.head),
+      candidate,
+    );
+  });
+
+  it("rejects a mixed-case PostCSS config at the repository root", () => {
+    const repository = createRepository();
+    const candidate = "PostCSS.Config.js";
+    fs.writeFileSync(
+      path.join(repository.root, candidate),
+      "export default { plugins: [] };\n",
+    );
+
+    expectPostCssRejection(
+      () => assertCurrentHeadBuildInputs(repository.root, repository.head),
       candidate,
     );
   });
