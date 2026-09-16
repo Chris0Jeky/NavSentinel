@@ -59,6 +59,7 @@ jobs:
           echo "0a9fef86e7ddda97e298c9006e620a6972ccc01b19e0c86aa5b4d88d7994815d  $RUNNER_TEMP/issue684-review-repair.py" | sha256sum --check --strict
           python -m py_compile "$RUNNER_TEMP/issue684-review-repair.py"
           python "$RUNNER_TEMP/issue684-review-repair.py"
+          python scripts/issue684-unit-fixture-fix.py
           git config user.name "NavSentinel Qualification"
           git config user.email "navsentinel-qualification@example.invalid"
           git add \
@@ -73,6 +74,7 @@ jobs:
           git rm \
             .github/workflows/issue684-review-repair.yml \
             scripts/issue684-review-repair.py.gz \
+            scripts/issue684-unit-fixture-fix.py \
             scripts/issue684-review-repair.b64.00 \
             scripts/issue684-review-repair.b64.01 \
             scripts/issue684-review-repair.b64.01.0 \
