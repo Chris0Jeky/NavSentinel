@@ -108,6 +108,17 @@ replacement = r"""    regex_once(
 
 text = text[:start] + replacement + text[end:]
 
+old_mac_payload = """  delete unsigned.launcher_finalization.mac_sha256;
+  const expected = authenticateFinalReceipt(unsigned, finalizationKey);"""
+new_mac_payload = """  delete unsigned.launcher_finalization.mac_sha256;
+  delete unsigned.launcher_signature;
+  const expected = authenticateFinalReceipt(unsigned, finalizationKey);"""
+if text.count(old_mac_payload) != 1:
+    raise SystemExit(
+        f"expected one final receipt MAC payload, found {text.count(old_mac_payload)}"
+    )
+text = text.replace(old_mac_payload, new_mac_payload, 1)
+
 old_import = """  const module = await import(
     \"../scripts/run-state-authority-campaign.mjs\"
   );"""
@@ -118,5 +129,16 @@ if text.count(old_import) != 1:
         f"expected one launcher import boundary, found {text.count(old_import)}"
     )
 text = text.replace(old_import, new_import, 1)
+
+old_contract = """    expect(launcher).toContain(\"function verifyFinalReceiptSignature\");
+    expect(launcher).toContain(\"signingPublicKeySha256\");"""
+new_contract = """    expect(launcher).toContain(\"function verifyFinalReceiptSignature\");
+    expect(launcher).toContain(\"delete unsigned.launcher_signature\");
+    expect(launcher).toContain(\"signingPublicKeySha256\");"""
+if text.count(old_contract) != 1:
+    raise SystemExit(
+        f"expected one signing contract block, found {text.count(old_contract)}"
+    )
+text = text.replace(old_contract, new_contract, 1)
 
 path.write_text(text, encoding="utf-8")
