@@ -18,6 +18,7 @@ const RELEASE_PATH_SCRIPTS = [
   "scripts/release.mjs",
   "scripts/package.mjs",
   "scripts/build-extension.mjs",
+  "scripts/packaged-html.mjs",
   "scripts/check-release-profile.mjs",
   "scripts/release-profile.mjs",
   "scripts/check-bloom-real.mjs",

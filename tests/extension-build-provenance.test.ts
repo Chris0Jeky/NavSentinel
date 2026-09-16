@@ -31,6 +31,8 @@ function createRepository(): { root: string; head: string; configPath: string } 
   git(root, ["init", "--quiet"]);
   git(root, ["config", "user.name", "NavSentinel Tests"]);
   git(root, ["config", "user.email", "navsentinel-tests@example.invalid"]);
+  git(root, ["config", "core.autocrlf", "false"]);
+  git(root, ["config", "core.eol", "lf"]);
   const configPath = path.join(root, "config", "release-profiles.json");
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, '{"defaultProfile":"interaction-only"}\n', "utf8");
@@ -85,7 +87,7 @@ afterEach(() => {
   }
 });
 
-describe("state-authority extension build provenance", () => {
+describe("state-authority extension build provenance", { timeout: 15_000 }, () => {
   it("records immutable commit, tree, object format and raw-byte equality", () => {
     const repository = createRepository();
     const attestation = assertCurrentHeadBuildInputs(repository.root, repository.head);

@@ -149,7 +149,7 @@
         );
         const spoofedUndoCoordinate = (event, axis) => {
           const undo = [...(extensionHost(event)?.shadowRoot
-            ?.querySelectorAll("[data-ns-ui-action]") ?? [])]
+            ?.querySelectorAll("button") ?? [])]
             .find((control) => control.textContent?.trim() === "Undo");
           if (!undo) return null;
           const rect = undo.getBoundingClientRect();

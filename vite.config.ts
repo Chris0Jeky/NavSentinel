@@ -59,13 +59,22 @@ export default defineConfig({
     emptyOutDir: true,
     rolldownOptions: {
       input: {
-        onboarding: resolve(import.meta.dirname, "extension/src/onboarding/onboarding.html")
+        onboarding: resolve(import.meta.dirname, "extension/src/onboarding/onboarding.html"),
+        evidence: resolve(import.meta.dirname, "extension/src/evidence/evidence.html")
       },
       output: {
         // Chrome MV3 module workers require static imports. Keep the pending-decision
         // runtime out of the 25 KiB worker entry without turning it into import().
         codeSplitting: {
           groups: [
+            {
+              // Keep Options presentation/operation helpers separate as the
+              // settings editor grows; total-dist budget still covers both.
+              name: "options-model",
+              test: /[\\/]src[\\/]options[\\/]options_model\.ts$/,
+              entriesAware: true,
+              priority: 10
+            },
             {
               name: "pending-decision-runtime",
               test: /[\\/]src[\\/](?:shared[\\/]pending_decision|sw[\\/]pending_decision_(?:handlers|store))\.ts$/,

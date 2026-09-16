@@ -10,24 +10,25 @@ import {
 type GymServerHandle = { baseUrl: string; close: () => Promise<void> };
 const SAFE_GYM_PORT_START = 46000;
 const SAFE_GYM_PORT_ATTEMPTS = 25;
-let builtMainUiGuardRevision: string | undefined;
+let builtUiGuardRevision: string | undefined;
 
-export function readBuiltMainUiGuardRevision(): string {
-  if (builtMainUiGuardRevision) return builtMainUiGuardRevision;
+/** Runtime revision of the built isolated-world capture loader that carries the UI input fence. */
+export function readBuiltUiGuardRevision(): string {
+  if (builtUiGuardRevision) return builtUiGuardRevision;
   const dist = process.env.EXTENSION_PATH
     ? path.resolve(process.env.EXTENSION_PATH)
     : path.resolve(process.cwd(), "extension", "dist");
   const manifest = JSON.parse(
     fs.readFileSync(path.join(dist, "manifest.json"), "utf8"),
   ) as { content_scripts?: Array<{ world?: string; js?: string[] }> };
-  const mainScript = manifest.content_scripts
-    ?.find((entry) => entry.world === "MAIN")
+  const captureScript = manifest.content_scripts
+    ?.find((entry) => entry.world === "ISOLATED" && /capture_isolated/.test(entry.js?.[0] ?? ""))
     ?.js?.[0];
-  if (!mainScript) throw new Error("Built MAIN-world content-script loader is missing");
-  const loader = fs.readFileSync(path.join(dist, mainScript), "utf8");
-  assertContentAddressedLoader(mainScript, loader);
-  builtMainUiGuardRevision = assertUiGuardRevision(loader);
-  return builtMainUiGuardRevision;
+  if (!captureScript) throw new Error("Built isolated-world capture content-script loader is missing");
+  const loader = fs.readFileSync(path.join(dist, captureScript), "utf8");
+  assertContentAddressedLoader(captureScript, loader);
+  builtUiGuardRevision = assertUiGuardRevision(loader);
+  return builtUiGuardRevision;
 }
 
 export async function getServiceWorker(context: BrowserContext): Promise<Worker> {
@@ -79,7 +80,7 @@ export async function getExtensionId(context: BrowserContext): Promise<string> {
 export async function waitForNavSentinelBridge(
   page: Page,
   timeout = 15000,
-  expectedGuard = readBuiltMainUiGuardRevision(),
+  expectedGuard = readBuiltUiGuardRevision(),
 ): Promise<void> {
   try {
     await page.waitForFunction(

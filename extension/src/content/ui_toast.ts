@@ -41,7 +41,6 @@ let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
 const controlActions = new WeakMap<EventTarget, () => void>();
 const cardRemovers = new WeakMap<HTMLElement, (notifyDismiss?: boolean) => void>();
-let nextControlAction = 0;
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
 let burstCount = 0;
@@ -64,21 +63,36 @@ function isolateInteraction(event: Event): void {
 }
 
 function bindControl(control: HTMLElement, action: () => void): void {
-  control.dataset.nsUiAction = String(++nextControlAction);
   controlActions.set(control, action);
+  // Direct listener: the fallback for synthetic activation in non-browser unit
+  // DOMs. Trusted browser input never reaches it because the document-start
+  // fence consumes that input at window capture and calls
+  // activateOwnedToastControl instead.
   control.addEventListener("click", action);
 }
 
-/** Invoke only a control token delivered by the verified MAIN-world bridge. */
-function activateToastControl(id?: string): void {
-  if (!root || !id || id.length > 16) return;
-  const controls = root.querySelectorAll<HTMLElement>("[data-ns-ui-action]");
-  for (let index = 0; index < controls.length; index += 1) {
-    const control = controls.item(index);
-    if (control.dataset.nsUiAction !== id) continue;
-    controlActions.get(control)?.();
-    return;
+/**
+ * Invoke the control found on a trusted event path delivered by the
+ * document-start input fence (same isolated world, no bridge involved).
+ *
+ * Ownership is decided by identity, never by id or attribute: `eventHost` must
+ * be the element this module created, and the control must be one this module
+ * bound. A page-created element that copies the host id or any attribute
+ * therefore cannot activate a real control. Returns whether an action ran.
+ */
+export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[]): boolean {
+  if (!host || eventHost !== host) return false;
+  for (const node of path) {
+    if (node === host) return false;
+    const action = typeof node === "object" && node !== null
+      ? controlActions.get(node as EventTarget)
+      : undefined;
+    if (action) {
+      action();
+      return true;
+    }
   }
+  return false;
 }
 
 function ensureHost() {
@@ -100,9 +114,9 @@ function ensureHost() {
 
   root = host.attachShadow({ mode: "open" });
 
-  // UI events are composed across a shadow boundary by default. The MAIN-world
-  // guard consumes trusted input before hostile capture listeners; this root
-  // remains the fallback boundary for non-browser unit DOMs.
+  // UI events are composed across a shadow boundary by default. The isolated
+  // world's document-start fence consumes trusted input before hostile capture
+  // listeners; this root remains the fallback boundary for non-browser unit DOMs.
   for (const type of [
     "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend",
     "click", "dblclick", "auxclick", "contextmenu", "keydown", "keyup",
@@ -116,6 +130,21 @@ function ensureHost() {
   root.appendChild(style);
 
   document.documentElement.appendChild(host);
+  // Place the host in the top layer. A page layer inserted later at the same
+  // maximum z-index would otherwise paint above the notice (later DOM order
+  // wins a z-index tie) and swallow every click meant for its controls. The
+  // top layer paints over all z-indexed page boxes regardless of DOM order;
+  // `manual` popovers are never light-dismissed. Inline styles above still
+  // position the host, so the popover UA defaults (inset/margin/border) do not
+  // apply. Older engines without the Popover API keep the z-index-only host.
+  try {
+    if ("showPopover" in host) {
+      host.setAttribute("popover", "manual");
+      host.showPopover();
+    }
+  } catch {
+    // Unsupported document state; the z-index host remains usable.
+  }
   bindNavReset();
 }
 
@@ -183,6 +212,9 @@ function renderFullCard(opts: ToastOptions): void {
       document.removeEventListener("pointerdown", outsidePointerDown, true);
     }
     cardRemovers.delete(wrap);
+    // A detached control must never fire again, even if a stale reference
+    // reaches activateOwnedToastControl later.
+    wrap.querySelectorAll("button").forEach((control) => controlActions.delete(control));
     wrap.remove();
     if (notifyDismiss && !actionClicked && opts.onDismiss) opts.onDismiss();
   };
@@ -282,7 +314,10 @@ function dismissPill(): void {
     window.clearTimeout(pillIdleTimer);
     pillIdleTimer = 0;
   }
-  pill?.remove();
+  if (pill) {
+    controlActions.delete(pill);
+    pill.remove();
+  }
   pill = null;
   pillCountEl = null;
 }
@@ -386,12 +421,8 @@ export function showOverlayCleanupToast(onUndo: () => void): void {
   });
 }
 
-/** Dismiss the cleanup card, or activate one verified token when supplied. */
-export function controlToast(id?: string): void {
-  if (id) {
-    activateToastControl(id);
-    return;
-  }
+/** Dismiss the persistent cleanup card (feature switched off). */
+export function controlToast(): void {
   root?.querySelectorAll<HTMLElement>(".wrap[data-persistent='true']")
     .forEach((card) => removeCard(card));
 }

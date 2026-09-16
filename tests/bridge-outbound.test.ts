@@ -260,10 +260,6 @@ describe("isMainGuardAlertType (main->isolated priority classification)", () => 
     }
   });
 
-  it("treats the compact verified UI-action relay as priority", () => {
-    expect(isMainGuardAlertType("u")).toBe(true);
-  });
-
   it("treats JS-behavior signals as priority", () => {
     for (const t of ["ns-js-exfil-network", "ns-js-credential-read", "ns-js-form-submit-suspicious"]) {
       expect(isMainGuardAlertType(t)).toBe(true);

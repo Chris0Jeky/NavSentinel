@@ -1,6 +1,6 @@
 import type { Mode } from "./types";
 import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
-import { getRegistrableDomain, hostForUrl, normalizeHost, safeUrlParse } from "./domain";
+import { getRegistrableDomain, hostForUrl, isIPAddress, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
   clearAdaptiveScoresDirect,
@@ -36,6 +36,7 @@ export interface CredentialSettings {
 }
 
 export interface SuiteSettings {
+  autoSave: boolean;
   nav: NavSettings;
   credential: CredentialSettings;
   logLimit: number;
@@ -49,7 +50,27 @@ export type SuiteSettingsPatch = Partial<Omit<SuiteSettings, "nav" | "credential
 };
 
 /** Settings writes from popup/options to the service worker. */
-export type SuiteSettingsUpdateMessage = { type: "ns-suite-settings-update"; patch: unknown };
+export type SuiteSettingsUpdateMessage = {
+  type: "ns-suite-settings-update";
+  patch: unknown;
+  /**
+   * Options supplies the settings it rendered before editing. The worker uses it
+   * only to reject a competing edit to the same leaf; popup writes stay
+   * unconditional.
+   */
+  expected?: unknown;
+};
+
+/** A worker response that preserves the current settings for conflict recovery. */
+export type SuiteSettingsUpdateResponse = SuiteSettings & { conflict?: true };
+
+/** Raised in an extension page when the worker rejects a stale Options patch. */
+export class SuiteSettingsConflictError extends Error {
+  constructor(readonly settings: SuiteSettings) {
+    super("settings changed in another window");
+    this.name = "SuiteSettingsConflictError";
+  }
+}
 
 export const SUITE_SETTINGS_KEY = "sentinelsuite:settings_v1";
 export const TRUSTED_DOMAINS_KEY = "sentinelsuite:trusted_domains_v1";
@@ -144,6 +165,7 @@ export function buildNavOutcomeFeatures(input: {
 }
 
 const DEFAULT_SUITE_SETTINGS: SuiteSettings = {
+  autoSave: true,
   nav: {
     defaultMode: "smart",
     debug: false,
@@ -201,6 +223,7 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   };
 
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
+  next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
   next.credential.mediumRiskThreshold = clampInt(
     next.credential.mediumRiskThreshold,
     0,
@@ -302,9 +325,38 @@ const queueSuiteSettingsWrite = createStorageWriteQueue((err) => {
  * through runtime messaging. Keeping this direct lane worker-owned prevents two
  * independently loaded page modules from interleaving their own queues. (#558)
  */
-function updateSuiteSettingsDirect(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
-  return queueSuiteSettingsWrite(async (): Promise<SuiteSettings> => {
+function patchMatchesExpectedSettings(
+  current: SettingsRecord,
+  expected: SettingsRecord,
+  patch: SettingsRecord,
+): boolean {
+  for (const [key, value] of Object.entries(patch)) {
+    if (isRecord(value)) {
+      if (!patchMatchesExpectedSettings(
+        current[key] as SettingsRecord,
+        expected[key] as SettingsRecord,
+        value,
+      )) return false;
+    } else if (current[key] !== expected[key] && current[key] !== value) {
+      // An identical retry is already satisfied; a different intervening value
+      // must reach Options as an explicit conflict rather than be overwritten.
+      return false;
+    }
+  }
+  return true;
+}
+
+function updateSuiteSettingsDirect(
+  partial: SuiteSettingsPatch,
+  expected?: SuiteSettings,
+): Promise<SuiteSettingsUpdateResponse> {
+  return queueSuiteSettingsWrite(async (): Promise<SuiteSettingsUpdateResponse> => {
     const cur = await getSuiteSettings();
+    if (expected && !patchMatchesExpectedSettings(
+      cur as unknown as SettingsRecord,
+      expected as unknown as SettingsRecord,
+      partial as SettingsRecord,
+    )) return { ...cur, conflict: true };
     const merged = mergeSuiteSettings(cur, partial);
     await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
     return merged;
@@ -335,7 +387,7 @@ function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, un
 export async function handleSuiteSettingsUpdateMessage(
   message: SuiteSettingsUpdateMessage,
   sender?: chrome.runtime.MessageSender,
-): Promise<SuiteSettings> {
+): Promise<SuiteSettingsUpdateResponse> {
   if (!sender || sender.id !== chrome.runtime.id || (
     sender.url !== chrome.runtime.getURL("src/popup/popup.html") &&
     sender.url !== chrome.runtime.getURL("src/options/options.html")
@@ -347,22 +399,37 @@ export async function handleSuiteSettingsUpdateMessage(
     DEFAULT_SUITE_SETTINGS as unknown as Record<string, unknown>,
   ) as SuiteSettingsPatch | null;
   if (!patch) throw new Error("invalid");
-  return updateSuiteSettingsDirect(patch);
+  let expected: SuiteSettings | undefined;
+  if (message.expected !== undefined) {
+    const sanitized = sanitizeSuiteSettingsFields(
+      message.expected,
+      DEFAULT_SUITE_SETTINGS as unknown as Record<string, unknown>,
+    ) as SuiteSettingsPatch | null;
+    if (!sanitized) throw new Error("invalid");
+    expected = mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), sanitized);
+  }
+  return updateSuiteSettingsDirect(patch, expected);
 }
 
-export function updateSuiteSettings(partial: SuiteSettingsPatch): Promise<SuiteSettings> {
+function unwrapSuiteSettingsUpdate(response: SuiteSettingsUpdateResponse | undefined): SuiteSettings {
+  if (!response) throw new Error("suite-settings update failed");
+  if (response.conflict) {
+    const { conflict: _conflict, ...settings } = response;
+    throw new SuiteSettingsConflictError(settings);
+  }
+  return response;
+}
+
+export function updateSuiteSettings(partial: SuiteSettingsPatch, expected?: SuiteSettings): Promise<SuiteSettings> {
   if (shouldDelegatePromptOutcomeWrite()) {
     // Do not fall back to a page-local write when delivery fails: it would revive
     // the lost-update race this worker boundary closes. (#558)
-    return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial })
-      .then((settings: SuiteSettings | undefined) => {
-        if (settings) return settings;
-        throw new Error("suite-settings update failed");
-      });
+    return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial, ...(expected ? { expected } : {}) })
+      .then((response: SuiteSettingsUpdateResponse | undefined) => unwrapSuiteSettingsUpdate(response));
   }
   // Non-extension test environments have no runtime messenger. Production page
   // contexts always do, and therefore always take the worker-owned path above.
-  return updateSuiteSettingsDirect(partial);
+  return updateSuiteSettingsDirect(partial, expected).then(unwrapSuiteSettingsUpdate);
 }
 
 export function onSuiteSettingsChange(cb: (s: SuiteSettings) => void): void {
@@ -620,6 +687,44 @@ export const STORAGE_DELEGATE_RETRY_DELAYS_MS = [50, 150, 400];
 
 function isEventKind(value: unknown): value is EventKind {
   return typeof value === "string" && EVENT_KINDS.has(value as EventKind);
+}
+
+const EVENT_HOST_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+/**
+ * Normalize an event page association without ever treating it as a URL.
+ *
+ * `pageSite` is a hostname-only field. In particular, do not prepend a scheme
+ * and parse arbitrary input here: doing that would turn a persisted path,
+ * query, or fragment into an apparently valid host. IP literals are passed
+ * through the URL parser only after they have been identified as addresses so
+ * accepted values get the same canonical hostname spelling as the browser.
+ */
+export function normalizeEventPageSite(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = normalizeHost(value.trim());
+  if (!normalized || normalized.length > 253) return undefined;
+
+  if (isIPAddress(normalized)) {
+    try {
+      const parsed = new URL(`https://${hostForUrl(normalized)}`);
+      const canonical = normalizeHost(parsed.hostname);
+      return canonical && isIPAddress(canonical) ? canonical : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // A four-label, all-numeric host is parsed as an IPv4 address by browsers;
+  // do not let an out-of-range address fall through as a DNS hostname.
+  if (/^\d+(?:\.\d+){3}$/.test(normalized)) return undefined;
+
+  // A colon can only be valid here as part of an IPv6 literal. Reject it (and
+  // all URL/path delimiters) before validating ordinary DNS labels.
+  if (normalized.includes(":")) return undefined;
+  const labels = normalized.split(".");
+  if (labels.some((label) => !EVENT_HOST_LABEL_RE.test(label))) return undefined;
+  return normalized;
 }
 
 function isEventLogEntry(value: unknown): value is EventLogEntry {
@@ -941,11 +1046,12 @@ function stripUrlQueryAndFragment(raw: string): string {
 }
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
+  const pageSite = normalizeEventPageSite(partial.pageSite);
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
-    ...(partial.pageSite !== undefined ? { pageSite: partial.pageSite.slice(0, MAX_EVENT_STRING_LEN) } : {}),
+    ...(pageSite === undefined ? {} : { pageSite }),
     ...(partial.site !== undefined ? { site: partial.site } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
     ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
@@ -1339,7 +1445,8 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // a truncated tail is at worst cosmetic. (#299 R2)
   const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
   const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
-  if (e.pageSite !== undefined) out.pageSite = cap(e.pageSite);
+  const pageSite = normalizeEventPageSite(e.pageSite);
+  if (pageSite !== undefined) out.pageSite = pageSite;
   if (e.site !== undefined) out.site = cap(e.site);
   if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = cap(e.destHost);
