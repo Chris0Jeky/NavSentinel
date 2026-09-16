@@ -53,6 +53,19 @@ jobs:
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
           python scripts/issue684-manifest-postcss-repair.py
+          python - <<'PY'
+          from pathlib import Path
+
+          for name in (
+              "docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md",
+              "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md",
+          ):
+              target = Path(name)
+              target.write_text(
+                  target.read_text(encoding="utf-8").rstrip() + "\n",
+                  encoding="utf-8",
+              )
+          PY
           node --check scripts/verify-state-authority-receipts.mjs
           git diff --check
           git config user.name "NavSentinel Qualification"
