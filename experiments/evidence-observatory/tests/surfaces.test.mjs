@@ -16,6 +16,18 @@ const cli = fileURLToPath(new URL('../cli.mjs', import.meta.url));
 const demo = () => buildReport([JSON.stringify(demonstration())]);
 function temporary(t) { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'observatory-test-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; }
 const invoke = args => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
+function symlinkOrSkip(t, target, link, type) {
+  try {
+    fs.symlinkSync(target, link, process.platform === 'win32' && type === 'dir' ? 'junction' : type);
+    return true;
+  } catch (error) {
+    if (process.platform === 'win32' && ['EPERM', 'EACCES'].includes(error.code)) {
+      t.skip('Windows host does not permit creating the symlink needed by this test');
+      return false;
+    }
+    throw error;
+  }
+}
 
 test('standalone HTML has an exact script hash and syntactically valid script', () => {
   const html = renderReport(demo());
@@ -47,11 +59,13 @@ test('local input discovery is bounded and ignores non-JSON artifacts', t => {
   assert.equal(collectInputs(dir).length, 1);
 });
 test('directory symlinks are refused, never traversed', t => {
-  const dir = temporary(t); fs.mkdirSync(path.join(dir, 'source')); fs.symlinkSync(path.join(dir, 'source'), path.join(dir, 'linked'), 'dir');
+  const dir = temporary(t); fs.mkdirSync(path.join(dir, 'source'));
+  if (!symlinkOrSkip(t, path.join(dir, 'source'), path.join(dir, 'linked'), 'dir')) return;
   assert.throws(() => collectInputs(path.join(dir, 'linked')), /LINKED_PATH_REFUSED/);
 });
 test('symlinked files and ancestors are refused', t => {
-  const dir = temporary(t); fs.writeFileSync(path.join(dir, 'source.json'), '{}'); fs.symlinkSync(path.join(dir, 'source.json'), path.join(dir, 'linked.json'));
+  const dir = temporary(t); fs.writeFileSync(path.join(dir, 'source.json'), '{}');
+  if (!symlinkOrSkip(t, path.join(dir, 'source.json'), path.join(dir, 'linked.json'))) return;
   assert.throws(() => readInput(path.join(dir, 'linked.json')), /LINKED_PATH_REFUSED/);
 });
 test('oversized input is rejected before reading unbounded data', t => {
