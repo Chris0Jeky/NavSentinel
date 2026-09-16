@@ -95,6 +95,7 @@ describe("state-authority extension build provenance", () => {
     const head = commit(repository.root, "masked input");
 
     fs.writeFileSync(inputPath, "ATTACK\n", "utf8");
+    git(repository.root, ["add", "--", "extension/input.txt"]);
 
     const filteredOid = git(repository.root, [
       "hash-object",
@@ -105,6 +106,7 @@ describe("state-authority extension build provenance", () => {
     const committedOid = git(repository.root, ["rev-parse", `${head}:extension/input.txt`]);
     expect(filteredOid).toBe(committedOid);
     expect(git(repository.root, ["status", "--porcelain"])).toBe("");
+    expect(fs.readFileSync(inputPath, "utf8")).toBe("ATTACK\n");
 
     expect(() => assertCurrentHeadBuildInputs(repository.root, head)).toThrow("RAW_BYTES_MISMATCH");
   });
