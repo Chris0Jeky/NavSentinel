@@ -1,8 +1,8 @@
 # Observatory trace v1 and agent contract
 
 Authoritative validator: `experiments/evidence-observatory/model.mjs`.
-Executable, explicitly authored example: `demo.mjs`. No browser producer currently
-emits this full contract; #700 owns the first trusted integration. Do not change a
+Executable, explicitly authored example: `demo.mjs`. The initial document describes v1. The #704 producer emits v2 with explicit health,
+source, receiver and scene metadata; see the v2 section below. Do not change a
 teaching example to `synthetic` and describe it as measured evidence.
 
 ## Envelope
@@ -118,3 +118,29 @@ reported as gaps. They cannot be silently converted into native certified runs.
 All adapters are test-only minimizers, not a general browsing-data sanitizer. Fields
 that accept identifiers can still contain sensitive strings supplied maliciously.
 Never import a real browsing dump and assume this projection made it shareable.
+
+## Recorded v2 additions
+
+`capture-v2.mjs` defines `navsentinel.observatory.trace.v2`. V1 and explicit legacy
+imports stay supported without silently filling their missing fields. V2 adds a
+provenance envelope (raw source tree/input digests, lockfile/settings digest and
+after-run artifact digest), run-scoped context/target IDs, full/minimal recording
+mode, before/after HTTP health challenge receipts and bounded fault categories.
+Receiver events bind run/scenario/role/target and one-use counts. Observation health
+cannot be borrowed from a different run. Negative evidence requires the declared
+window to finish after the last dispatched input.
+
+Optional event context contains runner-assigned page/frame/document and parent-frame
+IDs; source clocks stay distinct from collector receive time. `scene.sample` contains
+a bounded viewport and up to 16 typed rectangles, visibility state and target/scope
+categories, never full DOM or arbitrary URLs. The renderer shows the latest earlier
+measurement and its age; document replacement invalidates stale geometry.
+
+The fixture's attack attempt is installation/reinsertion of an intercepting layer;
+a native navigation prevented before input reaches that layer is not invented as
+an executed call. Product cleanup records are collected from existing worker-owned
+storage with their collection time, not backdated to a fabricated original time.
+This is scoped synthetic evidence, not general native initiator attestation.
+
+For executable contracts, faults and commands see `CAMPAIGN_700.md`; for the visual
+measurement boundary see `SCENE_INSPECTION_701.md`.
