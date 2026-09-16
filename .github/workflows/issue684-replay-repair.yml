@@ -34,10 +34,27 @@ jobs:
         run: |
           cat scripts/.issue684-replay-patch.* > scripts/issue684-replay-patch.py
           actual_size="$(wc -c < scripts/issue684-replay-patch.py)"
-          echo "Reconstructed patch bytes: $actual_size"
+          echo "Reconstructed staged patch bytes: $actual_size"
           test "$actual_size" -eq 21307
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path("scripts/issue684-replay-patch.py")
+          text = target.read_text(encoding="utf-8")
+          needle = '''        "receipt materializer oid",
+              target.write_text(text, encoding="utf-8")'''
+          replacement = '''        "receipt materializer oid",
+              )
+              target.write_text(text, encoding="utf-8")'''
+          count = text.count(needle)
+          if count != 1:
+              raise SystemExit(f"expected one split-boundary repair point, found {count}")
+          target.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
+          PY
+          repaired_size="$(wc -c < scripts/issue684-replay-patch.py)"
+          echo "Repaired patch bytes: $repaired_size"
+          test "$repaired_size" -eq 21313
           sha256sum scripts/issue684-replay-patch.py
-          nl -ba scripts/issue684-replay-patch.py | sed -n '96,136p'
           PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python -m py_compile scripts/issue684-replay-patch.py
           python -B scripts/issue684-replay-patch.py
           rm scripts/issue684-replay-patch.py
