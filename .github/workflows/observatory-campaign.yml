@@ -49,6 +49,8 @@ jobs:
           console.log(JSON.stringify({summary:report.summary,rejected:report.rejected,comparisons:report.comparisons}));
           if(files.length!==2 || !supportsCompleteSet(report)) process.exitCode=1;
           JS
+      - name: Inspect measured scenes from actual recorded campaigns
+        run: node experiments/evidence-observatory/smoke-recorded.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -58,4 +60,5 @@ jobs:
             test-results/observatory-campaign-report/
             test-results/observatory-input-binding.json
             test-results/observatory-full-validation.json
+            test-results/observatory-recorded-scenes/
           retention-days: 7

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { REPORT_SCHEMA } from './model.mjs';
+import { selectScene } from './scene-view.mjs';
 
 const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 const encodedJSON = value => JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('&', '\\u0026').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029');
@@ -74,12 +75,64 @@ function application() {
     }
     renderEvent();
   }
+  function renderScene(c) {
+    const panel = $('scene-panel'); panel.replaceChildren(make('h3', 'Sampled geometry'));
+    const measured = selectScene(c.events, cursor);
+    if (!measured) {
+      panel.append(make('p', 'No geometry was recorded at or before this event. An event log is not a visual recording.', 'muted'));
+    } else {
+      const age = measured.ageMs === null ? 'age unknown' : `${measured.ageMs} ms before the selected event`;
+      const jump = make('button', `Sample ${measured.eventId}`, 'small');
+      jump.addEventListener('click', () => { cursor = measured.eventIndex; $('scrub').value = String(cursor); renderEvent(); });
+      panel.append(make('p', `Measured at +${measured.elapsedMs} ms · ${age}. No interpolation or archived script execution.`, 'muted'), jump);
+      if (measured.invalidated) {
+        panel.append(make('p', 'A frame was removed or replaced after this sample. Its earlier geometry is no longer shown as the current scene.', 'notice'));
+      } else {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', `0 0 ${measured.scene.width} ${measured.scene.height}`);
+        svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Measured rectangles: frame boundaries, visible legitimate controls and visible attack layers. Hidden or absent elements are described below.');
+        svg.classList.add('scene-map');
+        for (const box of measured.scene.boxes.filter(b => b.state === 'visible')) {
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          for (const key of ['x', 'y', 'width', 'height']) rect.setAttribute(key, String(box[key]));
+          rect.setAttribute('class', `scene-box scene-${box.kind}`);
+          const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${box.id}: ${box.kind}, ${box.state}`; rect.append(title); svg.append(rect);
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', String(Math.max(2, box.x + 6))); text.setAttribute('y', String(Math.max(18, box.y + 20)));
+          text.textContent = box.kind === 'attack' ? 'ATTACK LAYER' : box.kind === 'frame' ? 'CHILD FRAME' : 'LEGITIMATE CONTROL'; svg.append(text);
+        }
+        panel.append(svg);
+      }
+      const list = make('div', undefined, 'scene-facts');
+      for (const box of measured.scene.boxes) {
+        const row = make('div', undefined, 'scene-row');
+        row.append(make('strong', `${human(box.kind)} · ${human(box.state)} · ${box.id}`),
+          make('span', `Frame ${box.frameId}, document ${box.documentId}; parent ${box.parentFrameId ?? 'none'}`, 'muted'));
+        if (box.declaredTarget !== 'none' || box.effectiveTarget !== 'none') row.append(make('span',
+          `Declared: ${human(box.declaredTarget)} → effective: ${human(box.effectiveTarget)} · ${human(box.targetScope)}`, 'target-flow'));
+        list.append(row);
+      }
+      panel.append(list);
+    }
+    const receiver = $('receiver-panel'); receiver.replaceChildren(make('h3', 'Receiver receipt inbox'));
+    const receipts = c.events.slice(0, cursor + 1).filter(e => e.kind === 'sink.receipt');
+    if (!receipts.length) receiver.append(make('p', 'No accepted consequence recorded yet at this point. Check final receiver health and the completed observation window before drawing a prevention conclusion.', 'muted'));
+    for (const e of receipts) {
+      const b = make('button', `${human(e.data.consequence ?? 'synthetic')} receipt · ${e.id}`, 'receipt-link');
+      b.addEventListener('click', () => { cursor = c.events.indexOf(e); $('scrub').value = String(cursor); renderEvent(); });
+      receiver.append(b);
+      if (e.data.receiver) receiver.append(make('p', `Recorded receiver binding: Run ${e.data.receiver.runId} · one-use target ${e.data.receiver.targetId}`, 'muted'));
+      else receiver.append(make('p', 'Producer-reported receipt; receiver binding unavailable.', 'muted'));
+    }
+  }
+
   function renderEvent() {
     const c = data.cases.find(c => c.id === selected);
     const e = c?.events[cursor];
     const node = $('event-detail'); node.replaceChildren();
     Array.from($('timeline').children).forEach((b, i) => b.setAttribute('aria-pressed', String(i === cursor)));
     $('step-label').textContent = e ? `Event ${cursor + 1} of ${c.events.length}` : 'No events captured';
+    renderScene(c);
     if (!e) return;
     node.append(make('h3', human(e.kind)), make('p', e.explanation), make('p', `Source: ${e.source} · Frame: ${e.frame} · Clock: ${e.clock}`, 'muted'));
     if (e.causes.length) {
@@ -109,13 +162,14 @@ function application() {
 const css = `
 :root{color-scheme:dark;--bg:#0c111b;--panel:#131d2c;--line:#293a50;--text:#ecf2fa;--muted:#abbdd4;--accent:#76dbbf;--warn:#ffcd7c;font:15px/1.55 system-ui,sans-serif}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:9px 14px}button:hover{border-color:var(--accent)}header{padding:30px 4vw 22px;border-bottom:1px solid var(--line);background:#101a28}.topline{display:flex;gap:20px;align-items:center;justify-content:space-between}h1{font-size:clamp(25px,3vw,38px);letter-spacing:-.03em;margin:5px 0}h2{font-size:25px;margin:4px 0 16px}h3{margin:0 0 8px;font-size:18px}p{margin:8px 0 16px}.eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}.muted{color:var(--muted)}.notice{border-left:3px solid var(--warn);padding:12px 16px;background:#282318;color:#ffe0a8;max-width:1100px;margin:16px 0 0}.summary,.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px}.metric{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}.metric strong{font-size:24px}.metric span{font-size:12px}.layout{display:grid;grid-template-columns:300px minmax(0,1fr);max-width:1600px;margin:auto}aside{padding:24px;border-right:1px solid var(--line)}input[type=search],select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);margin:5px 0 14px}label{display:block;color:var(--muted);font-size:13px}.case-button{display:flex;flex-direction:column;text-align:left;width:100%;gap:7px;margin:0 0 10px}.case-button[aria-pressed=true]{background:#173637;border-color:var(--accent)}.case-status{color:var(--muted);font-size:12px}.case-button strong{font-size:14px}main{padding:28px;min-width:0}.verdict{display:inline-block;padding:6px 12px;border:1px solid var(--warn);color:var(--warn);border-radius:6px;font-size:13px;margin-bottom:4px}.verdict[data-state=HARM_OBSERVED],.verdict[data-state=HARM_THEN_RECOVERY],.verdict[data-state=INVALID]{border-color:#ff9b98;color:#ffb3b1}.verdict[data-state=BOUNDED_PREVENTION_SUPPORTED]{border-color:var(--accent);color:var(--accent)}.explain-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:22px 0}.card{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:18px;margin:16px 0}.explain-grid .card{margin:0}.controls{display:flex;gap:12px;align-items:center;margin:14px 0}.controls input{flex:1;min-width:60px;accent-color:var(--accent)}.timeline-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}.timeline{max-height:420px;overflow:auto;padding:3px}.event{display:grid;grid-template-columns:115px 80px minmax(0,1fr);width:100%;gap:10px;text-align:left;padding:10px;border-radius:6px;margin-bottom:7px}.event[aria-pressed=true]{outline:2px solid var(--accent);outline-offset:-2px}.event-time{font-size:12px;color:var(--muted)}.lane-label{font-size:12px;color:var(--accent)}.event-kind{font-size:13px;overflow-wrap:anywhere}.event[data-lane=sink] .lane-label{color:var(--warn)}.event[data-lane=page] .lane-label{color:#cfb5ff}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace;color:#c5d4e6;max-height:380px;overflow:auto}details{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}summary{cursor:pointer;color:var(--muted)}li{margin-bottom:7px;overflow-wrap:anywhere}footer{padding:20px 4vw;border-top:1px solid var(--line);color:var(--muted);font-size:12px}.small{padding:4px 7px;margin:3px;font-size:12px}[hidden]{display:none!important}.empty{padding:25px}
+.scene-map{width:100%;height:auto;max-height:410px;background:#0a1420;border:1px solid var(--line);border-radius:8px;margin-top:14px}.scene-map text{fill:#fff;font:14px system-ui;paint-order:stroke;stroke:#081018;stroke-width:3px}.scene-box{stroke-width:3px;vector-effect:non-scaling-stroke}.scene-frame{fill:transparent;stroke:#91b5e5}.scene-control{fill:#20483f;stroke:#76dbbf}.scene-attack{fill:#772c3266;stroke:#ffa297;stroke-dasharray:7 4}.scene-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:10px;margin-top:14px}.scene-row{display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--line);padding:10px 0;font-size:12px;overflow-wrap:anywhere}.target-flow{color:var(--warn)}.receipt-link{display:block;width:100%;text-align:left;margin:8px 0;overflow-wrap:anywhere}
 @media(max-width:1100px){.layout{grid-template-columns:245px minmax(0,1fr)}.timeline-layout{grid-template-columns:1fr}.summary,.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.explain-grid{grid-template-columns:1fr}}
 @media(max-width:720px){header{padding:20px}.topline{align-items:flex-start;flex-direction:column}.layout{display:block}aside{border-right:0;border-bottom:1px solid var(--line);padding:20px}.case-list{max-height:230px;overflow:auto}main{padding:20px}.event{grid-template-columns:92px 65px minmax(0,1fr);gap:5px}.controls{gap:7px}.controls button{padding:7px}.metric{padding:12px}.metric strong{font-size:20px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}@media print{body{background:white;color:black}.layout{display:block}aside,.controls,#download{display:none}pre,.muted{color:#333}.timeline{max-height:none}.card,.metric{background:white;break-inside:avoid}}
 `;
 export function renderReport(report) {
   if (report?.schema !== REPORT_SCHEMA) throw new Error('REPORT_SCHEMA_INVALID');
-  const script = `(${application.toString()})();`;
+  const script = `${selectScene.toString()}\n(${application.toString()})();`;
   const hash = createHash('sha256').update(script).digest('base64');
   const policy = `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
   const demo = report.cases.some(c => c.mode === 'demo');
@@ -124,7 +178,7 @@ export function renderReport(report) {
 <body><header><div class="topline"><div><div class="eyebrow">NavSentinel / Local evidence workbench</div><h1>Evidence Observatory</h1><p class="muted">What was attempted. What the defense reported. What actually reached the receiver.</p></div><button id="download" type="button">Save projected report JSON</button></div><div class="notice">${demo ? '<strong>DEMONSTRATION — not an executed browser run.</strong> ' : ''}A block message is not proof of prevention. Imported evidence remains diagnostic; this workbench never changes a policy or promotes a registry claim.</div><div id="summary" class="summary"></div></header>
 <div class="layout"><aside><label for="search">Find a case, variant or assessment</label><input type="search" id="search" placeholder="Search evidence"><label for="arm-filter">Run arm</label><select id="arm-filter"><option value="">All arms</option><option>baseline</option><option>protected</option><option>benign</option><option>mixed</option><option>unknown</option></select><div id="case-list" class="case-list" aria-label="Evidence cases"></div><div id="import-errors"></div></aside>
 <main><noscript><p>This interactive local viewer needs JavaScript. The adjacent report.json is readable without JavaScript.</p></noscript>${report.cases.length ? '' : '<div class="empty"><h2>No supported evidence imported</h2><p>Inspect import diagnostics; this is not a passing security result.</p></div>'}<section id="case-panel"><div id="case-subtitle" class="eyebrow"></div><h2 id="case-title"></h2><div id="verdict" class="verdict"></div><p id="claim" class="muted"></p><div class="explain-grid"><article class="card"><h3>What the attack is trying to do</h3><p id="intent"></p></article><article class="card"><h3>What counts as a consequence</h3><p id="boundary"></p></article></div><div id="case-metrics" class="metrics"></div>
-<section class="card"><h3>Follow the evidence</h3><p id="clock-note" class="muted"></p><div class="controls"><button id="previous" aria-label="Previous event">Previous</button><label for="scrub" id="step-label">Event</label><input id="scrub" type="range" min="0" max="0" value="0"><button id="next" aria-label="Next event">Next</button></div><div class="timeline-layout"><div id="timeline" class="timeline" aria-label="Events in capture order"></div><div id="event-detail" aria-live="polite"></div></div></section><section class="card"><h3>What this evidence cannot yet establish</h3><ul id="gaps"></ul></section><section class="card" id="provenance"></section></section></main></div>
+<section class="card"><h3>Follow the evidence</h3><p id="clock-note" class="muted"></p><div class="controls"><button id="previous" aria-label="Previous event">Previous</button><label for="scrub" id="step-label">Event</label><input id="scrub" type="range" min="0" max="0" value="0"><button id="next" aria-label="Next event">Next</button></div><div class="timeline-layout"><div id="timeline" class="timeline" aria-label="Events in capture order"></div><div id="event-detail" aria-live="polite"></div></div></section><section class="card" id="scene-panel"></section><section class="card" id="receiver-panel"></section><section class="card"><h3>What this evidence cannot yet establish</h3><ul id="gaps"></ul></section><section class="card" id="provenance"></section></section></main></div>
 <footer>No network requests, uploaded browsing history, policy controls or executable imported content. All event labels are data, not instructions. Raw Playwright traces remain separate and can contain sensitive material.</footer>
 <script type="application/json" id="report-data">${encodedJSON(report)}</script><script>${script}</script></body></html>\n`;
 }
