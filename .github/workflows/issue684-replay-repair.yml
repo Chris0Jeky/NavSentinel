@@ -58,6 +58,19 @@ jobs:
           PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python -m py_compile scripts/issue684-replay-patch.py
           python -B scripts/issue684-replay-patch.py
           rm scripts/issue684-replay-patch.py
+          python - <<'PY'
+          from pathlib import Path
+
+          for name in (
+              "docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md",
+              "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md",
+          ):
+              target = Path(name)
+              target.write_text(
+                  target.read_text(encoding="utf-8").rstrip() + "\n",
+                  encoding="utf-8",
+              )
+          PY
           git config user.name "NavSentinel Qualification"
           git config user.email "navsentinel-qualification@example.invalid"
           git add \
