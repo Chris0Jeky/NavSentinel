@@ -5,6 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as source from '../source-inputs.mjs';
+function symlinkOrSkip(t, target, link) {
+  try {
+    fs.symlinkSync(target, link);
+    return true;
+  } catch (error) {
+    if (process.platform === 'win32' && ['EPERM', 'EACCES'].includes(error.code)) {
+      t.skip('Windows host does not permit creating the file symlink needed by this test');
+      return false;
+    }
+    throw error;
+  }
+}
 function repo(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'observatory-source-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -38,12 +50,18 @@ test('a clean filter cannot launder different executed bytes', t => {
 test('symlinks in executed source are rejected', t => {
   const { root } = repo(t); assert.equal(typeof source.captureInputs, 'function');
   fs.renameSync(path.join(root, 'gym', 'fixture.html'), path.join(root, 'other.html'));
-  fs.symlinkSync('../other.html', path.join(root, 'gym', 'fixture.html'));
+  if (!symlinkOrSkip(t, '../other.html', path.join(root, 'gym', 'fixture.html'))) return;
   assert.throws(() => source.captureInputs(root), /LINKED_INPUT/);
 });
 test('inherited Git index/object/worktree overrides are not honored', t => {
   const { root, git } = repo(t); assert.equal(typeof source.captureInputs, 'function');
-  const before = process.env.GIT_WORK_TREE; process.env.GIT_WORK_TREE = '/not-the-repository';
+  const workTreeKey = process.platform === 'win32' ? 'gIt_WoRk_TrEe' : 'GIT_WORK_TREE';
+  const globalConfigKey = process.platform === 'win32' ? 'gIt_CoNfIg_GlObAl' : 'GIT_CONFIG_GLOBAL';
+  const beforeWorkTree = process.env[workTreeKey], beforeGlobalConfig = process.env[globalConfigKey];
+  process.env[workTreeKey] = '/not-the-repository'; process.env[globalConfigKey] = '/not-a-git-config';
   try { assert.equal(source.captureInputs(root).head, git('rev-parse', 'HEAD')); }
-  finally { if (before === undefined) delete process.env.GIT_WORK_TREE; else process.env.GIT_WORK_TREE = before; }
+  finally {
+    if (beforeWorkTree === undefined) delete process.env[workTreeKey]; else process.env[workTreeKey] = beforeWorkTree;
+    if (beforeGlobalConfig === undefined) delete process.env[globalConfigKey]; else process.env[globalConfigKey] = beforeGlobalConfig;
+  }
 });

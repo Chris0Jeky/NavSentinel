@@ -12,8 +12,9 @@ const excluded = name => name === '.git' || name.split('/').includes('node_modul
   ['extension/dist', 'dist', '.vite', 'artifacts', 'test-results', 'playwright-report'].some(p => name === p || name.startsWith(`${p}/`));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 function gitEnv() {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
-  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_SYSTEM: os.devNull, GIT_CONFIG_GLOBAL: os.devNull, GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' };
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_')));
+  const nullDevice = process.platform === 'win32' ? 'NUL' : os.devNull;
+  return { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_SYSTEM: nullDevice, GIT_CONFIG_GLOBAL: nullDevice, GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' };
 }
 function plain(root, relative) {
   let current = root;
