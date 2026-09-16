@@ -1,0 +1,61 @@
+name: Observatory recorded campaign
+on:
+  pull_request:
+    paths:
+      - 'experiments/evidence-observatory/**'
+      - 'tests/e2e/observatory-overlay.spec.ts'
+      - 'tests/e2e/proving_ground_fake_sink.ts'
+      - 'tests/observatory-sink-health.test.ts'
+      - 'gym/overlay-nesting-*.html'
+      - '.github/workflows/observatory-campaign.yml'
+  push:
+    branches: [feat/observatory-campaign-20260913]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recorded-overlay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - name: Recorder and source contract tests
+        run: node --test experiments/evidence-observatory/tests/*.test.mjs
+      - run: npm run typecheck && npm run lint
+      - name: Receiver health and existing receiver regressions
+        run: npx vitest run tests/observatory-sink-health.test.ts tests/proving-ground-fake-sink.test.ts
+      - run: npx playwright install --with-deps chromium
+      - name: Build from verified raw inputs and record actual four-arm campaigns
+        run: node experiments/evidence-observatory/run-campaign.mjs
+      - name: Validate full-instrumentation captures separately from minimal controls
+        if: always()
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {buildReport, supportsCompleteSet} from './experiments/evidence-observatory/model.mjs';
+          const walk = p => fs.readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(p,e.name)):[path.join(p,e.name)]);
+          const files=fs.existsSync('test-results/observatory-campaign')?walk('test-results/observatory-campaign').filter(p=>p.endsWith('/full-trace.json')):[];
+          const report=buildReport(files.map(f=>fs.readFileSync(f)));
+          fs.mkdirSync('test-results', {recursive: true});
+          fs.writeFileSync('test-results/observatory-full-validation.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify({summary:report.summary,rejected:report.rejected,comparisons:report.comparisons}));
+          if(files.length!==2 || !supportsCompleteSet(report)) process.exitCode=1;
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observatory-recorded-overlay-campaign
+          path: |
+            test-results/observatory-campaign/
+            test-results/observatory-campaign-report/
+            test-results/observatory-input-binding.json
+            test-results/observatory-full-validation.json
+          retention-days: 7

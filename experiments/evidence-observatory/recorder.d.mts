@@ -1,0 +1,26 @@
+export type Arm = "baseline" | "protected" | "benign" | "mixed";
+export type FrameContext = { pageId: string; frameId: string; documentId: string; parentFrameId: string | null };
+export type SceneBox = { id: string; frameId: string; documentId: string; parentFrameId: string | null;
+  kind: "frame" | "control" | "attack"; state: "visible" | "hidden" | "absent";
+  x: number; y: number; width: number; height: number;
+  declaredTarget: "harm-receiver" | "benign-receiver" | "same-document" | "none" | "unknown";
+  effectiveTarget: "harm-receiver" | "benign-receiver" | "same-document" | "none" | "unknown";
+  targetScope: "new-context" | "current-context" | "none" | "unknown" };
+export type Health = { healthy: boolean; healthSequence: number; receiptCount: number; invalidAttempts: number; observerErrors: number; targetUses: Record<string, number> };
+export type CapturedEvent = { id: string; sequence: number; elapsedMs: number; source: string; kind: string; frame: string; causes: string[];
+  consequence?: "harm" | "benign"; context?: FrameContext; code?: string; sourceClock?: { id: string; timeMs: number };
+  scene?: { width: number; height: number; boxes: SceneBox[] } };
+export type CapturedRun = { runId: string; arm: Arm; protection: "off" | "on"; completed: boolean; declaredOutcome: string;
+  observer: { startedMs: number; endedMs: number; requiredMs: number; droppedEvents: number; [key: string]: number | boolean };
+  capture: { contextId: string; instrumentation: string; harmTargetId: string; benignTargetId: string; baselineMode: string;
+    startHealth: Health | null; endHealth: Health | null; faults: string[] }; events: CapturedEvent[] };
+export const TRACE_V2: string;
+export function createRunRecorder(options: { runId: string; arm: Arm; contextId: string; harmTargetId: string; benignTargetId: string;
+  scenarioId?: string; requiredMs?: number; instrumentation?: "full" | "minimal"; clock?: () => number; maxEvents?: number }): {
+  record(source: string, kind: string, extra?: { frame?: string; causes?: string[]; code?: string; context?: FrameContext;
+    sourceClock?: { id: string; timeMs: number }; scene?: { width: number; height: number; boxes: SceneBox[] } }): string | null;
+  gap(code: string): void;
+  health(phase: "start" | "end", health: Health): void;
+  receipt(receipt: { sequence: number; runId: string; scenarioId: string; role: string; consequence: string; targetId?: string; method: string; sentinelSha256: string }): string | null;
+  finish(options?: { completed?: boolean; extensionReady?: boolean; trustedInput?: boolean; egressFenced?: boolean }): CapturedRun;
+};

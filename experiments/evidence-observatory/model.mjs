@@ -1,5 +1,6 @@
 /** Offline diagnostic projection. Never imports code or promotes registry evidence. */
 import { createHash } from 'node:crypto';
+import { TRACE_V2, validateEventMetadata, validateRunCapture, validateProvenance } from './capture-v2.mjs';
 
 export const LIMITS = Object.freeze({ bytes: 1024 * 1024, totalBytes: 32 * 1024 * 1024, files: 128, events: 2000, runs: 16 });
 export const TRACE_SCHEMA = 'navsentinel.observatory.trace.v1';
@@ -13,8 +14,13 @@ const SOURCES = {
   'decision.hold': 'extension', 'decision.rollback': 'extension',
   'navigation.committed': 'browser', 'navigation.restored': 'browser', 'request.observed': 'browser',
   'control.completed': 'browser', 'sink.receipt': 'sink',
+  'observer.health': 'runner', 'scene.sample': 'browser', 'frame.attached': 'browser', 'frame.detached': 'browser',
 };
 const EXPLANATIONS = {
+  'observer.health': 'The runner checked the independent receiver using a separate non-consuming health challenge.',
+  'scene.sample': 'The browser harness sampled these element rectangles. This is a snapshot, not continuous video.',
+  'frame.attached': 'The browser observed a frame/document context; IDs are local to this fresh run.',
+  'frame.detached': 'The browser observed this frame being removed; its document identity is no longer live.',
   'run.start': 'The runner began this observation window.',
   'input.dispatched': 'The runner dispatched input. This is not itself proof of a human actor.',
   'attack.intent': 'The fixture announced its intent; this is an untrusted page report.',
@@ -172,7 +178,9 @@ function hiddenMedia(raw, source) {
   return [assess(c)];
 }
 function nativeTrace(raw, source) {
-  keys(raw, ['schema', 'mode', 'campaignId', 'scenarioId', 'variantId', 'identity', 'runs']);
+  const v2 = raw.schema === TRACE_V2;
+  keys(raw, ['schema', 'mode', 'campaignId', 'scenarioId', 'variantId', 'identity', 'runs', ...(v2 ? ['provenance'] : [])]);
+  const provenance = v2 ? validateProvenance(raw.provenance) : null;
   const mode = requireValue(enumValue(raw.mode, ['synthetic', 'demo']), 'MODE_INVALID');
   const campaignId = requireValue(token(raw.campaignId), 'CAMPAIGN_INVALID');
   const scenario = requireValue(token(raw.scenarioId), 'SCENARIO_INVALID');
@@ -182,7 +190,7 @@ function nativeTrace(raw, source) {
     fixtureSha256: digest(raw.identity.fixtureSha256), browserVersion: token(raw.identity.browserVersion), profile: token(raw.identity.profile), seed: token(raw.identity.seed) };
   const runIds = new Set();
   return array(raw.runs, LIMITS.runs).map(run => {
-    keys(run, ['runId', 'arm', 'protection', 'completed', 'declaredOutcome', 'observer', 'events']);
+    keys(run, ['runId', 'arm', 'protection', 'completed', 'declaredOutcome', 'observer', 'events', ...(v2 ? ['capture'] : [])]);
     const runId = requireValue(token(run.runId), 'RUN_ID_INVALID');
     if (runIds.has(runId)) throw new Error('DUPLICATE_RUN_ID');
     runIds.add(runId);
@@ -201,7 +209,7 @@ function nativeTrace(raw, source) {
     const ids = new Set(); let previousMs = o.startedMs; let sinkSequence = 0; let harmSequence = -1;
     c.facts = { harmReceipts: 0, benignReceipts: 0, cumulativeReceipts: null, legitimateCompletions: 0, recovered: false };
     for (const input of array(run.events)) {
-      keys(input, ['id', 'sequence', 'elapsedMs', 'source', 'kind', 'frame', 'causes', 'code', 'consequence', 'sinkSequence']);
+      keys(input, ['id', 'sequence', 'elapsedMs', 'source', 'kind', 'frame', 'causes', 'code', 'consequence', 'sinkSequence', ...(v2 ? ['context', 'sourceClock', 'scene', 'receiver'] : [])]);
       const id = requireValue(token(input.id), 'EVENT_ID_INVALID');
       if (ids.has(id) || input.sequence !== c.events.length + 1) throw new Error('EVENT_ORDER_OR_ID_INVALID');
       const time = requireValue(millis(input.elapsedMs), 'EVENT_TIME_INVALID');
@@ -210,7 +218,8 @@ function nativeTrace(raw, source) {
       if (!Object.hasOwn(SOURCES, input.kind) || SOURCES[input.kind] !== input.source) throw new Error('EVENT_PROVENANCE_INVALID');
       const causes = array(input.causes, 4);
       if (new Set(causes).size !== causes.length || causes.some(id => !ids.has(id))) throw new Error('CAUSE_NOT_PREVIOUS_EVENT');
-      const e = event(input.sequence, input.source, input.kind, EXPLANATIONS[input.kind], {}, time, 'collector-monotonic');
+      const e = event(input.sequence, input.source, input.kind, EXPLANATIONS[input.kind], v2 ? validateEventMetadata(input) : {}, time, 'collector-monotonic');
+      if (v2 && ((input.receiver !== undefined && input.kind !== 'sink.receipt') || (input.scene !== undefined && input.kind !== 'scene.sample'))) throw new Error('CAPTURE_METADATA_KIND_MISMATCH');
       e.id = id; e.causes = [...causes]; e.frame = requireValue(enumValue(input.frame, ['top', 'child', 'none', 'unknown']), 'FRAME_INVALID');
       if (input.code !== undefined) e.data.code = requireValue(token(input.code), 'REASON_CODE_INVALID');
       if (input.kind === 'sink.receipt') {
@@ -235,7 +244,14 @@ function nativeTrace(raw, source) {
     if (!c.events.some(e => e.kind === 'input.dispatched')) c.gaps.push('INPUT_EVENT_MISSING');
     if (arm !== 'benign' && !c.events.some(e => e.kind === 'attack.attempt')) c.gaps.push('ATTEMPT_NOT_RECORDED');
     if (c.declaredOutcome === 'HARM_REACHED' && c.facts.harmReceipts === 0) c.gaps.push('DECLARED_HARM_NOT_RECEIPTED');
-    c.proof = { campaignId, runId, producerContract: TRACE_SCHEMA, observationMs: o.endedMs - o.startedMs, requiredMs: o.requiredMs };
+    c.proof = { campaignId, runId, producerContract: v2 ? TRACE_V2 : TRACE_SCHEMA, observationMs: o.endedMs - o.startedMs, requiredMs: o.requiredMs };
+    if (v2) {
+      const capture = validateRunCapture(run, scenario);
+      c.proof.capture = capture.value; c.proof.provenance = provenance; c.gaps.push(...capture.gaps);
+      if (!provenance.rawVerified) c.gaps.push('RAW_SOURCE_NOT_VERIFIED');
+      if (provenance.inputsBefore !== provenance.inputsAfter) c.gaps.push('SOURCE_INPUTS_CHANGED');
+      if (provenance.artifactAfter !== identity.extensionSha256) c.gaps.push('BUILT_ARTIFACT_CHANGED');
+    }
     c.warnings.push('Producer attestations are not authenticated by importing JSON.', 'A bounded synthetic run is not an open-web efficacy measurement.');
     if (mode === 'demo') c.warnings.push('DEMONSTRATION: authored example, not an executed NavSentinel campaign.');
     return assess(c);
@@ -250,7 +266,7 @@ export function parseSource(bytes, id = 'source-1') {
   if (!object(raw)) throw new Error('ROOT_NOT_OBJECT');
   const source = { id, sha256: sha256(bytes), bytes: bytes.length, format: 'unknown' };
   let cases;
-  if (raw.schema === TRACE_SCHEMA) { source.format = 'observatory-trace-v1'; cases = nativeTrace(raw, source); }
+  if (raw.schema === TRACE_SCHEMA || raw.schema === TRACE_V2) { source.format = raw.schema === TRACE_V2 ? 'observatory-trace-v2' : 'observatory-trace-v1'; cases = nativeTrace(raw, source); }
   else if (raw.scenario_id === 'NS-ADV-UI-004') { source.format = 'overlay-receipt-v1'; cases = overlay(raw, source); }
   else if (raw.arm && Array.isArray(raw.sinkReceipts) && Array.isArray(raw.diagnostics)) { source.format = 'hidden-media-diagnostic-v1'; cases = hiddenMedia(raw, source); }
   else throw new Error('UNSUPPORTED_FORMAT');
@@ -268,6 +284,11 @@ function compare(cases) {
     const arms = Object.fromEntries(ARMS.map(a => [a, group.filter(c => c.arm === a)]));
     if (ARMS.some(a => arms[a].length !== 1)) reasons.push('REQUIRE_EXACTLY_ONE_OF_EACH_ARM');
     if (new Set(group.map(c => JSON.stringify(c.identity))).size !== 1) reasons.push('IDENTITY_MISMATCH');
+    if (new Set(group.map(c => c.proof.producerContract)).size !== 1) reasons.push('PRODUCER_VERSION_MISMATCH');
+    if (group.some(c => c.proof.capture)) {
+      if (new Set(group.map(c => c.proof.capture?.contextId)).size !== group.length) reasons.push('CONTEXT_REUSED_ACROSS_ARMS');
+      if (new Set(group.map(c => JSON.stringify(c.proof.provenance))).size !== 1) reasons.push('PROVENANCE_MISMATCH');
+    }
     if (new Set(group.map(c => c.proof.runId)).size !== group.length) reasons.push('DUPLICATE_RUN_ID_ACROSS_INPUTS');
     if (group.some(c => c.mode === 'demo')) reasons.push('DEMONSTRATION_NOT_EVIDENCE');
     if (group.some(c => c.validity !== 'complete' || c.gaps.length)) reasons.push('OBSERVATIONS_INCOMPLETE_OR_INVALID');
