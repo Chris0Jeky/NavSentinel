@@ -11,12 +11,22 @@ type LauncherModule = {
   sanitizedEnvironment: (source: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
 };
 
+type BootstrapModule = {
+  sanitizedBootstrapEnvironment: (source: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
+};
+
 async function loadLauncherModule(): Promise<LauncherModule> {
   // The committed launcher is plain ESM JavaScript and deliberately has no
   // declaration file; the runtime shape is asserted by these contracts.
   // @ts-expect-error -- committed launcher has no declaration file
   const module = await import("../scripts/run-state-authority-campaign.mjs");
   return module as unknown as LauncherModule;
+}
+
+async function loadBootstrapModule(): Promise<BootstrapModule> {
+  // @ts-expect-error -- the dependency-free bootstrap has no declaration file
+  const module = await import("../scripts/launch-state-authority-campaign.mjs");
+  return module as unknown as BootstrapModule;
 }
 
 function git(args: string[]): string {
@@ -62,6 +72,36 @@ afterEach(() => {
 });
 
 describe("state-authority launcher replay boundary", () => {
+  it("scrubs preload and repository authority before extracting the launcher", async () => {
+    const { sanitizedBootstrapEnvironment } = await loadBootstrapModule();
+    const environment = sanitizedBootstrapEnvironment({
+      PATH: process.env.PATH ?? "",
+      git_dir: "/tmp/alternate-git-dir",
+      NavSentinel_State_Authority_Key: "caller-key",
+      NoDe_OpTiOnS: "--require=caller-preload.cjs",
+      node_path: "/tmp/caller-modules",
+      Extension_Path: "/tmp/caller-extension",
+      SAFE_VALUE: "retained",
+    });
+
+    expect(environment).toMatchObject({
+      SAFE_VALUE: "retained",
+      GIT_NO_REPLACE_OBJECTS: "1",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_OPTIONAL_LOCKS: "0",
+    });
+    const normalizedKeys = Object.keys(environment).map((key) => key.toUpperCase());
+    expect(normalizedKeys.some((key) => key.startsWith("NAVSENTINEL_STATE_AUTHORITY_"))).toBe(false);
+    expect(normalizedKeys.some((key) => key.startsWith("GIT_") && ![
+      "GIT_NO_REPLACE_OBJECTS",
+      "GIT_NO_LAZY_FETCH",
+      "GIT_OPTIONAL_LOCKS",
+    ].includes(key))).toBe(false);
+    expect(normalizedKeys).not.toContain("NODE_OPTIONS");
+    expect(normalizedKeys).not.toContain("NODE_PATH");
+    expect(normalizedKeys).not.toContain("EXTENSION_PATH");
+  });
+
   it("scrubs every sensitive environment spelling case-insensitively", async () => {
     const { sanitizedEnvironment } = await loadLauncherModule();
     const environment = sanitizedEnvironment({

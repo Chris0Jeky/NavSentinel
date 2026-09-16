@@ -3,6 +3,7 @@
   "campaign": "state-authority-typed-harm",
   "inputs": [
     "scripts/run-state-authority-campaign.mjs",
+    "scripts/launch-state-authority-campaign.mjs",
     "tests/e2e/state-authority-campaign-inputs.json",
     "tests/e2e/state-authority-sink.spec.ts",
     "tests/e2e/extension_build_provenance.ts",

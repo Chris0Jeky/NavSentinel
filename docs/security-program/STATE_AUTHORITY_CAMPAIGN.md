@@ -55,7 +55,7 @@ attempts are recorded separately from authored-fixture traffic.
 - [x] test-owned current-head extension build and output recheck
 - [x] exact-head RW-21/RW-24/RW-25 typed-harm campaign
 - [ ] normal hosted CI on the pushed head
-- [ ] one issue-scoped independent review of PR #714
+- [x] one issue-scoped independent review of PR #714
 
 PR #714 is stacked directly on PR #681 and supplies the bounded #684 closure.
 Its publication gate runs the raw-authority unit suite and all three typed-harm
@@ -103,6 +103,9 @@ campaign tests.
 
 Promotion still requires an exact-head hosted run of all three typed-harm
 journeys and a fresh independent review of this repaired execution boundary.
+An explicit `Stress Tests` workflow dispatch performs that full-history hosted
+qualification; the nightly schedule and `npm run test:e2e:stress` remain the
+ordinary stress lane only.
 
 ## Launcher-owned final receipt checkpoint
 
@@ -152,7 +155,9 @@ parse or accept the retained set. It then enforces the exact unique journey set
 journey and scenario fields.
 
 `state-authority-sink.spec.ts` is excluded from every broad ordinary
-Playwright collection: default, rollback, and live. It remains available only
-through `playwright.stress.config.ts` and the committed launcher, so ordinary
-E2E lanes neither bypass the authority boundary nor fail merely by importing a
-launcher-only module.
+Playwright collection: default, rollback, live, and the package-level ordinary
+stress command. It remains available to the committed launcher through
+`playwright.stress.config.ts`, so ordinary E2E lanes neither bypass the authority
+boundary nor fail merely by importing a launcher-only module. Run the authority
+lane with `npm run test:e2e:state-authority` from a trusted full-history checkout
+or dispatch the `Stress Tests` workflow for hosted retained evidence.

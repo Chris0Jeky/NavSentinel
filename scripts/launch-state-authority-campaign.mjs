@@ -1,0 +1,99 @@
+#!/usr/bin/env node
+
+import { execFileSync, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";
+
+function fail(message) {
+  throw new Error(`State-authority bootstrap failed: ${message}`);
+}
+
+export function sanitizedBootstrapEnvironment(source = process.env) {
+  const environment = {};
+  for (const [key, value] of Object.entries(source)) {
+    const normalizedKey = key.toUpperCase();
+    if (
+      normalizedKey.startsWith("GIT_")
+      || normalizedKey.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
+      || normalizedKey === "NODE_OPTIONS"
+      || normalizedKey === "NODE_PATH"
+      || normalizedKey === "EXTENSION_PATH"
+    ) {
+      continue;
+    }
+    environment[key] = value;
+  }
+  environment.GIT_NO_REPLACE_OBJECTS = "1";
+  environment.GIT_NO_LAZY_FETCH = "1";
+  environment.GIT_OPTIONAL_LOCKS = "0";
+  return environment;
+}
+
+function git(args, { cwd, environment, encoding } = {}) {
+  return execFileSync("git", args, {
+    cwd,
+    env: environment,
+    encoding,
+    maxBuffer: 128 * 1024 * 1024,
+  });
+}
+
+export function main(args = process.argv.slice(2)) {
+  if (args.some((argument) => argument !== "--preflight-only")) {
+    fail("only --preflight-only is accepted");
+  }
+  const environment = sanitizedBootstrapEnvironment(process.env);
+  const repositoryRoot = path.resolve(
+    git(["rev-parse", "--show-toplevel"], {
+      cwd: process.cwd(),
+      environment,
+      encoding: "utf8",
+    }).trim(),
+  );
+  const launcherOid = git(
+    ["-C", repositoryRoot, "rev-parse", `HEAD:${LAUNCHER_REPOSITORY_PATH}`],
+    { environment, encoding: "utf8" },
+  ).trim();
+  if (!/^[0-9a-f]{40,64}$/u.test(launcherOid)) {
+    fail("committed launcher object ID is malformed");
+  }
+  const launcherBytes = git(
+    ["-C", repositoryRoot, "cat-file", "blob", launcherOid],
+    { environment },
+  );
+  const temporaryRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+  );
+  try {
+    const launcherPath = path.join(
+      temporaryRoot,
+      "run-state-authority-campaign.mjs",
+    );
+    fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+    environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;
+    const result = spawnSync(
+      process.execPath,
+      [launcherPath, "--repository", repositoryRoot, ...args],
+      {
+        cwd: repositoryRoot,
+        env: environment,
+        stdio: "inherit",
+      },
+    );
+    if (result.error) throw result.error;
+    return result.status ?? 1;
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+const modulePath = path.resolve(fileURLToPath(import.meta.url));
+const entryPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
+const directExecution = process.platform === "win32"
+  ? modulePath.toLowerCase() === entryPath.toLowerCase()
+  : modulePath === entryPath;
+if (directExecution) process.exitCode = main();

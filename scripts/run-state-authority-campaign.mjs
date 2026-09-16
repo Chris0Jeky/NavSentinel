@@ -25,6 +25,7 @@ const MANIFEST_REPOSITORY_PATH =
   "tests/e2e/state-authority-campaign-inputs.json";
 const REQUIRED_CAMPAIGN_INPUTS = new Set([
   LAUNCHER_REPOSITORY_PATH,
+  "scripts/launch-state-authority-campaign.mjs",
   MANIFEST_REPOSITORY_PATH,
   "tests/e2e/state-authority-sink.spec.ts",
   HELPER_REPOSITORY_PATH,

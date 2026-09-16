@@ -55,9 +55,20 @@ CLIP-005's JSON attachments are diagnostic observations, not exact-head evidence
 
 Local fixtures never accept destination URLs from `harm_target` or `benign_target` query parameters. An E2E caller instead asks the live typed sink to build an immutable, page-scoped bootstrap for one exact loopback origin/path and exact `(target role, scenario, origin mode)` keys. The Playwright page init script only configures those destinations before navigation: it changes only one frozen, non-writable Window resolver and injects no input, event, navigation, document-node mutation, product call, or decision. Query input cannot select or replace a destination; this is harness configuration, not a proof about hostile-page authority in an already armed context. The fixture revalidates every armed result structurally, and the final sink independently revalidates active run, scenario, authority, sentinel, and one-use count. This remains local-only `MODELLED` evidence, not Chrome Gate-3 or release evidence.
 
-`npm run test:e2e:stress` also includes the bounded
-[`STATE_AUTHORITY_CAMPAIGN.md`](security-program/STATE_AUTHORITY_CAMPAIGN.md)
-lane for RW-21, RW-24, and RW-25. It launches Playwright-bundled Chromium with
+`npm run test:e2e:stress` runs only the ordinary stress spec. The launcher-only
+RW-21 / RW-24 / RW-25 authority spec is deliberately excluded from that command;
+direct Playwright collection cannot create authoritative receipts. Run the
+bounded [`STATE_AUTHORITY_CAMPAIGN.md`](security-program/STATE_AUTHORITY_CAMPAIGN.md)
+lane from a full-history checkout with:
+
+```bash
+npm run test:e2e:state-authority
+```
+
+The `Stress Tests` workflow uses the same separation: scheduled runs execute the
+ordinary stress spec, while an explicit `workflow_dispatch` also runs the
+committed-object authority campaign and retains its signed receipts for 30 days.
+The authority lane launches Playwright-bundled Chromium with
 native popup blocking deliberately disabled, proves that the extension-disabled
 attack reaches a typed local harm sink, then requires zero harm receipts with the
 release extension in protected and mixed arms. A native-keyboard benign control
@@ -67,7 +78,9 @@ build inputs against the current Git head, and rebuilds the fixed
 `extension/dist` path. Each receipt binds those source hashes to the exact
 loaded-build hash and rechecks both before attachment. This is independent local
 regression evidence, not branded-Chrome, real sleep/restart, open-web efficacy,
-or release evidence.
+or release evidence. The convenience bootstrap cannot undo code that Node loaded
+before it started, so a trusted owner shell must clear preload authority before
+local execution; the hosted workflow starts from a clean runner environment.
 
 The older Python flow still works when needed:
 

@@ -34,13 +34,23 @@ describe("state-authority Playwright collection boundary", () => {
   });
 
   it("keeps the scheduled stress lane outside the launcher-only authority spec", () => {
+    const packageJson = JSON.parse(fs.readFileSync(
+      path.join(repositoryRoot, "package.json"),
+      "utf8",
+    )) as { scripts?: Record<string, string> };
     const workflow = fs.readFileSync(
       path.join(repositoryRoot, ".github", "workflows", "stress.yml"),
       "utf8",
     );
 
-    expect(workflow).toContain(
-      "npm run test:e2e:stress -- tests/e2e/navsentinel.stress.spec.ts",
+    expect(packageJson.scripts?.["test:e2e:stress"]).toContain(
+      "tests/e2e/navsentinel.stress.spec.ts",
     );
+    expect(workflow).toContain(
+      "npm run test:e2e:stress",
+    );
+    expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow).toContain("if: github.event_name == 'workflow_dispatch'");
+    expect(workflow).toContain("npm run test:e2e:state-authority");
   });
 });
