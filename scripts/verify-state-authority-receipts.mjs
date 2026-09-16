@@ -148,6 +148,7 @@ export function verifyReceiptDirectory({
   ) {
     fail("manifest repository head does not match the trusted run");
   }
+
   const verified = [];
   const seenFilenames = new Set();
   const seenJourneys = new Set();

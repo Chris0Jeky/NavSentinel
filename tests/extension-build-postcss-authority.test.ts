@@ -85,4 +85,35 @@ describe("state-authority PostCSS build-input boundary", () => {
       candidate,
     );
   });
+
+  it("rejects an untracked PostCSS config under the Vite project root", () => {
+    const repository = createRepository();
+    const candidate = "extension/postcss.config.js";
+    fs.writeFileSync(
+      path.join(repository.root, ...candidate.split("/")),
+      "export default { plugins: [] };\n",
+    );
+
+    expectPostCssRejection(
+      () => assertCurrentHeadBuildInputs(repository.root, repository.head),
+      candidate,
+    );
+  });
+
+  it("rejects a tracked PostCSS rc config under the Vite project root", () => {
+    const repository = createRepository();
+    const candidate = "extension/.postcssrc";
+    fs.writeFileSync(
+      path.join(repository.root, ...candidate.split("/")),
+      '{"plugins":{}}\n',
+    );
+    git(repository.root, ["add", "--", candidate]);
+    git(repository.root, ["commit", "--quiet", "-m", "extension postcss config"]);
+    const head = git(repository.root, ["rev-parse", "HEAD"]);
+
+    expectPostCssRejection(
+      () => assertCurrentHeadBuildInputs(repository.root, head),
+      candidate,
+    );
+  });
 });

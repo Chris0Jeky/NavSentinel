@@ -167,3 +167,20 @@ GitHub Actions run binds that key to the exact launcher execution. The uploaded
 bundle can then be checked with `scripts/verify-state-authority-receipts.mjs`
 using the fingerprint from the independent run log. An embedded replacement key
 alone is not trusted.
+
+## Auto-discovered build configuration and manifest-set binding
+
+The build-input verifier rejects every supported root PostCSS configuration
+candidate (`.postcssrc*` and `postcss.config.*`) because this release build has
+no declared PostCSS configuration. The committed `package.json` remains part of
+the authenticated input closure, so a package-level `postcss` field cannot drift
+without invalidating raw-byte equality. Configuration found above the repository
+root remains part of the explicitly trusted runner/toolchain boundary.
+
+Retained-receipt verification now requires the finalization-manifest SHA-256
+published by the trusted launcher run in addition to the signing-key fingerprint
+and exact repository head. The verifier checks that digest before parsing the
+manifest, then requires exactly one signed receipt for each fixed journey
+`RW-21`, `RW-24`, and `RW-25`, with canonical filenames and matching signed
+scenario/journey fields. Replacing the manifest or duplicating one valid receipt
+therefore fails closed.

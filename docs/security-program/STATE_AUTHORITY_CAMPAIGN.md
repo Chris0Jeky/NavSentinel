@@ -139,3 +139,15 @@ is verified against that independently bound fingerprint with
 `scripts/verify-state-authority-receipts.mjs`. The internal HMAC remains only a
 same-process/read-back control and is not presented as long-term artifact
 authentication.
+
+## Retained-set and default-runner boundary
+
+The external verifier requires the trusted run's manifest SHA-256 before it will
+parse or accept the retained set. It then enforces the exact unique journey set
+`RW-21` / `RW-24` / `RW-25` and binds each canonical filename to the signed
+journey and scenario fields.
+
+`state-authority-sink.spec.ts` is excluded from ordinary Playwright collection.
+It remains available only through `playwright.stress.config.ts` and the committed
+launcher, so the default E2E lane neither bypasses the authority boundary nor
+fails merely by importing a launcher-only module.

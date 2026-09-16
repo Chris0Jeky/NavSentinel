@@ -31,7 +31,10 @@ const POSTCSS_CONFIG_CANDIDATES = [
   "postcss.config.mts",
   "postcss.config.cts",
 ] as const;
-const POSTCSS_CONFIG_PATHS = new Set<string>(POSTCSS_CONFIG_CANDIDATES);
+const POSTCSS_CONFIG_PATHS = new Set<string>([
+  ...POSTCSS_CONFIG_CANDIDATES,
+  ...POSTCSS_CONFIG_CANDIDATES.map((candidate) => `extension/${candidate}`),
+]);
 
 const BUILD_INPUT_PATHS = [
   "extension",
@@ -753,6 +756,12 @@ function assertNoUnexpectedBuildInputs(
     }
     assertValidRelativePath(relativePath);
     registerCanonicalPath(canonicalPaths, relativePath);
+    if (POSTCSS_CONFIG_PATHS.has(relativePath)) {
+      throw integrityError(
+        "AUTO_DISCOVERED_POSTCSS_CONFIG",
+        `auto-discovered PostCSS configuration '${relativePath}' is not allowed`,
+      );
+    }
     if (stats.isSymbolicLink()) {
       throw integrityError("SPECIAL_INPUT", `symbolic link or junction at '${relativePath}'`);
     }
