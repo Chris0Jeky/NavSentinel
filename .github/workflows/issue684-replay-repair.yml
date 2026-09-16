@@ -1,0 +1,103 @@
+name: Issue 684 replay-resistant campaign repair
+
+on:
+  push:
+    branches:
+      - fix/684-raw-evidence-inputs-20260916
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-684-replay-repair
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/684-raw-evidence-inputs-20260916
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Materialize final repair commit
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          cat scripts/.issue684-replay-patch.* > scripts/issue684-replay-patch.py
+          test "$(wc -c < scripts/issue684-replay-patch.py)" -eq 21314
+          echo "023da2975d078e5adc228043656b7b19ba7c1db27112e40f758e686653c3d73f  scripts/issue684-replay-patch.py" | sha256sum --check --strict
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python -m py_compile scripts/issue684-replay-patch.py
+          python -B scripts/issue684-replay-patch.py
+          rm scripts/issue684-replay-patch.py
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add \
+            docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md \
+            docs/security-program/STATE_AUTHORITY_CAMPAIGN.md \
+            scripts/run-state-authority-campaign.mjs \
+            tests/e2e/materialized_campaign_provenance.ts \
+            tests/e2e/state-authority-campaign-inputs.json \
+            tests/e2e/state-authority-sink.spec.ts \
+            tests/state-authority-launcher-contract.test.ts
+          git rm \
+            .github/workflows/issue684-replay-repair.yml \
+            scripts/.issue684-replay-patch.*
+          git diff --cached --check
+          git commit -m "fix: execute state-authority campaign from Git objects"
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify syntax and manifest
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          node --check scripts/run-state-authority-campaign.mjs
+          node -e 'JSON.parse(require("node:fs").readFileSync("tests/e2e/state-authority-campaign-inputs.json", "utf8"))'
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run provenance and replay contracts
+        run: >
+          npm run test -- --run
+          tests/extension-build-provenance.test.ts
+          tests/state-authority-launcher-contract.test.ts
+
+      - name: Verify Git object store
+        run: git fsck --full --strict --no-reflogs --no-progress HEAD
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run exact committed campaign
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          launcher_oid="$(git rev-parse HEAD:scripts/run-state-authority-campaign.mjs)"
+          launcher_path="$RUNNER_TEMP/run-state-authority-campaign.mjs"
+          git cat-file blob "$launcher_oid" > "$launcher_path"
+          chmod 600 "$launcher_path"
+          env -u NODE_OPTIONS -u NODE_PATH \
+            NAVSENTINEL_EXPECTED_LAUNCHER_OID="$launcher_oid" \
+            xvfb-run -a node --experimental-strip-types "$launcher_path" \
+              --repository "$GITHUB_WORKSPACE"
+          node scripts/check-perf-budget.mjs
+
+      - name: Push qualified exact head
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git push origin HEAD:fix/684-raw-evidence-inputs-20260916

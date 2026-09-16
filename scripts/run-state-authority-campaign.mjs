@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,17 +14,24 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";
 const HELPER_REPOSITORY_PATH = "tests/e2e/extension_build_provenance.ts";
-const MANIFEST_REPOSITORY_PATH = "tests/e2e/state-authority-campaign-inputs.json";
+const MATERIALIZER_REPOSITORY_PATH =
+  "tests/e2e/materialized_campaign_provenance.ts";
+const MANIFEST_REPOSITORY_PATH =
+  "tests/e2e/state-authority-campaign-inputs.json";
 const REQUIRED_CAMPAIGN_INPUTS = new Set([
   LAUNCHER_REPOSITORY_PATH,
   MANIFEST_REPOSITORY_PATH,
   "tests/e2e/state-authority-sink.spec.ts",
   HELPER_REPOSITORY_PATH,
+  MATERIALIZER_REPOSITORY_PATH,
   "tests/e2e/extension_test_utils.ts",
   "scripts/content-loader-contract.mjs",
   "tests/e2e/local_fixture_target_bootstrap.ts",
   "tests/e2e/proving_ground_fake_sink.ts",
   "playwright.stress.config.ts",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
   "gym/local-fixture-targets.js",
   "gym/rw21-allow-once-double-spend.html",
   "gym/rw24-idle-resume-popup.html",
@@ -27,7 +39,9 @@ const REQUIRED_CAMPAIGN_INPUTS = new Set([
 ]);
 
 function fail(code, message) {
-  const error = new Error(`State-authority launch TEST_INVALID [${code}]: ${message}`);
+  const error = new Error(
+    `State-authority launch TEST_INVALID [${code}]: ${message}`,
+  );
   error.name = "StateAuthorityLaunchIntegrityError";
   throw error;
 }
@@ -35,7 +49,13 @@ function fail(code, message) {
 function sanitizedEnvironment(source = process.env) {
   const environment = {};
   for (const [key, value] of Object.entries(source)) {
-    if (value === undefined || key.toUpperCase().startsWith("GIT_")) continue;
+    if (
+      value === undefined
+      || key.toUpperCase().startsWith("GIT_")
+      || key.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
+    ) {
+      continue;
+    }
     environment[key] = value;
   }
   delete environment.NODE_OPTIONS;
@@ -49,13 +69,21 @@ function sanitizedEnvironment(source = process.env) {
 }
 
 function git(repositoryRoot, args, options = {}) {
-  const result = spawnSync("git", ["--no-replace-objects", "-C", repositoryRoot, ...args], {
-    env: sanitizedEnvironment(options.environment ?? process.env),
-    input: options.input,
-    encoding: options.encoding ?? "utf8",
-    maxBuffer: 1024 * 1024 * 1024,
-    stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
-  });
+  const result = spawnSync(
+    "git",
+    ["--no-replace-objects", "-C", repositoryRoot, ...args],
+    {
+      env: sanitizedEnvironment(options.environment ?? process.env),
+      input: options.input,
+      encoding: options.encoding ?? "utf8",
+      maxBuffer: 1024 * 1024 * 1024,
+      stdio: [
+        options.input === undefined ? "ignore" : "pipe",
+        "pipe",
+        "pipe",
+      ],
+    },
+  );
   if (result.error || result.status !== 0) {
     const detail = String(result.stderr ?? "").trim()
       || String(result.stdout ?? "").trim()
@@ -77,7 +105,10 @@ function gitBuffer(repositoryRoot, args) {
 
 function hashAlgorithm(objectFormat) {
   if (objectFormat === "sha1" || objectFormat === "sha256") return objectFormat;
-  fail("UNSUPPORTED_OBJECT_FORMAT", `unsupported Git object format '${objectFormat}'`);
+  fail(
+    "UNSUPPORTED_OBJECT_FORMAT",
+    `unsupported Git object format '${objectFormat}'`,
+  );
 }
 
 function computeGitObjectId(objectFormat, type, content) {
@@ -113,9 +144,14 @@ function assertCanonicalManifestPath(relativePath) {
     || relativePath.startsWith("/")
     || relativePath.includes("\\")
     || path.posix.normalize(relativePath) !== relativePath
-    || relativePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
+    || relativePath
+      .split("/")
+      .some((segment) => !segment || segment === "." || segment === "..")
   ) {
-    fail("CAMPAIGN_MANIFEST", `non-canonical campaign input '${String(relativePath)}'`);
+    fail(
+      "CAMPAIGN_MANIFEST",
+      `non-canonical campaign input '${String(relativePath)}'`,
+    );
   }
 }
 
@@ -124,7 +160,10 @@ function loadCampaignManifest(content) {
   try {
     parsed = JSON.parse(content.toString("utf8"));
   } catch (error) {
-    fail("CAMPAIGN_MANIFEST", error instanceof Error ? error.message : String(error));
+    fail(
+      "CAMPAIGN_MANIFEST",
+      error instanceof Error ? error.message : String(error),
+    );
   }
   if (
     !parsed
@@ -133,23 +172,40 @@ function loadCampaignManifest(content) {
     || parsed.campaign !== "state-authority-typed-harm"
     || !Array.isArray(parsed.inputs)
   ) {
-    fail("CAMPAIGN_MANIFEST", "manifest schema or campaign identity is invalid");
+    fail(
+      "CAMPAIGN_MANIFEST",
+      "manifest schema or campaign identity is invalid",
+    );
   }
   const inputs = parsed.inputs;
-  for (const relativePath of inputs) assertCanonicalManifestPath(relativePath);
+  for (const relativePath of inputs) {
+    assertCanonicalManifestPath(relativePath);
+  }
   if (new Set(inputs).size !== inputs.length) {
     fail("CAMPAIGN_MANIFEST", "campaign manifest contains duplicate inputs");
   }
   for (const required of REQUIRED_CAMPAIGN_INPUTS) {
     if (!inputs.includes(required)) {
-      fail("CAMPAIGN_MANIFEST", `campaign manifest omits required input '${required}'`);
+      fail(
+        "CAMPAIGN_MANIFEST",
+        `campaign manifest omits required input '${required}'`,
+      );
     }
   }
   return Object.freeze([...inputs].sort());
 }
 
-function readCommittedPath(repositoryRoot, commit, relativePath, objectFormat) {
-  const oid = gitText(repositoryRoot, ["rev-parse", "--verify", `${commit}:${relativePath}`]);
+function readCommittedPath(
+  repositoryRoot,
+  commit,
+  relativePath,
+  objectFormat,
+) {
+  const oid = gitText(repositoryRoot, [
+    "rev-parse",
+    "--verify",
+    `${commit}:${relativePath}`,
+  ]);
   const content = gitBuffer(repositoryRoot, ["cat-file", "blob", oid]);
   const computed = computeGitObjectId(objectFormat, "blob", content);
   if (computed !== oid) {
@@ -162,17 +218,89 @@ function readCommittedPath(repositoryRoot, commit, relativePath, objectFormat) {
 }
 
 function writePrivateFile(target, content) {
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   fs.writeFileSync(target, content, { mode: 0o600, flag: "wx" });
   if (process.platform !== "win32") fs.chmodSync(target, 0o600);
 }
 
+function materializeCampaign(
+  repositoryRoot,
+  repositoryCommit,
+  objectFormat,
+  campaignFiles,
+  campaignRoot,
+) {
+  for (const relativePath of campaignFiles) {
+    const committed = readCommittedPath(
+      repositoryRoot,
+      repositoryCommit,
+      relativePath,
+      objectFormat,
+    );
+    writePrivateFile(
+      path.join(campaignRoot, ...relativePath.split("/")),
+      committed.content,
+    );
+  }
+}
+
+function linkTrustedToolchain(repositoryRoot, campaignRoot) {
+  const source = path.join(repositoryRoot, "node_modules");
+  let sourceStats;
+  try {
+    sourceStats = fs.lstatSync(source);
+  } catch (error) {
+    fail(
+      "TOOLCHAIN_UNAVAILABLE",
+      `node_modules is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (sourceStats.isSymbolicLink() || !sourceStats.isDirectory()) {
+    fail(
+      "TOOLCHAIN_UNAVAILABLE",
+      "node_modules must be an ordinary directory",
+    );
+  }
+  fs.symlinkSync(
+    source,
+    path.join(campaignRoot, "node_modules"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+}
+
+function createEnvelope(payload, key) {
+  const mac = createHmac("sha256", key)
+    .update(JSON.stringify(payload))
+    .digest("hex");
+  return { schemaVersion: 2, payload, mac };
+}
+
 async function main() {
-  const { repositoryRoot: requestedRoot, preflightOnly } = parseArguments(process.argv.slice(2));
+  const {
+    repositoryRoot: requestedRoot,
+    preflightOnly,
+  } = parseArguments(process.argv.slice(2));
   const repositoryRoot = fs.realpathSync.native(requestedRoot);
   const fsck = spawnSync(
     "git",
-    ["--no-replace-objects", "-C", repositoryRoot, "fsck", "--full", "--strict", "--no-reflogs", "--no-progress", "HEAD"],
-    { env: sanitizedEnvironment(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    [
+      "--no-replace-objects",
+      "-C",
+      repositoryRoot,
+      "fsck",
+      "--full",
+      "--strict",
+      "--no-reflogs",
+      "--no-progress",
+      "HEAD",
+    ],
+    {
+      env: sanitizedEnvironment(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
   if (fsck.error || fsck.status !== 0) {
     const detail = String(fsck.stderr ?? "").trim()
@@ -182,12 +310,24 @@ async function main() {
     fail("OBJECT_STORE_INTEGRITY", detail);
   }
 
-  const repositoryCommit = gitText(repositoryRoot, ["rev-parse", "--verify", "HEAD^{commit}"]);
-  const repositoryTree = gitText(repositoryRoot, ["rev-parse", "--verify", `${repositoryCommit}^{tree}`]);
-  const objectFormat = gitText(repositoryRoot, ["rev-parse", "--show-object-format"]);
+  const repositoryCommit = gitText(repositoryRoot, [
+    "rev-parse",
+    "--verify",
+    "HEAD^{commit}",
+  ]);
+  const repositoryTree = gitText(repositoryRoot, [
+    "rev-parse",
+    "--verify",
+    `${repositoryCommit}^{tree}`,
+  ]);
+  const objectFormat = gitText(repositoryRoot, [
+    "rev-parse",
+    "--show-object-format",
+  ]);
   hashAlgorithm(objectFormat);
 
-  const expectedLauncherOid = process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID?.trim();
+  const expectedLauncherOid =
+    process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID?.trim();
   if (!expectedLauncherOid) {
     fail(
       "LAUNCHER_BOOTSTRAP",
@@ -200,8 +340,14 @@ async function main() {
     LAUNCHER_REPOSITORY_PATH,
     objectFormat,
   );
-  const executingLauncherBytes = fs.readFileSync(fileURLToPath(import.meta.url));
-  const executingLauncherOid = computeGitObjectId(objectFormat, "blob", executingLauncherBytes);
+  const executingLauncherBytes = fs.readFileSync(
+    fileURLToPath(import.meta.url),
+  );
+  const executingLauncherOid = computeGitObjectId(
+    objectFormat,
+    "blob",
+    executingLauncherBytes,
+  );
   if (
     committedLauncher.oid !== expectedLauncherOid
     || executingLauncherOid !== expectedLauncherOid
@@ -213,12 +359,22 @@ async function main() {
     );
   }
 
-  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-state-authority-launch-"));
+  const temporaryRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "navsentinel-state-authority-launch-"),
+  );
+  const campaignRoot = path.join(temporaryRoot, "campaign");
+  fs.mkdirSync(campaignRoot, { mode: 0o700 });
   try {
     const helper = readCommittedPath(
       repositoryRoot,
       repositoryCommit,
       HELPER_REPOSITORY_PATH,
+      objectFormat,
+    );
+    const materializer = readCommittedPath(
+      repositoryRoot,
+      repositoryCommit,
+      MATERIALIZER_REPOSITORY_PATH,
       objectFormat,
     );
     const manifest = readCommittedPath(
@@ -227,11 +383,25 @@ async function main() {
       MANIFEST_REPOSITORY_PATH,
       objectFormat,
     );
-    const helperPath = path.join(temporaryRoot, "extension_build_provenance.ts");
-    writePrivateFile(helperPath, helper.content);
     const campaignFiles = loadCampaignManifest(manifest.content);
+    materializeCampaign(
+      repositoryRoot,
+      repositoryCommit,
+      objectFormat,
+      campaignFiles,
+      campaignRoot,
+    );
 
-    const provenanceModule = await import(pathToFileURL(helperPath).href);
+    const provenanceModule = await import(
+      pathToFileURL(
+        path.join(campaignRoot, ...HELPER_REPOSITORY_PATH.split("/")),
+      ).href
+    );
+    const materializedModule = await import(
+      pathToFileURL(
+        path.join(campaignRoot, ...MATERIALIZER_REPOSITORY_PATH.split("/")),
+      ).href
+    );
     const buildInputs = provenanceModule.assertCurrentHeadBuildInputs(
       repositoryRoot,
       repositoryCommit,
@@ -244,24 +414,62 @@ async function main() {
       campaignAbsolutePaths,
       repositoryCommit,
     );
-    const campaignExecutedSha256 = provenanceModule.hashCanonicalWorktreeFiles(
-      repositoryRoot,
-      campaignAbsolutePaths,
-      repositoryCommit,
-    );
+    const campaignExecutedSha256 =
+      provenanceModule.hashCanonicalWorktreeFiles(
+        repositoryRoot,
+        campaignAbsolutePaths,
+        repositoryCommit,
+      );
     if (campaignGitSha256 !== campaignExecutedSha256) {
-      fail("CAMPAIGN_SOURCE_MISMATCH", "campaign worktree bytes differ from committed blobs");
+      fail(
+        "CAMPAIGN_SOURCE_MISMATCH",
+        "campaign worktree bytes differ from committed blobs",
+      );
+    }
+    const campaignMaterializedSha256 =
+      materializedModule.hashMaterializedCampaign(
+        campaignRoot,
+        campaignFiles,
+      );
+
+    if (preflightOnly) {
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            schemaVersion: 2,
+            mode: "non-consumable-preflight-summary",
+            consumable: false,
+            repositoryCommit: buildInputs.repositoryCommit,
+            repositoryTree: buildInputs.repositoryTree,
+            objectFormat: buildInputs.objectFormat,
+            comparisonMode: buildInputs.comparisonMode,
+            buildInputGitSha256: buildInputs.gitSha256,
+            campaignGitSha256,
+            campaignMaterializedSha256,
+            materializedInputCount: campaignFiles.length,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      return;
     }
 
+    linkTrustedToolchain(repositoryRoot, campaignRoot);
     const runId = randomUUID();
     const issuedAt = new Date();
-    const expiresAt = new Date(issuedAt.getTime() + 15 * 60 * 1000);
-    const attestationPath = path.join(temporaryRoot, "launch-attestation.json");
-    const attestation = {
-      schemaVersion: 1,
+    const expiresAt = new Date(issuedAt.getTime() + 10 * 60 * 1000);
+    const attestationPath = path.join(
+      temporaryRoot,
+      "launch-attestation.json",
+    );
+    const campaignExecutionRoot = fs.realpathSync.native(campaignRoot);
+    const payload = {
+      schemaVersion: 2,
       runId,
-      launcherMode: "git-object-extracted",
+      launcherMode: "git-object-materialized-campaign",
       repositoryRoot,
+      campaignExecutionRoot,
       repositoryCommit: buildInputs.repositoryCommit,
       repositoryTree: buildInputs.repositoryTree,
       objectFormat: buildInputs.objectFormat,
@@ -270,19 +478,23 @@ async function main() {
       buildInputExecutedSha256: buildInputs.executedSha256,
       campaignGitSha256,
       campaignExecutedSha256,
+      campaignMaterializedSha256,
       campaignFiles,
       launcherOid: committedLauncher.oid,
       helperOid: helper.oid,
+      materializerOid: materializer.oid,
       manifestOid: manifest.oid,
       issuedAt: issuedAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
     };
-    writePrivateFile(attestationPath, Buffer.from(`${JSON.stringify(attestation, null, 2)}\n`, "utf8"));
-
-    if (preflightOnly) {
-      process.stdout.write(`${JSON.stringify(attestation, null, 2)}\n`);
-      return;
-    }
+    const key = randomBytes(32);
+    writePrivateFile(
+      attestationPath,
+      Buffer.from(
+        `${JSON.stringify(createEnvelope(payload, key), null, 2)}\n`,
+        "utf8",
+      ),
+    );
 
     const playwrightCli = path.join(
       repositoryRoot,
@@ -292,19 +504,24 @@ async function main() {
       "cli.js",
     );
     if (!fs.existsSync(playwrightCli)) {
-      fail("TOOLCHAIN_UNAVAILABLE", `Playwright CLI is missing at '${playwrightCli}'`);
+      fail(
+        "TOOLCHAIN_UNAVAILABLE",
+        `Playwright CLI is missing at '${playwrightCli}'`,
+      );
     }
     const childEnvironment = sanitizedEnvironment(process.env);
     delete childEnvironment.EXTENSION_PATH;
-    childEnvironment.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION = attestationPath;
-    childEnvironment.NAVSENTINEL_STATE_AUTHORITY_RUN_ID = runId;
+    childEnvironment.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION =
+      attestationPath;
+    childEnvironment.NAVSENTINEL_STATE_AUTHORITY_KEY = key.toString("hex");
+    childEnvironment.NAVSENTINEL_STATE_AUTHORITY_CAMPAIGN_ROOT =
+      campaignExecutionRoot;
     const result = spawnSync(
       process.execPath,
       [
         playwrightCli,
         "test",
-        "tests/e2e/state-authority-sink.spec.ts",
-        "--config=playwright.stress.config.ts",
+        `--config=${path.join(campaignRoot, "playwright.stress.config.ts")}`,
         "--project=stress",
         "--workers=1",
         "--retries=0",
@@ -316,6 +533,7 @@ async function main() {
         stdio: "inherit",
       },
     );
+    key.fill(0);
     if (result.error) throw result.error;
     if (result.status !== 0) process.exitCode = result.status ?? 1;
   } finally {

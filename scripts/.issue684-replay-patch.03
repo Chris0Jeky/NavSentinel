@@ -1,0 +1,137 @@
+ized source closure.\nThe diagnostic preflight command emits only a non-consumable summary. Direct\nworktree loading is a required negative regression and cannot enumerate the\ncampaign tests.\n\nPromotion still requires an exact-head hosted run of all three typed-harm\njourneys and a fresh independent review of this repaired execution boundary.\n"
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected one match, found {count}")
+    return text.replace(old, new, 1)
+
+
+def regex_replace_once(
+    text: str,
+    pattern: str,
+    replacement: str,
+    label: str,
+) -> str:
+    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected one match, found {count}")
+    return updated
+
+
+def patch_spec() -> None:
+    target = ROOT / "tests/e2e/state-authority-sink.spec.ts"
+    text = target.read_text(encoding="utf-8")
+
+    text = replace_once(
+        text,
+        'import { randomUUID } from "node:crypto";',
+        'import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";',
+        "crypto import",
+    )
+    text = replace_once(
+        text,
+        'import path from "node:path";',
+        'import path from "node:path";\nimport { fileURLToPath } from "node:url";',
+        "url import",
+    )
+    text = replace_once(
+        text,
+        '} from "./extension_build_provenance";',
+        '} from "./extension_build_provenance";\nimport { hashMaterializedCampaign } from "./materialized_campaign_provenance";',
+        "materialized helper import",
+    )
+    text = replace_once(
+        text,
+        '''const repositoryRoot = path.resolve(process.cwd());
+const extensionPath = path.join(repositoryRoot, "extension", "dist");
+const gymRoot = path.resolve(process.cwd(), "gym");''',
+        '''const repositoryRoot = fs.realpathSync.native(path.resolve(process.cwd()));
+const campaignExecutionRoot = resolveCampaignExecutionRoot();
+const extensionPath = path.join(repositoryRoot, "extension", "dist");
+const gymRoot = path.join(campaignExecutionRoot, "gym");''',
+        "campaign execution constants",
+    )
+    text = regex_replace_once(
+        text,
+        r'type StateAuthorityLaunchAttestation = \{.*?\n\};\n\ntype LaunchSnapshot = \{.*?\n\};',
+        TYPE_BLOCK,
+        "attestation types",
+    )
+    old_integrity = '''function launchIntegrityError(code: string, message: string): Error {
+  return new Error(`State-authority evidence TEST_INVALID [${code}]: ${message}`);
+}'''
+    text = replace_once(
+        text,
+        old_integrity,
+        LAUNCH_HELPERS,
+        "launch execution guard",
+    )
+    text = regex_replace_once(
+        text,
+        r'function loadLaunchAttestation\(\): StateAuthorityLaunchAttestation \{.*?\n\}\n\nfunction assertLaunchSnapshotCurrent',
+        NEW_LOAD + "\nfunction assertLaunchSnapshotCurrent",
+        "one-shot launch attestation",
+    )
+    text = regex_replace_once(
+        text,
+        r'function assertLaunchSnapshotCurrent\(attestation: StateAuthorityLaunchAttestation\): LaunchSnapshot \{.*?\n\}\n\nfunction prepareCurrentHeadExtension',
+        NEW_SNAPSHOT + "\nfunction prepareCurrentHeadExtension",
+        "materialized snapshot",
+    )
+    text = replace_once(
+        text,
+        "    schema_version: 3,",
+        "    schema_version: 4,",
+        "receipt schema",
+    )
+    text = replace_once(
+        text,
+        '''      executed_sha256: executedSourceSha256,
+      exact_head_match: true,
+      verified_before_module_import: true,''',
+        '''      executed_sha256: executedSourceSha256,
+      materialized_sha256: currentSnapshot.campaignMaterializedSha256,
+      exact_head_match: true,
+      verified_before_module_import: true,
+      attestation_consumed: true,''',
+        "receipt materialized hash",
+    )
+    text = replace_once(
+        text,
+        '''      helper_oid: launchAttestation.helperOid,
+      manifest_oid: launchAttestation.manifestOid,''',
+        '''      helper_oid: launchAttestation.helperOid,
+      materializer_oid: launchAttestation.materializerOid,
+      manifest_oid: launchAttestation.manifestOid,''',
+        "receipt materializer oid",
+    target.write_text(text, encoding="utf-8")
+
+
+def patch_manifest() -> None:
+    target = ROOT / "tests/e2e/state-authority-campaign-inputs.json"
+    data = json.loads(target.read_text(encoding="utf-8"))
+    helper = "tests/e2e/materialized_campaign_provenance.ts"
+    if helper not in data["inputs"]:
+        index = data["inputs"].index(
+            "tests/e2e/extension_build_provenance.ts"
+        ) + 1
+        data["inputs"].insert(index, helper)
+    target.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def append_once(path: Path, marker: str, addition: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if marker not in text:
+        path.write_text(text.rstrip() + addition + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    patch_spec()
+    patch_manifest()
+    append_once(
+        ROOT / "docs/security-program/RAW_EVIDENCE_AUTHORITY_684.md",
+        "## Replay-resistant campaign

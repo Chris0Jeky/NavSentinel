@@ -1,0 +1,13 @@
+ execution",
+        RAW_DOC_APPEND,
+    )
+    append_once(
+        ROOT / "docs/security-program/STATE_AUTHORITY_CAMPAIGN.md",
+        "## Replay-resistance checkpoint",
+        STATE_DOC_APPEND,
+    )
+    print("Issue #684 replay-resistant campaign repair materialized.")
+
+
+if __name__ == "__main__":
+    main()
