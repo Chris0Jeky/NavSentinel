@@ -10,19 +10,19 @@ sink.
 
 | Slice | Scenario | Attack vector | Candidate state | Evidence ceiling |
 | --- | --- | --- | --- | --- |
-| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | behavior passed once plus three repeats at `a666fda4`; PR #681 parked after review found an unresolved HIGH receipt-provenance boundary tracked by #684 | local bundled-Chromium regression |
-| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | behavior passed once plus three repeats at `a666fda4`; PR #681 parked after review found an unresolved HIGH receipt-provenance boundary tracked by #684 | one fixed timer boundary |
-| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | behavior passed once plus three repeats at `a666fda4`; PR #681 parked after review found an unresolved HIGH receipt-provenance boundary tracked by #684 | one authored churn ordering |
+| RW-21 | `NS-ADV-WIN-005` | one trusted gesture is double-spent across two popup destinations | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | local bundled-Chromium regression |
+| RW-24 | `NS-ADV-EVADE-003` | delayed time-bomb popup fires after gesture authority expires | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | one fixed timer boundary |
+| RW-25 | `NS-ADV-STATE-008` | rapid popup close/reopen churn leaks stale authority to a final target | behavior proved on PR #681; PR #714 supplies raw committed-byte, index, undeclared-input, and fixed-output receipt authority pending final review | one authored churn ordering |
 
 The executable receipt emitted by
 `tests/e2e/state-authority-sink.spec.ts` is authoritative for a run. Do not turn
-this table into a manual pass claim: promotion requires the test-owned
-current-head build, exact-head build-input and campaign-source hash assertions,
-loaded-build hash, typed sink observations, and all proving checks below. The
-lane rejects an `EXTENSION_PATH` outside the current worktree so a stale or
-unrelated artifact cannot be credited to the recorded repository head. The
-tracked closure includes release-profile configuration, and a temp-repository
-mutation test proves that configuration drift fails closed.
+this table into a manual pass claim: promotion requires immutable commit/tree
+resolution, raw Git-blob versus filesystem-byte equality, exact index modes and
+object IDs, zero undeclared or special build inputs, the fixed-output hash,
+typed-sink observations, and all proving checks below. The lane rejects an
+`EXTENSION_PATH` outside the current worktree, owns only ordinary
+`extension/dist`, and rechecks source and output authority before attaching a
+receipt. See [RAW_EVIDENCE_AUTHORITY_684.md](RAW_EVIDENCE_AUTHORITY_684.md).
 
 ## Adverse conditions and expected outcomes
 
@@ -47,21 +47,22 @@ attempts are recorded separately from authored-fixture traffic.
 
 ## Qualification checklist
 
+- [x] focused ESLint for the changed evidence files
 - [x] `npm run typecheck`
-- [x] focused ESLint for the changed test files
-- [x] `npm run test -- --run tests/gym-local-fixture-contract.test.ts`
-- [x] test-owned current-head `node scripts/build-extension.mjs`
-- [x] one exact-source-head focused campaign run
-- [x] one exact-source-head three-repeat campaign run after provenance hardening
-- [x] legacy RW-21/RW-24/RW-25 stress regressions
-- [x] `npm run security:check` after registry promotion
-- [x] two-round fresh-context adversarial review completed; final verdict BLOCK
-- [ ] hosted CI on the pushed head
+- [x] raw-authority adversarial unit suite, including clean-filter and CRLF bypasses
+- [x] ordinary and ignored untracked-input rejection
+- [x] committed and worktree link rejection without traversal
+- [x] stale-head, index-drift, missing-object, linked-worktree, and output-mutation coverage
+- [x] test-owned current-head extension build and output recheck
+- [x] exact-head RW-21/RW-24/RW-25 typed-harm campaign
+- [ ] normal hosted CI on the pushed head
+- [ ] one issue-scoped independent review of PR #714
 
-PR #681 remains ready-for-review but parked. Resume only through #684: replace
-filter-aware worktree comparison with raw committed-byte comparison or a clean
-isolated checkout, reject untracked/special build inputs, add the clean-filter
-bypass regression, then re-run this campaign and one issue-scoped review.
+PR #714 is stacked directly on PR #681 and supplies the bounded #684 closure.
+Its publication gate runs the raw-authority unit suite and all three typed-harm
+journeys against the exact candidate commit before pushing it. Merge remains
+blocked on normal hosted CI and one issue-scoped independent review; broader
+receipt migration stays separate from this state-authority slice.
 
 Any missing attack-baseline receipt, any protected or mixed harm receipt, an
 invalid sink request, a source/hash mismatch, or authored-fixture external

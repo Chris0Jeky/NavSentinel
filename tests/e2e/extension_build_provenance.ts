@@ -56,7 +56,7 @@ type GitResult = {
   status: number | null;
   stdout: Buffer;
   stderr: Buffer;
-  error?: Error;
+  error: Error | undefined;
 };
 
 function integrityError(code: string, message: string): Error {
@@ -106,7 +106,11 @@ function assertValidRelativePath(relativePath: string): void {
   if (path.posix.normalize(relativePath) !== relativePath) {
     throw integrityError("NON_CANONICAL_PATH", `unsupported repository path '${relativePath}'`);
   }
-  if (/[\u0000-\u001f\u007f]/u.test(relativePath)) {
+  const hasControlCharacter = [...relativePath].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint < 0x20 || codePoint === 0x7f);
+  });
+  if (hasControlCharacter) {
     throw integrityError("NON_CANONICAL_PATH", `control character in repository path '${relativePath}'`);
   }
 }
@@ -355,7 +359,12 @@ function readTreeEntries(authority: RepositoryAuthority, paths: readonly string[
     if (!match) {
       throw integrityError("MALFORMED_GIT_OUTPUT", `unsupported git ls-tree header '${header}'`);
     }
-    const [, mode, type, oid] = match;
+    const mode = match[1];
+    const type = match[2];
+    const oid = match[3];
+    if (mode === undefined || type === undefined || oid === undefined) {
+      throw integrityError("MALFORMED_GIT_OUTPUT", `incomplete git ls-tree header '${header}'`);
+    }
     const relativePath = decodeUtf8Path(record.subarray(tab + 1));
     assertValidRelativePath(relativePath);
     registerCanonicalPath(canonicalPaths, relativePath);
@@ -402,7 +411,12 @@ function readIndexEntries(
     if (!match) {
       throw integrityError("MALFORMED_GIT_OUTPUT", `unsupported git index header '${header}'`);
     }
-    const [, mode, oid, stage] = match;
+    const mode = match[1];
+    const oid = match[2];
+    const stage = match[3];
+    if (mode === undefined || oid === undefined || stage === undefined) {
+      throw integrityError("MALFORMED_GIT_OUTPUT", `incomplete git index header '${header}'`);
+    }
     const relativePath = decodeUtf8Path(record.subarray(tab + 1));
     assertValidRelativePath(relativePath);
     registerCanonicalPath(canonicalPaths, relativePath);
@@ -516,11 +530,10 @@ function assertTrackedWorktreeFile(
   entry: TreeEntry,
   expectedBytes: Buffer,
 ): Buffer {
-  const absolutePath = path.join(authority.root, ...entry.path.split("/"));
   const segments = entry.path.split("/");
   let current = authority.root;
-  for (let index = 0; index < segments.length; index += 1) {
-    current = path.join(current, segments[index]);
+  for (const [index, segment] of segments.entries()) {
+    current = path.join(current, segment);
     let stats: fs.Stats;
     try {
       stats = fs.lstatSync(current);
