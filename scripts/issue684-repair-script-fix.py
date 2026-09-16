@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 
 path = Path(__file__).with_name("issue684-portability-integrity-repair.py")
 text = path.read_text(encoding="utf-8")
-text = text.replace(
-    "updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)",
-    "updated, count = re.subn(pattern, lambda _match: replacement, text, count=1, flags=re.S)",
-    1,
-)
 
-pattern = re.compile(
-    r'''    replace_once\(\n        path,\n        '''    const receipt = \{.*?        "signed finalization manifest",\n    \)\n\n''',
-    re.S,
+old_regex_line = (
+    "updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)"
 )
-replacement = r'''    regex_once(
+new_regex_line = (
+    "updated, count = re.subn("
+    "pattern, lambda _match: replacement, text, count=1, flags=re.S)"
+)
+if text.count(old_regex_line) != 1:
+    raise SystemExit(
+        f"expected one regex replacement line, found {text.count(old_regex_line)}"
+    )
+text = text.replace(old_regex_line, new_regex_line, 1)
+
+start_marker = """    replace_once(
+        path,
+        '''    const receipt = {"""
+end_marker = """    replace_once(
+        path,
+        '''    const finalizationKey = randomBytes(32);"""
+try:
+    start = text.index(start_marker)
+    end = text.index(end_marker, start)
+except ValueError as error:
+    raise SystemExit(f"cannot locate receipt patch boundaries: {error}") from error
+
+replacement = r"""    regex_once(
         path,
         r'''    const receipt = \{.*?\n  return \{\n    finalDirectory,\n    finalizationManifest,\n  \};''',
         '''    const authenticatedReceipt = {
@@ -89,8 +104,7 @@ replacement = r'''    regex_once(
         "signed receipts and manifest",
     )
 
-'''
-text, count = pattern.subn(lambda _match: replacement, text, count=1)
-if count != 1:
-    raise SystemExit(f"expected one receipt/manifest patch block, found {count}")
+"""
+
+text = text[:start] + replacement + text[end:]
 path.write_text(text, encoding="utf-8")
