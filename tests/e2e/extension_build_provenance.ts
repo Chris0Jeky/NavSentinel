@@ -3,13 +3,24 @@ import { createHash, type Hash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+const EXPECTED_VITE_CONFIG = "vite.config.ts";
+const VITE_CONFIG_CANDIDATES = [
+  "vite.config.js",
+  "vite.config.mjs",
+  "vite.config.cjs",
+  "vite.config.ts",
+  "vite.config.mts",
+  "vite.config.cts",
+] as const;
+const VITE_CONFIG_PATHS = new Set<string>(VITE_CONFIG_CANDIDATES);
+
 const BUILD_INPUT_PATHS = [
   "extension",
   "scripts",
   "config",
   "package.json",
   "package-lock.json",
-  "vite.config.ts",
+  ...VITE_CONFIG_CANDIDATES,
   "tsconfig.json",
 ] as const;
 
@@ -19,6 +30,31 @@ const OID_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const ZERO = Buffer.from([0]);
 
+function hashAlgorithmForObjectFormat(objectFormat: string): "sha1" | "sha256" {
+  if (objectFormat === "sha1" || objectFormat === "sha256") return objectFormat;
+  throw integrityError("UNSUPPORTED_OBJECT_FORMAT", `unsupported Git object format '${objectFormat}'`);
+}
+
+function assertObjectIdForFormat(objectFormat: string, oid: string, label: string): void {
+  const expectedLength = hashAlgorithmForObjectFormat(objectFormat) === "sha1" ? 40 : 64;
+  if (oid.length !== expectedLength || !OID_RE.test(oid)) {
+    throw integrityError(
+      "INVALID_OBJECT_ID",
+      `${label} has a non-canonical ${objectFormat} object ID '${oid}'`,
+    );
+  }
+}
+
+function computeGitObjectId(
+  objectFormat: string,
+  type: GitObjectType,
+  content: Buffer,
+): string {
+  const hash = createHash(hashAlgorithmForObjectFormat(objectFormat));
+  hash.update(Buffer.from(`${type} ${content.length}\0`, "utf8"));
+  hash.update(content);
+  return hash.digest("hex");
+}
 export const RAW_BLOB_COMPARISON_MODE = "raw-blob-byte-equality" as const;
 
 type TreeEntry = {
@@ -32,6 +68,14 @@ type RepositoryAuthority = {
   commit: string;
   tree: string;
   objectFormat: string;
+};
+
+type GitObjectType = "blob" | "tree" | "commit";
+
+type GitObjectRequest = {
+  oid: string;
+  type: GitObjectType;
+  label: string;
 };
 
 export type BuildInputAttestation = {
@@ -115,10 +159,10 @@ function assertValidRelativePath(relativePath: string): void {
   }
 }
 
-function sanitizedGitEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export function sanitizedGitEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(source)) {
-    if (value === undefined || key.startsWith("GIT_")) continue;
+    if (value === undefined || key.toUpperCase().startsWith("GIT_")) continue;
     environment[key] = value;
   }
   environment.GIT_NO_REPLACE_OBJECTS = "1";
@@ -272,6 +316,7 @@ function resolveRepositoryAuthority(repositoryRoot: string, expectedHead: string
   assertSelfContainedObjectAuthority(root);
 
   const objectFormat = gitText(root, ["rev-parse", "--show-object-format"]);
+  hashAlgorithmForObjectFormat(objectFormat);
   let currentCommit: string;
   let expectedCommit: string;
   try {
@@ -283,9 +328,8 @@ function resolveRepositoryAuthority(repositoryRoot: string, expectedHead: string
       error instanceof Error ? error.message : String(error),
     );
   }
-  if (!OID_RE.test(currentCommit) || !OID_RE.test(expectedCommit)) {
-    throw integrityError("INVALID_OBJECT_ID", "Git returned a non-canonical commit object ID");
-  }
+  assertObjectIdForFormat(objectFormat, currentCommit, "current commit");
+  assertObjectIdForFormat(objectFormat, expectedCommit, "expected commit");
   if (currentCommit !== expectedCommit) {
     throw integrityError(
       "HEAD_MISMATCH",
@@ -302,10 +346,10 @@ function resolveRepositoryAuthority(repositoryRoot: string, expectedHead: string
       error instanceof Error ? error.message : String(error),
     );
   }
-  if (!OID_RE.test(tree)) {
-    throw integrityError("INVALID_OBJECT_ID", "Git returned a non-canonical tree object ID");
-  }
-  return { root, commit: currentCommit, tree, objectFormat };
+  assertObjectIdForFormat(objectFormat, tree, "root tree");
+  const authority = { root, commit: currentCommit, tree, objectFormat };
+  verifyRepositoryObjectGraph(authority);
+  return authority;
 }
 
 function splitNulRecords(buffer: Buffer, source: string): Buffer[] {
@@ -328,6 +372,115 @@ function decodeUtf8Path(pathBytes: Buffer): string {
   } catch {
     throw integrityError("NON_UTF8_PATH", "non-UTF-8 repository paths are not supported");
   }
+}
+
+function readVerifiedGitObjects(
+  authority: RepositoryAuthority,
+  requests: readonly GitObjectRequest[],
+): Buffer[] {
+  if (requests.length === 0) return [];
+  for (const request of requests) {
+    assertObjectIdForFormat(authority.objectFormat, request.oid, request.label);
+  }
+  const input = Buffer.from(`${requests.map((request) => request.oid).join("\n")}\n`, "ascii");
+  const output = gitBuffer(authority.root, ["cat-file", "--batch"], input);
+  const contents: Buffer[] = [];
+  let offset = 0;
+
+  for (const request of requests) {
+    const newline = output.indexOf(0x0a, offset);
+    if (newline === -1) {
+      throw integrityError("MISSING_OBJECT_AUTHORITY", `missing object header for ${request.label}`);
+    }
+    const header = output.subarray(offset, newline).toString("ascii");
+    const match = /^([0-9a-f]{40}|[0-9a-f]{64}) (blob|tree|commit) (\d+)$/u.exec(header);
+    const actualOid = match?.[1];
+    const actualType = match?.[2];
+    const sizeText = match?.[3];
+    if (
+      actualOid === undefined
+      || actualType === undefined
+      || sizeText === undefined
+      || actualOid !== request.oid
+      || actualType !== request.type
+    ) {
+      throw integrityError(
+        "MISSING_OBJECT_AUTHORITY",
+        `unexpected object authority for ${request.label}: '${header}'`,
+      );
+    }
+    const size = Number(sizeText);
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw integrityError("MISSING_OBJECT_AUTHORITY", `invalid object size for ${request.label}`);
+    }
+    const contentStart = newline + 1;
+    const contentEnd = contentStart + size;
+    if (contentEnd >= output.length || output[contentEnd] !== 0x0a) {
+      throw integrityError("MISSING_OBJECT_AUTHORITY", `truncated object for ${request.label}`);
+    }
+    const content = Buffer.from(output.subarray(contentStart, contentEnd));
+    const computedOid = computeGitObjectId(authority.objectFormat, request.type, content);
+    if (computedOid !== request.oid) {
+      throw integrityError(
+        "OBJECT_HASH_MISMATCH",
+        `${request.label} payload hashes to ${computedOid}, not claimed object ${request.oid}`,
+      );
+    }
+    contents.push(content);
+    offset = contentEnd + 1;
+  }
+
+  if (offset !== output.length) {
+    throw integrityError("MALFORMED_GIT_OUTPUT", "git cat-file returned unexpected trailing bytes");
+  }
+  return contents;
+}
+
+function verifyRepositoryObjectGraph(authority: RepositoryAuthority): void {
+  const commitContent = readVerifiedGitObjects(authority, [
+    { oid: authority.commit, type: "commit", label: "repository commit" },
+  ])[0];
+  if (!commitContent) {
+    throw integrityError("MISSING_COMMIT_AUTHORITY", "repository commit payload is unavailable");
+  }
+  const firstLineEnd = commitContent.indexOf(0x0a);
+  const firstLine = commitContent.subarray(0, firstLineEnd === -1 ? commitContent.length : firstLineEnd)
+    .toString("ascii");
+  if (firstLine !== `tree ${authority.tree}`) {
+    throw integrityError(
+      "COMMIT_TREE_MISMATCH",
+      `commit ${authority.commit} does not bind expected tree ${authority.tree}`,
+    );
+  }
+
+  const requests: GitObjectRequest[] = [
+    { oid: authority.tree, type: "tree", label: "root tree" },
+  ];
+  const seen = new Set([authority.tree]);
+  const output = gitBuffer(
+    authority.root,
+    ["ls-tree", "-r", "-z", "-t", "--full-tree", authority.tree],
+  );
+  for (const record of splitNulRecords(output, "git ls-tree -t")) {
+    const tab = record.indexOf(0x09);
+    if (tab === -1) {
+      throw integrityError("MALFORMED_GIT_OUTPUT", "git ls-tree -t returned a malformed record");
+    }
+    const header = record.subarray(0, tab).toString("ascii");
+    const match = /^(\d{6}) (blob|tree|commit) ([0-9a-f]{40}|[0-9a-f]{64})$/u.exec(header);
+    const type = match?.[2];
+    const oid = match?.[3];
+    if (type === undefined || oid === undefined) {
+      throw integrityError("MALFORMED_GIT_OUTPUT", `unsupported git ls-tree -t header '${header}'`);
+    }
+    if (type === "tree" && !seen.has(oid)) {
+      const relativePath = decodeUtf8Path(record.subarray(tab + 1));
+      assertValidRelativePath(relativePath);
+      seen.add(oid);
+      requests.push({ oid, type: "tree", label: `tree '${relativePath}'` });
+    }
+  }
+  readVerifiedGitObjects(authority, requests);
 }
 
 function registerCanonicalPath(canonicalPaths: Map<string, string>, relativePath: string): void {
@@ -369,6 +522,12 @@ function readTreeEntries(authority: RepositoryAuthority, paths: readonly string[
     assertValidRelativePath(relativePath);
     registerCanonicalPath(canonicalPaths, relativePath);
 
+    if (VITE_CONFIG_PATHS.has(relativePath) && relativePath !== EXPECTED_VITE_CONFIG) {
+      throw integrityError(
+        "ALTERNATE_VITE_CONFIG",
+        `alternate Vite configuration '${relativePath}' is not allowed`,
+      );
+    }
     if (relativePath === FIXED_OUTPUT_RELATIVE_PATH
       || relativePath.startsWith(`${FIXED_OUTPUT_RELATIVE_PATH}/`)) {
       throw integrityError(
@@ -452,38 +611,21 @@ function readCommittedBlobs(
   authority: RepositoryAuthority,
   entries: TreeEntry[],
 ): Map<string, Buffer> {
-  if (entries.length === 0) return new Map();
-  const input = Buffer.from(`${entries.map((entry) => entry.oid).join("\n")}\n`, "ascii");
-  const output = gitBuffer(authority.root, ["cat-file", "--batch"], input);
+  const contents = readVerifiedGitObjects(
+    authority,
+    entries.map((entry) => ({
+      oid: entry.oid,
+      type: "blob" as const,
+      label: `blob '${entry.path}'`,
+    })),
+  );
   const blobs = new Map<string, Buffer>();
-  let offset = 0;
-  for (const entry of entries) {
-    const newline = output.indexOf(0x0a, offset);
-    if (newline === -1) {
-      throw integrityError("MISSING_BLOB_AUTHORITY", `missing blob header for '${entry.path}'`);
+  for (const [index, entry] of entries.entries()) {
+    const content = contents[index];
+    if (!content) {
+      throw integrityError("MISSING_BLOB_AUTHORITY", `missing blob bytes for '${entry.path}'`);
     }
-    const header = output.subarray(offset, newline).toString("ascii");
-    const match = /^([0-9a-f]{40}|[0-9a-f]{64}) blob (\d+)$/u.exec(header);
-    if (!match || match[1] !== entry.oid) {
-      throw integrityError(
-        "MISSING_BLOB_AUTHORITY",
-        `unexpected blob authority for '${entry.path}': '${header}'`,
-      );
-    }
-    const size = Number(match[2]);
-    if (!Number.isSafeInteger(size) || size < 0) {
-      throw integrityError("MISSING_BLOB_AUTHORITY", `invalid blob size for '${entry.path}'`);
-    }
-    const contentStart = newline + 1;
-    const contentEnd = contentStart + size;
-    if (contentEnd >= output.length || output[contentEnd] !== 0x0a) {
-      throw integrityError("MISSING_BLOB_AUTHORITY", `truncated blob for '${entry.path}'`);
-    }
-    blobs.set(entry.path, Buffer.from(output.subarray(contentStart, contentEnd)));
-    offset = contentEnd + 1;
-  }
-  if (offset !== output.length) {
-    throw integrityError("MALFORMED_GIT_OUTPUT", "git cat-file returned unexpected trailing bytes");
+    blobs.set(entry.path, content);
   }
   return blobs;
 }
@@ -621,6 +763,12 @@ function assertNoUnexpectedBuildInputs(
   for (const rootPath of BUILD_INPUT_PATHS) {
     const absolutePath = path.join(authority.root, ...rootPath.split("/"));
     if (!lstatIfPresent(absolutePath)) continue;
+    if (VITE_CONFIG_PATHS.has(rootPath) && rootPath !== EXPECTED_VITE_CONFIG) {
+      throw integrityError(
+        "ALTERNATE_VITE_CONFIG",
+        `alternate Vite configuration '${rootPath}' is not allowed`,
+      );
+    }
     visit(absolutePath, rootPath);
   }
 }

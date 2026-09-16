@@ -55,3 +55,33 @@ protection from a concurrent hostile local process, branded-Chrome Gate-3
 acceptance, open-web efficacy, or release eligibility. `node_modules`, Node.js,
 Git, Playwright, Chromium, the operating system, and the runner remain trusted
 local toolchain inputs.
+
+
+## Independent-review repairs
+
+The first reviewed candidate was not merge-eligible despite green tests. Review
+identified three ways a positive receipt could still outpace its authority:
+Git could return substituted loose-object payloads under unchanged object IDs,
+Vite could auto-select an undeclared alternate config name, and Playwright could
+load changed campaign modules before the in-spec check ran.
+
+The repaired boundary now:
+
+- recomputes the Git-format hash of the commit, every traversed tree, and every
+  selected blob; the `cat-file` header is not treated as authentication;
+- rejects every supported alternate Vite config name and invokes Vite with the
+  committed `vite.config.ts` explicitly;
+- scrubs inherited Git variables case-insensitively, which matters on Windows;
+- requires a launcher extracted from the committed launcher blob, runs full
+  object-store integrity checking, extracts the verifier and manifest from Git
+  objects, and validates the complete campaign input manifest before Playwright
+  imports its config or spec graph;
+- passes a short-lived private launch attestation into the one-worker campaign,
+  then rechecks build inputs, campaign inputs, and fixed output before receipts.
+
+A direct `playwright test` invocation cannot emit this receipt: the stress hook
+fails `TEST_INVALID [EXTERNAL_PREFLIGHT_REQUIRED]` before any campaign arm runs.
+The authoritative hosted command first extracts
+`scripts/run-state-authority-campaign.mjs` from `HEAD`, supplies its object ID via
+`NAVSENTINEL_EXPECTED_LAUNCHER_OID`, and executes that exact blob with Node's
+TypeScript stripping enabled.

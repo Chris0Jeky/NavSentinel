@@ -76,3 +76,14 @@ real sleep/wake or calendar gating, service-worker suspension/restart, browser
 crash/profile restart, randomized concurrency, every popup policy, or every
 authority-token consumer. Issue #175 owns broader lifecycle recovery, while
 #458 and #496 own browser-platform attribution boundaries.
+
+
+## Review repair checkpoint
+
+The initial raw-byte candidate passed its scoped campaign and ordinary Build /
+Unit lane but independent review found three P1 receipt-authority gaps. Those
+results remain development evidence only. The successor must pass corrupted
+object, alternate-config, mixed-case Git environment and external-preflight
+regressions, then rerun all three journeys on one exact commit and receive a
+fresh review before #681 can become merge-eligible. Direct in-spec verification
+is no longer an accepted launch route.

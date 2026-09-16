@@ -31,6 +31,8 @@ import {
   hashExtensionBuildOutput,
   hashGitFiles,
   resetExtensionBuildOutput,
+  sanitizedGitEnvironment,
+  type BuildInputAttestation,
   type BuildOutputAttestation,
 } from "./extension_build_provenance";
 
@@ -91,6 +93,34 @@ type ExtensionProvenance = {
   specialInputCount: number;
 };
 
+type StateAuthorityLaunchAttestation = {
+  schemaVersion: 1;
+  runId: string;
+  launcherMode: "git-object-extracted";
+  repositoryRoot: string;
+  repositoryCommit: string;
+  repositoryTree: string;
+  objectFormat: string;
+  comparisonMode: "raw-blob-byte-equality";
+  buildInputGitSha256: string;
+  buildInputExecutedSha256: string;
+  campaignGitSha256: string;
+  campaignExecutedSha256: string;
+  campaignFiles: string[];
+  launcherOid: string;
+  helperOid: string;
+  manifestOid: string;
+  issuedAt: string;
+  expiresAt: string;
+};
+
+type LaunchSnapshot = {
+  buildInputs: BuildInputAttestation;
+  campaignGitSha256: string;
+  campaignExecutedSha256: string;
+};
+
+let launchAttestation: StateAuthorityLaunchAttestation | undefined;
 let extensionProvenance: ExtensionProvenance | undefined;
 
 const scenarios: readonly ScenarioDefinition[] = [
@@ -129,19 +159,183 @@ const scenarios: readonly ScenarioDefinition[] = [
   },
 ];
 
-function prepareCurrentHeadExtension(): ExtensionProvenance {
+function launchIntegrityError(code: string, message: string): Error {
+  return new Error(`State-authority evidence TEST_INVALID [${code}]: ${message}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requiredString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  if (typeof value !== "string" || !value) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", `missing string field '${key}'`);
+  }
+  return value;
+}
+
+function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
+  const attestationPathValue = process.env.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION?.trim();
+  const expectedRunId = process.env.NAVSENTINEL_STATE_AUTHORITY_RUN_ID?.trim();
+  if (!attestationPathValue || !expectedRunId) {
+    throw launchIntegrityError(
+      "EXTERNAL_PREFLIGHT_REQUIRED",
+      "run this campaign through the Git-object-extracted external launcher",
+    );
+  }
+  const attestationPath = path.resolve(attestationPathValue);
+  const stats = fs.lstatSync(attestationPath);
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation is linked or not a file");
+  }
+  if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation permissions are too broad");
+  }
+  const realAttestationPath = fs.realpathSync.native(attestationPath);
+  const relativeToRepository = path.relative(repositoryRoot, realAttestationPath);
+  if (
+    relativeToRepository === ""
+    || (!relativeToRepository.startsWith(`..${path.sep}`) && relativeToRepository !== ".." && !path.isAbsolute(relativeToRepository))
+  ) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation must be outside the repository");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(realAttestationPath, "utf8"));
+  } catch (error) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (!isRecord(parsed) || parsed.schemaVersion !== 1) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "unsupported launch attestation schema");
+  }
+  const campaignFilesValue = parsed.campaignFiles;
+  if (!Array.isArray(campaignFilesValue) || campaignFilesValue.some((entry) => typeof entry !== "string")) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "campaignFiles must be an array of strings");
+  }
+  const campaignFiles = campaignFilesValue as string[];
+  for (const relativePath of campaignFiles) {
+    if (
+      !relativePath
+      || relativePath.startsWith("/")
+      || relativePath.includes("\\")
+      || path.posix.normalize(relativePath) !== relativePath
+      || relativePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
+    ) {
+      throw launchIntegrityError("LAUNCH_ATTESTATION", `invalid campaign path '${relativePath}'`);
+    }
+  }
+  if (new Set(campaignFiles).size !== campaignFiles.length) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "campaignFiles contains duplicates");
+  }
+
+  const attestation: StateAuthorityLaunchAttestation = {
+    schemaVersion: 1,
+    runId: requiredString(parsed, "runId"),
+    launcherMode: requiredString(parsed, "launcherMode") as "git-object-extracted",
+    repositoryRoot: requiredString(parsed, "repositoryRoot"),
+    repositoryCommit: requiredString(parsed, "repositoryCommit"),
+    repositoryTree: requiredString(parsed, "repositoryTree"),
+    objectFormat: requiredString(parsed, "objectFormat"),
+    comparisonMode: requiredString(parsed, "comparisonMode") as "raw-blob-byte-equality",
+    buildInputGitSha256: requiredString(parsed, "buildInputGitSha256"),
+    buildInputExecutedSha256: requiredString(parsed, "buildInputExecutedSha256"),
+    campaignGitSha256: requiredString(parsed, "campaignGitSha256"),
+    campaignExecutedSha256: requiredString(parsed, "campaignExecutedSha256"),
+    campaignFiles,
+    launcherOid: requiredString(parsed, "launcherOid"),
+    helperOid: requiredString(parsed, "helperOid"),
+    manifestOid: requiredString(parsed, "manifestOid"),
+    issuedAt: requiredString(parsed, "issuedAt"),
+    expiresAt: requiredString(parsed, "expiresAt"),
+  };
+
+  if (attestation.runId !== expectedRunId || attestation.launcherMode !== "git-object-extracted") {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "launcher identity or run token mismatch");
+  }
+  if (fs.realpathSync.native(attestation.repositoryRoot) !== repositoryRoot) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "attested repository root differs from this worktree");
+  }
+  if (attestation.comparisonMode !== "raw-blob-byte-equality") {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "unsupported comparison mode");
+  }
+  const issuedAt = Date.parse(attestation.issuedAt);
+  const expiresAt = Date.parse(attestation.expiresAt);
+  const now = Date.now();
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || issuedAt > now + 60_000 || expiresAt < now) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation is expired or has invalid time bounds");
+  }
+  const oidLength = attestation.objectFormat === "sha1" ? 40 : attestation.objectFormat === "sha256" ? 64 : 0;
+  const oidPattern = new RegExp(`^[0-9a-f]{${oidLength}}$`, "u");
+  const sha256Pattern = /^[0-9a-f]{64}$/u;
+  if (
+    oidLength === 0
+    || !oidPattern.test(attestation.repositoryCommit)
+    || !oidPattern.test(attestation.repositoryTree)
+    || !oidPattern.test(attestation.launcherOid)
+    || !oidPattern.test(attestation.helperOid)
+    || !oidPattern.test(attestation.manifestOid)
+    || !sha256Pattern.test(attestation.buildInputGitSha256)
+    || !sha256Pattern.test(attestation.buildInputExecutedSha256)
+    || !sha256Pattern.test(attestation.campaignGitSha256)
+    || !sha256Pattern.test(attestation.campaignExecutedSha256)
+  ) {
+    throw launchIntegrityError("LAUNCH_ATTESTATION", "attestation contains malformed object IDs or hashes");
+  }
+  return attestation;
+}
+
+function assertLaunchSnapshotCurrent(attestation: StateAuthorityLaunchAttestation): LaunchSnapshot {
+  const buildInputs = assertCurrentHeadBuildInputs(repositoryRoot, attestation.repositoryCommit);
+  if (
+    buildInputs.repositoryCommit !== attestation.repositoryCommit
+    || buildInputs.repositoryTree !== attestation.repositoryTree
+    || buildInputs.objectFormat !== attestation.objectFormat
+    || buildInputs.comparisonMode !== attestation.comparisonMode
+    || buildInputs.gitSha256 !== attestation.buildInputGitSha256
+    || buildInputs.executedSha256 !== attestation.buildInputExecutedSha256
+  ) {
+    throw launchIntegrityError("LAUNCH_SNAPSHOT_MISMATCH", "build inputs changed after external preflight");
+  }
+  const campaignAbsolutePaths = attestation.campaignFiles.map((relativePath) =>
+    path.join(repositoryRoot, ...relativePath.split("/"))
+  );
+  const campaignGitSha256 = hashGitFiles(
+    repositoryRoot,
+    campaignAbsolutePaths,
+    attestation.repositoryCommit,
+  );
+  const campaignExecutedSha256 = hashCanonicalWorktreeFiles(
+    repositoryRoot,
+    campaignAbsolutePaths,
+    attestation.repositoryCommit,
+  );
+  if (
+    campaignGitSha256 !== attestation.campaignGitSha256
+    || campaignExecutedSha256 !== attestation.campaignExecutedSha256
+    || campaignGitSha256 !== campaignExecutedSha256
+  ) {
+    throw launchIntegrityError("LAUNCH_SNAPSHOT_MISMATCH", "campaign inputs changed after external preflight");
+  }
+  return { buildInputs, campaignGitSha256, campaignExecutedSha256 };
+}
+
+function prepareCurrentHeadExtension(attestation: StateAuthorityLaunchAttestation): ExtensionProvenance {
   if (process.env.EXTENSION_PATH && path.resolve(process.env.EXTENSION_PATH) !== extensionPath) {
     throw new Error("State-authority evidence rejects EXTENSION_PATH outside the current worktree build.");
   }
-  const requestedHead = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  }).trim();
-  const buildInputs = assertCurrentHeadBuildInputs(repositoryRoot, requestedHead);
+  const initialSnapshot = assertLaunchSnapshotCurrent(attestation);
+  const buildInputs = initialSnapshot.buildInputs;
   resetExtensionBuildOutput(repositoryRoot, extensionPath);
 
-  const buildEnvironment = { ...process.env };
+  const buildEnvironment = sanitizedGitEnvironment(process.env);
   delete buildEnvironment.EXTENSION_PATH;
+  delete buildEnvironment.NODE_OPTIONS;
+  delete buildEnvironment.NODE_PATH;
   execFileSync(process.execPath, [path.join(repositoryRoot, "scripts", "build-extension.mjs")], {
     cwd: repositoryRoot,
     env: buildEnvironment,
@@ -151,10 +345,8 @@ function prepareCurrentHeadExtension(): ExtensionProvenance {
     throw new Error("Current-head extension build did not produce extension/dist/manifest.json.");
   }
 
-  const postBuildInputs = assertCurrentHeadBuildInputs(
-    repositoryRoot,
-    buildInputs.repositoryCommit,
-  );
+  const postBuildSnapshot = assertLaunchSnapshotCurrent(attestation);
+  const postBuildInputs = postBuildSnapshot.buildInputs;
   if (
     postBuildInputs.repositoryTree !== buildInputs.repositoryTree
     || postBuildInputs.gitSha256 !== buildInputs.gitSha256
@@ -382,28 +574,14 @@ async function attachReceipt(
   observations: ArmObservation[],
   browserVersion: string,
 ): Promise<void> {
-  if (!extensionProvenance) throw new Error("Current-head extension provenance was not established.");
-  const repositoryHead = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-  }).trim();
-  const campaignFiles = [
-    path.join(gymRoot, scenario.fixture),
-    path.join(gymRoot, "local-fixture-targets.js"),
-    path.resolve(process.cwd(), "tests", "e2e", "state-authority-sink.spec.ts"),
-    path.resolve(process.cwd(), "tests", "e2e", "extension_build_provenance.ts"),
-    path.resolve(process.cwd(), "tests", "e2e", "extension_test_utils.ts"),
-    path.resolve(process.cwd(), "tests", "e2e", "local_fixture_target_bootstrap.ts"),
-    path.resolve(process.cwd(), "tests", "e2e", "proving_ground_fake_sink.ts"),
-    path.resolve(process.cwd(), "playwright.stress.config.ts"),
-  ];
-  const currentBuildInputs = assertCurrentHeadBuildInputs(repositoryRoot, repositoryHead);
-  const gitSourceSha256 = hashGitFiles(repositoryRoot, campaignFiles, repositoryHead);
-  const executedSourceSha256 = hashCanonicalWorktreeFiles(
-    repositoryRoot,
-    campaignFiles,
-    repositoryHead,
-  );
+  if (!launchAttestation || !extensionProvenance) {
+    throw new Error("External launch and current-head extension provenance were not established.");
+  }
+  const currentSnapshot = assertLaunchSnapshotCurrent(launchAttestation);
+  const repositoryHead = currentSnapshot.buildInputs.repositoryCommit;
+  const currentBuildInputs = currentSnapshot.buildInputs;
+  const gitSourceSha256 = currentSnapshot.campaignGitSha256;
+  const executedSourceSha256 = currentSnapshot.campaignExecutedSha256;
   expect(executedSourceSha256, "Campaign sources must match raw committed bytes").toBe(gitSourceSha256);
   expect(currentBuildInputs.repositoryCommit, "Repository head must not change after the build").toBe(
     extensionProvenance.repositoryHead,
@@ -421,7 +599,7 @@ async function attachReceipt(
     extensionProvenance.buildOutput,
   );
   const receipt = {
-    schema_version: 2,
+    schema_version: 3,
     repository_head: repositoryHead,
     extension_build_sha256: extensionProvenance.buildOutput.sha256,
     extension_build_provenance: {
@@ -446,6 +624,13 @@ async function attachReceipt(
       git_sha256: gitSourceSha256,
       executed_sha256: executedSourceSha256,
       exact_head_match: true,
+      verified_before_module_import: true,
+      launch_run_id: launchAttestation.runId,
+      launcher_mode: launchAttestation.launcherMode,
+      launcher_oid: launchAttestation.launcherOid,
+      helper_oid: launchAttestation.helperOid,
+      manifest_oid: launchAttestation.manifestOid,
+      manifest_input_count: launchAttestation.campaignFiles.length,
     },
     scenario_id: scenario.id,
     journey: scenario.rw,
@@ -471,7 +656,8 @@ async function attachReceipt(
 }
 
 test.beforeAll(() => {
-  extensionProvenance = prepareCurrentHeadExtension();
+  launchAttestation = loadLaunchAttestation();
+  extensionProvenance = prepareCurrentHeadExtension(launchAttestation);
 });
 
 for (const scenario of scenarios) {

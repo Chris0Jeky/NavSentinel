@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { deflateSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertCurrentHeadBuildInputs,
@@ -10,6 +11,7 @@ import {
   hashExtensionBuildOutput,
   hashGitFiles,
   resetExtensionBuildOutput,
+  sanitizedGitEnvironment,
 } from "./e2e/extension_build_provenance";
 
 const temporaryPaths: string[] = [];
@@ -71,6 +73,10 @@ function installMaskingCleanFilter(repositoryRoot: string): string {
 
 function expectIntegrityCode(operation: () => unknown, code: string): void {
   expect(operation).toThrow(new RegExp(`\\[${code}\\]`, "u"));
+}
+
+function expectIntegrityCodeOneOf(operation: () => unknown, codes: string[]): void {
+  expect(operation).toThrow(new RegExp(`\\[(?:${codes.join("|")})\\]`, "u"));
 }
 
 afterEach(() => {
@@ -242,7 +248,7 @@ describe("state-authority extension build provenance", () => {
     fs.rmSync(looseObject);
     expectIntegrityCode(
       () => assertCurrentHeadBuildInputs(repository.root, head),
-      "MISSING_BLOB_AUTHORITY",
+      "MISSING_OBJECT_AUTHORITY",
     );
   });
 
@@ -308,4 +314,75 @@ describe("state-authority extension build provenance", () => {
       "BUILD_OUTPUT_HASH_MISMATCH",
     );
   });
+
+  it("authenticates loose object payloads instead of trusting echoed object IDs", () => {
+    const repository = createRepository();
+    const inputPath = addTrackedInput(repository.root, "extension/input.txt", "SAFE\n");
+    const head = commit(repository.root, "tracked input");
+    const oid = git(repository.root, ["rev-parse", `${head}:extension/input.txt`]);
+    const gitDirectoryValue = git(repository.root, ["rev-parse", "--git-dir"]);
+    const gitDirectory = path.isAbsolute(gitDirectoryValue)
+      ? gitDirectoryValue
+      : path.resolve(repository.root, gitDirectoryValue);
+    const objectPath = path.join(gitDirectory, "objects", oid.slice(0, 2), oid.slice(2));
+    expect(fs.existsSync(objectPath)).toBe(true);
+
+    const tampered = Buffer.from("EVIL\n", "utf8");
+    const loosePayload = Buffer.concat([
+      Buffer.from(`blob ${tampered.length}\0`, "utf8"),
+      tampered,
+    ]);
+    fs.chmodSync(objectPath, 0o600);
+    fs.writeFileSync(objectPath, deflateSync(loosePayload));
+    fs.writeFileSync(inputPath, tampered);
+
+    expectIntegrityCodeOneOf(
+      () => assertCurrentHeadBuildInputs(repository.root, head),
+      ["OBJECT_HASH_MISMATCH", "GIT_AUTHORITY_UNAVAILABLE"],
+    );
+  });
+
+  it("rejects tracked and untracked alternate Vite configuration names", () => {
+    const untracked = createRepository();
+    addTrackedInput(untracked.root);
+    const untrackedHead = commit(untracked.root, "tracked input");
+    fs.writeFileSync(path.join(untracked.root, "vite.config.js"), "export default {};\n", "utf8");
+    expectIntegrityCode(
+      () => assertCurrentHeadBuildInputs(untracked.root, untrackedHead),
+      "ALTERNATE_VITE_CONFIG",
+    );
+
+    const tracked = createRepository();
+    addTrackedInput(tracked.root);
+    fs.writeFileSync(path.join(tracked.root, "vite.config.mjs"), "export default {};\n", "utf8");
+    git(tracked.root, ["add", "--", "vite.config.mjs", "extension/input.txt"]);
+    const trackedHead = commit(tracked.root, "alternate config");
+    expectIntegrityCode(
+      () => assertCurrentHeadBuildInputs(tracked.root, trackedHead),
+      "ALTERNATE_VITE_CONFIG",
+    );
+  });
+
+  it("scrubs mixed-case inherited Git overrides", () => {
+    const environment = sanitizedGitEnvironment({
+      PATH: process.env.PATH,
+      git_index_file: "/tmp/attacker-index",
+      Git_Work_Tree: "/tmp/attacker-tree",
+      gIt_Object_Directory: "/tmp/attacker-objects",
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "core.hooksPath",
+      GIT_CONFIG_VALUE_0: "/tmp/attacker-hooks",
+    });
+
+    expect(environment.PATH).toBe(process.env.PATH);
+    expect(environment.git_index_file).toBeUndefined();
+    expect(environment.Git_Work_Tree).toBeUndefined();
+    expect(environment.gIt_Object_Directory).toBeUndefined();
+    expect(environment.GIT_CONFIG_COUNT).toBeUndefined();
+    expect(environment.GIT_CONFIG_KEY_0).toBeUndefined();
+    expect(environment.GIT_CONFIG_VALUE_0).toBeUndefined();
+    expect(environment.GIT_NO_REPLACE_OBJECTS).toBe("1");
+    expect(environment.GIT_NO_LAZY_FETCH).toBe("1");
+  });
+
 });
