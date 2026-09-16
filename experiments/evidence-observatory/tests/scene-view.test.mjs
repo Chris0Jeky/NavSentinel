@@ -29,10 +29,13 @@ test('receipt without collector time never invents an age',()=>{
 test('geometry projection does not share mutable objects with the source',()=>{
  const s=selectScene(events,2); s.scene.boxes[0].x=999; assert.equal(events[1].data.scene.boxes[0].x,10);
 });
-test('viewer exposes measured scene and independent receipt panels',()=>{
+test('viewer exposes measured scene and authority-neutral receipt panels',()=>{
  const html=renderReport(buildReport([JSON.stringify(demonstration())]));
  assert.ok(html.includes('id="scene-panel"')); assert.ok(html.includes('id="receiver-panel"'));
  assert.ok(html.includes('Sampled geometry')); assert.ok(html.includes('createElementNS'));
+ assert.ok(html.includes('Receiver receipt inbox'));
+ assert.ok(html.includes('Producer-reported receipt; receiver binding unavailable.'));
+ assert.ok(!html.includes('Independent receiver inbox'));
 });
 
 

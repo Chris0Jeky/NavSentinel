@@ -114,14 +114,15 @@ function application() {
       }
       panel.append(list);
     }
-    const receiver = $('receiver-panel'); receiver.replaceChildren(make('h3', 'Independent receiver inbox'));
+    const receiver = $('receiver-panel'); receiver.replaceChildren(make('h3', 'Receiver receipt inbox'));
     const receipts = c.events.slice(0, cursor + 1).filter(e => e.kind === 'sink.receipt');
     if (!receipts.length) receiver.append(make('p', 'No accepted consequence recorded yet at this point. Check final receiver health and the completed observation window before drawing a prevention conclusion.', 'muted'));
     for (const e of receipts) {
       const b = make('button', `${human(e.data.consequence ?? 'synthetic')} receipt · ${e.id}`, 'receipt-link');
       b.addEventListener('click', () => { cursor = c.events.indexOf(e); $('scrub').value = String(cursor); renderEvent(); });
       receiver.append(b);
-      if (e.data.receiver) receiver.append(make('p', `Run ${e.data.receiver.runId} · one-use target ${e.data.receiver.targetId}`, 'muted'));
+      if (e.data.receiver) receiver.append(make('p', `Recorded receiver binding: Run ${e.data.receiver.runId} · one-use target ${e.data.receiver.targetId}`, 'muted'));
+      else receiver.append(make('p', 'Producer-reported receipt; receiver binding unavailable.', 'muted'));
     }
   }
 
