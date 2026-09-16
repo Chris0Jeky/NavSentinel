@@ -87,3 +87,20 @@ object, alternate-config, mixed-case Git environment and external-preflight
 regressions, then rerun all three journeys on one exact commit and receive a
 fresh review before #681 can become merge-eligible. Direct in-spec verification
 is no longer an accepted launch route.
+
+## Replay-resistance checkpoint
+
+The successor review found that the first external-preflight token was reusable:
+`--preflight-only` printed the complete unsigned attestation and the spec trusted
+caller-supplied run identity. That result is superseded.
+
+The qualifying launcher must now execute Playwright's config, spec, imported
+helpers, and Gym fixtures from a private tree materialized directly from
+authenticated Git blobs. The one-worker campaign consumes an HMAC-authenticated
+attestation exactly once and repeatedly hashes the materialized source closure.
+The diagnostic preflight command emits only a non-consumable summary. Direct
+worktree loading is a required negative regression and cannot enumerate the
+campaign tests.
+
+Promotion still requires an exact-head hosted run of all three typed-harm
+journeys and a fresh independent review of this repaired execution boundary.

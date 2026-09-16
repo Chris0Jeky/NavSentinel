@@ -6,6 +6,7 @@
     "tests/e2e/state-authority-campaign-inputs.json",
     "tests/e2e/state-authority-sink.spec.ts",
     "tests/e2e/extension_build_provenance.ts",
+    "tests/e2e/materialized_campaign_provenance.ts",
     "tests/e2e/extension_test_utils.ts",
     "scripts/content-loader-contract.mjs",
     "tests/e2e/local_fixture_target_bootstrap.ts",

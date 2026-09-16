@@ -85,3 +85,30 @@ The authoritative hosted command first extracts
 `scripts/run-state-authority-campaign.mjs` from `HEAD`, supplies its object ID via
 `NAVSENTINEL_EXPECTED_LAUNCHER_OID`, and executes that exact blob with Node's
 TypeScript stripping enabled.
+
+## Replay-resistant campaign execution
+
+The reviewed preflight candidate still exposed a complete, reusable launch
+attestation. A caller could replay or edit that unsigned JSON and load changed
+worktree modules before the in-spec verifier ran. The campaign no longer treats
+that file as an execution capability.
+
+The exact committed launcher now materializes every declared campaign input from
+an authenticated Git blob into a private temporary tree before Playwright loads
+its configuration or spec graph. The campaign runs from those copies, while the
+repository worktree remains the source/build subject under test. A dedicated
+materialized-tree hash is checked before the build, after the build, and at
+receipt time. The local `node_modules` directory is linked only as an explicitly
+trusted toolchain input and remains outside the project-source claim.
+
+The full launch uses a short-lived HMAC-authenticated envelope that is consumed
+and deleted by the one-worker campaign. `--preflight-only` emits a
+non-consumable summary: it contains no run ID, expiry, attestation path,
+execution root, or authentication key, and its temporary materialization is
+deleted before the launcher exits. Direct worktree Playwright loading fails
+during module evaluation with `COMMITTED_CAMPAIGN_EXECUTION_REQUIRED`.
+
+This repair prevents a positive receipt from crediting campaign modules that
+were merely checked before import but were not the bytes Playwright executed.
+It does not turn the local toolchain or a hostile concurrent same-user process
+into trusted evidence; those remain outside this bounded receipt.

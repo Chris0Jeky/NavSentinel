@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   chromium,
   expect,
@@ -35,12 +36,14 @@ import {
   type BuildInputAttestation,
   type BuildOutputAttestation,
 } from "./extension_build_provenance";
+import { hashMaterializedCampaign } from "./materialized_campaign_provenance";
 
 const HARM_CONSEQUENCE = "wrong-target-navigation";
 const BENIGN_CONSEQUENCE = "benign-navigation";
-const repositoryRoot = path.resolve(process.cwd());
+const repositoryRoot = fs.realpathSync.native(path.resolve(process.cwd()));
+const campaignExecutionRoot = resolveCampaignExecutionRoot();
 const extensionPath = path.join(repositoryRoot, "extension", "dist");
-const gymRoot = path.resolve(process.cwd(), "gym");
+const gymRoot = path.join(campaignExecutionRoot, "gym");
 
 test.setTimeout(180_000);
 
@@ -94,10 +97,11 @@ type ExtensionProvenance = {
 };
 
 type StateAuthorityLaunchAttestation = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   runId: string;
-  launcherMode: "git-object-extracted";
+  launcherMode: "git-object-materialized-campaign";
   repositoryRoot: string;
+  campaignExecutionRoot: string;
   repositoryCommit: string;
   repositoryTree: string;
   objectFormat: string;
@@ -106,9 +110,11 @@ type StateAuthorityLaunchAttestation = {
   buildInputExecutedSha256: string;
   campaignGitSha256: string;
   campaignExecutedSha256: string;
+  campaignMaterializedSha256: string;
   campaignFiles: string[];
   launcherOid: string;
   helperOid: string;
+  materializerOid: string;
   manifestOid: string;
   issuedAt: string;
   expiresAt: string;
@@ -118,6 +124,7 @@ type LaunchSnapshot = {
   buildInputs: BuildInputAttestation;
   campaignGitSha256: string;
   campaignExecutedSha256: string;
+  campaignMaterializedSha256: string;
 };
 
 let launchAttestation: StateAuthorityLaunchAttestation | undefined;
@@ -163,6 +170,84 @@ function launchIntegrityError(code: string, message: string): Error {
   return new Error(`State-authority evidence TEST_INVALID [${code}]: ${message}`);
 }
 
+function sameNativePath(left: string, right: string): boolean {
+  const normalizedLeft = path.resolve(left);
+  const normalizedRight = path.resolve(right);
+  return process.platform === "win32"
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
+}
+
+function resolveCampaignExecutionRoot(): string {
+  const configured =
+    process.env.NAVSENTINEL_STATE_AUTHORITY_CAMPAIGN_ROOT?.trim();
+  if (!configured) {
+    throw launchIntegrityError(
+      "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
+      "the state-authority spec must execute from the launcher's private committed-object tree",
+    );
+  }
+
+  const requested = path.resolve(configured);
+  let stats: fs.Stats;
+  try {
+    stats = fs.lstatSync(requested);
+  } catch (error) {
+    throw launchIntegrityError(
+      "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
+      `campaign execution root is unavailable: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw launchIntegrityError(
+      "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
+      "campaign execution root is linked or not an ordinary directory",
+    );
+  }
+
+  const realRoot = fs.realpathSync.native(requested);
+  if (!sameNativePath(requested, realRoot)) {
+    throw launchIntegrityError(
+      "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
+      "campaign execution root resolves through a link",
+    );
+  }
+  const relativeToRepository = path.relative(repositoryRoot, realRoot);
+  if (
+    relativeToRepository === ""
+    || (
+      !relativeToRepository.startsWith(`..${path.sep}`)
+      && relativeToRepository !== ".."
+      && !path.isAbsolute(relativeToRepository)
+    )
+  ) {
+    throw launchIntegrityError(
+      "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
+      "campaign execution root must be outside the repository worktree",
+    );
+  }
+
+  const executingSpec = fs.realpathSync.native(
+    fileURLToPath(import.meta.url),
+  );
+  const expectedSpec = path.join(
+    realRoot,
+    "tests",
+    "e2e",
+    "state-authority-sink.spec.ts",
+  );
+  if (!sameNativePath(executingSpec, expectedSpec)) {
+    throw launchIntegrityError(
+      "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
+      "the loaded state-authority spec is not the materialized committed copy",
+    );
+  }
+  return realRoot;
+}
+
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -176,46 +261,116 @@ function requiredString(record: Record<string, unknown>, key: string): string {
 }
 
 function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
-  const attestationPathValue = process.env.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION?.trim();
-  const expectedRunId = process.env.NAVSENTINEL_STATE_AUTHORITY_RUN_ID?.trim();
-  if (!attestationPathValue || !expectedRunId) {
+  const attestationPathValue =
+    process.env.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION?.trim();
+  const keyValue =
+    process.env.NAVSENTINEL_STATE_AUTHORITY_KEY?.trim();
+  if (!attestationPathValue || !keyValue) {
     throw launchIntegrityError(
       "EXTERNAL_PREFLIGHT_REQUIRED",
-      "run this campaign through the Git-object-extracted external launcher",
+      "run this campaign through the Git-object-materializing external launcher",
     );
   }
+  if (!/^[0-9a-f]{64}$/u.test(keyValue)) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launch attestation key is malformed",
+    );
+  }
+
   const attestationPath = path.resolve(attestationPathValue);
   const stats = fs.lstatSync(attestationPath);
   if (stats.isSymbolicLink() || !stats.isFile()) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation is linked or not a file");
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launch attestation is linked or not a file",
+    );
   }
   if (process.platform !== "win32" && (stats.mode & 0o077) !== 0) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation permissions are too broad");
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launch attestation permissions are too broad",
+    );
   }
   const realAttestationPath = fs.realpathSync.native(attestationPath);
-  const relativeToRepository = path.relative(repositoryRoot, realAttestationPath);
+  const relativeToRepository = path.relative(
+    repositoryRoot,
+    realAttestationPath,
+  );
   if (
     relativeToRepository === ""
-    || (!relativeToRepository.startsWith(`..${path.sep}`) && relativeToRepository !== ".." && !path.isAbsolute(relativeToRepository))
+    || (
+      !relativeToRepository.startsWith(`..${path.sep}`)
+      && relativeToRepository !== ".."
+      && !path.isAbsolute(relativeToRepository)
+    )
   ) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation must be outside the repository");
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launch attestation must be outside the repository",
+    );
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(realAttestationPath, "utf8"));
+    const serialized = fs.readFileSync(realAttestationPath, "utf8");
+    fs.rmSync(realAttestationPath);
+    parsed = JSON.parse(serialized);
   } catch (error) {
     throw launchIntegrityError(
       "LAUNCH_ATTESTATION",
       error instanceof Error ? error.message : String(error),
     );
+  } finally {
+    delete process.env.NAVSENTINEL_STATE_AUTHORITY_ATTESTATION;
+    delete process.env.NAVSENTINEL_STATE_AUTHORITY_KEY;
   }
-  if (!isRecord(parsed) || parsed.schemaVersion !== 1) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "unsupported launch attestation schema");
+  if (
+    !isRecord(parsed)
+    || parsed.schemaVersion !== 2
+    || !isRecord(parsed.payload)
+    || typeof parsed.mac !== "string"
+    || !/^[0-9a-f]{64}$/u.test(parsed.mac)
+  ) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "unsupported launch attestation envelope",
+    );
   }
-  const campaignFilesValue = parsed.campaignFiles;
-  if (!Array.isArray(campaignFilesValue) || campaignFilesValue.some((entry) => typeof entry !== "string")) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "campaignFiles must be an array of strings");
+
+  const expectedMac = createHmac(
+    "sha256",
+    Buffer.from(keyValue, "hex"),
+  )
+    .update(JSON.stringify(parsed.payload))
+    .digest();
+  const suppliedMac = Buffer.from(parsed.mac, "hex");
+  if (
+    suppliedMac.length !== expectedMac.length
+    || !timingSafeEqual(suppliedMac, expectedMac)
+  ) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launch attestation authentication failed",
+    );
+  }
+
+  const payload = parsed.payload;
+  if (payload.schemaVersion !== 2) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "unsupported launch attestation payload schema",
+    );
+  }
+  const campaignFilesValue = payload.campaignFiles;
+  if (
+    !Array.isArray(campaignFilesValue)
+    || campaignFilesValue.some((entry) => typeof entry !== "string")
+  ) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "campaignFiles must be an array of strings",
+    );
   }
   const campaignFiles = campaignFilesValue as string[];
   for (const relativePath of campaignFiles) {
@@ -224,52 +379,117 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
       || relativePath.startsWith("/")
       || relativePath.includes("\\")
       || path.posix.normalize(relativePath) !== relativePath
-      || relativePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
+      || relativePath
+        .split("/")
+        .some((segment) => !segment || segment === "." || segment === "..")
     ) {
-      throw launchIntegrityError("LAUNCH_ATTESTATION", `invalid campaign path '${relativePath}'`);
+      throw launchIntegrityError(
+        "LAUNCH_ATTESTATION",
+        `invalid campaign path '${relativePath}'`,
+      );
     }
   }
   if (new Set(campaignFiles).size !== campaignFiles.length) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "campaignFiles contains duplicates");
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "campaignFiles contains duplicates",
+    );
   }
 
   const attestation: StateAuthorityLaunchAttestation = {
-    schemaVersion: 1,
-    runId: requiredString(parsed, "runId"),
-    launcherMode: requiredString(parsed, "launcherMode") as "git-object-extracted",
-    repositoryRoot: requiredString(parsed, "repositoryRoot"),
-    repositoryCommit: requiredString(parsed, "repositoryCommit"),
-    repositoryTree: requiredString(parsed, "repositoryTree"),
-    objectFormat: requiredString(parsed, "objectFormat"),
-    comparisonMode: requiredString(parsed, "comparisonMode") as "raw-blob-byte-equality",
-    buildInputGitSha256: requiredString(parsed, "buildInputGitSha256"),
-    buildInputExecutedSha256: requiredString(parsed, "buildInputExecutedSha256"),
-    campaignGitSha256: requiredString(parsed, "campaignGitSha256"),
-    campaignExecutedSha256: requiredString(parsed, "campaignExecutedSha256"),
+    schemaVersion: 2,
+    runId: requiredString(payload, "runId"),
+    launcherMode: requiredString(
+      payload,
+      "launcherMode",
+    ) as "git-object-materialized-campaign",
+    repositoryRoot: requiredString(payload, "repositoryRoot"),
+    campaignExecutionRoot: requiredString(
+      payload,
+      "campaignExecutionRoot",
+    ),
+    repositoryCommit: requiredString(payload, "repositoryCommit"),
+    repositoryTree: requiredString(payload, "repositoryTree"),
+    objectFormat: requiredString(payload, "objectFormat"),
+    comparisonMode: requiredString(
+      payload,
+      "comparisonMode",
+    ) as "raw-blob-byte-equality",
+    buildInputGitSha256: requiredString(
+      payload,
+      "buildInputGitSha256",
+    ),
+    buildInputExecutedSha256: requiredString(
+      payload,
+      "buildInputExecutedSha256",
+    ),
+    campaignGitSha256: requiredString(payload, "campaignGitSha256"),
+    campaignExecutedSha256: requiredString(
+      payload,
+      "campaignExecutedSha256",
+    ),
+    campaignMaterializedSha256: requiredString(
+      payload,
+      "campaignMaterializedSha256",
+    ),
     campaignFiles,
-    launcherOid: requiredString(parsed, "launcherOid"),
-    helperOid: requiredString(parsed, "helperOid"),
-    manifestOid: requiredString(parsed, "manifestOid"),
-    issuedAt: requiredString(parsed, "issuedAt"),
-    expiresAt: requiredString(parsed, "expiresAt"),
+    launcherOid: requiredString(payload, "launcherOid"),
+    helperOid: requiredString(payload, "helperOid"),
+    materializerOid: requiredString(payload, "materializerOid"),
+    manifestOid: requiredString(payload, "manifestOid"),
+    issuedAt: requiredString(payload, "issuedAt"),
+    expiresAt: requiredString(payload, "expiresAt"),
   };
 
-  if (attestation.runId !== expectedRunId || attestation.launcherMode !== "git-object-extracted") {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "launcher identity or run token mismatch");
+  if (
+    attestation.launcherMode !== "git-object-materialized-campaign"
+  ) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launcher execution mode mismatch",
+   );
   }
-  if (fs.realpathSync.native(attestation.repositoryRoot) !== repositoryRoot) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "attested repository root differs from this worktree");
+  if (
+     !sameNativePath(attestation.repositoryRoot, repositoryRoot)
+    || !sameNativePath(
+      attestation.campaignExecutionRoot,
+      campaignExecutionRoot,
+    )
+  ) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "attested repository or campaign root differs from this execution",
+    );
   }
   if (attestation.comparisonMode !== "raw-blob-byte-equality") {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "unsupported comparison mode");
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "unsupported comparison mode",
+   );
   }
+
   const issuedAt = Date.parse(attestation.issuedAt);
   const expiresAt = Date.parse(attestation.expiresAt);
   const now = Date.now();
-  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || issuedAt > now + 60_000 || expiresAt < now) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "launch attestation is expired or has invalid time bounds");
+  if (
+    !Number.isFinite(issuedAt)
+    || !Number.isFinite(expiresAt)
+    || issuedAt > now + 60_000
+    || expiresAt < now
+    || expiresAt <= issuedAt
+    || expiresAt - issuedAt > 10 * 60 * 1000
+  ) {
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "launch attestation is expired or has invalid time bounds",
+    );
   }
-  const oidLength = attestation.objectFormat === "sha1" ? 40 : attestation.objectFormat === "sha256" ? 64 : 0;
+
+  const oidLength = attestation.objectFormat === "sha1"
+    ? 40
+    : attestation.objectFormat === "sha256"
+      ? 64
+      : 0;
   const oidPattern = new RegExp(`^[0-9a-f]{${oidLength}}$`, "u");
   const sha256Pattern = /^[0-9a-f]{64}$/u;
   if (
@@ -278,31 +498,46 @@ function loadLaunchAttestation(): StateAuthorityLaunchAttestation {
     || !oidPattern.test(attestation.repositoryTree)
     || !oidPattern.test(attestation.launcherOid)
     || !oidPattern.test(attestation.helperOid)
+    || !oidPattern.test(attestation.materializerOid)
     || !oidPattern.test(attestation.manifestOid)
     || !sha256Pattern.test(attestation.buildInputGitSha256)
     || !sha256Pattern.test(attestation.buildInputExecutedSha256)
     || !sha256Pattern.test(attestation.campaignGitSha256)
     || !sha256Pattern.test(attestation.campaignExecutedSha256)
+    || !sha256Pattern.test(attestation.campaignMaterializedSha256)
   ) {
-    throw launchIntegrityError("LAUNCH_ATTESTATION", "attestation contains malformed object IDs or hashes");
+    throw launchIntegrityError(
+      "LAUNCH_ATTESTATION",
+      "attestation contains malformed object IDs or hashes",
+    );
   }
   return attestation;
 }
 
-function assertLaunchSnapshotCurrent(attestation: StateAuthorityLaunchAttestation): LaunchSnapshot {
-  const buildInputs = assertCurrentHeadBuildInputs(repositoryRoot, attestation.repositoryCommit);
+function assertLaunchSnapshotCurrent(
+  attestation: StateAuthorityLaunchAttestation,
+): LaunchSnapshot {
+  const buildInputs = assertCurrentHeadBuildInputs(
+    repositoryRoot,
+    attestation.repositoryCommit,
+  );
   if (
     buildInputs.repositoryCommit !== attestation.repositoryCommit
     || buildInputs.repositoryTree !== attestation.repositoryTree
     || buildInputs.objectFormat !== attestation.objectFormat
     || buildInputs.comparisonMode !== attestation.comparisonMode
     || buildInputs.gitSha256 !== attestation.buildInputGitSha256
-    || buildInputs.executedSha256 !== attestation.buildInputExecutedSha256
+    || buildInputs.executedSha256
+      !== attestation.buildInputExecutedSha256
   ) {
-    throw launchIntegrityError("LAUNCH_SNAPSHOT_MISMATCH", "build inputs changed after external preflight");
+    throw launchIntegrityError(
+      "LAUNCH_SNAPSHOT_MISMATCH",
+      "build inputs changed after external preflight",
+    );
   }
-  const campaignAbsolutePaths = attestation.campaignFiles.map((relativePath) =>
-    path.join(repositoryRoot, ...relativePath.split("/"))
+  const campaignAbsolutePaths = attestation.campaignFiles.map(
+    (relativePath) =>
+      path.join(repositoryRoot, ...relativePath.split("/")),
   );
   const campaignGitSha256 = hashGitFiles(
     repositoryRoot,
@@ -314,14 +549,28 @@ function assertLaunchSnapshotCurrent(attestation: StateAuthorityLaunchAttestatio
     campaignAbsolutePaths,
     attestation.repositoryCommit,
   );
+  const campaignMaterializedSha256 = hashMaterializedCampaign(
+    campaignExecutionRoot,
+    attestation.campaignFiles,
+  );
   if (
     campaignGitSha256 !== attestation.campaignGitSha256
     || campaignExecutedSha256 !== attestation.campaignExecutedSha256
     || campaignGitSha256 !== campaignExecutedSha256
+    || campaignMaterializedSha256
+      !== attestation.campaignMaterializedSha256
   ) {
-    throw launchIntegrityError("LAUNCH_SNAPSHOT_MISMATCH", "campaign inputs changed after external preflight");
+    throw launchIntegrityError(
+      "LAUNCH_SNAPSHOT_MISMATCH",
+      "campaign inputs changed after external preflight",
+    );
   }
-  return { buildInputs, campaignGitSha256, campaignExecutedSha256 };
+  return {
+    buildInputs,
+    campaignGitSha256,
+    campaignExecutedSha256,
+    campaignMaterializedSha256,
+  };
 }
 
 function prepareCurrentHeadExtension(attestation: StateAuthorityLaunchAttestation): ExtensionProvenance {
@@ -599,7 +848,7 @@ async function attachReceipt(
     extensionProvenance.buildOutput,
   );
   const receipt = {
-    schema_version: 3,
+    schema_version: 4,
     repository_head: repositoryHead,
     extension_build_sha256: extensionProvenance.buildOutput.sha256,
     extension_build_provenance: {
@@ -623,12 +872,15 @@ async function attachReceipt(
       comparison_mode: extensionProvenance.comparisonMode,
       git_sha256: gitSourceSha256,
       executed_sha256: executedSourceSha256,
+      materialized_sha256: currentSnapshot.campaignMaterializedSha256,
       exact_head_match: true,
       verified_before_module_import: true,
+      attestation_consumed: true,
       launch_run_id: launchAttestation.runId,
       launcher_mode: launchAttestation.launcherMode,
       launcher_oid: launchAttestation.launcherOid,
       helper_oid: launchAttestation.helperOid,
+      materializer_oid: launchAttestation.materializerOid,
       manifest_oid: launchAttestation.manifestOid,
       manifest_input_count: launchAttestation.campaignFiles.length,
     },
