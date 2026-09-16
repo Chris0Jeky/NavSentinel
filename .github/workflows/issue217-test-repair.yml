@@ -38,30 +38,28 @@ jobs:
           target = Path("tests/popup-model.test.ts")
           text = target.read_text(encoding="utf-8")
 
-          green_old = '''      "nrs_allowlisted",
-              "nrs_user_activation_active",
-              "nrs_explicit_new_tab_intent",'''
-          green_new = '''      "nrs_allowlisted",
-              "nrs_explicit_new_tab_intent",'''
+          green_old = '"nrs_allowlisted",\n      "nrs_user_activation_active",\n      "nrs_explicit_new_tab_intent",'
+          green_new = '"nrs_allowlisted",\n      "nrs_explicit_new_tab_intent",'
           green_count = text.count(green_old)
           if green_count != 2:
               raise SystemExit(f"expected two green user-activation entries, found {green_count}")
           text = text.replace(green_old, green_new)
 
-          warn_old = '''      "clickfix_command_with_overlay",
-              "nav_anomaly",'''
-          warn_new = '''      "nrs_user_activation_active",
-              "clickfix_command_with_overlay",
-              "nav_anomaly",'''
+          warn_old = '"clickfix_command_with_overlay",\n      "nav_anomaly",'
+          warn_new = '"nrs_user_activation_active",\n      "clickfix_command_with_overlay",\n      "nav_anomaly",'
           warn_count = text.count(warn_old)
           if warn_count != 1:
               raise SystemExit(f"expected one warning list insertion point, found {warn_count}")
           text = text.replace(warn_old, warn_new, 1)
 
-          comment_old = '''    // user_activation is matched EXACTLY, keyboard_/legit_ via startsWith — so a
-              // hypothetical spoof/fake variant stays a warning (no false reassurance).'''
-          comment_new = '''    // User activation remains a positive NRS factor, so it and spoofed variants
-              // stay warnings; keyboard_/legit_ prefix matches are reserved for mitigations.'''
+          comment_old = (
+              "// user_activation is matched EXACTLY, keyboard_/legit_ via startsWith — so a\n"
+              "    // hypothetical spoof/fake variant stays a warning (no false reassurance)."
+          )
+          comment_new = (
+              "// User activation remains a positive NRS factor, so it and spoofed variants\n"
+              "    // stay warnings; keyboard_/legit_ prefix matches are reserved for mitigations."
+          )
           comment_count = text.count(comment_old)
           if comment_count != 1:
               raise SystemExit(f"expected one user-activation comment, found {comment_count}")
