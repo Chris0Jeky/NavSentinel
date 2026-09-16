@@ -16,6 +16,7 @@ const root = path.resolve(__dirname, "..");
  */
 const RELEASE_PATH_SCRIPTS = [
   "scripts/release.mjs",
+  "scripts/release-input-integrity.mjs",
   "scripts/package.mjs",
   "scripts/build-extension.mjs",
   "scripts/packaged-html.mjs",
