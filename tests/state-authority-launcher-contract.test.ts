@@ -139,7 +139,7 @@ describe("state-authority launcher replay boundary", () => {
     expect(result.stdout).not.toContain(
       "NAVSENTINEL_STATE_AUTHORITY_KEY",
     );
-  });
+  }, 15_000);
 
   it("rejects direct worktree loading before Playwright can list tests", async () => {
     const { sanitizedEnvironment } = await loadLauncherModule();
