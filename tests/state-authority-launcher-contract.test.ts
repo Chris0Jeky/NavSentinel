@@ -61,7 +61,6 @@ describe("state-authority launcher replay boundary", () => {
     const result = spawnSync(
       process.execPath,
       [
-        "--experimental-strip-types",
         launcherPath,
         "--repository",
         repositoryRoot,
@@ -160,5 +159,4 @@ describe("state-authority launcher replay boundary", () => {
       "childEnvironment.NAVSENTINEL_STATE_AUTHORITY_FINALIZATION_KEY",
     );
   });
-
 });
