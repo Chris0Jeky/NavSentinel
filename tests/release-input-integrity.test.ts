@@ -42,6 +42,17 @@ function runGit(root: string, args: string[], options: { env?: NodeJS.ProcessEnv
   }).trim();
 }
 
+function configureFixtureRepository(root: string): void {
+  runGit(root, ["config", "core.autocrlf", "false"]);
+  runGit(root, ["config", "core.eol", "lf"]);
+}
+
+function releaseFilterCommand(filterScript: string): string {
+  const nodeExecutable = process.execPath.replaceAll("\\", "/");
+  const normalizedScript = filterScript.replaceAll("\\", "/");
+  return `"${nodeExecutable}" "${normalizedScript}"`;
+}
+
 function createRepository(
   label: string,
   files: Record<string, string | Buffer> = { "tracked.txt": "committed\n" },
@@ -49,6 +60,7 @@ function createRepository(
   const root = path.join(makeTempRoot(label), "repo");
   fs.mkdirSync(root, { recursive: true });
   runGit(root, ["init", "-b", "main"]);
+  configureFixtureRepository(root);
   runGit(root, ["config", "user.name", "Release Integrity Test"]);
   runGit(root, ["config", "user.email", "release-integrity@example.invalid"]);
   for (const [relativePath, contents] of Object.entries(files)) {
@@ -84,6 +96,7 @@ function copyRepositoryForReleaseTest(): string {
     },
   });
   runGit(root, ["init", "-b", "main"]);
+  configureFixtureRepository(root);
   runGit(root, ["config", "user.name", "Release Integrity Test"]);
   runGit(root, ["config", "user.email", "release-integrity@example.invalid"]);
   runGit(root, ["add", "-A"]);
@@ -116,7 +129,7 @@ describe("release input integrity", () => {
     );
     fs.writeFileSync(path.join(root, ".gitattributes"), "raw-input.txt filter=release-mask\n");
     fs.writeFileSync(path.join(root, "raw-input.txt"), "committed\n");
-    runGit(root, ["config", "filter.release-mask.clean", `node ${filterScript}`]);
+    runGit(root, ["config", "filter.release-mask.clean", releaseFilterCommand(filterScript)]);
     runGit(root, ["config", "filter.release-mask.required", "true"]);
     runGit(root, ["add", "-A"]);
     runGit(root, ["commit", "-m", "add filtered input"]);
@@ -364,7 +377,7 @@ describe("release script integration", () => {
     );
     fs.writeFileSync(path.join(root, ".gitattributes"), "raw-input.txt filter=release-mask\n");
     fs.writeFileSync(path.join(root, "raw-input.txt"), "committed\n");
-    runGit(root, ["config", "filter.release-mask.clean", `node ${filterScript}`]);
+    runGit(root, ["config", "filter.release-mask.clean", releaseFilterCommand(filterScript)]);
     runGit(root, ["config", "filter.release-mask.required", "true"]);
     runGit(root, ["add", "-A"]);
     runGit(root, ["commit", "-m", "add filtered release input"]);
