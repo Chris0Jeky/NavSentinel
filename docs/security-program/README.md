@@ -17,6 +17,8 @@ All experiments are defensive, local, inert, and synthetic. No programme fixture
 
 - [PROGRAM_STATE.md](PROGRAM_STATE.md): factual seed state and evidence ceiling.
 - [NEXT_WORK.md](NEXT_WORK.md): up to ten concrete next slices, subordinate to live roadmap authority.
+- [STATE_AUTHORITY_CAMPAIGN.md](STATE_AUTHORITY_CAMPAIGN.md): live conditions,
+  outcome contract, qualification gates, and non-claims for RW-21/RW-24/RW-25.
 - [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md): generated 31-capability reconciliation.
 - [EVIDENCE_INDEX.md](EVIDENCE_INDEX.md): generated outcome and evidence-state index.
 - [DECISIONS.md](DECISIONS.md), [FAILURES.md](FAILURES.md), and [RISK_ACCEPTANCE.md](RISK_ACCEPTANCE.md): durable operational ledgers.

@@ -9,6 +9,7 @@ const topology = resolveE2eTopology();
 export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/state-authority-sink.spec.ts",
   fullyParallel: topology.fullyParallel,
   workers: topology.workers,
   retries: process.env.CI ? 1 : 0,
