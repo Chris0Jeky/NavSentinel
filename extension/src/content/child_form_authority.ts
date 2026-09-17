@@ -16,7 +16,13 @@ export class ChildFormAuthority {
   private blocked = new Map<string, BlockedForm>();
   private replay: { intent: FormIntent; expiresAt: number } | null = null;
   constructor(private deps: Dependencies) {
-    window.addEventListener("keydown", event => { this.approvedImplicitSubmit(event); }, true);
+    window.addEventListener("keydown", event => {
+      const binding = deps.enabled() && event.isTrusted ? implicitSubmitBinding(event) : null;
+      if (!binding) return;
+      this.cancel();
+      this.gate.clear();
+      this.approveBinding(binding, event.timeStamp);
+    }, true);
   }
 
   private id(): string {
@@ -59,15 +65,6 @@ export class ChildFormAuthority {
     if (!this.deps.enabled() || !event.isTrusted) return null;
     const binding = clickFormBinding(event);
     return binding ? this.approveBinding(binding, event.timeStamp) : null;
-  }
-  /** Trusted Enter on the browser's no-submit-button implicit form path. */
-  private approvedImplicitSubmit(event: KeyboardEvent): void {
-    if (!this.deps.enabled() || !event.isTrusted) return;
-    const binding = implicitSubmitBinding(event);
-    if (!binding) return;
-    this.cancel();
-    this.gate.clear();
-    this.approveBinding(binding, event.timeStamp);
   }
   recordBlocked(data: { id?: string; kind?: string; formIntent?: unknown }): void {
     if (!this.deps.enabled() || !data.id || data.id.length > 128 ||
