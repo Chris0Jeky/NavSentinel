@@ -9,3 +9,8 @@ export function selectFormIntent(c, cursor) {
   const earlier = snapshots.findLast(v => v.phase === 'input') ?? snapshots[0];
   return structuredClone({ earlier, current });
 }
+
+export function countRejectedReceiverAttempts(c, cursor) {
+  if (!Array.isArray(c?.events) || !Number.isInteger(cursor) || cursor < 0 || cursor >= c.events.length) return 0;
+  return c.events.slice(0, cursor + 1).filter(event => event?.kind === 'receiver.rejected').length;
+}

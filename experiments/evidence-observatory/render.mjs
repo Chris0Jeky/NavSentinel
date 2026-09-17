@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { REPORT_SCHEMA } from './model.mjs';
 import { selectScene } from './scene-view.mjs';
-import { selectFormIntent } from './form-state.mjs';
+import { countRejectedReceiverAttempts, selectFormIntent } from './form-state.mjs';
 
 const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 const encodedJSON = value => JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('&', '\\u0026').replaceAll('\u2028', '\\u2028').replaceAll('\u2029', '\\u2029');
@@ -164,7 +164,8 @@ function application() {
       }
       panel.append(detail('Pairing prerequisites and limits', comparison));
     }
-    panel.append(make('p', `Rejected receiver spends: ${c.formEvidence.rejectedAttempts}. A receiver rejection is not a NavSentinel block.`, 'muted'));
+    const rejectedAttempts = countRejectedReceiverAttempts(c, cursor);
+    panel.append(make('p', `Rejected receiver spends at or before selected event: ${rejectedAttempts}. A receiver rejection is not a NavSentinel block.`, 'muted'));
   }
 
   function renderEvent() {
@@ -211,7 +212,7 @@ const css = `
 `;
 export function renderReport(report) {
   if (report?.schema !== REPORT_SCHEMA) throw new Error('REPORT_SCHEMA_INVALID');
-  const script = `${selectScene.toString()}\n${selectFormIntent.toString()}\n(${application.toString()})();`;
+  const script = `${selectScene.toString()}\n${selectFormIntent.toString()}\n${countRejectedReceiverAttempts.toString()}\n(${application.toString()})();`;
   const hash = createHash('sha256').update(script).digest('base64');
   const policy = `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
   const faultNotice = report.faultQualification ? '<strong>OBSERVER FAULT CHECKS — not protection results.</strong> These trials deliberately break observation. A successful test means the monitor refused a false prevention claim. ' : '';

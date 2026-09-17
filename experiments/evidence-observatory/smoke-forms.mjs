@@ -44,6 +44,7 @@ try {
     await page.locator('.case-button').click();
     assert.equal(await page.locator('#form-panel table').count(), 0, 'no future form snapshot at run start');
     assert.equal(await page.locator('.receipt-link').count(), 0, 'no future receiver arrival at run start');
+    assert.match(await page.locator('#form-panel').innerText(), /Rejected receiver spends at or before selected event: 0/, 'no future rejected spend at run start');
   };
   await select('action-substitution', 'protected');
   await page.getByRole('button', { name: 'Show input snapshot', exact: true }).click();
@@ -76,7 +77,7 @@ try {
   assert.equal(await page.locator('#event-detail h3').innerText(), 'sink.receipt');
   await select('replay', 'baseline');
   await page.locator('.event').last().click();
-  assert.match(await page.locator('#form-panel').innerText(), /Rejected receiver spends: 1/);
+  assert.match(await page.locator('#form-panel').innerText(), /Rejected receiver spends at or before selected event: 1/);
   await page.locator('.event').filter({ hasText: 'receiver.rejected' }).click();
   assert.match(await page.locator('#event-detail').innerText(), /not prevention by NavSentinel/);
   await select('mixed', 'mixed');
