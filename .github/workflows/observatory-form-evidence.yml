@@ -47,7 +47,7 @@ jobs:
       - name: Same assertions without the detailed observer
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browser.outcome == 'success' }}
         run: npx playwright test tests/e2e/issue688-form-intent.spec.ts --project=regression --workers=2 --fully-parallel --retries=0 --output=test-results/form-control
-      - name: Require all forty-five arm outcomes to agree
+      - name: Require all forty-five arm outcomes and complete observer traces
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browser.outcome == 'success' }}
         run: node experiments/form-observatory/compare.mjs test-results/form-full test-results/form-control | tee form-evidence/observer-parity.json
       - uses: actions/upload-artifact@v4

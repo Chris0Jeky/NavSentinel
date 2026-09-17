@@ -59,6 +59,11 @@ async function executeArm(variant: FormCase, protectedArm: boolean, info: TestIn
       if (sourcePage !== page) { trace.fail("PROBE_REJECTED"); return; }
       trace.pageReport(value);
     });
+    await context.exposeBinding("__nsFormObservationFault", ({ page: sourcePage }, code: unknown) => {
+      if (sourcePage !== page) { trace.fail("PROBE_REJECTED"); return; }
+      if (code === "PROBE_REJECTED" || code === "RECEIVER_CALLBACK_LOSS") trace.fail(code);
+      else trace.fail("PROBE_REJECTED");
+    });
     const destination = (url: string): "fixture" | "harm" | "benign" | "other" => {
       try {
         const parsed = new URL(url), address = parsed.origin + parsed.pathname;
