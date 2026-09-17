@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectFormIntent } from '../form-state.mjs';
+import { countRejectedReceiverAttempts, selectFormIntent } from '../form-state.mjs';
 const event = (kind, source = 'page') => ({ kind, source });
 const sample = (eventIndex, phase, action) => ({ eventIndex, eventId: `e${eventIndex + 1}`, phase, intent: { action } });
 const fixture = () => ({ events: [event('run.start', 'runner'), event('form.intent'), event('form.intent'), event('form.intent'), event('form.intent')],
@@ -26,4 +26,11 @@ test('selector snapshots are independent immutable copies for callers', () => {
 });
 test('empty and out-of-range selections remain absent', () => {
   assert.equal(selectFormIntent({}, 0), null); assert.equal(selectFormIntent(fixture(), -1), null); assert.equal(selectFormIntent(fixture(), 99), null);
+});
+
+test('rejected receiver spends appear only after their event enters the visible prefix', () => {
+  const c = { events: [event('run.start', 'runner'), event('receiver.rejected', 'sink'), event('observation.end', 'runner')] };
+  assert.equal(countRejectedReceiverAttempts(c, 0), 0);
+  assert.equal(countRejectedReceiverAttempts(c, 1), 1);
+  assert.equal(countRejectedReceiverAttempts(c, 2), 1);
 });
