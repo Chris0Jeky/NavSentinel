@@ -641,6 +641,13 @@ function formDestinationMatches(form: FormNavigationEntry, target: Pick<AllowTar
 }
 
 function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, now: number): void {
+  // A server redirect can emit another onBeforeNavigate before the eventual
+  // form_submit commit. Keep the original matched start while that navigation
+  // is in flight; consumeForm still requires the final form_submit transition
+  // and, for a changed URL, the server_redirect qualifier. A second unrelated
+  // start therefore cannot spend the capability, while a mismatched first
+  // start remains terminal.
+  if (form.phase === "s" && form.startedUrl !== url && now < formDeadline(form)) return;
   if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt || !formDestinationMatches(form, target, url)) {
     form.phase = "p";
     delete form.startedUrl;
