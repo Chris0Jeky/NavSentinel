@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Issue 566 - destination</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { max-width: 720px; margin: 0 auto; padding: 32px; }
+    .destination { border: 2px solid #15803d; border-radius: 10px; padding: 22px; background: #f0fdf4; }
+    code { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main class="destination">
+    <h1>Issue 566 destination</h1>
+    <p id="destination-query">Destination query: <code></code></p>
+    <p>This page is local and contains no external resources.</p>
+  </main>
+  <script>
+    const query = document.querySelector("#destination-query code");
+    query.textContent = window.location.search || "(none)";
+    document.documentElement.dataset.issue566Destination = "ready";
+  </script>
+</body>
+</html>
