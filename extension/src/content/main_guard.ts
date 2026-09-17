@@ -717,7 +717,13 @@ function patchForms(): void {
         allowed();
         return;
       }
-      if (spent.allowed && intent && isHttpFormIntent(intent)) { allowed(); return; }
+      if (spent.allowed && intent && isHttpFormIntent(intent)) {
+        // HTMLFormElement.prototype.submit() fires no submit event, so relay the
+        // exact child-gate spend before invoking the native navigation.
+        if (!request && spent.attemptId) postToIsolated("ns-form-intent-submitted", { attemptId: spent.attemptId });
+        allowed();
+        return;
+      }
       if (spent.attemptId || spent.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", { ...spent });
     } else if (intent?.[1] === "dialog" || consumeRedirectAllowance(intent?.[0]) !== "none") {
       allowed();
