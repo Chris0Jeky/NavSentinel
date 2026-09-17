@@ -6,17 +6,44 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { stripSensitiveEnvironment } from "./sensitive-environment.mjs";
 
 const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";
 const SENSITIVE_ENVIRONMENT_REPOSITORY_PATH = "scripts/sensitive-environment.mjs";
+const SENSITIVE_ENVIRONMENT_PREFIXES = Object.freeze([
+  "GIT_",
+  "NAVSENTINEL_STATE_AUTHORITY_",
+]);
+const SENSITIVE_ENVIRONMENT_EXACT_KEYS = Object.freeze([
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "EXTENSION_PATH",
+]);
 
 function fail(message) {
   throw new Error(`State-authority bootstrap failed: ${message}`);
 }
 
+// This outer bootstrap must be dependency-free: it runs before Git has
+// verified any worktree blob. The same classification is used by the
+// committed helper extracted below and by the release trust boundary.
+function stripBootstrapSensitiveEnvironment(source = process.env) {
+  const environment = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    const normalized = String(key).toUpperCase();
+    if (
+      SENSITIVE_ENVIRONMENT_EXACT_KEYS.includes(normalized)
+      || SENSITIVE_ENVIRONMENT_PREFIXES.some(prefix => normalized.startsWith(prefix))
+    ) {
+      continue;
+    }
+    environment[key] = value;
+  }
+  return environment;
+}
+
 export function sanitizedBootstrapEnvironment(source = process.env) {
-  const environment = stripSensitiveEnvironment(source);
+  const environment = stripBootstrapSensitiveEnvironment(source);
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_OPTIONAL_LOCKS = "0";

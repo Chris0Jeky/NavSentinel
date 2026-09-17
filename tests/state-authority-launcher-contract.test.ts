@@ -204,6 +204,23 @@ describe("state-authority launcher replay boundary", () => {
     expect(normalizedKeys).not.toContain("EXTENSION_PATH");
   });
 
+  it("keeps the outer bootstrap independent of the mutable helper import", () => {
+    const bootstrap = fs.readFileSync(
+      path.join(repositoryRoot, "scripts", "launch-state-authority-campaign.mjs"),
+      "utf8",
+    );
+
+    expect(bootstrap).not.toContain(
+      'from "./sensitive-environment.mjs"',
+    );
+    expect(bootstrap).toContain(
+      "stripBootstrapSensitiveEnvironment",
+    );
+    expect(bootstrap).toContain(
+      "extracted below and by the release trust boundary",
+    );
+  });
+
   it("scrubs every sensitive environment spelling case-insensitively", async () => {
     const { sanitizedEnvironment } = await loadLauncherModule();
     const environment = sanitizedEnvironment({
