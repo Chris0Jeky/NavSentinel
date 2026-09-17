@@ -10,7 +10,9 @@ const bootstrap = path.resolve("scripts/launch-state-authority-campaign.mjs");
 const roots: string[] = [];
 
 function fixture(format: "sha1" | "sha256") {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nav bootstrap replay "));
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), "nav bootstrap replay ")),
+  );
   roots.push(root);
   const home = path.join(root, "home");
   const repository = path.join(root, "repository with spaces");
