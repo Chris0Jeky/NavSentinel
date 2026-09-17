@@ -119,9 +119,9 @@ export class FormAttemptGate {
   revoke(): { attemptId?: string | undefined; gestureTime?: number | undefined } {
     const pending = this.pending;
     this.pending = null;
-    return pending ? { attemptId: pending.attemptId, gestureTime: pending.gestureTime } : {};
+    return pending ?? {};
   }
-  clear(): string | undefined { return this.revoke().attemptId; }
+  clear(): void { this.pending = null; }
   consume(form: HTMLFormElement, submitter: HTMLElement | null, intent: FormIntent, now: number): { allowed: boolean; attemptId?: string | undefined; gestureTime?: number | undefined } {
     const pending = this.pending;
     this.pending = null;
