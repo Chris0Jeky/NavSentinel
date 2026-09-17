@@ -14,9 +14,12 @@ const SOURCES = {
   'decision.hold': 'extension', 'decision.rollback': 'extension',
   'navigation.committed': 'browser', 'navigation.restored': 'browser', 'request.observed': 'browser',
   'control.completed': 'browser', 'sink.receipt': 'sink',
-  'observer.health': 'runner', 'scene.sample': 'browser', 'frame.attached': 'browser', 'frame.detached': 'browser',
+  'observer.health': 'runner', 'fault.injected': 'runner', 'worker.stopped': 'browser', 'worker.restarted': 'browser', 'scene.sample': 'browser', 'frame.attached': 'browser', 'frame.detached': 'browser',
 };
 const EXPLANATIONS = {
+  'fault.injected': 'The test runner deliberately requested an observer fault. This announcement does not establish that the fault occurred.',
+  'worker.stopped': 'Chromium reported the extension worker stopped. The observation interval is incomplete even if protection later resumes.',
+  'worker.restarted': 'The browser worker resumed with a different in-memory epoch. This is recovery, not continuous observation.',
   'observer.health': 'The runner checked the independent receiver using a separate non-consuming health challenge.',
   'scene.sample': 'The browser harness sampled these element rectangles. This is a snapshot, not continuous video.',
   'frame.attached': 'The browser observed a frame/document context; IDs are local to this fresh run.',
@@ -48,6 +51,7 @@ const count = x => Number.isSafeInteger(x) && x >= 0 && x <= 1000000 ? x : null;
 const millis = x => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 86400000 ? x : null;
 const bool = x => typeof x === 'boolean' ? x : null;
 const enumValue = (x, values) => values.includes(x) ? x : null;
+const declaredOutcome = value => value === undefined ? 'UNKNOWN' : requireValue(enumValue(value, OUTCOMES), 'DECLARED_OUTCOME_INVALID');
 const array = (x, max = LIMITS.events) => {
   if (!Array.isArray(x) || x.length > max) throw new Error('ARRAY_INVALID_OR_OVER_LIMIT');
   return x;
@@ -106,7 +110,7 @@ function overlay(raw, source) {
   const protectedPhase = Object.hasOwn(obs, 'protectedReceiptCount');
   const arm = raw.fixture?.role === 'benign' ? 'benign' : raw.fixture?.role === 'mixed' ? 'mixed' : protectedPhase ? 'protected' : raw.outcome === 'HARM_REACHED' ? 'baseline' : 'unknown';
   const c = baseCase(source, raw.scenario_id, 'overlay-nesting', arm);
-  c.declaredOutcome = enumValue(raw.outcome, OUTCOMES) ?? 'UNKNOWN';
+  c.declaredOutcome = declaredOutcome(raw.outcome);
   c.identity = { ...c.identity, repositoryHead: head(raw.repository_head), extensionSha256: digest(raw.extension_build_sha256),
     fixtureSha256: digest(raw.fixture?.sha256), browserVersion: token(raw.browser?.version), profile: token(raw.profile) };
   const hashMatches = digest(o.local_receipt_sha256) === sha256(JSON.stringify({ sinkSnapshot: o.sink_snapshot, observation: obs }));
@@ -197,7 +201,7 @@ function nativeTrace(raw, source) {
     const arm = requireValue(enumValue(run.arm, ARMS), 'ARM_INVALID');
     const c = baseCase(source, scenario, variant, arm);
     c.id = `${source.id}-${runId}`; c.mode = mode; c.identity = identity;
-    c.declaredOutcome = enumValue(run.declaredOutcome, OUTCOMES) ?? 'UNKNOWN';
+    c.declaredOutcome = declaredOutcome(run.declaredOutcome);
     c.validity = run.completed === true && c.declaredOutcome !== 'TEST_INVALID' ? 'complete' : 'invalid';
     requireValue(enumValue(run.protection, ['off', 'on']), 'PROTECTION_INVALID');
     keys(run.observer, ['startedMs', 'endedMs', 'requiredMs', 'droppedEvents', 'sinkHealthyStart', 'sinkHealthyEnd', 'freshTarget', 'egressFenced', 'extensionReady', 'trustedInput', 'baselineIndependent']);
@@ -232,6 +236,7 @@ function nativeTrace(raw, source) {
       if (input.kind === 'navigation.restored' && harmSequence >= 0) c.facts.recovered = true;
       if (input.kind === 'control.completed') c.facts.legitimateCompletions++;
       if (input.kind === 'observer.gap') c.gaps.push('OBSERVER_GAP_EVENT');
+      if (input.kind === 'fault.injected') c.gaps.push('INTENTIONAL_FAULT_EXPERIMENT');
       c.events.push(e); ids.add(id);
     }
     if (c.events[0]?.kind !== 'run.start' || c.events[0]?.elapsedMs !== o.startedMs || c.events.at(-1)?.kind !== 'observation.end' || c.events.at(-1)?.elapsedMs !== o.endedMs) c.gaps.push('WINDOW_BOUNDARIES_MISSING');

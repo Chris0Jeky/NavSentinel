@@ -5,9 +5,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import { buildReport, supportsCompleteSet } from './model.mjs';
+import { CHALLENGES } from './campaign-plan.mjs';
 import { readInput, writeReport } from './io.mjs';
 
-const input = path.resolve('test-results/observatory-campaign');
+const challengeMode = process.argv[2] === 'challenges';
+assert.ok(process.argv.length === 2 || process.argv.length === 3 && challengeMode, 'known viewer lane required');
+const variantIds = challengeMode ? CHALLENGES.map(c => `${c.id}-full`) : ['stable-full', 'reinsertion-full'];
+const input = path.resolve(challengeMode ? 'test-results/observatory-challenges' : 'test-results/observatory-campaign');
 const traces = [];
 // This directory is produced by the trusted campaign in the same job, not a ZIP
 // or arbitrary browsing dump. Input bytes still cross the ordinary bounded reader.
@@ -20,7 +24,7 @@ assert.equal(traces.length, 2, 'both full recorded variants are required');
 const report = buildReport(traces);
 assert.equal(supportsCompleteSet(report), true, 'do not screenshot an incomplete campaign as a success');
 assert.equal(report.cases.length, 8);
-const output = writeReport('test-results/observatory-recorded-scenes', report);
+const output = writeReport(challengeMode ? 'test-results/observatory-challenge-scenes' : 'test-results/observatory-recorded-scenes', report);
 const errors = [], requests = [];
 let browser;
 try {
@@ -33,7 +37,7 @@ try {
   page.on('request', r => { if (/^https?:/.test(r.url())) requests.push(r.url()); });
   await page.goto(pathToFileURL(path.join(output, 'index.html')).href);
   await page.locator('.case-button').first().waitFor();
-  for (const variant of ['stable-full', 'reinsertion-full']) {
+  for (const variant of variantIds) {
     await page.locator('#search').fill(variant);
     assert.equal(await page.locator('.case-button').count(), 4);
     for (const arm of ['baseline', 'protected', 'benign', 'mixed']) {
