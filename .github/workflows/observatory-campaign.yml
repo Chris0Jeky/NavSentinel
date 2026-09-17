@@ -3,10 +3,14 @@ on:
   pull_request:
     paths:
       - 'experiments/evidence-observatory/**'
+      - 'tests/e2e/observatory-overlay.spec.ts'
+      - 'tests/e2e/extension_test_utils.ts'
+      - 'tests/e2e/local_fixture_target_bootstrap.ts'
       - 'tests/e2e/observatory*'
       - 'tests/e2e/proving_ground_fake_sink.ts'
       - 'tests/observatory-sink-health.test.ts'
       - 'gym/overlay-nesting-*.html'
+      - 'gym/local-fixture-targets.js'
       - '.github/workflows/observatory-campaign.yml'
   push:
     branches: [feat/observatory-campaign-20260913]
