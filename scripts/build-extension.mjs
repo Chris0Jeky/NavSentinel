@@ -118,7 +118,7 @@ function installEarlyUiFence() {
 
 console.log(`[build] profile=${profile.id}; releaseEligible=${profile.releaseEligible}`);
 const env = { [RELEASE_PROFILE_ENV]: profile.id };
-runNode(viteBin, ["build"], env);
+runNode(viteBin, ["build", "--config", path.join(root, "vite.config.ts")], env);
 const uiGuardRevision = installEarlyUiFence();
 runNode(path.join(root, "scripts", "check-content-loader-identity.mjs"));
 compactPackagedHtml();
