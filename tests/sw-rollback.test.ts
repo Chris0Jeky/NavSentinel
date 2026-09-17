@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EVENT_LOG_KEY, type EventLogEntry } from "../extension/src/shared/storage";
+import type { FormIntent } from "../extension/src/shared/form_intent";
 
 type RuntimeMessage = Record<string, unknown>;
 type RuntimeSender = { id?: string; tab?: { id?: number; url?: string }; frameId?: number; documentId?: string };
@@ -2456,7 +2457,7 @@ describe("child-form worker capability (#688)", () => {
   const url = "https://sink.test/accept?original=1";
   const id = "a".repeat(32);
   const source = { id: "test-extension", tab: { id: 71, url: origin }, frameId: 3, documentId: "child-document" };
-  const intent = { actionUrl: url, method: "post", enctype: "application/x-www-form-urlencoded", target: "_top", targetScope: "top" };
+  const intent = [url, "post", "application/x-www-form-urlencoded", "_top", "top"] as const;
   beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); vi.setSystemTime(10000); });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
   async function setup() {
@@ -2466,7 +2467,7 @@ describe("child-form worker capability (#688)", () => {
     await flushMicrotasks();
     return mock;
   }
-  function arm(mock: _ChromeMock, formIntent = intent, attemptId = id) {
+  function arm(mock: _ChromeMock, formIntent: FormIntent = intent, attemptId = id) {
     return mock.dispatchRuntimeMessage({ type: "ns-form-intent", formIntent, attemptId, issuedAt: Date.now() }, source);
   }
   function start(mock: _ChromeMock, destination = url) { mock.emitBeforeNavigate({ tabId: 71, frameId: 0, url: destination }); }
@@ -2485,7 +2486,7 @@ describe("child-form worker capability (#688)", () => {
     expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(true);
   });
   it("GET replaces the action query, rather than matching a misleading prefix", async () => {
-    const mock = await setup(); arm(mock, { ...intent, method: "get" });
+    const mock = await setup(); arm(mock, [intent[0], "get", intent[2], intent[3], intent[4]]);
     start(mock, "https://sink.test/accept?sentinel=1");
     expect(commit(mock, "https://sink.test/accept?sentinel=1").entry?.allowedAtCommit).toBe(true);
   });
@@ -2512,7 +2513,7 @@ describe("child-form worker capability (#688)", () => {
     expect(commit(mock).entry?.allowedAtCommit).toBe(false);
   });
   it("a self-targeted form cannot authorize a top-frame form commit", async () => {
-    const mock = await setup(); arm(mock, { ...intent, target: "", targetScope: "self" }); start(mock);
+    const mock = await setup(); arm(mock, [intent[0], intent[1], intent[2], "", "self"]); start(mock);
     expect(commit(mock).entry?.allowedAtCommit).toBe(false);
   });
   it("burns authority on source-frame replacement or a navigation error", async () => {
@@ -2559,7 +2560,7 @@ describe("child-form worker capability (#688)", () => {
   it("rejects unbounded, future-dated, non-HTTP and body-bearing metadata", async () => {
     const mock = await setup();
     for (const changed of [{ issuedAt: 10001 }, { issuedAt: 8500 }, { attemptId: "invalid" },
-      { formIntent: { ...intent, actionUrl: "javascript:void(0)" } }, { formIntent: { ...intent, password: "sentinel" } }]) {
+      { formIntent: ["javascript:void(0)", intent[1], intent[2], intent[3], intent[4]] }, { formIntent: [intent[0], intent[1], intent[2], intent[3], intent[4], "sentinel"] }]) {
       expect(mock.dispatchRuntimeMessage({ type: "ns-form-intent", formIntent: intent, attemptId: id, issuedAt: 10000, ...changed }, source)).toEqual({ ok: false });
     }
   });

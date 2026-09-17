@@ -1,4 +1,4 @@
-import { isFormNavigationEntry, type FormNavigationEntry } from "./form_intent";
+import { isFormIntent, isHttpFormIntent, type FormNavigationEntry } from "./form_intent";
 /**
  * SessionStateManager: write-through cache for ephemeral SW state.
  *
@@ -41,6 +41,7 @@ export interface AllowTargetEntry {
   expiresAt: number;
   matchQueryPrefix?: boolean;
   silentEvent?: EventLogEntry;
+  form?: FormNavigationEntry;
 }
 
 export interface TypedOriginEntry {
@@ -101,7 +102,19 @@ const isValidAllowTarget = (v: unknown): boolean =>
   // silentEvent is optional; if present it must at least be an object. The write-site
   // isEventLogAppendMessage guard is the primary defence — this drops only a wholly
   // non-object value that restore-tampering could inject before it reaches appendEvent.
-  (v.silentEvent === undefined || isRecord(v.silentEvent));
+  (v.silentEvent === undefined || isRecord(v.silentEvent)) &&
+  (v.form === undefined || isValidFormNavigation(v.form));
+
+export const isValidFormNavigation = (v: unknown): v is FormNavigationEntry =>
+  isRecord(v) &&
+  typeof v.attemptId === "string" && /^[a-f0-9]{32}$/.test(v.attemptId) &&
+  Number.isSafeInteger(v.sourceFrameId) && (v.sourceFrameId as number) > 0 &&
+  isString(v.sourceDocumentId) && v.sourceDocumentId.length > 0 && v.sourceDocumentId.length <= 128 &&
+  isFormIntent(v.intent) && isHttpFormIntent(v.intent) &&
+  (v.startedUrl === undefined || isString(v.startedUrl) && v.startedUrl.length <= 8192) &&
+  isFiniteNumber(v.issuedAt) && isFiniteNumber(v.expiresAt) && v.expiresAt === v.issuedAt + 1500 &&
+  typeof v.phase === "string" && ["a", "s", "p"].includes(v.phase) &&
+  (v.phase !== "s" || isFiniteNumber(v.startedAt) && v.startedAt >= v.issuedAt && v.startedAt < v.expiresAt);
 const isValidPendingRollback = (v: unknown): boolean =>
   isRecord(v) &&
   isString(v.url) &&
@@ -169,7 +182,6 @@ const KEYS = {
   gestureUntil: `${PREFIX}gestureUntil`,
   allowStarted: `${PREFIX}allowStarted`,
   allowTarget: `${PREFIX}allowTarget`,
-  formNavigation: `${PREFIX}formNavigation`,
   userNavContextUntil: `${PREFIX}userNavContextUntil`,
   suppressUntil: `${PREFIX}suppressUntil`,
   typedOrigin: `${PREFIX}typedOrigin`,
@@ -236,7 +248,6 @@ export class SessionStateManager {
   readonly gestureUntilByTab = new Map<number, number>();
   readonly allowStartedByTab = new Map<number, string>();
   readonly allowTargetByTab = new Map<number, AllowTargetEntry>();
-  readonly formNavigationByTab = new Map<number, FormNavigationEntry>();
   readonly userNavContextUntilByTab = new Map<number, number>();
   readonly suppressUntilByTab = new Map<number, number>();
   readonly typedOriginByTab = new Map<number, TypedOriginEntry>();
@@ -312,7 +323,6 @@ export class SessionStateManager {
     this._restoreMap(this.gestureUntilByTab, data[KEYS.gestureUntil], isFiniteNumber);
     this._restoreMap(this.allowStartedByTab, data[KEYS.allowStarted], isString);
     this._restoreMap(this.allowTargetByTab, data[KEYS.allowTarget], isValidAllowTarget);
-    this._restoreMap(this.formNavigationByTab, data[KEYS.formNavigation], isFormNavigationEntry);
     this._restoreMap(this.userNavContextUntilByTab, data[KEYS.userNavContextUntil], isFiniteNumber);
     this._restoreMap(this.suppressUntilByTab, data[KEYS.suppressUntil], isFiniteNumber);
     this._restoreMap(this.typedOriginByTab, data[KEYS.typedOrigin], isValidTypedOrigin);
@@ -358,7 +368,6 @@ export class SessionStateManager {
       [KEYS.gestureUntil]: mapToObj(this.gestureUntilByTab),
       [KEYS.allowStarted]: mapToObj(this.allowStartedByTab),
       [KEYS.allowTarget]: mapToObj(this.allowTargetByTab),
-      [KEYS.formNavigation]: mapToObj(this.formNavigationByTab),
       [KEYS.userNavContextUntil]: mapToObj(this.userNavContextUntilByTab),
       [KEYS.suppressUntil]: mapToObj(this.suppressUntilByTab),
       [KEYS.typedOrigin]: mapToObj(this.typedOriginByTab),
@@ -386,7 +395,6 @@ export class SessionStateManager {
     this.gestureUntilByTab.delete(tabId);
     this.allowStartedByTab.delete(tabId);
     this.allowTargetByTab.delete(tabId);
-    this.formNavigationByTab.delete(tabId);
     this.userNavContextUntilByTab.delete(tabId);
     this.suppressUntilByTab.delete(tabId);
     this.typedOriginByTab.delete(tabId);

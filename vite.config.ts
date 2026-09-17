@@ -68,9 +68,10 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
-              // Keep form authority statically linked: MV3 disallows import().
-              name: "form-navigation-runtime",
-              test: /[\\/]src[\\/]sw[\\/]form_navigation\.ts$/,
+              // Keep the session-backed worker state in a static module so the
+              // MV3 worker entry stays below its byte budget.
+              name: "session-state-runtime",
+              test: /[\\/]src[\\/]shared[\\/]session_state\.ts$/,
               entriesAware: true,
               priority: 10
             },
