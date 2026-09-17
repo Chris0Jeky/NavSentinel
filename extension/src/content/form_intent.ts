@@ -7,6 +7,10 @@ const buttonType = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, 
 const inputType = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "type")!.get!;
 const buttonForm = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, "form")!.get!;
 const inputForm = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "form")!.get!;
+const implicitSubmissionInputTypes = new Set([
+  "text", "search", "tel", "url", "email", "password", "date", "month",
+  "week", "time", "datetime-local", "number",
+]);
 
 export function submitControlForm(control: HTMLElement): HTMLFormElement | null | false {
   if (control.localName === "button" && buttonType.call(control) === "submit") return buttonForm.call(control);
@@ -68,6 +72,31 @@ export function clickFormBinding(event: MouseEvent): FormBinding | null {
     if (!form) continue;
     const intent = resolveFormIntent(form, node);
     return intent ? { form, submitter: node, intent } : null;
+  }
+  return null;
+}
+
+/**
+ * Bind the browser's no-submit-button implicit submission path without turning
+ * every Enter press into form authority. Forms with a submit control continue
+ * through the existing trusted-click path; more than one blocking input does
+ * not qualify for native implicit submission.
+ */
+export function implicitSubmitBinding(event: KeyboardEvent): FormBinding | null {
+  if (event.key !== "Enter" || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return null;
+  for (const node of event.composedPath()) {
+    if (!(node instanceof HTMLInputElement) || node.disabled ||
+        !implicitSubmissionInputTypes.has(inputType.call(node))) continue;
+    const form = inputForm.call(node) as HTMLFormElement | null;
+    if (!form) return null;
+    const controls = Array.from(form.elements);
+    if (!controls.includes(node)) controls.push(node);
+    if (controls.some(control => control instanceof HTMLElement && submitControlForm(control) === form)) return null;
+    const blocking = controls.filter(control => control instanceof HTMLInputElement && !control.disabled &&
+      implicitSubmissionInputTypes.has(inputType.call(control)));
+    if (blocking.length !== 1 || blocking[0] !== node) return null;
+    const intent = resolveFormIntent(form, null);
+    return intent ? { form, submitter: null, intent } : null;
   }
   return null;
 }

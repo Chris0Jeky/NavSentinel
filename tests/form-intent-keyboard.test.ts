@@ -36,7 +36,7 @@ describe("implicit keyboard form authority (#688)", () => {
       "post",
       "application/x-www-form-urlencoded",
       "_top",
-      "top",
+      "self",
     ]);
   });
 
@@ -51,10 +51,21 @@ describe("implicit keyboard form authority (#688)", () => {
     expect(binding?.submitter).toBeNull();
   });
 
+  it("defers to the existing trusted-click path when a submit control exists", () => {
+    document.body.innerHTML = '<form action="https://sink.test/accept" target="_top"><input id="q"><button>Submit</button></form>';
+    expect(captureBinding(document.querySelector("#q")!, { key: "Enter" })).toBeNull();
+  });
+
+  it("does not grant authority when native implicit submission is blocked by multiple text fields", () => {
+    document.body.innerHTML = '<form action="https://sink.test/accept" target="_top"><input id="q"><input name="second"></form>';
+    expect(captureBinding(document.querySelector("#q")!, { key: "Enter" })).toBeNull();
+  });
+
   it.each([
     ["another key", '<input id="q">', { key: "a" }],
     ["composition", '<input id="q">', { key: "Enter", isComposing: true }],
     ["Alt+Enter", '<input id="q">', { key: "Enter", altKey: true }],
+    ["Control+Enter", '<input id="q">', { key: "Enter", ctrlKey: true }],
     ["button input", '<input id="q" type="button">', { key: "Enter" }],
     ["textarea", '<textarea id="q"></textarea>', { key: "Enter" }],
   ] as const)("does not mint authority for %s", (_name, control, init) => {
