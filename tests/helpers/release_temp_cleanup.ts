@@ -15,8 +15,8 @@ export type RemoveReleaseTempTree = (
 const RELEASE_TEMP_REMOVE_OPTIONS: ReleaseTempRemoveOptions = {
   recursive: true,
   force: true,
-  maxRetries: 5,
-  retryDelay: 50,
+  maxRetries: 10,
+  retryDelay: 100,
 };
 
 const RETRYABLE_REMOVE_CODES = new Set(["EBUSY", "EMFILE", "ENFILE", "ENOTEMPTY", "EPERM"]);
