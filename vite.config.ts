@@ -57,6 +57,10 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // MV3 targets Chrome, where modulepreload is available. The hints are an
+    // optional startup optimization; omitting them keeps both profile artifacts
+    // under the aggregate package budget without changing runtime imports.
+    modulePreload: false,
     rolldownOptions: {
       input: {
         onboarding: resolve(import.meta.dirname, "extension/src/onboarding/onboarding.html"),
@@ -67,6 +71,14 @@ export default defineConfig({
         // runtime out of the 25 KiB worker entry without turning it into import().
         codeSplitting: {
           groups: [
+            {
+              // Keep the session-backed worker state in a static module so the
+              // MV3 worker entry stays below its byte budget.
+              name: "session-state-runtime",
+              test: /[\\/]src[\\/]shared[\\/]session_state\.ts$/,
+              entriesAware: true,
+              priority: 10
+            },
             {
               // Keep Options presentation/operation helpers separate as the
               // settings editor grows; total-dist budget still covers both.

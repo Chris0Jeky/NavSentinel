@@ -39,7 +39,7 @@ function semanticSnapshot(html: string): unknown {
 }
 
 describe("known Options artifact HTML compaction", () => {
-  it("preserves the real page's structure, attributes, and text", () => {
+  it("preserves the real page's browser structure and text", () => {
     const source = fs.readFileSync(path.resolve("extension/src/options/options.html"), "utf8")
       .replace(/\r\n?/g, "\n")
       .replace(/<!--(?!\[if\b)[\s\S]*?-->/gi, "")
@@ -58,7 +58,14 @@ describe("known Options artifact HTML compaction", () => {
 
     const compacted = compactKnownOptionsHtml(OPTIONS_PATH, source, SAFE_STYLES);
     expect(Buffer.byteLength(source) - Buffer.byteLength(compacted)).toBeGreaterThan(4_000);
-    expect(semanticSnapshot(compacted)).toEqual(semanticSnapshot(source));
+    const stripPackagingOnlyAttributes = (snapshot: unknown) =>
+      (snapshot as Array<{ attributes: Array<[string, string]> }>).map((entry) => ({
+        ...entry,
+        attributes: entry.attributes.filter(([name]) => name !== "crossorigin"),
+      }));
+    expect(stripPackagingOnlyAttributes(semanticSnapshot(compacted)))
+      .toEqual(stripPackagingOnlyAttributes(semanticSnapshot(source)));
+    expect(compacted).not.toContain(" crossorigin");
   });
 
   it.each([

@@ -1,3 +1,4 @@
+import type { FormNavigationEntry } from "./form_intent";
 /**
  * SessionStateManager: write-through cache for ephemeral SW state.
  *
@@ -40,6 +41,7 @@ export interface AllowTargetEntry {
   expiresAt: number;
   matchQueryPrefix?: boolean;
   silentEvent?: EventLogEntry;
+  form?: FormNavigationEntry;
 }
 
 export interface TypedOriginEntry {
@@ -89,6 +91,13 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const isStringArray = (v: unknown): boolean =>
   Array.isArray(v) && v.every((s) => typeof s === "string");
+const isCanonicalHttpUrl = (v: unknown): v is string => {
+  if (!isString(v)) return false;
+  try {
+    const url = new URL(v);
+    return (url.protocol === "http:" || url.protocol === "https:") && url.href === v;
+  } catch { return false; }
+};
 
 const isValidAllowTarget = (v: unknown): boolean =>
   isRecord(v) &&
@@ -100,7 +109,20 @@ const isValidAllowTarget = (v: unknown): boolean =>
   // silentEvent is optional; if present it must at least be an object. The write-site
   // isEventLogAppendMessage guard is the primary defence — this drops only a wholly
   // non-object value that restore-tampering could inject before it reaches appendEvent.
-  (v.silentEvent === undefined || isRecord(v.silentEvent));
+  (v.silentEvent === undefined || isRecord(v.silentEvent)) &&
+  (v.form === undefined || isCanonicalHttpUrl(v.url) && isValidFormNavigation(v.form));
+
+export const isValidFormNavigation = (v: unknown): v is FormNavigationEntry =>
+  isRecord(v) &&
+  typeof v.attemptId === "string" && /^[a-f0-9]{32}$/.test(v.attemptId) &&
+  Number.isSafeInteger(v.sourceFrameId) && (v.sourceFrameId as number) > 0 &&
+  isString(v.sourceDocumentId) && v.sourceDocumentId.length > 0 && v.sourceDocumentId.length <= 128 &&
+  typeof v.get === "boolean" &&
+  typeof v.top === "boolean" &&
+  (v.startedUrl === undefined || isString(v.startedUrl) && v.startedUrl.length <= 8192) &&
+  isFiniteNumber(v.issuedAt) && isFiniteNumber(v.expiresAt) && v.expiresAt === v.issuedAt + 1500 &&
+  typeof v.phase === "string" && ["a", "s", "p"].includes(v.phase) &&
+  (v.phase !== "s" || isFiniteNumber(v.startedAt) && v.startedAt >= v.issuedAt && v.startedAt < v.expiresAt);
 const isValidPendingRollback = (v: unknown): boolean =>
   isRecord(v) &&
   isString(v.url) &&
