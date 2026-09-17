@@ -77,7 +77,7 @@ browser-surface PR should be opened until that queue drains. The test-only PR
 | PR | Branch | Exact head | Gate | State |
 | --- | --- | --- | --- | --- |
 | #572 | `fix/issue566-modifier-authority` | `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf` | AI-31 | re-reconciled with `main` today; CI run 33821991601 success. Still PARKED before AI-31 on failure record SP-F-013 (the ~1-in-50 rollback survivor); green CI is not containment evidence |
-| #599 | `fix/issue523-unverified-clipboard-cap` | `d6f6b7efa2dd83e6845d474eb059a81afce863d7` | AI-37 | re-reconciled today; CI run 33821845180 success, unit 3188/3188. Owner #523 queue-design decision and the bridge queue-pressure Chrome check remain open |
+| #599 | `fix/issue523-unverified-clipboard-cap` | `0c64e2e979b29a8f92ac25b939cd8eaaea5f88d2` (integrated code head) | AI-37 | current-main integration pushed; scoped bridge checks pass. Owner #523 queue-design decision and branded-Chrome bridge-pressure Gate-3 remain open |
 | #600 | `fix/issue560-isolated-input-fence` | `04470a5dc230b07f261c66213c2ba23770fc9cd3` | AI-38 | containment only; owner media-page Chrome check open |
 | #608 | `feat/issue601-extension-origin-allow` | `8b12ffbd3a76c0abdf8fbe8090980640a7bc50e5` | AI-39 | stacked on #600 and must follow it |
 | #609 | `fix/issue569-stale-redirect-chain` | `3f42f7d0ac5607b333433505419fc35593cd7c4e` | AI-40 | branded-Chrome BFCache check open |
