@@ -57,7 +57,8 @@ export interface PendingDecisionRuntimeBrokerDependencies {
     url: string;
     windowId: number;
     active: true;
-  }) => Promise<unknown>;
+  }) => Promise<Pick<chrome.tabs.Tab, "id"> | undefined>;
+  removeTab: (tabId: number) => Promise<void>;
 }
 
 interface ActiveTabContext {
@@ -94,6 +95,7 @@ function defaultDependencies(): PendingDecisionRuntimeBrokerDependencies {
     getLifecycleGeneration: () => 0,
     deliverDecision: (tabId, message, options) => chrome.tabs.sendMessage(tabId, message, options),
     createTab: (properties) => chrome.tabs.create(properties),
+    removeTab: (tabId) => chrome.tabs.remove(tabId),
   };
 }
 
@@ -215,6 +217,9 @@ export class PendingDecisionRuntimeBroker {
   private readonly dependencies: PendingDecisionRuntimeBrokerDependencies;
   private readonly createTailsByScope = new Map<string, Promise<void>>();
   private readonly latestCreateAdmissionsByScope = new Map<string, symbol>();
+  // Keep completed admissions observable to consumes already in flight; the active
+  // token map is cleared when a create settles.
+  private readonly createAdmissionVersionsByScope = new Map<string, number>();
 
   constructor(
     private readonly store: PendingDecisionStore,
@@ -233,6 +238,9 @@ removeForTabLifecycle(tabId: number): Promise<PendingDecisionLifecycleRemovalSta
     if (scopeKey.startsWith(prefix)) {
       this.latestCreateAdmissionsByScope.delete(scopeKey);
     }
+  }
+  for (const scopeKey of this.createAdmissionVersionsByScope.keys()) {
+    if (scopeKey.startsWith(prefix)) this.createAdmissionVersionsByScope.delete(scopeKey);
   }
   return this.store.removeForTabLifecycle(tabId);
 }
@@ -285,6 +293,10 @@ private async handleCreate(
   } satisfies Pick<PendingDecision, "documentId" | "frameId" | "kind">;
   const scopeKey = pendingCreateScopeKey(tabId, scope);
   const admission = Symbol(scopeKey);
+  this.createAdmissionVersionsByScope.set(
+    scopeKey,
+    (this.createAdmissionVersionsByScope.get(scopeKey) ?? 0) + 1,
+  );
   this.latestCreateAdmissionsByScope.set(scopeKey, admission);
   let predecessorRetired = false;
 
@@ -364,6 +376,21 @@ private hasActiveCreateAdmission(
     pendingCreateScopeKey(decision.tabId, decision),
   );
 }
+
+  private createAdmissionVersion(
+    decision: Pick<PendingDecision, "tabId" | "documentId" | "frameId" | "kind">,
+  ): number {
+    return this.createAdmissionVersionsByScope.get(
+      pendingCreateScopeKey(decision.tabId, decision),
+    ) ?? 0;
+  }
+
+  private hasCreateAdmissionChanged(
+    decision: Pick<PendingDecision, "tabId" | "documentId" | "frameId" | "kind">,
+    version: number,
+  ): boolean {
+    return this.hasActiveCreateAdmission(decision) || this.createAdmissionVersion(decision) !== version;
+  }
 
   private async handleList(
     message: PendingDecisionRuntimeMessage,
@@ -468,9 +495,10 @@ private hasActiveCreateAdmission(
         ? listed.decisions.find((candidate) => candidate.id === message.id)
         : undefined;
     if (!decision) return failure("consume", "missing");
-if (this.hasActiveCreateAdmission(decision)) {
-  return failure("consume", "context-changed");
-}
+    const admissionVersion = this.createAdmissionVersion(decision);
+    if (this.hasCreateAdmissionChanged(decision, admissionVersion)) {
+      return failure("consume", "context-changed");
+    }
     if (
       decision.kind !== "navigation" ||
       decision.reason !== "blank-target-blocked" ||
@@ -492,9 +520,9 @@ if (this.hasActiveCreateAdmission(decision)) {
       return failure("consume", "context-changed");
     }
 
-if (this.hasActiveCreateAdmission(decision)) {
-  return failure("consume", "context-changed");
-}
+    if (this.hasCreateAdmissionChanged(decision, admissionVersion)) {
+      return failure("consume", "context-changed");
+    }
 
     const consumed = await this.store.consume(
       {
@@ -571,18 +599,31 @@ if (this.hasActiveCreateAdmission(decision)) {
       return failure("consume", "delivery-failed");
     }
 
-if (this.hasActiveCreateAdmission(consumed.decision)) {
-  return failure("consume", "context-changed");
-}
+    if (this.hasCreateAdmissionChanged(consumed.decision, admissionVersion)) {
+      return failure("consume", "context-changed");
+    }
 
+    let createdTab: Pick<chrome.tabs.Tab, "id"> | undefined;
     try {
-      await this.dependencies.createTab({
+      createdTab = await this.dependencies.createTab({
         url: destinationUrl,
         windowId: activeAfterHash.windowId,
         active: true,
       });
     } catch {
       return failure("consume", "delivery-failed");
+    }
+
+    if (this.hasCreateAdmissionChanged(consumed.decision, admissionVersion)) {
+      if (!isBrowserId(createdTab?.id)) return failure("consume", "delivery-failed");
+      try {
+        // tabs.create may have resolved after a newer admission; close that
+        // stale tab before reporting the consume as context-changed.
+        await this.dependencies.removeTab(createdTab.id);
+      } catch {
+        return failure("consume", "delivery-failed");
+      }
+      return failure("consume", "context-changed");
     }
 
     try {

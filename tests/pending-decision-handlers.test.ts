@@ -109,6 +109,7 @@ function createHarness() {
     windowId: number;
     active: true;
   }) => ({ id: 99 }));
+  const removeTab = vi.fn(async (_tabId: number) => undefined);
   const fingerprintUrl = vi.fn(
     async (url: string) => createHash("sha256").update(url).digest("hex"),
   );
@@ -129,6 +130,7 @@ function createHarness() {
     getLifecycleGeneration: () => lifecycleGeneration.value,
     deliverDecision,
     createTab,
+    removeTab,
   });
   return {
     activeTab,
@@ -143,6 +145,7 @@ function createHarness() {
     lifecycleGeneration,
     now,
     queryActiveTabs,
+    removeTab,
     storage,
   };
 }
@@ -796,6 +799,48 @@ it("keeps a failed scope retirement tombstoned until a clean retry succeeds", as
     expect(
       await harness.broker.handle(consumeMessage(decision), extensionSender()),
     ).toEqual({ ok: false, operation: "consume", status: "missing" });
+  });
+
+  it("closes a tab if a newer same-scope admission arrives during creation", async () => {
+    const harness = createHarness();
+    const previous = await createAndList(harness);
+    let releaseCreateTab!: () => void;
+    const createTabGate = new Promise<void>((resolve) => {
+      releaseCreateTab = resolve;
+    });
+    harness.createTab.mockImplementationOnce(async () => {
+      await createTabGate;
+      return { id: 99 };
+    });
+    harness.deliverDecision.mockResolvedValueOnce({
+      ok: true,
+      status: "released",
+      destinationUrl: DESTINATION_URL,
+    });
+
+    const consume = harness.broker.handle(
+      consumeMessage(previous),
+      extensionSender(),
+    );
+    await vi.waitFor(() => expect(harness.createTab).toHaveBeenCalledTimes(1));
+
+    const latest = await harness.broker.handle(
+      createMessage(LATEST_DESTINATION_URL),
+      contentSender(),
+    );
+    expect(latest).toMatchObject({
+      ok: true,
+      operation: "create",
+      status: "created",
+    });
+
+    releaseCreateTab();
+    await expect(consume).resolves.toEqual({
+      ok: false,
+      operation: "consume",
+      status: "context-changed",
+    });
+    expect(harness.removeTab).toHaveBeenCalledWith(99);
   });
 
   it("burns the token when active context changes after consume", async () => {
