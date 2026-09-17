@@ -720,7 +720,7 @@ function patchForms(): void {
       if (spent.allowed && intent && isHttpFormIntent(intent)) {
         // HTMLFormElement.prototype.submit() fires no submit event, so relay the
         // exact child-gate spend before invoking the native navigation.
-        if (!request && spent.attemptId) postToIsolated("ns-form-intent-submitted", { attemptId: spent.attemptId });
+        if (!request) postToIsolated("ns-form-intent-cancel", { ...spent, s: 1 });
         allowed();
         return;
       }

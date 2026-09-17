@@ -2471,7 +2471,7 @@ describe("child-form worker capability (#688)", () => {
     return mock.dispatchRuntimeMessage({ type: "ns-form-intent", formIntent, attemptId, issuedAt: Date.now() }, source);
   }
   function markSourceSubmitted(mock: _ChromeMock, attemptId = id, sender = source) {
-    return mock.dispatchRuntimeMessage({ type: "ns-form-intent-submitted", attemptId }, sender);
+    return mock.dispatchRuntimeMessage({ type: "ns-form-intent-cancel", attemptId, s: 1 }, sender);
   }
   function start(mock: _ChromeMock, destination = url, sourceSubmitted = true) {
     if (sourceSubmitted) markSourceSubmitted(mock);

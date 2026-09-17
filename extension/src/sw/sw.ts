@@ -647,9 +647,8 @@ function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: str
   // burns it. A server-redirect commit may still be accepted when Chrome reports
   // one matched start, but a repeated changed start is conservatively untrusted.
   if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt ||
-      !formDestinationMatches(form, target, url) || (form.top && form.sourceSubmitted !== true)) {
+      !formDestinationMatches(form, target, url) || (form.top && form.startedUrl !== "")) {
     form.phase = "p";
-    delete form.sourceSubmitted;
     delete form.startedUrl;
     delete form.startedAt;
     return;
@@ -661,12 +660,10 @@ function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: str
 
 function consumeForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, transition: string, qualifiers: readonly string[], now: number): boolean {
   const allowed = form.phase === "s" && now < formDeadline(form) && form.top &&
-    form.sourceSubmitted === true &&
     transition === "form_submit" && !!form.startedUrl && formDestinationMatches(form, target, form.startedUrl) &&
     !qualifiers.includes("forward_back") && !qualifiers.includes("client_redirect") &&
     (formDestinationMatches(form, target, url) || qualifiers.includes("server_redirect"));
   form.phase = "p";
-  delete form.sourceSubmitted;
   delete form.startedUrl;
   delete form.startedAt;
   return allowed;
@@ -685,18 +682,12 @@ function handleChildFormMessage(
   const current = allowTargetByTab.get(tabId)?.form;
   if (message.type === "ns-form-intent-cancel") {
     if (current && current.attemptId === message.attemptId && current.sourceFrameId === frameId && current.sourceDocumentId === documentId) {
-      current.phase = "p";
-      delete current.startedUrl;
-      delete current.startedAt;
-      swState.persistMap(allowTargetByTab, "allowTarget");
-    }
-    return true;
-  }
-  if (message.type === "ns-form-intent-submitted") {
-    if (typeof message.attemptId !== "string" || !/^[a-f0-9]{32}$/.test(message.attemptId)) return false;
-    if (current && current.attemptId === message.attemptId && current.phase === "a" &&
-        current.sourceFrameId === frameId && current.sourceDocumentId === documentId) {
-      current.sourceSubmitted = true;
+      if (message.s) {
+        current.startedUrl ||= "";
+      } else {
+        current.phase = "p";
+        current.startedUrl = current.startedAt = undefined;
+      }
       swState.persistMap(allowTargetByTab, "allowTarget");
     }
     return true;
@@ -835,8 +826,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
-  if (message.type === "ns-form-intent" || message.type === "ns-form-intent-cancel" ||
-      message.type === "ns-form-intent-submitted") {
+  if (message.type === "ns-form-intent" || message.type === "ns-form-intent-cancel") {
     return runWhenHydrated(() => {
       sendResponse?.({ ok: handleChildFormMessage(message, sender) });
     });

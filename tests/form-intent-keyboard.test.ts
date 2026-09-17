@@ -100,8 +100,8 @@ describe("implicit keyboard form authority (#688)", () => {
     expect(ready?.ok).toBe(true);
 
     sendMessage.mockClear();
-    expect(authority.handleBridge({ type: "ns-form-intent-submitted", attemptId: ready.attemptId })).toBe(true);
-    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-submitted", attemptId: ready.attemptId });
+    expect(authority.handleBridge({ type: "ns-form-intent-cancel", attemptId: ready.attemptId, s: 1 })).toBe(true);
+    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-cancel", attemptId: ready.attemptId, s: 1 });
 
     sendMessage.mockClear();
     const event = {
@@ -113,7 +113,7 @@ describe("implicit keyboard form authority (#688)", () => {
     } as unknown as SubmitEvent;
     authority.submit(event);
 
-    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-submitted", attemptId: ready.attemptId });
+    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-cancel", attemptId: ready.attemptId, s: 1 });
     expect(event.preventDefault).not.toHaveBeenCalled();
   });
 });
