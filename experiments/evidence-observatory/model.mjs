@@ -1,5 +1,6 @@
 /** Offline diagnostic projection. Never imports code or promotes registry evidence. */
 import { createHash } from 'node:crypto';
+import { FORM_SCHEMA, parseFormTrace, compareFormCases } from './form-trace.mjs';
 import { TRACE_V2, validateEventMetadata, validateRunCapture, validateProvenance } from './capture-v2.mjs';
 
 export const LIMITS = Object.freeze({ bytes: 1024 * 1024, totalBytes: 32 * 1024 * 1024, files: 128, events: 2000, runs: 16 });
@@ -271,7 +272,8 @@ export function parseSource(bytes, id = 'source-1') {
   if (!object(raw)) throw new Error('ROOT_NOT_OBJECT');
   const source = { id, sha256: sha256(bytes), bytes: bytes.length, format: 'unknown' };
   let cases;
-  if (raw.schema === TRACE_SCHEMA || raw.schema === TRACE_V2) { source.format = raw.schema === TRACE_V2 ? 'observatory-trace-v2' : 'observatory-trace-v1'; cases = nativeTrace(raw, source); }
+  if (raw.schema === FORM_SCHEMA) { source.format = 'form-observatory-v1'; cases = parseFormTrace(raw, source, baseCase); }
+  else if (raw.schema === TRACE_SCHEMA || raw.schema === TRACE_V2) { source.format = raw.schema === TRACE_V2 ? 'observatory-trace-v2' : 'observatory-trace-v1'; cases = nativeTrace(raw, source); }
   else if (raw.scenario_id === 'NS-ADV-UI-004') { source.format = 'overlay-receipt-v1'; cases = overlay(raw, source); }
   else if (raw.arm && Array.isArray(raw.sinkReceipts) && Array.isArray(raw.diagnostics)) { source.format = 'hidden-media-diagnostic-v1'; cases = hiddenMedia(raw, source); }
   else throw new Error('UNSUPPORTED_FORMAT');
@@ -336,7 +338,7 @@ export function buildReport(inputs, { producerStatus = 'not-recorded' } = {}) {
     boundedSupportedComparisons: comparisons.filter(c => c.status === 'BOUNDED_PREVENTION_SUPPORTED').length,
     inconclusiveCases: cases.filter(c => c.assessment === 'INCONCLUSIVE').length, invalidCases: cases.filter(c => c.validity === 'invalid').length };
   return { schema: REPORT_SCHEMA, evidencePolicy: 'DIAGNOSTIC_ONLY_NO_REGISTRY_PROMOTION', producerStatus: enumValue(producerStatus, ['passed', 'failed', 'timedout', 'interrupted', 'not-recorded']) ?? 'failed',
-    summary, sources, cases, comparisons, rejected, duplicates,
+    summary, sources, cases, comparisons, formComparisons: compareFormCases(cases), rejected, duplicates,
     limitations: ['This viewer checks structure and evidence consistency, not producer authenticity or exact-source execution.',
       'No protection claim extends beyond the declared synthetic boundary and observation window.',
       'Missing, dropped, invalid or unpaired observations never become proof of prevention.',
