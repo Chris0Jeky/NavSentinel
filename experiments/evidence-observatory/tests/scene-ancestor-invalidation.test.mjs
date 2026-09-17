@@ -37,6 +37,22 @@ test('navigating an ancestor invalidates sampled descendant geometry', () => {
   assert.equal(selectScene(input, 3).invalidated, true);
 });
 
+test('later frame identity reuse cannot resurrect invalidated descendant geometry', () => {
+  const input = [...events,
+    {
+      id: 'top-navigated', kind: 'navigation.committed', elapsedMs: 60,
+      data: { context: { frameId: 'top-frame', documentId: 'top-document-2', parentFrameId: null } },
+    },
+    {
+      id: 'child-reused', kind: 'frame.attached', elapsedMs: 80,
+      data: { context: { frameId: 'child-frame', documentId: 'new-child-document', parentFrameId: 'other-top' } },
+    },
+    { id: 'end', kind: 'observation.end', elapsedMs: 100, data: {} },
+  ];
+
+  assert.equal(selectScene(input, 5).invalidated, true);
+});
+
 test('an unrelated frame lifecycle event leaves sampled geometry current', () => {
   const input = [...events, {
     id: 'other-detached', kind: 'frame.detached', elapsedMs: 60,
