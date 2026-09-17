@@ -9,7 +9,7 @@ describe("compactHtml", () => {
       </main>`;
 
     expect(compactHtml(source)).toBe(
-      "<!doctype html><main><p> A sentence with <strong>inline</strong> text. </p></main>",
+      "<!doctype html><main><p>A sentence with <strong>inline</strong> text.</main>",
     );
   });
 
@@ -37,7 +37,7 @@ describe("compactHtml", () => {
     </body></html>`;
 
     expect(compactHtml(source)).toBe(
-      "<!doctype html><html lang=en><head><title>Page</title><body><select><option value=one>One<option value=two>Two</select><p>Copy",
+      "<!doctype html><html lang=en><head><title>Page</title><select><option value=one>One<option value=two>Two</select><p>Copy",
     );
   });
 
