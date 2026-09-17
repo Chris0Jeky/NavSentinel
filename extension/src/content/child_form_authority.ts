@@ -14,7 +14,7 @@ export class ChildFormAuthority {
   private currentId: string | undefined;
   private gestureTime = -1;
   private blocked = new Map<string, BlockedForm>();
-  private replay: { attemptId: string; intent: FormIntent; expiresAt: number } | null = null;
+  private replay: { intent: FormIntent; expiresAt: number } | null = null;
   constructor(private deps: Dependencies) {
     window.addEventListener("keydown", event => {
       const binding = deps.enabled() && event.isTrusted ? implicitSubmitBinding(event) : null;
@@ -27,12 +27,14 @@ export class ChildFormAuthority {
   private id(): string {
     return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
   }
-  private cancel(id = this.currentId): void {
+  private cancel(id = this.currentId, submitted?: number): void {
     if (!id || id !== this.currentId) return;
-    this.currentId = undefined;
-    this.gate.clear();
-    this.replay = null;
-    void chrome.runtime.sendMessage({ type: "ns-form-intent-cancel", attemptId: id }).catch(() => {});
+    if (!submitted) {
+      this.currentId = undefined;
+      this.gate.clear();
+      this.replay = null;
+    }
+    void chrome.runtime.sendMessage({ type: "ns-form-intent-cancel", attemptId: id, s: submitted }).catch(() => {});
   }
   reset(): void {
     this.invalid();
@@ -77,16 +79,11 @@ export class ChildFormAuthority {
     if (entry.expiresAt > Date.now() && this.deps.enabled()) entry.approved = true;
     return true;
   }
-  handleBridge(data: { type?: string; id?: string; attemptId?: string; gestureTime?: number; formIntent?: unknown }): boolean {
+  handleBridge(data: { type?: string; id?: string; attemptId?: string; gestureTime?: number; s?: number; formIntent?: unknown }): boolean {
     if (data.type === "ns-form-replay-rejected") { this.deps.reject(); return true; }
     if (data.type === "ns-form-intent-cancel") {
-      if (data.attemptId === this.currentId || (data.gestureTime !== undefined && data.gestureTime === this.gestureTime)) this.cancel();
-      return true;
-    }
-    if (data.type === "ns-form-intent-submitted") {
-      if (typeof data.attemptId === "string" && /^[a-f0-9]{32}$/.test(data.attemptId) && data.attemptId === this.currentId) {
-        void chrome.runtime.sendMessage({ type: "ns-form-intent-submitted", attemptId: data.attemptId }).catch(() => {});
-      }
+      if (data.s === 1) this.cancel(data.attemptId, 1);
+      else if (data.attemptId === this.currentId || data.gestureTime === this.gestureTime) this.cancel();
       return true;
     }
     if (data.type !== "ns-form-replay-request") return false;
@@ -101,7 +98,7 @@ export class ChildFormAuthority {
     const attemptId = this.id();
     void this.arm(attemptId, entry.intent).then(ok => {
       const fresh = ok && this.currentId === attemptId && this.deps.enabled() && entry.expiresAt > Date.now();
-      if (fresh) this.replay = { attemptId, intent: entry.intent, expiresAt: Date.now() + FORM_INTENT_TTL_MS };
+      if (fresh) this.replay = { intent: entry.intent, expiresAt: Date.now() + FORM_INTENT_TTL_MS };
       else this.cancel(attemptId);
       this.deps.post("ns-form-replay-ready", { id: data.id, attemptId, ok: fresh });
     });
@@ -109,8 +106,6 @@ export class ChildFormAuthority {
   }
   invalid(): void {
     this.cancel();
-    this.gate.clear();
-    this.replay = null;
   }
   /** Native default submits share the same tuple/identity gate as wrappers. */
   submit(event: SubmitEvent): void {
@@ -124,14 +119,8 @@ export class ChildFormAuthority {
     const spent = intent ? this.gate.consume(event.target, event.submitter, intent, Date.now()) : { allowed: false };
     const replay = this.replay;
     this.replay = null;
-    if (event.isTrusted && intent && spent.allowed) {
-      if (spent.attemptId) {
-        void chrome.runtime.sendMessage({ type: "ns-form-intent-submitted", attemptId: spent.attemptId }).catch(() => {});
-      }
-      return;
-    }
-    if (event.isTrusted && intent && replay && replay.expiresAt > Date.now() && sameFormIntent(replay.intent, intent)) {
-      void chrome.runtime.sendMessage({ type: "ns-form-intent-submitted", attemptId: replay.attemptId }).catch(() => {});
+    if (event.isTrusted && intent && (spent.allowed || replay && replay.expiresAt > Date.now() && sameFormIntent(replay.intent, intent))) {
+      this.cancel(this.currentId, 1);
       return;
     }
     this.cancel();
