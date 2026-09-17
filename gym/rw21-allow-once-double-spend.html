@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RW-21 - Allow-Once Double Spend</title>
+    <script src="local-fixture-targets.js"></script>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -37,6 +38,10 @@
         font-size: 13px;
         color: #666;
       }
+      .benign-control {
+        display: inline-block;
+        margin-top: 18px;
+      }
     </style>
   </head>
   <body>
@@ -47,14 +52,36 @@
         popup to spend the allow-window. NavSentinel should block the second action.
       </p>
       <button id="rw21Action" type="button">Open account settings</button>
+      <a
+        id="rw21Benign"
+        class="benign-control"
+        data-navsentinel-local-target="benign"
+        data-navsentinel-scenario="NS-ADV-WIN-005"
+      >Review the account help page</a>
+      <a
+        id="rw21Harm"
+        data-navsentinel-local-target="harm"
+        data-navsentinel-scenario="NS-ADV-WIN-005"
+        hidden
+        aria-hidden="true"
+        tabindex="-1"
+      ></a>
       <div id="status"></div>
     </section>
 
     <script>
       document.getElementById('rw21Action').addEventListener('click', () => {
+        const typedEvidence = new URLSearchParams(location.search).get('evidence') === 'typed';
+        const benignTarget = typedEvidence
+          ? document.getElementById('rw21Benign').href
+          : 'rw21-settings-popup.html?step=settings';
+        const harmTarget = typedEvidence
+          ? document.getElementById('rw21Harm').href
+          : 'rw21-exfil-popup.html?step=exfil';
+
         // First popup: legitimate settings page
         window.open(
-          'rw21-settings-popup.html?step=settings',
+          benignTarget,
           'rw21-settings',
           'popup,width=420,height=620'
         );
@@ -62,7 +89,7 @@
         // Second popup: abuse attempt spending the allow-gesture
         window.setTimeout(() => {
           window.open(
-            'rw21-exfil-popup.html?step=exfil',
+            harmTarget,
             'rw21-exfil',
             'popup,width=420,height=620'
           );
