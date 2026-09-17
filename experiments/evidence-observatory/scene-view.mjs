@@ -5,10 +5,32 @@ export function selectScene(events, cursor) {
   while (index >= 0 && !(events[index]?.kind === 'scene.sample' && events[index]?.data?.scene)) index--;
   if (index < 0) return null;
   const event = events[index], scene = structuredClone(event.data.scene);
+  const parents = new Map();
+  for (const box of scene.boxes) {
+    if (box?.frameId) parents.set(box.frameId, box.parentFrameId ?? null);
+  }
+  for (const observed of events.slice(0, end + 1)) {
+    const context = observed.data?.context;
+    if (context?.frameId) parents.set(context.frameId, context.parentFrameId ?? null);
+  }
+  const isSelfOrAncestor = (candidate, frameId) => {
+    const visited = new Set();
+    let current = frameId;
+    while (current && !visited.has(current)) {
+      if (current === candidate) return true;
+      visited.add(current);
+      current = parents.get(current) ?? null;
+    }
+    return false;
+  };
   const invalidated = events.slice(index + 1, end + 1).some(e => {
     const frame = e.data?.context;
-    return frame && scene.boxes.some(box => box.frameId === frame.frameId &&
-      (e.kind === 'frame.detached' || e.kind === 'navigation.committed' && box.documentId !== frame.documentId));
+    if (!frame?.frameId || (e.kind !== 'frame.detached' && e.kind !== 'navigation.committed')) return false;
+    return scene.boxes.some(box => {
+      if (!isSelfOrAncestor(frame.frameId, box.frameId)) return false;
+      if (e.kind === 'frame.detached') return true;
+      return box.frameId !== frame.frameId || box.documentId !== frame.documentId;
+    });
   });
   const now = events[end]?.elapsedMs, then = event.elapsedMs;
   return { eventId: event.id, eventIndex: index, elapsedMs: then, scene, invalidated,
