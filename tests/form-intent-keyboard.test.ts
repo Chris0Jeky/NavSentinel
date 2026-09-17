@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { implicitSubmitBinding } from "../extension/src/content/form_intent";
 
-function captureBinding(target: Element, init: KeyboardEventInit) {
+function captureBinding(target: Element, init: KeyboardEventInit): ReturnType<typeof implicitSubmitBinding> {
   let binding: ReturnType<typeof implicitSubmitBinding> = null;
   target.addEventListener("keydown", event => {
     binding = implicitSubmitBinding(event as KeyboardEvent);
