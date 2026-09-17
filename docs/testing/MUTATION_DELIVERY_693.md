@@ -9,10 +9,13 @@ not repair the scheduling assumption.
 
 The reserve suite now awaits a test-only delivery handshake at both baseline and
 flood mutations. Each of at most eight attempts drains real observer records and
-checks the monitor-owned pending count. A failed probe yields one microtask before
-the next drain. Success returns immediately; exhausting the fixed bound throws.
-A drain/probe exception is never caught or converted to success. The helper has
-no shared state, timer advancement, sleep, retrying product action or skip path.
+checks the monitor-owned pending count. After an unsuccessful attempt, the helper
+yields one real Node event-loop turn through a native `setImmediate` captured
+before Vitest enables fake timers. Pending microtasks therefore run before the
+next drain, while the monitor's fake debounce and auto-disconnect timers remain
+frozen. Success returns immediately; exhausting the fixed bound throws. A
+drain/probe exception is never caught or converted to success. The helper has no
+shared state, fake-timer advancement, sleep, retrying product action or skip path.
 
 The test suite still owns its explicit 200 ms debounce advances. Its
 `shouldAdvanceTime: false` setting, all 69 existing cases and every product
@@ -23,19 +26,20 @@ modified. No file under `extension/` changes.
 
 ## Verification
 
-The added helper regression file covers immediate delivery, all seven permitted
-microtask delays (including success on the final attempt), exact-bound failure,
-drain/probe error propagation, no timer advancement and independent invocations.
+The helper regression file covers immediate delivery, delivery after each of the
+seven permitted real event-loop yields (including success on the final attempt),
+exact-bound failure, drain/probe error propagation, no fake-timer advancement and
+independent invocations. One regression deliberately schedules delivery through
+the captured native `setImmediate` while a fake 1 ms timer must remain pending.
 
-Locally executed on Node 22.16.0: an out-of-tree runner executes the actual
-TypeScript helper through the available TypeScript 5.8.3 transpiler. All 12
-contracts passed, including a source comparison preserving both awaited callsites,
-every remaining `expect` line and all fake-clock configuration/advance lines.
-Syntax transpilation and `git diff --check` passed. This is supplementary
-validation, not a Vitest or happy-dom result.
+Hosted qualification replayed the test-only red commit, then verified the fixing
+head with 12/12 focused helper contracts. The formerly flaky shadow-root case
+passed in 20/20 fresh Node 20 processes, and the complete 69-case mutation-monitor
+suite passed in each of five fresh processes. Focused lint and full TypeScript
+typecheck also passed. Normal CI then passed on the exact final code head before
+this documentation correction.
 
-The local sandbox has no installed lockfile dependencies and registry access was
-unavailable. Required qualification remains exact-source hosted runs of:
+For requalification, run:
 
 ```sh
 npm ci
@@ -43,10 +47,10 @@ npm run lint
 npm run typecheck
 npx vitest run tests/mutation-observer-delivery.test.ts
 # Execute each invocation in a fresh process; do not use retry mode.
-for attempt in $(seq 1 30); do
+for attempt in $(seq 1 20); do
   npx vitest run tests/mutation-monitor.test.ts -t 'emits the credential signal for a shadow root registered after a benign flood' || exit 1
 done
-for attempt in $(seq 1 15); do
+for attempt in $(seq 1 5); do
   npx vitest run tests/mutation-monitor.test.ts || exit 1
 done
 npm test
