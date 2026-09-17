@@ -322,14 +322,10 @@ jobs:
           )
           replace_once(
               "scripts/launch-state-authority-campaign.mjs",
-              '''  if (gitObjectId("blob", launcherBytes, objectFormat) !== launcherOid) {
-            fail("extracted launcher bytes do not match the committed object ID");
-          }
-          const temporaryRoot = fs.mkdtempSync(''',
-              '''  if (gitObjectId("blob", launcherBytes, objectFormat) !== launcherOid) {
-            fail("extracted launcher bytes do not match the committed object ID");
-          }
-          const sensitiveEnvironmentOid = git(
+              '''  const temporaryRoot = fs.mkdtempSync(
+            path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+          );''',
+              '''  const sensitiveEnvironmentOid = git(
             ["-C", repositoryRoot, "rev-parse", `HEAD:${SENSITIVE_ENVIRONMENT_REPOSITORY_PATH}`],
             { environment, encoding: "utf8" },
           ).trim();
@@ -340,7 +336,9 @@ jobs:
           if (gitObjectId("blob", sensitiveEnvironmentBytes, objectFormat) !== sensitiveEnvironmentOid) {
             fail("extracted sensitive-environment bytes do not match the committed object ID");
           }
-          const temporaryRoot = fs.mkdtempSync(''',
+          const temporaryRoot = fs.mkdtempSync(
+            path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+          );''',
               "bootstrap policy extraction",
           )
           replace_once(
