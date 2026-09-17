@@ -121,9 +121,15 @@ test("Options exposes a conflict for simultaneous same-field saves @regression",
     // second click is dispatched, turning this concurrency test into a hang.
     await Promise.all([first.locator("#save").dispatchEvent("click"), second.locator("#save").dispatchEvent("click")]);
 
-    const firstConflict = await first.locator("#settingsConflict").isVisible();
-    const secondConflict = await second.locator("#settingsConflict").isVisible();
-    expect(Number(firstConflict) + Number(secondConflict)).toBe(1);
+    let firstConflict = false;
+    let secondConflict = false;
+    await expect.poll(async () => {
+      [firstConflict, secondConflict] = await Promise.all([
+        first.locator("#settingsConflict").isVisible(),
+        second.locator("#settingsConflict").isVisible(),
+      ]);
+      return Number(firstConflict) + Number(secondConflict);
+    }).toBe(1);
 
     const loser = firstConflict ? first : second;
     const expectedMode = firstConflict ? "strict" : "off";
