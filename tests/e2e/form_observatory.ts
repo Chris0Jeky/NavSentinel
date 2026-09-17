@@ -19,7 +19,7 @@ export function isFormIntent(value: unknown): value is FormIntentSample {
   return Object.keys(v).length === Object.keys(choices).length + 1 && typeof v.ownerMatches === "boolean" &&
     Object.entries(choices).every(([key, values]) => typeof v[key] === "string" && values.includes(v[key] as string));
 }
-const FAULTS = ["RUNNER_FAILED", "CLOCK_INVALID", "RECEIVER_UNHEALTHY", "RECEIVER_CALLBACK_LOSS", "PAGE_ERROR", "CLEANUP_FAILED", "PROBE_REJECTED", "EVENTS_DROPPED", "PRODUCT_READ_FAILED", "DOCUMENT_BINDING_INVALID", "DOCUMENT_CONTEXT_UNKNOWN", "DOCUMENT_CONTEXT_REUSED", "DOCUMENT_FRAME_UNKNOWN", "DOCUMENT_LIMIT", "DOCUMENT_METADATA_INVALID", "DOCUMENT_TRANSPORT_LOST"];
+const FAULTS = ["RUNNER_FAILED", "CLOCK_INVALID", "RECEIVER_UNHEALTHY", "RECEIVER_CALLBACK_LOSS", "PAGE_ERROR", "CLEANUP_FAILED", "PROBE_REJECTED", "EVENTS_DROPPED", "PRODUCT_READ_FAILED", "OBSERVATION_INCOMPLETE", "DOCUMENT_BINDING_INVALID", "DOCUMENT_CONTEXT_UNKNOWN", "DOCUMENT_CONTEXT_REUSED", "DOCUMENT_FRAME_UNKNOWN", "DOCUMENT_LIMIT", "DOCUMENT_METADATA_INVALID", "DOCUMENT_TRANSPORT_LOST"];
 export class FormObservation {
   readonly runId = randomUUID();
   private readonly seenDocuments = new Set<string>();
@@ -92,5 +92,17 @@ export class FormObservation {
       runId: this.runId, protectedArm: this.options.protectedArm, identity: { ...this.options.identity }, completed, browserVersion: this.browserVersion,
       requiredObservationMs: 2300, dropped: this.dropped, gaps: [...this.gaps], events: structuredClone(this.events), evidencePolicy: "FORM_DIAGNOSTIC_NOT_FOUR_ARM_CERTIFICATION" };
   }
-  finish(completed: boolean) { if (!this.finished) { for (const binding of this.activeDocuments.values()) this.documentEnded(binding, "collector-closed"); this.add("runner", "observation.end", {}); this.finished = this.snapshot(completed); } return structuredClone(this.finished); }
+  finish(completed: boolean) {
+    if (!this.finished) {
+      for (const binding of this.activeDocuments.values()) this.documentEnded(binding, "collector-closed");
+      this.add("runner", "observation.end", {});
+      if (completed) {
+        const hasIntent = this.events.some(event => event.kind === "form.intent");
+        const healthPhases = new Set(this.events.filter(event => event.kind === "receiver.health").map(event => event.data.phase));
+        if (!hasIntent || !healthPhases.has("start") || !healthPhases.has("end")) { this.gaps.add("OBSERVATION_INCOMPLETE"); completed = false; }
+      }
+      this.finished = this.snapshot(completed);
+    }
+    return structuredClone(this.finished);
+  }
 }

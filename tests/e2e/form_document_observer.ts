@@ -18,6 +18,10 @@ export async function attachFormDocumentObserver(page: Page, trace: FormObservat
     const binding = registry.resolve(event.executionContextId); if (!binding) return;
     if (typeof event.payload !== "string" || Buffer.byteLength(event.payload, "utf8") > 4096) { trace.fail("PROBE_REJECTED"); return; }
     let value: unknown; try { value = JSON.parse(event.payload); } catch { trace.fail("PROBE_REJECTED"); return; }
+    if (value && typeof value === "object" && !Array.isArray(value) && "fault" in value) {
+      const code = (value as { fault?: unknown }).fault;
+      trace.fail(code === "PROBE_REJECTED" || code === "RECEIVER_CALLBACK_LOSS" ? code : "PROBE_REJECTED"); return;
+    }
     trace.pageReport(value, binding);
   };
   session.on("Page.frameNavigated", navigated); session.on("Page.frameDetached", detached);
@@ -45,7 +49,7 @@ export async function attachFormDocumentObserver(page: Page, trace: FormObservat
     await session.send("Runtime.enable");
     // Fixed wrapper preserves the existing fixture probe API. MAIN may forge
     // these payloads, but cannot supply Runtime.bindingCalled's context ID.
-    const source = `if(location.origin===${JSON.stringify(origin)}){const send=globalThis.${bindingName};globalThis.__nsFormObservation=value=>send(JSON.stringify(value));}`;
+    const source = `if(location.origin===${JSON.stringify(origin)}){const send=globalThis.${bindingName};globalThis.__nsFormObservation=value=>send(JSON.stringify(value));globalThis.__nsFormObservationFault=code=>send(JSON.stringify({fault:code}));}`;
     scriptId = (await session.send("Page.addScriptToEvaluateOnNewDocument", { source })).identifier;
     return { prepareToClose: () => { plannedClose = true; }, dispose };
   } catch (error) {
