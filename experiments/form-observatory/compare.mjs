@@ -196,6 +196,43 @@ function validateEvent(event, index, previousElapsed, key, differences, document
   return Number.isFinite(event.elapsedMs) ? Math.max(previousElapsed, event.elapsedMs) : previousElapsed;
 }
 
+function validateDocumentLifetimes(events, key, differences) {
+  const seenDocuments = new Set();
+  const activeDocuments = new Map();
+  const activeFrames = new Map();
+  const frameScopes = new Map();
+  const reject = () => add(differences, "FORM_TRACE_DOCUMENT_LIFECYCLE", key);
+  for (const event of events) {
+    const binding = event?.binding;
+    if (event?.kind === "document.started") {
+      if (!validBinding(binding)) { reject(); continue; }
+      if (seenDocuments.has(binding.documentId) || activeDocuments.has(binding.documentId) || activeFrames.has(binding.frameId) ||
+          (frameScopes.has(binding.frameId) && frameScopes.get(binding.frameId) !== binding.scope)) {
+        reject();
+        continue;
+      }
+      seenDocuments.add(binding.documentId);
+      activeDocuments.set(binding.documentId, { frameId: binding.frameId, scope: binding.scope });
+      activeFrames.set(binding.frameId, binding.documentId);
+      frameScopes.set(binding.frameId, binding.scope);
+    } else if (event?.kind === "document.ended") {
+      if (!validBinding(binding)) { reject(); continue; }
+      const active = activeDocuments.get(binding.documentId);
+      if (!active || active.frameId !== binding.frameId || active.scope !== binding.scope) {
+        reject();
+        continue;
+      }
+      activeDocuments.delete(binding.documentId);
+      activeFrames.delete(binding.frameId);
+    } else if (event?.kind === "form.intent") {
+      if (!validBinding(binding)) { reject(); continue; }
+      const active = activeDocuments.get(binding.documentId);
+      if (!active || active.frameId !== binding.frameId || active.scope !== binding.scope) reject();
+    }
+  }
+  if (activeDocuments.size !== 0) reject();
+}
+
 function validateTrace(row, index, differences, campaign) {
   const fallbackKey = `row-${index}`;
   const documentBound = row?.schema === DOCUMENT_TRACE_SCHEMA;
@@ -266,6 +303,7 @@ function validateTrace(row, index, differences, campaign) {
     const documentEnds = row.events.filter((event) => event?.kind === "document.ended");
     if (documentStarts.length === 0) add(differences, "FORM_TRACE_DOCUMENT_START", key);
     if (documentEnds.length === 0) add(differences, "FORM_TRACE_DOCUMENT_END", key);
+    validateDocumentLifetimes(row.events, key, differences);
   }
 
   const pairOwner = campaign.pairOwners.get(row.pairId);

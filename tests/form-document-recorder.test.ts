@@ -22,7 +22,7 @@ it("a late message cannot be relabelled as the replacement document", () => {
 });
 it("binding-shaped payloads remain untrusted and cannot set attribution", () => {
   const r = bound(); r.documentStarted(binding); r.pageReport({ phase: "input", primitive: "native", intent: sample(), binding }, binding);
-  const t = r.finish(true); expect(t.gaps).toContain("PROBE_REJECTED"); expect(t.events.some(e => e.kind === "form.intent")).toBe(false);
+  const t = r.finish(true); expect(t.gaps).toContain("OBSERVATION_INCOMPLETE"); expect(t.gaps).not.toContain("PROBE_REJECTED"); expect(t.events.some(e => e.kind === "form.intent")).toBe(false);
 });
 it("receiver facts never inherit the most recent page document", () => {
   const r = bound(); r.documentStarted(binding); r.receiver({ role: "harm", method: "POST", ordinal: 1, accepted: true });

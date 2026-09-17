@@ -17,7 +17,7 @@ function fixture() {
 it("CDP envelope chooses identity and page input cannot overwrite it", async () => {
   const s = fixture(), observer = await attachFormDocumentObserver(s.page, s.trace, "http://localhost:1234");
   s.context(); s.report(); s.report({ ...s.payload, documentId: "document-99" }); await observer.dispose();
-  const t = s.trace.finish(true); expect(t.events.find(e => e.kind === "form.intent")?.binding?.documentId).toBe("document-1"); expect(t.gaps).toContain("PROBE_REJECTED");
+  const t = s.trace.finish(true); expect(t.events.find(e => e.kind === "form.intent")?.binding?.documentId).toBe("document-1"); expect(t.gaps).toContain("OBSERVATION_INCOMPLETE"); expect(t.gaps).not.toContain("PROBE_REJECTED");
 });
 it("destroyed-source and unknown context reports cannot be attributed to current page", async () => {
   const s = fixture(), observer = await attachFormDocumentObserver(s.page, s.trace, "http://localhost:1234"); s.context();
