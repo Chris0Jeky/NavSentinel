@@ -82,8 +82,10 @@ export function implicitSubmitBinding(event: KeyboardEvent): FormBinding | null 
   const form = inputForm.call(input) as HTMLFormElement | null;
   if (!form) return null;
   let blockers = 0;
-  for (const control of form.elements) {
-    if (control instanceof HTMLElement && submitControlForm(control) === form) return null;
+  for (let i = 0; i < form.elements.length; i++) {
+    const control = form.elements.item(i);
+    if (!(control instanceof HTMLElement)) continue;
+    if (submitControlForm(control) === form) return null;
     if (control instanceof HTMLInputElement && !control.disabled &&
         implicitSubmissionInput.test(inputType.call(control)) && ++blockers > 1) return null;
   }
