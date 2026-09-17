@@ -49,7 +49,8 @@ $env:GIT_NO_REPLACE_OBJECTS = "1"
 $env:GIT_NO_LAZY_FETCH = "1"
 $env:GIT_OPTIONAL_LOCKS = "0"
 
-$nodeCommand = Get-Command -Name "node" -CommandType Application -ErrorAction Stop
+$nodeCommand = Get-Command -Name "node" -CommandType Application -ErrorAction Stop |
+  Select-Object -First 1
 $bootstrapPath = Join-Path $PSScriptRoot "launch-state-authority-campaign.mjs"
 if (-not (Test-Path -LiteralPath $bootstrapPath -PathType Leaf)) {
   throw "Committed state-authority bootstrap is missing: $bootstrapPath"

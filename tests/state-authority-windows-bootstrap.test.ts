@@ -52,16 +52,25 @@ describe("Windows state-authority bootstrap boundary", () => {
         "utf8",
       );
 
-      const environment = {
-        ...process.env,
-        PATH: `${shimDirectory};${process.env.PATH ?? ""}`,
+      const inheritedPathKey = Object.keys(process.env).find(
+        (key) => key.toUpperCase() === "PATH",
+      );
+      const inheritedPath = inheritedPathKey
+        ? process.env[inheritedPathKey] ?? ""
+        : "";
+      const environment = { ...process.env };
+      for (const key of Object.keys(environment)) {
+        if (key.toUpperCase() === "PATH") delete environment[key];
+      }
+      Object.assign(environment, {
+        PATH: `${shimDirectory};${inheritedPath}`,
         NS_TEST_NODE_RECEIPT: receiptPath,
         NoDe_OpTiOnS: "--require=caller-preload.cjs",
         node_path: "caller-modules",
         Extension_Path: "caller-extension",
         Git_Dir: "caller-git-dir",
         nAvSeNtInEl_StAtE_aUtHoRiTy_KeY: "caller-key",
-      };
+      });
       const result = spawnSync(
         "pwsh",
         [
