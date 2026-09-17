@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -36,7 +38,24 @@ jobs:
 
       - name: Run stress tests
         timeout-minutes: 30
+        # The state-authority sink in the same Playwright config is restricted to
+        # the committed campaign launcher. The generic nightly lane runs only the
+        # ordinary stress spec.
         run: xvfb-run -a npm run test:e2e:stress
+
+      - name: Run state-authority campaign
+        if: github.event_name == 'workflow_dispatch'
+        timeout-minutes: 15
+        run: xvfb-run -a npm run test:e2e:state-authority
+
+      - name: Upload state-authority receipts
+        if: github.event_name == 'workflow_dispatch' && success()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: state-authority-receipts-${{ github.run_id }}
+          path: test-results/state-authority-launcher-receipts/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload traces on failure
         if: failure()
