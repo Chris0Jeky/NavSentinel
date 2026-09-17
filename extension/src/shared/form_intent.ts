@@ -56,6 +56,8 @@ export interface FormNavigationEntry {
   issuedAt: number;
   expiresAt: number;
   phase: "a" | "s" | "p";
+  /** Trusted submit event observed in the originating child document. */
+  sourceSubmitted?: boolean;
   /** First onBeforeNavigate consumes the armed state, including on mismatch. */
   startedUrl?: string;
   startedAt?: number;
