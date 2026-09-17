@@ -18,7 +18,7 @@ type ReleaseIntegrityModule = typeof import("../scripts/release-input-integrity.
   resolveReleaseCommand?: (
     command: string,
     args: readonly string[],
-    options?: { platform?: NodeJS.Platform; comspec?: string },
+    options?: { nodeExecutable?: string; npmExecPath?: string },
   ) => { command: string; args: readonly string[] };
 };
 
@@ -270,23 +270,23 @@ describe("release input integrity", () => {
     expect(() => assertExactCommittedInputs(root, { environment })).not.toThrow();
   });
 
-  it("selects a Windows command interpreter for npm while preserving fixed arguments", () => {
+  it("selects Node plus npm's JavaScript entry point without a command shell", () => {
     const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
     expect(resolveReleaseCommand).toEqual(expect.any(Function));
+    const root = makeTempRoot("npm-cli-entry");
+    const npmExecPath = path.join(root, "npm-cli.js");
+    fs.writeFileSync(npmExecPath, "process.exitCode = 0;\n");
 
-    expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
-      platform: "win32",
-      comspec: "C:\\Windows\\System32\\cmd.exe",
+    expect(resolveReleaseCommand?.("npm", ["install", "argument with spaces & shell syntax"], {
+      nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
+      npmExecPath,
     })).toEqual({
-      command: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "npm", "install", "--package-lock-only", "--ignore-scripts"],
-    });
-
-    expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
-      platform: "linux",
-    })).toEqual({
-      command: "npm",
-      args: ["install", "--package-lock-only", "--ignore-scripts"],
+      command: "C:\\Program Files\\nodejs\\node.exe",
+      args: [
+        fs.realpathSync.native(npmExecPath),
+        "install",
+        "argument with spaces & shell syntax",
+      ],
     });
   });
 

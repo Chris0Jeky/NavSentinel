@@ -2,7 +2,7 @@
 
 /**
  * Release script for NavSentinel.
- * Usage: node scripts/release.mjs <major|minor|patch> [--dry-run]
+ * Usage: npm run release:<major|minor|patch> or npm run release:dry
  *
  * Steps:
  * 1. Validates clean working tree
@@ -37,13 +37,12 @@ const root = path.resolve(__dirname, "..");
 // Helpers
 // ---------------------------------------------------------------------------
 
-function runCommand(command, args, opts = {}) {
-  const invocation = resolveReleaseCommand(command, args);
+function runInvocation(invocation, opts = {}) {
   return execFileSync(invocation.command, invocation.args, {
     cwd: root,
     encoding: "utf8",
-    // npm may invoke Git for git-backed dependencies. Scrub the same inherited
-    // worktree/index/object overrides used by direct release-path Git calls.
+    // npm may invoke Git for git-backed dependencies. Scrub the full
+    // release trust-boundary environment before the child starts.
     env: opts.env ?? createSanitizedGitEnvironment(process.env),
     stdio: opts.stdio ?? ["ignore", "pipe", "pipe"],
   }).trim();
@@ -92,9 +91,20 @@ const dryRun = args.includes("--dry-run");
 const bumpType = args.find((a) => ["major", "minor", "patch"].includes(a));
 
 if (!bumpType) {
-  console.error("Usage: node scripts/release.mjs <major|minor|patch> [--dry-run]");
+  console.error("Usage: npm run release:<major|minor|patch> or npm run release:dry");
   process.exit(1);
 }
+
+// Resolve the npm JavaScript entry point before any release metadata is
+// changed. Real releases must run through an npm script so npm_execpath
+// names the current toolchain without invoking a .cmd shim or shell.
+const npmLockfileInvocation = dryRun
+  ? null
+  : resolveReleaseCommand("npm", [
+    "install",
+    "--package-lock-only",
+    "--ignore-scripts",
+  ]);
 
 // 1. Pin exact committed inputs and compare them with raw filesystem bytes.
 //    This deliberately does not trust git status/diff/hash-object because clean
@@ -246,8 +256,8 @@ fs.writeFileSync(changelogPath, changelog, "utf8");
 console.log(`Updated CHANGELOG.md with [${newVersion}] - ${releaseDate}`);
 
 // 6b. Sync package-lock.json
-if (!dryRun) {
-  runCommand("npm", ["install", "--package-lock-only", "--ignore-scripts"]);
+if (npmLockfileInvocation) {
+  runInvocation(npmLockfileInvocation);
 }
 
 // 6c. Recheck the original commit/tree immediately before staging. Only the

@@ -64,6 +64,20 @@ function extractCommittedLauncher(): {
     "run-state-authority-campaign.mjs",
   );
   fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+  const sensitiveEnvironmentOid = git([
+    "rev-parse",
+    "HEAD:scripts/sensitive-environment.mjs",
+  ]);
+  const sensitiveEnvironmentBytes = execFileSync(
+    "git",
+    ["cat-file", "blob", sensitiveEnvironmentOid],
+    { cwd: repositoryRoot },
+  );
+  fs.writeFileSync(
+    path.join(temporaryRoot, "sensitive-environment.mjs"),
+    sensitiveEnvironmentBytes,
+    { mode: 0o600 },
+  );
   return { launcherOid, launcherPath };
 }
 
