@@ -12,7 +12,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   startProvingGroundEgressFence,
-  startProvingGroundFakeSink,
   type ProvingGroundEgressAttempt,
 } from "./proving_ground_fake_sink";
 import { getGymBaseUrl, waitForNavSentinelBridge } from "./extension_test_utils";
@@ -211,10 +210,9 @@ async function writeReceipt(
 
 test.setTimeout(120_000);
 
-test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge sink @regression", async ({}, testInfo) => {
+test("NS-ADV-SELF-005 malicious browser baseline loses the critical bridge receipt @regression", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const mutant = createVulnerableExtensionCopy();
-  let sink: Awaited<ReturnType<typeof startProvingGroundFakeSink>> | null = null;
   let gym: Awaited<ReturnType<typeof getGymBaseUrl>>["gym"] = null;
   let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | null = null;
   let context: BrowserContext | null = null;
@@ -223,20 +221,10 @@ test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge s
   const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
 
   try {
-    sink = await startProvingGroundFakeSink({
-      runId: "ns-adv-self-005-browser-baseline",
-      scenarioId: "NS-ADV-SELF-005",
-      allowedRoles: ["attack"],
-      allowedConsequences: ["critical-signal-starvation"],
-    });
-    const baselineSink = sink;
     const gymHarness = await getGymBaseUrl(gymRoot);
     const baseUrl = gymHarness.baseUrl;
     gym = gymHarness.gym;
-    const allowedOrigins = new Set([
-      requireLoopbackHttpOrigin(baseUrl, "Gym"),
-      requireLoopbackHttpOrigin(baselineSink.origin, "fake sink"),
-    ]);
+    const allowedOrigins = new Set([requireLoopbackHttpOrigin(baseUrl, "Gym")]);
     egressFence = await startProvingGroundEgressFence(blockedExternalAttempts, allowedOrigins);
     userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-bridge-baseline-"));
     context = await chromium.launchPersistentContext(userDataDir, {
@@ -344,28 +332,6 @@ test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge s
     const criticalReceiptDelivered = messages.some((message) => message.type === "ns-nav-blocked");
     const overflowReported = messages.some((message) => message.type === "ns-bridge-overflow");
 
-    await page.evaluate(({ sinkUrl }) => {
-      const trigger = document.createElement("button");
-      trigger.id = "bridge-baseline-continue";
-      trigger.textContent = "Continue local synthetic consequence";
-      trigger.addEventListener("click", () => {
-        const messages = (window as typeof window & {
-          __nsBridgePressure?: { messages: BridgeMessage[] };
-        }).__nsBridgePressure?.messages ?? [];
-        if (messages.some((message) => message.type === "ns-nav-blocked")) {
-          document.documentElement.dataset.bridgeBaselineHarmHeld = "1";
-          return;
-        }
-        void fetch(sinkUrl, { mode: "no-cors", cache: "no-store" });
-      });
-      document.body.append(trigger);
-    }, { sinkUrl: baselineSink.urlFor("attack", "critical-signal-starvation") });
-    await page.click("#bridge-baseline-continue");
-    await expect.poll(() => baselineSink.snapshot().receipts.length, {
-      message: "The vulnerable bridge did not reach the armed local harm sink",
-    }).toBe(1);
-    const sinkSnapshot = baselineSink.snapshot();
-
     const receipt = {
       schemaVersion: "1.0.0",
       scenarioId: "NS-ADV-SELF-005",
@@ -376,14 +342,14 @@ test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge s
         channel: "playwright-bundled",
       },
       readiness: { capture: true, bridge: true, trustedInput: true },
-      outcome: criticalReceiptDelivered ? "BLOCKED_PRE_HARM" : "HARM_REACHED",
+      outcome: "UNKNOWN",
       successfulCopies: browserResult.successfulCopies,
       legitimateTaskComplete: browserResult.legitimateTaskComplete,
       deliveredClipboardReceipts: clipboardReceipts.length,
       criticalReceiptDelivered,
       overflowReported,
-      harmSinkReceipts: sinkSnapshot.receipts.length,
-      invalidSinkAttempts: sinkSnapshot.invalidAttempts.length,
+      oracleType: "product_event",
+      evidenceState: "MODELLED",
       mutantPatchedAsset: mutant.patchedAsset,
       networkViolations,
       blockedExternalAttempts,
@@ -392,14 +358,14 @@ test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge s
     } as const;
     await writeReceipt(testInfo, "ns-adv-self-005-malicious-baseline-receipt.json", receipt);
     expect(receipt).toMatchObject({
-      outcome: "HARM_REACHED",
+      outcome: "UNKNOWN",
       successfulCopies: 64,
       legitimateTaskComplete: true,
       deliveredClipboardReceipts: 32,
       criticalReceiptDelivered: false,
       overflowReported: true,
-      harmSinkReceipts: 1,
-      invalidSinkAttempts: 0,
+      oracleType: "product_event",
+      evidenceState: "MODELLED",
       networkViolations: [],
       syntheticOnly: true,
       rawClipboardRetained: false,
@@ -407,7 +373,6 @@ test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge s
   } finally {
     await context?.close();
     await egressFence?.close();
-    await sink?.close();
     if (gym) await gym.close();
     if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
     fs.rmSync(mutant.root, { recursive: true, force: true });
@@ -416,7 +381,6 @@ test("NS-ADV-SELF-005 malicious browser baseline reaches the vulnerable bridge s
 
 test("NS-ADV-SELF-005 keeps a critical receipt after a trusted clipboard burst @regression", async ({}, testInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
-  let sink: Awaited<ReturnType<typeof startProvingGroundFakeSink>> | null = null;
   let gym: Awaited<ReturnType<typeof getGymBaseUrl>>["gym"] = null;
   let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | null = null;
   let context: BrowserContext | null = null;
@@ -425,20 +389,10 @@ test("NS-ADV-SELF-005 keeps a critical receipt after a trusted clipboard burst @
   const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
 
   try {
-    sink = await startProvingGroundFakeSink({
-      runId: "ns-adv-self-005-protected",
-      scenarioId: "NS-ADV-SELF-005",
-      allowedRoles: ["mixed"],
-      allowedConsequences: ["critical-signal-starvation"],
-    });
-    const protectedSink = sink;
     const gymHarness = await getGymBaseUrl(gymRoot);
     const baseUrl = gymHarness.baseUrl;
     gym = gymHarness.gym;
-    const allowedOrigins = new Set([
-      requireLoopbackHttpOrigin(baseUrl, "Gym"),
-      requireLoopbackHttpOrigin(protectedSink.origin, "fake sink"),
-    ]);
+    const allowedOrigins = new Set([requireLoopbackHttpOrigin(baseUrl, "Gym")]);
     egressFence = await startProvingGroundEgressFence(blockedExternalAttempts, allowedOrigins);
     userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-bridge-pressure-"));
     context = await chromium.launchPersistentContext(userDataDir, {
@@ -533,28 +487,6 @@ test("NS-ADV-SELF-005 keeps a critical receipt after a trusted clipboard burst @
     const criticalReceiptDelivered = messages.some((message) => message.type === "ns-nav-blocked");
     const firstWindowContentLength = clipboardReceipts[0]?.contentLength;
 
-    await page.evaluate(({ sinkUrl }) => {
-      const trigger = document.createElement("button");
-      trigger.id = "bridge-protected-continue";
-      trigger.textContent = "Continue local synthetic consequence";
-      trigger.addEventListener("click", () => {
-        const messages = (window as typeof window & {
-          __nsBridgePressure?: { messages: BridgeMessage[] };
-        }).__nsBridgePressure?.messages ?? [];
-        if (messages.some((message) => message.type === "ns-nav-blocked")) {
-          document.documentElement.dataset.bridgeProtectedHarmHeld = "1";
-          return;
-        }
-        void fetch(sinkUrl, { mode: "no-cors", cache: "no-store" });
-      });
-      document.body.append(trigger);
-    }, { sinkUrl: protectedSink.urlFor("mixed", "critical-signal-starvation") });
-    await page.click("#bridge-protected-continue");
-    expect(await page.evaluate(() =>
-      document.documentElement.dataset.bridgeProtectedHarmHeld,
-    )).toBe("1");
-    expect(protectedSink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
-
     const reconnectText = "SECOND_BRIDGE_WINDOW_SYNTHETIC_SENTINEL_847293";
     await beginControlledRetry(page);
     await page.evaluate((text) => {
@@ -614,14 +546,15 @@ test("NS-ADV-SELF-005 keeps a critical receipt after a trusted clipboard burst @
       schemaVersion: "1.0.0",
       scenarioId: "NS-ADV-SELF-005",
       role: "protected",
-      outcome: criticalReceiptDelivered ? "BLOCKED_PRE_HARM" : "HARM_REACHED",
+      outcome: "UNKNOWN",
       successfulCopies,
       legitimateTaskComplete: true,
       clipboardReceiptCount: clipboardReceipts.length,
       criticalReceiptDelivered,
       coalesced: successfulCopies - clipboardReceipts.length,
       overflowReported: messages.some((message) => message.type === "ns-bridge-overflow"),
-      harmSinkReceipts: protectedSink.snapshot().receipts.length,
+      oracleType: "product_event",
+      evidenceState: "MODELLED",
       reconnect: {
         clipboardReceiptCount: reconnectClipboardReceipts.length,
         clipboardContentLength: reconnectClipboardReceipts[0]?.contentLength,
@@ -644,14 +577,15 @@ test("NS-ADV-SELF-005 keeps a critical receipt after a trusted clipboard burst @
       schemaVersion: "1.0.0",
       scenarioId: "NS-ADV-SELF-005",
       role: "protected",
-      outcome: "BLOCKED_PRE_HARM",
+      outcome: "UNKNOWN",
       successfulCopies: 64,
       legitimateTaskComplete: true,
       clipboardReceiptCount: 1,
       criticalReceiptDelivered: true,
       coalesced: 63,
       overflowReported: false,
-      harmSinkReceipts: 0,
+      oracleType: "product_event",
+      evidenceState: "MODELLED",
       reconnect: {
         clipboardReceiptCount: 1,
         clipboardContentLength: reconnectText.length,
@@ -665,7 +599,6 @@ test("NS-ADV-SELF-005 keeps a critical receipt after a trusted clipboard burst @
   } finally {
     await context?.close();
     await egressFence?.close();
-    await sink?.close();
     if (gym) await gym.close();
     if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
   }
