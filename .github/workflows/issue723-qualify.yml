@@ -1,0 +1,109 @@
+name: Issue 723 release cleanup qualification
+
+on:
+  push:
+    branches:
+      - fix/723-release-temp-cleanup-20260917
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-723-release-cleanup
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/723-release-temp-cleanup-20260917
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prove the regression commit is red
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          red_root="$RUNNER_TEMP/issue723-red"
+          git worktree add --detach "$red_root" 2cd046748078907f76dc1e4511f360c585d57138
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$red_root/node_modules"
+          set +e
+          (
+            cd "$red_root"
+            npx vitest run tests/release-temp-cleanup.test.ts
+          ) > "$RUNNER_TEMP/issue723-red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/issue723-red.log"
+          test "$status" -ne 0
+          grep -Fq "release_temp_cleanup" "$RUNNER_TEMP/issue723-red.log"
+          rm "$red_root/node_modules"
+          git worktree remove --force "$red_root"
+
+      - name: Route integration teardown through bounded cleanup
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path("tests/release-input-integrity.test.ts")
+          text = target.read_text(encoding="utf-8")
+          import_old = 'import { fileURLToPath } from "node:url";'
+          import_new = '''import { fileURLToPath } from "node:url";
+          import { removeReleaseTempRoot } from "./helpers/release_temp_cleanup";'''
+          cleanup_old = '''afterEach(() => {
+            for (const root of tempRoots.splice(0)) {
+              fs.rmSync(root, { recursive: true, force: true });
+            }
+          });'''
+          cleanup_new = '''afterEach(() => {
+            for (const root of tempRoots.splice(0)) {
+              removeReleaseTempRoot(root);
+            }
+          });'''
+          if text.count(import_old) != 1:
+              raise SystemExit("expected one release-integrity import anchor")
+          if text.count(cleanup_old) != 1:
+              raise SystemExit("expected one release-integrity cleanup block")
+          text = text.replace(import_old, import_new, 1)
+          text = text.replace(cleanup_old, cleanup_new, 1)
+          target.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify focused cleanup and release-integrity contracts
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          npx vitest run \
+            tests/release-temp-cleanup.test.ts \
+            tests/release-input-integrity.test.ts
+          npx eslint \
+            tests/helpers/release_temp_cleanup.ts \
+            tests/release-temp-cleanup.test.ts \
+            tests/release-input-integrity.test.ts
+          npm run typecheck
+
+      - name: Publish the qualified repair
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add \
+            tests/helpers/release_temp_cleanup.ts \
+            tests/release-temp-cleanup.test.ts \
+            tests/release-input-integrity.test.ts
+          git rm .github/workflows/issue723-qualify.yml
+          git diff --cached --check
+          git commit -m "test: retry release temp cleanup without masking failures"
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:fix/723-release-temp-cleanup-20260917
