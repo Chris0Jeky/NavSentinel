@@ -32,17 +32,34 @@ describe("Windows state-authority bootstrap boundary", () => {
         path.join(os.tmpdir(), "navsentinel-windows-bootstrap-"),
       );
       temporaryRoots.push(root);
-      const markerPath = path.join(root, "preload-ran.txt");
-      const preloadPath = path.join(root, "caller-preload.cjs");
+      const shimDirectory = path.join(root, "bin");
+      fs.mkdirSync(shimDirectory);
+      const receiptPath = path.join(root, "node-receipt.txt");
+      const shimPath = path.join(shimDirectory, "node.cmd");
       fs.writeFileSync(
-        preloadPath,
-        `require("node:fs").writeFileSync(${JSON.stringify(markerPath)}, "ran");\n`,
+        shimPath,
+        [
+          "@echo off",
+          `> "%NS_TEST_NODE_RECEIPT%" echo %*`,
+          `if defined NODE_OPTIONS >> "%NS_TEST_NODE_RECEIPT%" echo NODE_OPTIONS_PRESENT`,
+          `if defined NODE_PATH >> "%NS_TEST_NODE_RECEIPT%" echo NODE_PATH_PRESENT`,
+          `if defined EXTENSION_PATH >> "%NS_TEST_NODE_RECEIPT%" echo EXTENSION_PATH_PRESENT`,
+          `if defined GIT_DIR >> "%NS_TEST_NODE_RECEIPT%" echo GIT_DIR_PRESENT`,
+          `if defined NAVSENTINEL_STATE_AUTHORITY_KEY >> "%NS_TEST_NODE_RECEIPT%" echo AUTHORITY_PRESENT`,
+          "exit /b 0",
+          "",
+        ].join("\r\n"),
         "utf8",
       );
 
       const environment = {
         ...process.env,
-        NoDe_OpTiOnS: `--require=${preloadPath}`,
+        PATH: `${shimDirectory};${process.env.PATH ?? ""}`,
+        NS_TEST_NODE_RECEIPT: receiptPath,
+        NoDe_OpTiOnS: "--require=caller-preload.cjs",
+        node_path: "caller-modules",
+        Extension_Path: "caller-extension",
+        Git_Dir: "caller-git-dir",
         nAvSeNtInEl_StAtE_aUtHoRiTy_KeY: "caller-key",
       };
       const result = spawnSync(
@@ -65,8 +82,11 @@ describe("Windows state-authority bootstrap boundary", () => {
 
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain("non-consumable-preflight-summary");
-      expect(fs.existsSync(markerPath)).toBe(false);
+      const receipt = fs.readFileSync(receiptPath, "utf8");
+      expect(receipt).toContain("--preflight-only");
+      expect(receipt).not.toMatch(
+        /(?:NODE_OPTIONS|NODE_PATH|EXTENSION_PATH|GIT_DIR|AUTHORITY)_PRESENT/u,
+      );
     },
   );
 });
