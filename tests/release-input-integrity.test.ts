@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { removeReleaseTempRoot } from "./helpers/release_temp_cleanup";
 import {
   RELEASE_MUTABLE_PATHS,
   assertExactCommittedInputs,
@@ -106,7 +107,7 @@ function copyRepositoryForReleaseTest(): string {
 
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
-    fs.rmSync(root, { recursive: true, force: true });
+    removeReleaseTempRoot(root);
   }
 });
 
