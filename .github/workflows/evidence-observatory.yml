@@ -38,6 +38,8 @@ jobs:
         run: node experiments/evidence-observatory/smoke-browser.mjs
       - name: Recorded child-form viewer (not a new product campaign)
         run: node experiments/evidence-observatory/smoke-forms.mjs
+      - name: Recorded document-lifetime viewer (observer tests, not efficacy)
+        run: node experiments/evidence-observatory/smoke-documents.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -46,4 +48,5 @@ jobs:
             test-results/observatory-demo/
             test-results/observatory-viewer-smoke/
             test-results/observatory-form-viewer/
+            test-results/observatory-document-viewer/
           retention-days: 7
