@@ -1,0 +1,92 @@
+name: Issue 693 event-loop delivery qualification
+
+on:
+  push:
+    branches:
+      - test/693-event-loop-delivery-20260917
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-693-event-loop-delivery
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: test/693-event-loop-delivery-20260917
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prove the regression commit is red
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          red_root="$RUNNER_TEMP/issue693-red"
+          git worktree add --detach "$red_root" 44d5ed7f8a09eb6893f3770cdbb161339cce1e2a
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$red_root/node_modules"
+          set +e
+          (
+            cd "$red_root"
+            npx vitest run tests/mutation-observer-delivery.test.ts
+          ) > "$RUNNER_TEMP/issue693-red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/issue693-red.log"
+          test "$status" -ne 0
+          grep -Fq "allows DOM delivery on a real event-loop turn" \
+            "$RUNNER_TEMP/issue693-red.log"
+          rm "$red_root/node_modules"
+          git worktree remove --force "$red_root"
+
+      - name: Verify focused helper contracts
+        run: npx vitest run tests/mutation-observer-delivery.test.ts
+
+      - name: Stress the formerly flaky case in fresh processes
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          for attempt in $(seq 1 20); do
+            echo "targeted attempt $attempt/20"
+            npx vitest run tests/mutation-monitor.test.ts \
+              -t "emits the credential signal for a shadow root registered after a benign flood"
+          done
+
+      - name: Stress the complete mutation-monitor file
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          for attempt in $(seq 1 5); do
+            echo "whole-file attempt $attempt/5"
+            npx vitest run tests/mutation-monitor.test.ts
+          done
+
+      - name: Lint and typecheck
+        run: |
+          npx eslint \
+            tests/helpers/mutation-observer-delivery.ts \
+            tests/mutation-observer-delivery.test.ts \
+            tests/mutation-monitor.test.ts
+          npm run typecheck
+
+      - name: Publish the qualified exact head
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git rm .github/workflows/issue693-event-loop-qualify.yml
+          git diff --cached --check
+          git commit -m "ci: remove issue 693 qualification workflow"
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:test/693-event-loop-delivery-20260917
