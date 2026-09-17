@@ -32,7 +32,8 @@ export function readInput(input) {
       total += read;
     }
     if (total > LIMITS.bytes) throw new Error('INPUT_SIZE_LIMIT');
-    return buffer.subarray(0, total);
+    // A view would retain the entire scratch allocation for every tiny input.
+    return Buffer.from(buffer.subarray(0, total));
   } finally { fs.closeSync(fd); }
 }
 export function collectInputs(input) {
