@@ -1,0 +1,110 @@
+name: Windows trust-boundary contracts
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-trust-boundaries.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/launch-state-authority-campaign.mjs"
+      - "scripts/launch-state-authority-campaign.ps1"
+      - "scripts/content-loader-contract.mjs"
+      - "scripts/release-input-integrity.*"
+      - "scripts/release.mjs"
+      - "scripts/run-state-authority-campaign.mjs"
+      - "scripts/sensitive-environment.mjs"
+      - "scripts/sensitive-environment.*"
+      - "tests/e2e/extension_build_provenance.ts"
+      - "tests/e2e/extension_test_utils.ts"
+      - "tests/e2e/local_fixture_target_bootstrap.ts"
+      - "tests/e2e/materialized_campaign_provenance.ts"
+      - "tests/e2e/proving_ground_fake_sink.ts"
+      - "tests/e2e/state-authority-campaign-inputs.json"
+      - "tests/e2e/state-authority-sink.spec.ts"
+      - "tests/release-input-integrity.test.ts"
+      - "tests/sensitive-environment-boundary.test.ts"
+      - "tests/state-authority-bootstrap-replay.test.ts"
+      - "tests/state-authority-launcher-contract.test.ts"
+      - "tests/state-authority-windows-bootstrap.test.ts"
+      - "gym/local-fixture-targets.js"
+      - "gym/rw21-allow-once-double-spend.html"
+      - "gym/rw24-idle-resume-popup.html"
+      - "gym/rw25-rapid-close-reopen.html"
+      - "playwright.stress.config.ts"
+      - "tsconfig.json"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-trust-boundaries.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/launch-state-authority-campaign.mjs"
+      - "scripts/launch-state-authority-campaign.ps1"
+      - "scripts/content-loader-contract.mjs"
+      - "scripts/release-input-integrity.*"
+      - "scripts/release.mjs"
+      - "scripts/run-state-authority-campaign.mjs"
+      - "scripts/sensitive-environment.mjs"
+      - "scripts/sensitive-environment.*"
+      - "tests/e2e/extension_build_provenance.ts"
+      - "tests/e2e/extension_test_utils.ts"
+      - "tests/e2e/local_fixture_target_bootstrap.ts"
+      - "tests/e2e/materialized_campaign_provenance.ts"
+      - "tests/e2e/proving_ground_fake_sink.ts"
+      - "tests/e2e/state-authority-campaign-inputs.json"
+      - "tests/e2e/state-authority-sink.spec.ts"
+      - "tests/release-input-integrity.test.ts"
+      - "tests/sensitive-environment-boundary.test.ts"
+      - "tests/state-authority-bootstrap-replay.test.ts"
+      - "tests/state-authority-launcher-contract.test.ts"
+      - "tests/state-authority-windows-bootstrap.test.ts"
+      - "gym/local-fixture-targets.js"
+      - "gym/rw21-allow-once-double-spend.html"
+      - "gym/rw24-idle-resume-popup.html"
+      - "gym/rw25-rapid-close-reopen.html"
+      - "playwright.stress.config.ts"
+      - "tsconfig.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    name: Release and launcher contracts
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Preserve committed raw bytes
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git checkout-index -a -f
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run focused release and launcher contracts
+        run: >-
+          npx vitest run
+          tests/release-input-integrity.test.ts
+          tests/sensitive-environment-boundary.test.ts
+          tests/state-authority-bootstrap-replay.test.ts
+          tests/state-authority-launcher-contract.test.ts
+          tests/state-authority-windows-bootstrap.test.ts
+          --maxWorkers=2
+
+      - name: Run the external PowerShell bootstrap preflight
+        shell: pwsh
+        run: ./scripts/launch-state-authority-campaign.ps1 -PreflightOnly

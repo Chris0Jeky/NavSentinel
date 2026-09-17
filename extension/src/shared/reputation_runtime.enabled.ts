@@ -3,14 +3,12 @@ import {
   initReputation,
   isKnownBadDomain,
   reputationReady,
-} from "./reputation";
+} from "./reputation_runtime.production";
+import { MAX_FILE_BYTES } from "./reputation_runtime.production";
 import type { ReputationLoadOptions, ReputationStatus } from "./reputation_runtime.types";
 
 export { checkReputationViaMessage };
 export const reputationEnabled = true;
-
-/** Maximum .bin file size we will read (2 MB + 16-byte header). */
-const MAX_REPUTATION_FILE_BYTES = 2 * 1024 * 1024 + 16;
 
 export async function loadReputationFilter(options: ReputationLoadOptions = {}): Promise<void> {
   try {
@@ -23,14 +21,14 @@ export async function loadReputationFilter(options: ReputationLoadOptions = {}):
       return;
     }
     const contentLength = response.headers.get("content-length");
-    if (contentLength && Number(contentLength) > MAX_REPUTATION_FILE_BYTES) {
+    if (contentLength && Number(contentLength) > MAX_FILE_BYTES) {
       if (options.warnOnFailure) {
         console.warn("[NavSentinel] Reputation file too large (Content-Length:", contentLength, ")");
       }
       return;
     }
     const data = await response.arrayBuffer();
-    if (data.byteLength > MAX_REPUTATION_FILE_BYTES) {
+    if (data.byteLength > MAX_FILE_BYTES) {
       if (options.warnOnFailure) {
         console.warn("[NavSentinel] Reputation file too large:", data.byteLength, "bytes");
       }

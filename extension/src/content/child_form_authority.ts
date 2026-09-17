@@ -13,7 +13,6 @@ export class ChildFormAuthority {
   private gate = new FormAttemptGate();
   private currentId: string | undefined;
   private gestureTime = -1;
-  private generation = 0;
   private blocked = new Map<string, BlockedForm>();
   private replay: { intent: FormIntent; expiresAt: number } | null = null;
   constructor(private deps: Dependencies) {}
@@ -29,7 +28,6 @@ export class ChildFormAuthority {
     void chrome.runtime.sendMessage({ type: "ns-form-intent-cancel", attemptId: id }).catch(() => {});
   }
   reset(): void {
-    this.generation++;
     this.cancel();
     this.gate.clear();
     this.blocked.clear();
@@ -42,7 +40,6 @@ export class ChildFormAuthority {
   }
   /** Called only after the existing synchronous click policy decided allow. */
   approvedClick(event: MouseEvent): FormIntent | null {
-    this.generation++;
     this.cancel();
     this.gate.clear();
     if (!this.deps.enabled() || !event.isTrusted) return null;
@@ -90,9 +87,8 @@ export class ChildFormAuthority {
     }
     this.cancel();
     const attemptId = this.id();
-    const generation = ++this.generation;
     void this.arm(attemptId, entry.intent).then(ok => {
-      const fresh = ok && generation === this.generation && this.deps.enabled() && entry.expiresAt > Date.now();
+      const fresh = ok && this.currentId === attemptId && this.deps.enabled() && entry.expiresAt > Date.now();
       if (fresh) this.replay = { intent: entry.intent, expiresAt: Date.now() + FORM_INTENT_TTL_MS };
       else this.cancel(attemptId);
       this.deps.post("ns-form-replay-ready", { id: data.id, attemptId, ok: fresh });
@@ -100,7 +96,6 @@ export class ChildFormAuthority {
     return true;
   }
   invalid(): void {
-    this.generation++;
     this.cancel();
     this.gate.clear();
     this.replay = null;
@@ -110,7 +105,7 @@ export class ChildFormAuthority {
     if (!this.deps.enabled() || !(event.target instanceof HTMLFormElement)) return;
     let intent: FormIntent | null = null;
     try { intent = resolveFormIntent(event.target, event.submitter); } catch { /* fail closed below */ }
-    if (intent && (intent.targetScope === "self" || intent.method === "dialog")) {
+    if (intent && (intent[4] === "self" || intent[1] === "dialog")) {
       this.cancel();
       this.gate.clear();
       return;

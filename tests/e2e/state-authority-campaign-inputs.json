@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "campaign": "state-authority-typed-harm",
+  "inputs": [
+    "scripts/run-state-authority-campaign.mjs",
+    "scripts/launch-state-authority-campaign.mjs",
+    "scripts/sensitive-environment.mjs",
+    "tests/e2e/state-authority-campaign-inputs.json",
+    "tests/e2e/state-authority-sink.spec.ts",
+    "tests/e2e/extension_build_provenance.ts",
+    "tests/e2e/materialized_campaign_provenance.ts",
+    "tests/e2e/extension_test_utils.ts",
+    "scripts/content-loader-contract.mjs",
+    "tests/e2e/local_fixture_target_bootstrap.ts",
+    "tests/e2e/proving_ground_fake_sink.ts",
+    "playwright.stress.config.ts",
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "gym/local-fixture-targets.js",
+    "gym/rw21-allow-once-double-spend.html",
+    "gym/rw24-idle-resume-popup.html",
+    "gym/rw25-rapid-close-reopen.html"
+  ]
+}
