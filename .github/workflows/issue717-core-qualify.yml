@@ -1,0 +1,500 @@
+name: Issue 717 sensitive environment core qualification
+
+on:
+  push:
+    branches:
+      - fix/717-sensitive-environment-core-20260917
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-717-sensitive-environment-core
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/717-sensitive-environment-core-20260917
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prove the boundary regression commit is red
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          red_root="$RUNNER_TEMP/issue717-core-red"
+          git worktree add --detach "$red_root" 37132f9134268b9e75581565688aa9ad433916fd
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$red_root/node_modules"
+          set +e
+          (
+            cd "$red_root"
+            npx vitest run tests/sensitive-environment-boundary.test.ts
+          ) > "$RUNNER_TEMP/issue717-core-red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/issue717-core-red.log"
+          test "$status" -ne 0
+          grep -Fq "sensitive-environment.mjs" "$RUNNER_TEMP/issue717-core-red.log"
+          rm "$red_root/node_modules"
+          git worktree remove --force "$red_root"
+
+      - name: Integrate the normalized policy into release and launch boundaries
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(path, old, new, label):
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "scripts/release-input-integrity.mjs",
+              'import { createHash } from "node:crypto";\n',
+              'import { createHash } from "node:crypto";\nimport { stripSensitiveEnvironment } from "./sensitive-environment.mjs";\n',
+              "release policy import",
+          )
+          replace_once(
+              "scripts/release-input-integrity.mjs",
+              '''export function createSanitizedGitEnvironment(source = process.env) {
+            const environment = {};
+            for (const [key, value] of Object.entries(source)) {
+              if (value === undefined) continue;
+              const normalizedKey = key.toUpperCase();
+              if (normalizedKey.startsWith("GIT_") && !PRESERVED_GIT_IDENTITY_KEYS.has(normalizedKey)) continue;
+              environment[key] = value;
+            }
+
+            environment.GIT_NO_REPLACE_OBJECTS = "1";
+            environment.GIT_NO_LAZY_FETCH = "1";
+            environment.GIT_OPTIONAL_LOCKS = "0";
+            environment.LC_ALL = "C";
+            environment.LANG = "C";
+            return environment;
+          }''',
+              '''export function createSanitizedGitEnvironment(source = process.env) {
+            const environment = stripSensitiveEnvironment(source, {
+              preserveNormalizedKeys: [...PRESERVED_GIT_IDENTITY_KEYS],
+            });
+            environment.GIT_NO_REPLACE_OBJECTS = "1";
+            environment.GIT_NO_LAZY_FETCH = "1";
+            environment.GIT_OPTIONAL_LOCKS = "0";
+            environment.LC_ALL = "C";
+            environment.LANG = "C";
+            return environment;
+          }''',
+              "release environment sanitizer",
+          )
+          replace_once(
+              "scripts/release-input-integrity.mjs",
+              '''export function resolveReleaseCommand(command, args, options = {}) {
+            if ((options.platform ?? process.platform) !== "win32") {
+              return { command, args: [...args] };
+            }
+
+            return {
+              command: options.comspec ?? process.env.ComSpec ?? process.env.COMSPEC ?? "cmd.exe",
+              args: ["/d", "/s", "/c", command, ...args],
+            };
+          }''',
+              '''export function resolveReleaseCommand(command, args, options = {}) {
+            if (command !== "npm") return { command, args: [...args] };
+            const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
+            if (typeof npmExecPath !== "string" || !path.isAbsolute(npmExecPath)) {
+              throw integrityError(
+                "absolute npm CLI path is unavailable; invoke release through an npm release script so npm_execpath is set",
+              );
+            }
+            let resolvedNpmExecPath;
+            try {
+              resolvedNpmExecPath = fs.realpathSync.native(npmExecPath);
+            } catch (error) {
+              throw integrityError(
+                `npm_execpath cannot be resolved: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+            if (!fs.lstatSync(resolvedNpmExecPath).isFile()) {
+              throw integrityError("npm_execpath does not name an ordinary file");
+            }
+            return {
+              command: options.nodeExecutable ?? process.execPath,
+              args: [resolvedNpmExecPath, ...args],
+            };
+          }''',
+              "argument-safe npm invocation",
+          )
+
+          replace_once(
+              "scripts/release-input-integrity.d.mts",
+              '''export interface ReleaseCommandOptions {
+            readonly platform?: NodeJS.Platform;
+            readonly comspec?: string;
+          }''',
+              '''export interface ReleaseCommandOptions {
+            readonly nodeExecutable?: string;
+            readonly npmExecPath?: string;
+          }''',
+              "release command option types",
+          )
+
+          replace_once(
+              "scripts/release.mjs",
+              ' * Usage: node scripts/release.mjs <major|minor|patch> [--dry-run]\n',
+              ' * Usage: npm run release:<major|minor|patch> or npm run release:dry\n',
+              "release usage",
+          )
+          replace_once(
+              "scripts/release.mjs",
+              '''function runCommand(command, args, opts = {}) {
+            const invocation = resolveReleaseCommand(command, args);
+            return execFileSync(invocation.command, invocation.args, {
+              cwd: root,
+              encoding: "utf8",
+              // npm may invoke Git for git-backed dependencies. Scrub the same inherited
+              // worktree/index/object overrides used by direct release-path Git calls.
+              env: opts.env ?? createSanitizedGitEnvironment(process.env),
+              stdio: opts.stdio ?? ["ignore", "pipe", "pipe"],
+            }).trim();
+          }''',
+              '''function runInvocation(invocation, opts = {}) {
+            return execFileSync(invocation.command, invocation.args, {
+              cwd: root,
+              encoding: "utf8",
+              // npm may invoke Git for git-backed dependencies. Scrub the full
+              // release trust-boundary environment before the child starts.
+              env: opts.env ?? createSanitizedGitEnvironment(process.env),
+              stdio: opts.stdio ?? ["ignore", "pipe", "pipe"],
+            }).trim();
+          }''',
+              "release child runner",
+          )
+          replace_once(
+              "scripts/release.mjs",
+              '''if (!bumpType) {
+            console.error("Usage: node scripts/release.mjs <major|minor|patch> [--dry-run]");
+            process.exit(1);
+          }
+
+          // 1. Pin exact committed inputs''',
+              '''if (!bumpType) {
+            console.error("Usage: npm run release:<major|minor|patch> or npm run release:dry");
+            process.exit(1);
+          }
+
+          // Resolve the npm JavaScript entry point before any release metadata is
+          // changed. Real releases must run through an npm script so npm_execpath
+          // names the current toolchain without invoking a .cmd shim or shell.
+          const npmLockfileInvocation = dryRun
+            ? null
+            : resolveReleaseCommand("npm", [
+              "install",
+              "--package-lock-only",
+              "--ignore-scripts",
+            ]);
+
+          // 1. Pin exact committed inputs''',
+              "release npm preflight",
+          )
+          replace_once(
+              "scripts/release.mjs",
+              '''if (!dryRun) {
+            runCommand("npm", ["install", "--package-lock-only", "--ignore-scripts"]);
+          }''',
+              '''if (npmLockfileInvocation) {
+            runInvocation(npmLockfileInvocation);
+          }''',
+              "release npm execution",
+          )
+
+          replace_once(
+              "scripts/run-state-authority-campaign.mjs",
+              'import { fileURLToPath, pathToFileURL } from "node:url";\n',
+              'import { fileURLToPath, pathToFileURL } from "node:url";\nimport { stripSensitiveEnvironment } from "./sensitive-environment.mjs";\n',
+              "launcher policy import",
+          )
+          replace_once(
+              "scripts/run-state-authority-campaign.mjs",
+              '  "scripts/launch-state-authority-campaign.mjs",\n',
+              '  "scripts/launch-state-authority-campaign.mjs",\n  "scripts/sensitive-environment.mjs",\n',
+              "launcher required input",
+          )
+          old_launcher_sanitizer = '''export function sanitizedEnvironment(source = process.env) {
+            const environment = {};
+            for (const [key, value] of Object.entries(source)) {
+              const normalizedKey = key.toUpperCase();
+              if (
+                value === undefined
+                || normalizedKey.startsWith("GIT_")
+                || normalizedKey.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
+                || normalizedKey === "NODE_OPTIONS"
+                || normalizedKey === "NODE_PATH"
+                || normalizedKey === "EXTENSION_PATH"
+              ) {
+                continue;
+              }
+              environment[key] = value;
+            }
+            environment.GIT_NO_REPLACE_OBJECTS = "1";
+            environment.GIT_NO_LAZY_FETCH = "1";
+            environment.GIT_OPTIONAL_LOCKS = "0";
+            environment.LC_ALL = "C";
+            environment.LANG = "C";
+            return environment;
+          }'''
+          new_launcher_sanitizer = '''export function sanitizedEnvironment(source = process.env) {
+            const environment = stripSensitiveEnvironment(source);
+            environment.GIT_NO_REPLACE_OBJECTS = "1";
+            environment.GIT_NO_LAZY_FETCH = "1";
+            environment.GIT_OPTIONAL_LOCKS = "0";
+            environment.LC_ALL = "C";
+            environment.LANG = "C";
+            return environment;
+          }'''
+          replace_once(
+              "scripts/run-state-authority-campaign.mjs",
+              old_launcher_sanitizer,
+              new_launcher_sanitizer,
+              "committed launcher sanitizer",
+          )
+
+          replace_once(
+              "scripts/launch-state-authority-campaign.mjs",
+              'import { fileURLToPath } from "node:url";\n',
+              'import { fileURLToPath } from "node:url";\nimport { stripSensitiveEnvironment } from "./sensitive-environment.mjs";\n',
+              "bootstrap policy import",
+          )
+          replace_once(
+              "scripts/launch-state-authority-campaign.mjs",
+              'const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";\n',
+              'const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";\nconst SENSITIVE_ENVIRONMENT_REPOSITORY_PATH = "scripts/sensitive-environment.mjs";\n',
+              "bootstrap policy path",
+          )
+          old_bootstrap_sanitizer = '''export function sanitizedBootstrapEnvironment(source = process.env) {
+            const environment = {};
+            for (const [key, value] of Object.entries(source)) {
+              const normalizedKey = key.toUpperCase();
+              if (
+                normalizedKey.startsWith("GIT_")
+                || normalizedKey.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
+                || normalizedKey === "NODE_OPTIONS"
+                || normalizedKey === "NODE_PATH"
+                || normalizedKey === "EXTENSION_PATH"
+              ) {
+                continue;
+              }
+              environment[key] = value;
+            }
+            environment.GIT_NO_REPLACE_OBJECTS = "1";
+            environment.GIT_NO_LAZY_FETCH = "1";
+            environment.GIT_OPTIONAL_LOCKS = "0";
+            return environment;
+          }'''
+          new_bootstrap_sanitizer = '''export function sanitizedBootstrapEnvironment(source = process.env) {
+            const environment = stripSensitiveEnvironment(source);
+            environment.GIT_NO_REPLACE_OBJECTS = "1";
+            environment.GIT_NO_LAZY_FETCH = "1";
+            environment.GIT_OPTIONAL_LOCKS = "0";
+            return environment;
+          }'''
+          replace_once(
+              "scripts/launch-state-authority-campaign.mjs",
+              old_bootstrap_sanitizer,
+              new_bootstrap_sanitizer,
+              "bootstrap sanitizer",
+          )
+          replace_once(
+              "scripts/launch-state-authority-campaign.mjs",
+              '''  if (gitObjectId("blob", launcherBytes, objectFormat) !== launcherOid) {
+            fail("extracted launcher bytes do not match the committed object ID");
+          }
+          const temporaryRoot = fs.mkdtempSync(''',
+              '''  if (gitObjectId("blob", launcherBytes, objectFormat) !== launcherOid) {
+            fail("extracted launcher bytes do not match the committed object ID");
+          }
+          const sensitiveEnvironmentOid = git(
+            ["-C", repositoryRoot, "rev-parse", `HEAD:${SENSITIVE_ENVIRONMENT_REPOSITORY_PATH}`],
+            { environment, encoding: "utf8" },
+          ).trim();
+          const sensitiveEnvironmentBytes = git(
+            ["-C", repositoryRoot, "cat-file", "blob", sensitiveEnvironmentOid],
+            { environment },
+          );
+          if (gitObjectId("blob", sensitiveEnvironmentBytes, objectFormat) !== sensitiveEnvironmentOid) {
+            fail("extracted sensitive-environment bytes do not match the committed object ID");
+          }
+          const temporaryRoot = fs.mkdtempSync(''',
+              "bootstrap policy extraction",
+          )
+          replace_once(
+              "scripts/launch-state-authority-campaign.mjs",
+              '''    fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+            environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;''',
+              '''    fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+            fs.writeFileSync(
+              path.join(temporaryRoot, "sensitive-environment.mjs"),
+              sensitiveEnvironmentBytes,
+              { mode: 0o600 },
+            );
+            environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;''',
+              "bootstrap policy materialization",
+          )
+
+          manifest_path = Path("tests/e2e/state-authority-campaign-inputs.json")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          policy_path = "scripts/sensitive-environment.mjs"
+          if policy_path not in manifest["inputs"]:
+              index = manifest["inputs"].index("scripts/launch-state-authority-campaign.mjs") + 1
+              manifest["inputs"].insert(index, policy_path)
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+          replace_once(
+              "tests/release-input-integrity.test.ts",
+              '''    options?: { platform?: NodeJS.Platform; comspec?: string },''',
+              '''    options?: { nodeExecutable?: string; npmExecPath?: string },''',
+              "release test command options",
+          )
+          replace_once(
+              "tests/release-input-integrity.test.ts",
+              '''  it("selects a Windows command interpreter for npm while preserving fixed arguments", () => {
+            const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
+            expect(resolveReleaseCommand).toEqual(expect.any(Function));
+
+            expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+              platform: "win32",
+              comspec: "C:\\\\Windows\\\\System32\\\\cmd.exe",
+            })).toEqual({
+              command: "C:\\\\Windows\\\\System32\\\\cmd.exe",
+              args: ["/d", "/s", "/c", "npm", "install", "--package-lock-only", "--ignore-scripts"],
+            });
+
+            expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+              platform: "linux",
+            })).toEqual({
+              command: "npm",
+              args: ["install", "--package-lock-only", "--ignore-scripts"],
+            });
+          });''',
+              '''  it("selects Node plus npm's JavaScript entry point without a command shell", () => {
+            const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
+            expect(resolveReleaseCommand).toEqual(expect.any(Function));
+            const root = makeTempRoot("npm-cli-entry");
+            const npmExecPath = path.join(root, "npm-cli.js");
+            fs.writeFileSync(npmExecPath, "process.exitCode = 0;\\n");
+
+            expect(resolveReleaseCommand?.("npm", ["install", "argument with spaces & shell syntax"], {
+              nodeExecutable: "C:\\\\Program Files\\\\nodejs\\\\node.exe",
+              npmExecPath,
+            })).toEqual({
+              command: "C:\\\\Program Files\\\\nodejs\\\\node.exe",
+              args: [
+                fs.realpathSync.native(npmExecPath),
+                "install",
+                "argument with spaces & shell syntax",
+              ],
+            });
+          });''',
+              "release test npm seam",
+          )
+
+          replace_once(
+              "tests/state-authority-launcher-contract.test.ts",
+              '''  fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+            return { launcherOid, launcherPath };''',
+              '''  fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+            const sensitiveEnvironmentOid = git([
+              "rev-parse",
+              "HEAD:scripts/sensitive-environment.mjs",
+            ]);
+            const sensitiveEnvironmentBytes = execFileSync(
+              "git",
+              ["cat-file", "blob", sensitiveEnvironmentOid],
+              { cwd: repositoryRoot },
+            );
+            fs.writeFileSync(
+              path.join(temporaryRoot, "sensitive-environment.mjs"),
+              sensitiveEnvironmentBytes,
+              { mode: 0o600 },
+            );
+            return { launcherOid, launcherPath };''',
+              "launcher contract policy extraction",
+          )
+          replace_once(
+              "tests/state-authority-bootstrap-replay.test.ts",
+              '''  fs.writeFileSync(launcher, `console.log(JSON.stringify({
+            marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
+            oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
+          })); process.exitCode = 23;\\n`);''',
+              '''  fs.writeFileSync(launcher, `console.log(JSON.stringify({
+            marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
+            oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
+          })); process.exitCode = 23;\\n`);
+            fs.writeFileSync(
+              path.join(repository, "scripts/sensitive-environment.mjs"),
+              "export function stripSensitiveEnvironment(source = process.env) { return { ...source }; }\\n",
+            );''',
+              "bootstrap replay policy fixture",
+          )
+          PY
+
+      - name: Verify syntax and focused trust-boundary contracts
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          node --check scripts/sensitive-environment.mjs
+          node --check scripts/release-input-integrity.mjs
+          node --check scripts/release.mjs
+          node --check scripts/launch-state-authority-campaign.mjs
+          node --check scripts/run-state-authority-campaign.mjs
+          npx vitest run \
+            tests/sensitive-environment-boundary.test.ts \
+            tests/release-input-integrity.test.ts \
+            tests/state-authority-launcher-contract.test.ts \
+            tests/state-authority-bootstrap-replay.test.ts
+          node scripts/launch-state-authority-campaign.mjs --preflight-only
+          npx eslint \
+            tests/sensitive-environment-boundary.test.ts \
+            tests/release-input-integrity.test.ts \
+            tests/state-authority-launcher-contract.test.ts \
+            tests/state-authority-bootstrap-replay.test.ts
+          npm run typecheck
+
+      - name: Publish the qualified core
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add \
+            scripts/sensitive-environment.mjs \
+            scripts/sensitive-environment.d.mts \
+            scripts/release-input-integrity.mjs \
+            scripts/release-input-integrity.d.mts \
+            scripts/release.mjs \
+            scripts/launch-state-authority-campaign.mjs \
+            scripts/run-state-authority-campaign.mjs \
+            tests/e2e/state-authority-campaign-inputs.json \
+            tests/sensitive-environment-boundary.test.ts \
+            tests/release-input-integrity.test.ts \
+            tests/state-authority-launcher-contract.test.ts \
+            tests/state-authority-bootstrap-replay.test.ts
+          git rm .github/workflows/issue717-core-qualify.yml
+          git diff --cached --check
+          git commit -m "fix: centralize release and launcher environment boundaries"
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:fix/717-sensitive-environment-core-20260917
