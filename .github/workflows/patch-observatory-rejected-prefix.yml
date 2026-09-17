@@ -22,13 +22,12 @@ jobs:
 
           state = Path('experiments/evidence-observatory/form-state.mjs')
           text = state.read_text(encoding='utf-8')
-          addition = '''
-
-export function countRejectedReceiverAttempts(c, cursor) {
-  if (!Array.isArray(c?.events) || !Number.isInteger(cursor) || cursor < 0 || cursor >= c.events.length) return 0;
-  return c.events.slice(0, cursor + 1).filter(event => event?.kind === 'receiver.rejected').length;
-}
-'''
+          addition = '\n\n' + '\n'.join([
+              'export function countRejectedReceiverAttempts(c, cursor) {',
+              "  if (!Array.isArray(c?.events) || !Number.isInteger(cursor) || cursor < 0 || cursor >= c.events.length) return 0;",
+              "  return c.events.slice(0, cursor + 1).filter(event => event?.kind === 'receiver.rejected').length;",
+              '}',
+          ]) + '\n'
           if 'export function countRejectedReceiverAttempts' in text:
               raise SystemExit('helper already present')
           state.write_text(text.rstrip() + addition, encoding='utf-8')
@@ -40,22 +39,22 @@ export function countRejectedReceiverAttempts(c, cursor) {
           if text.count(old) != 1:
               raise SystemExit(f'expected one form-state import, found {text.count(old)}')
           text = text.replace(old, new)
-          text += '''
-test('rejected receiver spends appear only after their event enters the visible prefix', () => {
-  const c = { events: [event('run.start', 'runner'), event('receiver.rejected', 'sink'), event('observation.end', 'runner')] };
-  assert.equal(countRejectedReceiverAttempts(c, 0), 0);
-  assert.equal(countRejectedReceiverAttempts(c, 1), 1);
-  assert.equal(countRejectedReceiverAttempts(c, 2), 1);
-});
-'''
+          text += '\n' + '\n'.join([
+              "test('rejected receiver spends appear only after their event enters the visible prefix', () => {",
+              "  const c = { events: [event('run.start', 'runner'), event('receiver.rejected', 'sink'), event('observation.end', 'runner')] };",
+              '  assert.equal(countRejectedReceiverAttempts(c, 0), 0);',
+              '  assert.equal(countRejectedReceiverAttempts(c, 1), 1);',
+              '  assert.equal(countRejectedReceiverAttempts(c, 2), 1);',
+              '});',
+          ]) + '\n'
           tests.write_text(text, encoding='utf-8')
 
           render = Path('experiments/evidence-observatory/render.mjs')
           text = render.read_text(encoding='utf-8')
           replacements = [
-            ("import { selectFormIntent } from './form-state.mjs';", "import { countRejectedReceiverAttempts, selectFormIntent } from './form-state.mjs';"),
-            ("    panel.append(make('p', `Rejected receiver spends: ${c.formEvidence.rejectedAttempts}. A receiver rejection is not a NavSentinel block.`, 'muted'));", "    const rejectedAttempts = countRejectedReceiverAttempts(c, cursor);\n    panel.append(make('p', `Rejected receiver spends at or before selected event: ${rejectedAttempts}. A receiver rejection is not a NavSentinel block.`, 'muted'));"),
-            ("  const script = `${selectScene.toString()}\\n${selectFormIntent.toString()}\\n(${application.toString()})();`;", "  const script = `${selectScene.toString()}\\n${selectFormIntent.toString()}\\n${countRejectedReceiverAttempts.toString()}\\n(${application.toString()})();`;"),
+              ("import { selectFormIntent } from './form-state.mjs';", "import { countRejectedReceiverAttempts, selectFormIntent } from './form-state.mjs';"),
+              ("    panel.append(make('p', `Rejected receiver spends: ${c.formEvidence.rejectedAttempts}. A receiver rejection is not a NavSentinel block.`, 'muted'));", "    const rejectedAttempts = countRejectedReceiverAttempts(c, cursor);\n    panel.append(make('p', `Rejected receiver spends at or before selected event: ${rejectedAttempts}. A receiver rejection is not a NavSentinel block.`, 'muted'));"),
+              ("  const script = `${selectScene.toString()}\\n${selectFormIntent.toString()}\\n(${application.toString()})();`;", "  const script = `${selectScene.toString()}\\n${selectFormIntent.toString()}\\n${countRejectedReceiverAttempts.toString()}\\n(${application.toString()})();`;"),
           ]
           for old, new in replacements:
               if text.count(old) != 1:
