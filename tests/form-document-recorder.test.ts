@@ -44,3 +44,15 @@ it("document churn cannot consume the receiver and terminal reserve", () => {
   expect(t.events.some(e => e.kind === "receiver.attempt" && e.data.role === "harm")).toBe(true);
   expect(t.events.at(-1)?.kind).toBe("observation.end"); expect(t.gaps).toContain("EVENTS_DROPPED");
 });
+it("child fixture navigation churn cannot consume consequential navigation or receiver capacity", () => {
+  const r = new FormObservation({ variant: "exact-request", pairId: "e".repeat(64), protectedArm: false, identity, documentBound: true, maxEvents: 40 });
+  for (let i = 0; i < 64; i++) r.navigation("child", "fixture");
+  r.navigation("top", "harm");
+  r.receiver({ role: "harm", method: "POST", ordinal: 1, accepted: true });
+  const t = r.finish(false);
+  expect(t.events.some(e => e.kind === "navigation.committed" && e.data.scope === "top" && e.data.destination === "harm")).toBe(true);
+  expect(t.events.some(e => e.kind === "receiver.attempt" && e.data.role === "harm")).toBe(true);
+  expect(t.events.at(-1)?.kind).toBe("observation.end");
+  expect(t.events.filter(e => e.kind === "navigation.committed")).toHaveLength(8);
+  expect(t.gaps).toContain("EVENTS_DROPPED");
+});

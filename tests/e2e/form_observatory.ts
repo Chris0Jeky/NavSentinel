@@ -93,7 +93,12 @@ export class FormObservation {
     if (!value.ok) this.gaps.add("RECEIVER_UNHEALTHY");
     this.add("sink", "receiver.health", { phase, ok: value.ok, sequence: value.sequence });
   }
-  navigation(scope: "top" | "child", destination: "fixture" | "harm" | "benign" | "other"): void { this.add("browser", "navigation.committed", { scope, destination }); }
+  navigation(scope: "top" | "child", destination: "fixture" | "harm" | "benign" | "other"): void {
+    // Child-frame fixture reloads are bounded observation churn. Top-level
+    // fixture commits remain consequential because they can evidence recovery.
+    const ordinary = scope === "child" && destination === "fixture";
+    this.add("browser", "navigation.committed", { scope, destination }, ordinary);
+  }
   product(code: "form-blocked" | "navigation-blocked" | "navigation-rollback" | "other-decision"): void { this.add("extension", "decision.report", { code }); }
   fail(code: string): void { if (this.finished) throw new Error("FORM_RECORDER_FINISHED"); if (!FAULTS.has(code)) throw new Error("UNKNOWN_FORM_FAULT"); this.gaps.add(code); }
   currentEvents(): FormEvent[] { return structuredClone(this.events); }
