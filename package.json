@@ -33,6 +33,7 @@
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "test:e2e:stress": "playwright test tests/e2e/navsentinel.stress.spec.ts -c playwright.stress.config.ts",
     "test:e2e:state-authority": "node scripts/launch-state-authority-campaign.mjs",
+    "test:e2e:state-authority:windows": "pwsh -NoLogo -NoProfile -File scripts/launch-state-authority-campaign.ps1",
     "test:e2e:corpus": "playwright test -c playwright.corpus.config.ts",
     "test:e2e:corpus:contract": "playwright test -c playwright.corpus.config.ts --grep @corpus-contract",
     "test:e2e:maintainer-headed": "playwright test -c playwright.maintainer.config.ts",
