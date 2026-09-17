@@ -1,3 +1,4 @@
+import { setImmediate as scheduleImmediate } from "node:timers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flushMutationObserverDelivery, MUTATION_DELIVERY_TURNS } from "./helpers/mutation-observer-delivery";
 
@@ -34,6 +35,22 @@ describe("bounded observer delivery handshake (#693)", () => {
       vi.clearAllTimers();
     },
   );
+
+  it("allows DOM delivery on a real event-loop turn without advancing fake timers", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    let fakeTimerRan = false;
+    setTimeout(() => { fakeTimerRan = true; }, 1);
+
+    let pending = 0;
+    scheduleImmediate(() => { pending = 1; });
+
+    await flushMutationObserverDelivery(() => {}, () => pending);
+
+    expect(pending).toBe(1);
+    expect(fakeTimerRan).toBe(false);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.clearAllTimers();
+  });
 
   it("fails after exactly the fixed bound when no records arrive", async () => {
     const flush = vi.fn();
