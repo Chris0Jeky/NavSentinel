@@ -7,6 +7,7 @@ const buttonType = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, 
 const inputType = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "type")!.get!;
 const buttonForm = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, "form")!.get!;
 const inputForm = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "form")!.get!;
+const implicitSubmissionInput = /^(?:text|search|tel|url|email|password|date|month|week|time|datetime-local|number)$/;
 
 export function submitControlForm(control: HTMLElement): HTMLFormElement | null | false {
   if (control.localName === "button" && buttonType.call(control) === "submit") return buttonForm.call(control);
@@ -72,6 +73,27 @@ export function clickFormBinding(event: MouseEvent): FormBinding | null {
   return null;
 }
 
+/** Bind only the browser's no-submit-button implicit Enter path. */
+export function implicitSubmitBinding(event: KeyboardEvent): FormBinding | null {
+  if (event.key !== "Enter" || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return null;
+  const input = event.composedPath()[0];
+  if (!(input instanceof HTMLInputElement) || input.disabled ||
+      !implicitSubmissionInput.test(inputType.call(input))) return null;
+  const form = inputForm.call(input) as HTMLFormElement | null;
+  if (!form) return null;
+  let blockers = 0;
+  for (let i = 0; i < form.elements.length; i++) {
+    const control = form.elements.item(i);
+    if (!(control instanceof HTMLElement)) continue;
+    if (submitControlForm(control) === form) return null;
+    if (control instanceof HTMLInputElement && !control.disabled &&
+        implicitSubmissionInput.test(inputType.call(control)) && ++blockers > 1) return null;
+  }
+  if (blockers !== 1) return null;
+  const intent = resolveFormIntent(form, null);
+  return intent ? { form, submitter: null, intent } : null;
+}
+
 export function formBindingUnchanged(binding: FormBinding): boolean {
   if (!binding.form.isConnected || (binding.submitter &&
       (!binding.submitter.isConnected || submitControlForm(binding.submitter) !== binding.form))) return false;
@@ -99,7 +121,7 @@ export class FormAttemptGate {
     this.pending = null;
     return pending ? { attemptId: pending.attemptId, gestureTime: pending.gestureTime } : {};
   }
-  clear(): string | undefined { return this.revoke().attemptId; }
+  clear(): void { this.pending = null; }
   consume(form: HTMLFormElement, submitter: HTMLElement | null, intent: FormIntent, now: number): { allowed: boolean; attemptId?: string | undefined; gestureTime?: number | undefined } {
     const pending = this.pending;
     this.pending = null;

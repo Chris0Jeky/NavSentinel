@@ -171,5 +171,8 @@ export function compactKnownOptionsHtml(relativePath, html, stylesheetsByHref) {
   // Vite emits bare `crossorigin` on same-extension module/style resources.
   // Those resources have no cookies or cross-origin credentials to carry, so
   // the attribute is redundant in the shipped extension HTML.
-  return compactHtml(html, { stripCrossOrigin: true });
+  return compactHtml(html, {
+    stripCrossOrigin: true,
+    preserveInterElementWhitespace: artifactPath === OPTIONS_ARTIFACT_PATH,
+  });
 }

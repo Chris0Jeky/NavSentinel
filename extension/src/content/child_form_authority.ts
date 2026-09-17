@@ -1,4 +1,4 @@
-import { FormAttemptGate, clickFormBinding, resolveFormIntent } from "./form_intent";
+import { FormAttemptGate, clickFormBinding, implicitSubmitBinding, resolveFormIntent, type FormBinding } from "./form_intent";
 import { FORM_INTENT_TTL_MS, isFormIntent, isHttpFormIntent, sameFormIntent, type FormIntent } from "../shared/form_intent";
 
 interface Dependencies {
@@ -15,7 +15,14 @@ export class ChildFormAuthority {
   private gestureTime = -1;
   private blocked = new Map<string, BlockedForm>();
   private replay: { intent: FormIntent; expiresAt: number } | null = null;
-  constructor(private deps: Dependencies) {}
+  constructor(private deps: Dependencies) {
+    window.addEventListener("keydown", event => {
+      const binding = deps.enabled() && event.isTrusted ? implicitSubmitBinding(event) : null;
+      if (!binding) return;
+      this.invalid();
+      this.approveBinding(binding, event.timeStamp);
+    }, true);
+  }
 
   private id(): string {
     return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
@@ -28,33 +35,32 @@ export class ChildFormAuthority {
     void chrome.runtime.sendMessage({ type: "ns-form-intent-cancel", attemptId: id }).catch(() => {});
   }
   reset(): void {
-    this.cancel();
-    this.gate.clear();
+    this.invalid();
     this.blocked.clear();
-    this.replay = null;
   }
   private arm(attemptId: string, formIntent: FormIntent): Promise<boolean> {
     this.currentId = attemptId;
     return chrome.runtime.sendMessage({ type: "ns-form-intent", attemptId, formIntent, issuedAt: Date.now() })
       .then(reply => reply?.ok === true, () => false);
   }
-  /** Called only after the existing synchronous click policy decided allow. */
-  approvedClick(event: MouseEvent): FormIntent | null {
-    this.cancel();
-    this.gate.clear();
-    if (!this.deps.enabled() || !event.isTrusted) return null;
-    const binding = clickFormBinding(event);
-    if (!binding) return null;
+  private approveBinding(binding: FormBinding, gestureTime: number): FormIntent {
     const { intent } = binding;
     if (!isHttpFormIntent(intent)) return intent;
     const attemptId = this.id();
     const now = Date.now();
-    this.gestureTime = event.timeStamp;
-    this.gate.capture(binding, event.timeStamp, now);
-    this.gate.authorize(attemptId, intent, event.timeStamp, now);
+    this.gestureTime = gestureTime;
+    this.gate.capture(binding, gestureTime, now);
+    this.gate.authorize(attemptId, intent, gestureTime, now);
     void this.arm(attemptId, intent).then(ok => { if (!ok) this.cancel(attemptId); });
-    this.deps.post("ns-allow-form", { attemptId, formIntent: intent, gestureTime: event.timeStamp });
+    this.deps.post("ns-allow-form", { attemptId, formIntent: intent, gestureTime });
     return intent;
+  }
+  /** Called only after the existing synchronous click policy decided allow. */
+  approvedClick(event: MouseEvent): FormIntent | null {
+    this.invalid();
+    if (!this.deps.enabled() || !event.isTrusted) return null;
+    const binding = clickFormBinding(event);
+    return binding ? this.approveBinding(binding, event.timeStamp) : null;
   }
   recordBlocked(data: { id?: string; kind?: string; formIntent?: unknown }): void {
     if (!this.deps.enabled() || !data.id || data.id.length > 128 ||
@@ -106,8 +112,7 @@ export class ChildFormAuthority {
     let intent: FormIntent | null = null;
     try { intent = resolveFormIntent(event.target, event.submitter); } catch { /* fail closed below */ }
     if (intent && (intent[4] === "self" || intent[1] === "dialog")) {
-      this.cancel();
-      this.gate.clear();
+      this.invalid();
       return;
     }
     const spent = intent ? this.gate.consume(event.target, event.submitter, intent, Date.now()) : { allowed: false };
