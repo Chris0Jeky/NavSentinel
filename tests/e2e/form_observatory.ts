@@ -1,8 +1,17 @@
 /** Bounded test-only diagnostics. Page data cannot choose an authoritative source. */
 import { randomUUID } from "node:crypto";
 import type { FormIntentSample } from "./form_observatory_probe";
-export const FORM_TRACE_SCHEMA = "navsentinel.observatory.form.v1";
-export const FORM_VARIANTS = ["alternate-submitter", "action-substitution", "target-mutation", "method-mutation", "enctype-mutation", "base-href", "base-target", "reassociation", "expired", "mismatch-burn", "synthetic", "location-same", "location-different", "late-submit", "exact-submit", "exact-request", "native", "server-redirect", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "dialog", "validation", "replay", "allow-once", "allow-mutated", "mixed"] as const;
+import {
+  FORM_EVIDENCE_POLICY,
+  FORM_GAP_CODES,
+  FORM_REQUIRED_OBSERVATION_MS,
+  FORM_SCENARIO_ID,
+  FORM_TRACE_MODE,
+  FORM_TRACE_SCHEMA,
+  FORM_VARIANTS,
+  requiredFormReportsPresent,
+} from "../../experiments/form-observatory/trace-contract.mjs";
+export { FORM_TRACE_SCHEMA, FORM_VARIANTS };
 export interface FormIdentity { head: string; tree: string; extensionSha256: string; fixtureSha256: string }
 export interface FormEvent { id: string; sequence: number; elapsedMs: number; source: "runner" | "page" | "browser" | "sink" | "extension"; kind: string; data: Record<string, unknown> }
 const choices: Record<keyof Omit<FormIntentSample, "ownerMatches">, readonly string[]> = {
@@ -16,7 +25,7 @@ export function isFormIntent(value: unknown): value is FormIntentSample {
   return Object.keys(v).length === Object.keys(choices).length + 1 && typeof v.ownerMatches === "boolean" &&
     Object.entries(choices).every(([key, values]) => typeof v[key] === "string" && values.includes(v[key] as string));
 }
-const FAULTS = ["RUNNER_FAILED", "CLOCK_INVALID", "RECEIVER_UNHEALTHY", "RECEIVER_CALLBACK_LOSS", "PAGE_ERROR", "CLEANUP_FAILED", "PROBE_REJECTED", "EVENTS_DROPPED", "PRODUCT_READ_FAILED", "OBSERVATION_INCOMPLETE"];
+const FAULTS = new Set(FORM_GAP_CODES);
 export class FormObservation {
   readonly runId = randomUUID();
   private events: FormEvent[] = [];
@@ -29,7 +38,7 @@ export class FormObservation {
   private options: { variant: string; pairId: string; protectedArm: boolean; identity: FormIdentity; clock: () => number; maxEvents: number };
   constructor(options: { variant: string; pairId: string; protectedArm: boolean; identity: FormIdentity; clock?: () => number; maxEvents?: number }) {
     const maxEvents = options.maxEvents ?? 256;
-    if (!FORM_VARIANTS.includes(options.variant as typeof FORM_VARIANTS[number]) || !/^[a-f0-9]{64}$/.test(options.pairId) || typeof options.protectedArm !== "boolean" || !Number.isInteger(maxEvents) || maxEvents < 40 || maxEvents > 512) throw new Error("FORM_RECORDER_OPTIONS");
+    if (!FORM_VARIANTS.includes(options.variant) || !/^[a-f0-9]{64}$/.test(options.pairId) || typeof options.protectedArm !== "boolean" || !Number.isInteger(maxEvents) || maxEvents < 40 || maxEvents > 512) throw new Error("FORM_RECORDER_OPTIONS");
     if (![options.identity.head, options.identity.tree].every(v => /^[a-f0-9]{40}$/.test(v)) || ![options.identity.extensionSha256, options.identity.fixtureSha256].every(v => /^[a-f0-9]{64}$/.test(v))) throw new Error("FORM_IDENTITY_INVALID");
     this.options = { ...options, identity: { ...options.identity }, clock: options.clock ?? (() => performance.now()), maxEvents };
     this.start = this.options.clock(); if (!Number.isFinite(this.start)) throw new Error("FORM_CLOCK_INVALID");
@@ -64,20 +73,24 @@ export class FormObservation {
   }
   navigation(scope: "top" | "child", destination: "fixture" | "harm" | "benign" | "other"): void { this.add("browser", "navigation.committed", { scope, destination }); }
   product(code: "form-blocked" | "navigation-blocked" | "navigation-rollback" | "other-decision"): void { this.add("extension", "decision.report", { code }); }
-  fail(code: string): void { if (this.finished) throw new Error("FORM_RECORDER_FINISHED"); if (!FAULTS.includes(code)) throw new Error("UNKNOWN_FORM_FAULT"); this.gaps.add(code); }
+  fail(code: string): void { if (this.finished) throw new Error("FORM_RECORDER_FINISHED"); if (!FAULTS.has(code)) throw new Error("UNKNOWN_FORM_FAULT"); this.gaps.add(code); }
   private snapshot(completed: boolean) {
-    return { schema: FORM_TRACE_SCHEMA, mode: "synthetic", scenarioId: "issue688-form-intent", variant: this.options.variant, pairId: this.options.pairId,
+    return { schema: FORM_TRACE_SCHEMA, mode: FORM_TRACE_MODE, scenarioId: FORM_SCENARIO_ID, variant: this.options.variant, pairId: this.options.pairId,
       runId: this.runId, protectedArm: this.options.protectedArm, identity: { ...this.options.identity }, completed, browserVersion: this.browserVersion,
-      requiredObservationMs: 2300, dropped: this.dropped, gaps: [...this.gaps], events: structuredClone(this.events), evidencePolicy: "FORM_DIAGNOSTIC_NOT_FOUR_ARM_CERTIFICATION" };
+      requiredObservationMs: FORM_REQUIRED_OBSERVATION_MS, dropped: this.dropped, gaps: [...this.gaps], events: structuredClone(this.events), evidencePolicy: FORM_EVIDENCE_POLICY };
   }
   finish(completed: boolean) {
     if (!this.finished) {
       this.add("runner", "observation.end", {});
       if (completed) {
-        const hasIntent = this.events.some(event => event.kind === "form.intent");
-        const healthPhases = new Set(this.events.filter(event => event.kind === "receiver.health").map(event => event.data.phase));
-        if (!hasIntent || !healthPhases.has("start") || !healthPhases.has("end")) { this.gaps.add("OBSERVATION_INCOMPLETE"); completed = false; }
+        const health = this.events.filter(event => event.kind === "receiver.health");
+        const healthComplete = health.length === 2 &&
+          health[0]?.data.phase === "start" && health[0]?.data.ok === true && health[0]?.data.sequence === 1 &&
+          health[1]?.data.phase === "end" && health[1]?.data.ok === true && health[1]?.data.sequence === 2;
+        const reportsComplete = requiredFormReportsPresent(this.events, this.options.variant, this.options.protectedArm);
+        if (!healthComplete || !reportsComplete || this.browserVersion === "not-recorded") this.gaps.add("OBSERVATION_INCOMPLETE");
       }
+      if (this.dropped !== 0 || this.gaps.size !== 0) completed = false;
       this.finished = this.snapshot(completed);
     }
     return structuredClone(this.finished);

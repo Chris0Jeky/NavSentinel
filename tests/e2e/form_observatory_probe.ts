@@ -39,13 +39,12 @@ export function sampleFormIntent({ form, submitter, harmUrl, benignUrl }: {
 export function formProbeScript(harmUrl: string, benignUrl: string): string {
   const json = (s: string): string => JSON.stringify(s).replaceAll("<", "\\u003c");
   return `const __nsFormReport=(phase,form=f,submitter=a,primitive='requestSubmit')=>{
-    const fault=(code)=>{ try { const report=globalThis.__nsFormObservationFault; if(typeof report!=='function') return; const pending=report(code); if(pending&&typeof pending.catch==='function') pending.catch(()=>{}); } catch {} };
     try {
       const intent=(${sampleFormIntent.toString()})({form,submitter,harmUrl:${json(harmUrl)},benignUrl:${json(benignUrl)}});
       const report=globalThis.__nsFormObservation;
-      if(typeof report!=='function'){ fault('PROBE_REJECTED'); return; }
+      if(typeof report!=='function') return;
       const pending=report({phase,primitive,intent});
-      if(pending&&typeof pending.catch==='function') pending.catch(()=>fault('RECEIVER_CALLBACK_LOSS'));
-    } catch { fault('PROBE_REJECTED'); }
+      if(pending&&typeof pending.catch==='function') pending.catch(()=>{});
+    } catch {}
   };`;
 }
