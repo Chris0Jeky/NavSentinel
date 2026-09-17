@@ -1,0 +1,45 @@
+name: Evidence Observatory
+on:
+  pull_request:
+    paths:
+      - 'experiments/evidence-observatory/**'
+      - 'docs/observability/**'
+      - '.github/workflows/evidence-observatory.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'experiments/evidence-observatory/**'
+      - 'docs/observability/**'
+      - '.github/workflows/evidence-observatory.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  viewer-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline contracts (no dependency installation)
+        run: node --test experiments/evidence-observatory/tests/*.test.mjs
+      - name: Generate explicitly illustrative preview
+        run: node experiments/evidence-observatory/cli.mjs demo --out test-results/observatory-demo
+      - name: Install existing locked browser tooling
+        run: npm ci --ignore-scripts
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Standalone viewer browser smoke (not extension efficacy)
+        run: node experiments/evidence-observatory/smoke-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observatory-illustrative-preview-and-viewer-smoke
+          path: |
+            test-results/observatory-demo/
+            test-results/observatory-viewer-smoke/
+          retention-days: 7

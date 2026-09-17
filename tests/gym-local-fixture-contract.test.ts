@@ -21,6 +21,12 @@ const rwFixtures = [
   { file: "rw06-legit-auth-second-popup.html", scenarioId: "NS-ADV-AUTH-005", kind: "dynamic-dual" },
 ] as const;
 
+const stateAuthorityFixtures = [
+  { file: "rw21-allow-once-double-spend.html", scenarioId: "NS-ADV-WIN-005" },
+  { file: "rw24-idle-resume-popup.html", scenarioId: "NS-ADV-EVADE-003" },
+  { file: "rw25-rapid-close-reopen.html", scenarioId: "NS-ADV-STATE-008" },
+] as const;
+
 const clipboardFixture = {
   file: "clickfix-05-delayed-rewrite.html",
   scenarioId: "NS-ADV-CLIP-005",
@@ -104,6 +110,24 @@ describe("RW Gym fixture locality contracts", () => {
       `NavSentinelLocalTargets.url('harm', '${scenarioId}', 'alternate-loopback')`,
     );
   });
+
+  it.each(stateAuthorityFixtures)(
+    "keeps $file on one typed benign and one typed harm authority",
+    ({ file, scenarioId }) => {
+      const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
+      const benignAnchor = source.match(/<a\b[^>]*data-navsentinel-local-target=["']benign["'][^>]*>/iu)?.[0] ?? "";
+      const harmAnchor = source.match(/<a\b[^>]*data-navsentinel-local-target=["']harm["'][^>]*>/iu)?.[0] ?? "";
+
+      expect(source).toContain('<script src="local-fixture-targets.js"></script>');
+      expect(source).not.toMatch(/https?:\/\//u);
+      expect(benignAnchor, `${file} must contain a typed benign anchor`).not.toBe("");
+      expect(harmAnchor, `${file} must contain a typed harm anchor`).not.toBe("");
+      expect(benignAnchor).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      expect(harmAnchor).toContain(`data-navsentinel-scenario="${scenarioId}"`);
+      expect(benignAnchor, `${file} benign authority must start inert`).not.toMatch(/\bhref\s*=/iu);
+      expect(harmAnchor, `${file} harm authority must start inert`).not.toMatch(/\bhref\s*=/iu);
+    },
+  );
 });
 
 describe("clipboard time-bomb Gym fixture contract", () => {
