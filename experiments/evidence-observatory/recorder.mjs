@@ -1,0 +1,85 @@
+/** Bounded runner-side recorder. No browser globals, persistence or policy writes. */
+import { performance } from 'node:perf_hooks';
+import { EVENT_SOURCES, FAULT_CODES, TRACE_V2, validateEventMetadata } from './capture-v2.mjs';
+
+export { TRACE_V2 };
+export function createRunRecorder({ runId, arm, contextId, harmTargetId, benignTargetId,
+  scenarioId = 'NS-ADV-UI-004', requiredMs = 2300, instrumentation = 'full',
+  clock = () => performance.now(), maxEvents = 2000 }) {
+  if (!Number.isInteger(maxEvents) || maxEvents < 8 || maxEvents > 2000) throw new Error('EVENT_LIMIT_INVALID');
+  const start = clock(); let last = 0, dropped = 0, closed = false, result;
+  const events = [], faults = new Set(); let startHealth = null, endHealth = null;
+  const stamp = () => {
+    const value = Math.round(clock() - start);
+    if (!Number.isFinite(value) || value < last) faults.add('CLOCK_REGRESSION');
+    last = Number.isFinite(value) ? Math.max(last, value) : last;
+    return last;
+  };
+  const record = (source, kind, extra = {}) => {
+    if (closed) throw new Error('RECORDER_CLOSED');
+    if (!Object.hasOwn(EVENT_SOURCES, kind) || EVENT_SOURCES[kind] !== source) throw new Error('EVENT_PROVENANCE_INVALID');
+    const allowed = ['frame', 'causes', 'code', 'consequence', 'sinkSequence', 'context', 'sourceClock', 'scene', 'receiver'];
+    if (!extra || Object.keys(extra).some(k => !allowed.includes(k))) throw new Error('EVENT_FIELDS_INVALID');
+    validateEventMetadata(extra);
+    const critical = ['sink.receipt', 'observation.end', 'observer.health', 'observer.gap'].includes(kind);
+    const reserve = Math.min(8, Math.floor(maxEvents / 2));
+    // Keep one slot for a receipt and one for the terminal event. Gap/health
+    // events are important, but must not consume the only remaining harm slot.
+    const criticalReserve = ['observer.health', 'observer.gap'].includes(kind) ? 2 : 1;
+    const reservation = critical ? criticalReserve : reserve;
+    if (events.length >= maxEvents - reservation && kind !== 'observation.end') {
+      dropped++; if (critical) faults.add('CRITICAL_EVENT_OVERFLOW'); return null;
+    }
+    const id = `${runId}-e${events.length + 1}`;
+    const e = { id, sequence: events.length + 1, elapsedMs: stamp(), source, kind, frame: 'none', causes: [], ...structuredClone(extra) };
+    events.push(e); return id;
+  };
+  record('runner', 'run.start');
+  return {
+    record,
+    gap(code) {
+      if (closed) throw new Error('RECORDER_CLOSED');
+      if (!FAULT_CODES.includes(code)) throw new Error('FAULT_CODE_INVALID');
+      if (!faults.has(code)) {
+        faults.add(code);
+        record('runner', 'observer.gap', { code });
+      }
+    },
+    health(phase, value) {
+      if (closed) throw new Error('RECORDER_CLOSED');
+      if (!['start', 'end'].includes(phase) || (phase === 'start' ? startHealth : endHealth)) throw new Error('HEALTH_PHASE_INVALID');
+      const snapshot = structuredClone(value);
+      if (phase === 'start') startHealth = snapshot; else endHealth = snapshot;
+      record('runner', 'observer.health', { code: `sink-health-${phase}` });
+    },
+    receipt(receipt) {
+      const expectedRole = arm === 'mixed' ? 'mixed' : receipt.targetId === benignTargetId ? 'benign' : 'attack';
+      if (receipt.runId !== runId || receipt.scenarioId !== scenarioId || receipt.role !== expectedRole || receipt.method !== 'GET' ||
+          ![harmTargetId, benignTargetId].includes(receipt.targetId)) {
+        faults.add('RECEIVER_BINDING_MISMATCH'); throw new Error('RECEIVER_BINDING_MISMATCH');
+      }
+      const consequence = receipt.targetId === harmTargetId ? 'harm' : 'benign';
+      if (receipt.consequence !== (consequence === 'harm' ? 'wrong-target-navigation' : 'benign-navigation')) {
+        faults.add('RECEIVER_BINDING_MISMATCH'); throw new Error('RECEIVER_BINDING_MISMATCH');
+      }
+      return record('sink', 'sink.receipt', { consequence, sinkSequence: receipt.sequence, receiver: {
+        runId: receipt.runId, scenarioId: receipt.scenarioId, targetId: receipt.targetId,
+        sentinelSha256: receipt.sentinelSha256, method: receipt.method, role: receipt.role,
+      } });
+    },
+    finish({ completed = false, extensionReady = false, trustedInput = false, egressFenced = false } = {}) {
+      if (closed) return structuredClone(result);
+      record('runner', 'observation.end'); closed = true;
+      const harm = events.some(e => e.kind === 'sink.receipt' && e.consequence === 'harm');
+      result = { runId, arm, protection: arm === 'baseline' ? 'off' : 'on', completed,
+        declaredOutcome: completed ? (harm ? 'HARM_REACHED' : 'UNKNOWN') : 'TEST_INVALID',
+        observer: { startedMs: 0, endedMs: last, requiredMs, droppedEvents: dropped,
+          sinkHealthyStart: startHealth?.healthy === true, sinkHealthyEnd: endHealth?.healthy === true,
+          freshTarget: startHealth?.targetUses?.[harmTargetId] === 0 && startHealth?.targetUses?.[benignTargetId] === 0,
+          egressFenced, extensionReady, trustedInput, baselineIndependent: arm === 'baseline' },
+        capture: { contextId, instrumentation, harmTargetId, benignTargetId, baselineMode: arm === 'baseline' ? 'extension-absent' : 'enabled',
+          startHealth, endHealth, faults: [...faults] }, events: structuredClone(events) };
+      return structuredClone(result);
+    },
+  };
+}

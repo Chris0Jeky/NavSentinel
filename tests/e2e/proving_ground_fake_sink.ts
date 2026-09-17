@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import * as http from "node:http";
 
 export const PROVING_GROUND_SENTINEL = "NAVSENTINEL_SENTINEL_DO_NOT_RUN";
@@ -28,12 +28,25 @@ export type ProvingGroundSinkSnapshot = {
   invalidAttempts: Array<{ reason: string; receivedAt: string }>;
 };
 
+export type ProvingGroundSinkHealth = {
+  healthy: boolean;
+  healthSequence: number;
+  receiptCount: number;
+  invalidAttempts: number;
+  observerErrors: number;
+  targetUses: Record<string, number>;
+};
+
 export type ProvingGroundFakeSink = {
   origin: string;
   scenarioId: string;
   urlFor: (role: ProvingGroundRole, consequence: string, targetId?: string) => string;
   createFixtureBootstrap: (input: FixtureBootstrapInput) => FixtureTargetBootstrap;
   snapshot: () => ProvingGroundSinkSnapshot;
+  /** A separate runner-only challenge; never spends a consequence authority. */
+  probe: () => Promise<ProvingGroundSinkHealth>;
+  /** Receiver-side facts, not page events. Exceptions mark observation loss. */
+  observe: (listener: (receipt: ProvingGroundSinkReceipt) => void) => () => void;
   close: () => Promise<void>;
 };
 
@@ -291,6 +304,10 @@ export async function startProvingGroundFakeSinkForHost(
   const receipts: ProvingGroundSinkReceipt[] = [];
   const invalidAttempts: ProvingGroundSinkSnapshot["invalidAttempts"] = [];
   const sentinelSha256 = digest(PROVING_GROUND_SENTINEL);
+  const healthSecret = randomUUID();
+  let healthSequence = 0;
+  let observerErrors = 0;
+  const listeners = new Set<(receipt: ProvingGroundSinkReceipt) => void>();
 
   const reject = (res: http.ServerResponse, reason: string, statusCode = 400): void => {
     invalidAttempts.push({ reason, receivedAt: new Date().toISOString() });
@@ -299,6 +316,20 @@ export async function startProvingGroundFakeSinkForHost(
 
   const server = http.createServer((req, res) => {
     const reqUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+    // The secret stays in the runner closure. No health URL/credential is exposed
+    // to authored fixtures, and an acknowledgement never consumes a target.
+    if (req.method === "HEAD" && reqUrl.pathname === "/__navsentinel_sink_health" &&
+        !reqUrl.search && req.headers["x-navsentinel-health-key"] === healthSecret &&
+        typeof req.headers["x-navsentinel-health-challenge"] === "string") {
+      healthSequence++;
+      res.writeHead(204, {
+        "cache-control": "no-store",
+        "x-navsentinel-health-challenge": req.headers["x-navsentinel-health-challenge"],
+        "x-navsentinel-health-sequence": String(healthSequence),
+      });
+      res.end();
+      return;
+    }
     if (req.method !== "GET") {
       reject(res, "Only an inert GET consequence is accepted", 405);
       return;
@@ -363,6 +394,12 @@ export async function startProvingGroundFakeSinkForHost(
       sentinelSha256,
       receivedAt: new Date().toISOString(),
     });
+    // Listener failure must not interfere with accepting the consequence.
+    // Each listener receives its own copy; an observer cannot rewrite the oracle.
+    for (const listener of listeners) {
+      try { listener({ ...receipts[receipts.length - 1]! }); }
+      catch { observerErrors++; }
+    }
     writeInertResponse(
       res,
       200,
@@ -463,9 +500,43 @@ export async function startProvingGroundFakeSinkForHost(
     });
   };
 
+  const probe = async (): Promise<ProvingGroundSinkHealth> => {
+    const challenge = randomUUID();
+    const healthy = !server.listening ? false : await new Promise<boolean>((resolve) => {
+      const request = http.request(new URL("/__navsentinel_sink_health", origin), {
+        method: "HEAD",
+        agent: false,
+        headers: {
+          "x-navsentinel-health-key": healthSecret,
+          "x-navsentinel-health-challenge": challenge,
+        },
+      }, (response) => {
+        response.resume();
+        response.once("error", () => resolve(false));
+        response.once("end", () => resolve(response.statusCode === 204 &&
+          response.headers["x-navsentinel-health-challenge"] === challenge &&
+          Number(response.headers["x-navsentinel-health-sequence"]) > 0));
+      });
+      request.setTimeout(750, () => { request.destroy(); resolve(false); });
+      request.once("error", () => resolve(false));
+      request.end();
+    });
+    return {
+      healthy, healthSequence, receiptCount: receipts.length,
+      invalidAttempts: invalidAttempts.length, observerErrors,
+      targetUses: Object.fromEntries([...targetAuthorities.keys()].map(id => [id, targetUses.get(id) ?? 0])),
+    };
+  };
+
   return {
     origin,
     scenarioId: options.scenarioId,
+    probe,
+    observe: (listener) => {
+      if (listeners.size >= 8) throw new Error("Receiver observer limit reached");
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     urlFor,
     createFixtureBootstrap,
     snapshot: () => ({
