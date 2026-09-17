@@ -224,9 +224,14 @@ function validateTrace(row, index, differences, campaign) {
     add(differences, "FORM_TRACE_TERMINALS", key);
   }
   const health = row.events.filter((event) => event?.kind === "receiver.health");
-  if (health.length !== 2 || health[0]?.data?.phase !== "start" || health[0]?.data?.sequence !== 1 ||
-      health[1]?.data?.phase !== "end" || health[1]?.data?.sequence !== 2 ||
-      row.events.indexOf(health[0]) >= row.events.indexOf(health[1])) {
+  const healthStartIndex = row.events.indexOf(health[0]);
+  const healthEndIndex = row.events.indexOf(health[1]);
+  const healthComplete = health.length === 2 && health[0]?.data?.phase === "start" && health[0]?.data?.sequence === 1 &&
+    health[1]?.data?.phase === "end" && health[1]?.data?.sequence === 2 && healthStartIndex < healthEndIndex;
+  const outsideHealth = healthComplete && row.events.some((event, eventIndex) =>
+    !["run.start", "observation.end", "receiver.health"].includes(event?.kind) &&
+    (eventIndex <= healthStartIndex || eventIndex >= healthEndIndex));
+  if (!healthComplete || outsideHealth) {
     add(differences, "FORM_TRACE_HEALTH", key);
   }
   if (!requiredFormReportsPresent(row.events, row.variant, row.protectedArm)) {

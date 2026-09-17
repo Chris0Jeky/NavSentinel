@@ -47,8 +47,8 @@ const nativeControls = new Set([
 ]);
 
 /**
- * Required page-report prefix for one fixed arm. Additional trailing reports are allowed
- * only because a post-commit rollback can load a fresh child fixture and emit `prepared`.
+ * Required page-report sequence for one fixed arm. A post-commit rollback can load a fresh
+ * child fixture and emit trailing `prepared` reports, but no other trailing report is valid.
  */
 export function requiredFormReports(variant, protectedArm) {
   if (!FORM_VARIANTS.includes(variant) || typeof protectedArm !== "boolean") {
@@ -97,7 +97,8 @@ export function requiredFormReportsPresent(events, variant, protectedArm) {
     .filter((event) => event && typeof event === "object" && event.kind === "form.intent")
     .map((event) => ({ phase: event.data?.phase, primitive: event.data?.primitive }));
   if (reports.length < required.length) return false;
-  return required.every((expected, index) => (
+  if (!required.every((expected, index) => (
     reports[index]?.phase === expected.phase && reports[index]?.primitive === expected.primitive
-  ));
+  ))) return false;
+  return reports.slice(required.length).every((report) => report.phase === "prepared" && report.primitive === "native");
 }
