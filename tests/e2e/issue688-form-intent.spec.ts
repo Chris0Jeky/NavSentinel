@@ -194,12 +194,12 @@ for (const variant of benign) test(`@regression #688 benign ${variant}`, async (
   else expect(result.topUrl.startsWith(result.sinkOrigin + "/")).toBe(true);
   if (["empty-method", "invalid-method"].includes(variant)) expect(result.attempts[0]?.method).toBe("GET");
 });
-test("@regression #688 server-redirect: an unproven changed start is rolled back post-commit", async ({}, info) => {
+test("@regression #688 server-redirect: one matched start permits the bounded redirect", async ({}, info) => {
   test.setTimeout(45000);
   const result = await runArm("server-redirect", true, info);
   expect(result.attempts).toHaveLength(1);
   expect(result.attempts[0]).toMatchObject({ role: "benign", accepted: true });
-  expect(result.topUrl).toBe(result.parentUrl);
+  expect(result.topUrl).toBe(`${result.sinkOrigin}/done`);
 });
 test("@regression #688 dialog is not a navigation", async ({}, info) => {
   const result = await runArm("dialog", true, info); expect(result.attempts).toEqual([]); expect(result.dialogClosed).toBe(true);
