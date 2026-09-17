@@ -52,7 +52,7 @@ describe("Windows state-authority bootstrap boundary", () => {
           "-NoProfile",
           "-File",
           bootstrapPath,
-          "--preflight-only",
+          "-PreflightOnly",
         ],
         {
           cwd: repositoryRoot,

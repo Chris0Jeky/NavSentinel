@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+  [switch] $PreflightOnly,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]] $NodeArguments = @()
 )
@@ -52,6 +53,10 @@ $nodeCommand = Get-Command -Name "node" -CommandType Application -ErrorAction St
 $bootstrapPath = Join-Path $PSScriptRoot "launch-state-authority-campaign.mjs"
 if (-not (Test-Path -LiteralPath $bootstrapPath -PathType Leaf)) {
   throw "Committed state-authority bootstrap is missing: $bootstrapPath"
+}
+
+if ($PreflightOnly) {
+  $NodeArguments = @("--preflight-only") + $NodeArguments
 }
 
 & $nodeCommand.Source $bootstrapPath @NodeArguments

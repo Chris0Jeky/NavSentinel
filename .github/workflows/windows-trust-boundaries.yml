@@ -77,4 +77,4 @@ jobs:
 
       - name: Run the external PowerShell bootstrap preflight
         shell: pwsh
-        run: ./scripts/launch-state-authority-campaign.ps1 --preflight-only
+        run: ./scripts/launch-state-authority-campaign.ps1 -PreflightOnly
