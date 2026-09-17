@@ -323,35 +323,35 @@ jobs:
           replace_once(
               "scripts/launch-state-authority-campaign.mjs",
               '''  const temporaryRoot = fs.mkdtempSync(
-            path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
-          );''',
+              path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+            );''',
               '''  const sensitiveEnvironmentOid = git(
-            ["-C", repositoryRoot, "rev-parse", `HEAD:${SENSITIVE_ENVIRONMENT_REPOSITORY_PATH}`],
-            { environment, encoding: "utf8" },
-          ).trim();
-          const sensitiveEnvironmentBytes = git(
-            ["-C", repositoryRoot, "cat-file", "blob", sensitiveEnvironmentOid],
-            { environment },
-          );
-          if (gitObjectId("blob", sensitiveEnvironmentBytes, objectFormat) !== sensitiveEnvironmentOid) {
-            fail("extracted sensitive-environment bytes do not match the committed object ID");
-          }
-          const temporaryRoot = fs.mkdtempSync(
-            path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
-          );''',
+              ["-C", repositoryRoot, "rev-parse", `HEAD:${SENSITIVE_ENVIRONMENT_REPOSITORY_PATH}`],
+              { environment, encoding: "utf8" },
+            ).trim();
+            const sensitiveEnvironmentBytes = git(
+              ["-C", repositoryRoot, "cat-file", "blob", sensitiveEnvironmentOid],
+              { environment },
+            );
+            if (gitObjectId("blob", sensitiveEnvironmentBytes, objectFormat) !== sensitiveEnvironmentOid) {
+              fail("extracted sensitive-environment bytes do not match the committed object ID");
+            }
+            const temporaryRoot = fs.mkdtempSync(
+              path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+            );''',
               "bootstrap policy extraction",
           )
           replace_once(
               "scripts/launch-state-authority-campaign.mjs",
               '''    fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
-            environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;''',
+              environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;''',
               '''    fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
-            fs.writeFileSync(
-              path.join(temporaryRoot, "sensitive-environment.mjs"),
-              sensitiveEnvironmentBytes,
-              { mode: 0o600 },
-            );
-            environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;''',
+              fs.writeFileSync(
+                path.join(temporaryRoot, "sensitive-environment.mjs"),
+                sensitiveEnvironmentBytes,
+                { mode: 0o600 },
+              );
+              environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;''',
               "bootstrap policy materialization",
           )
 
@@ -372,43 +372,43 @@ jobs:
           replace_once(
               "tests/release-input-integrity.test.ts",
               '''  it("selects a Windows command interpreter for npm while preserving fixed arguments", () => {
-            const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
-            expect(resolveReleaseCommand).toEqual(expect.any(Function));
+              const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
+              expect(resolveReleaseCommand).toEqual(expect.any(Function));
 
-            expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
-              platform: "win32",
-              comspec: "C:\\\\Windows\\\\System32\\\\cmd.exe",
-            })).toEqual({
-              command: "C:\\\\Windows\\\\System32\\\\cmd.exe",
-              args: ["/d", "/s", "/c", "npm", "install", "--package-lock-only", "--ignore-scripts"],
-            });
+              expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+                platform: "win32",
+                comspec: "C:\\\\Windows\\\\System32\\\\cmd.exe",
+              })).toEqual({
+                command: "C:\\\\Windows\\\\System32\\\\cmd.exe",
+                args: ["/d", "/s", "/c", "npm", "install", "--package-lock-only", "--ignore-scripts"],
+              });
 
-            expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
-              platform: "linux",
-            })).toEqual({
-              command: "npm",
-              args: ["install", "--package-lock-only", "--ignore-scripts"],
-            });
-          });''',
+              expect(resolveReleaseCommand?.("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+                platform: "linux",
+              })).toEqual({
+                command: "npm",
+                args: ["install", "--package-lock-only", "--ignore-scripts"],
+              });
+            });''',
               '''  it("selects Node plus npm's JavaScript entry point without a command shell", () => {
-            const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
-            expect(resolveReleaseCommand).toEqual(expect.any(Function));
-            const root = makeTempRoot("npm-cli-entry");
-            const npmExecPath = path.join(root, "npm-cli.js");
-            fs.writeFileSync(npmExecPath, "process.exitCode = 0;\\n");
+              const resolveReleaseCommand = releaseIntegrityModule.resolveReleaseCommand;
+              expect(resolveReleaseCommand).toEqual(expect.any(Function));
+              const root = makeTempRoot("npm-cli-entry");
+              const npmExecPath = path.join(root, "npm-cli.js");
+              fs.writeFileSync(npmExecPath, "process.exitCode = 0;\\n");
 
-            expect(resolveReleaseCommand?.("npm", ["install", "argument with spaces & shell syntax"], {
-              nodeExecutable: "C:\\\\Program Files\\\\nodejs\\\\node.exe",
-              npmExecPath,
-            })).toEqual({
-              command: "C:\\\\Program Files\\\\nodejs\\\\node.exe",
-              args: [
-                fs.realpathSync.native(npmExecPath),
-                "install",
-                "argument with spaces & shell syntax",
-              ],
-            });
-          });''',
+              expect(resolveReleaseCommand?.("npm", ["install", "argument with spaces & shell syntax"], {
+                nodeExecutable: "C:\\\\Program Files\\\\nodejs\\\\node.exe",
+                npmExecPath,
+              })).toEqual({
+                command: "C:\\\\Program Files\\\\nodejs\\\\node.exe",
+                args: [
+                  fs.realpathSync.native(npmExecPath),
+                  "install",
+                  "argument with spaces & shell syntax",
+                ],
+              });
+            });''',
               "release test npm seam",
           )
 
@@ -437,17 +437,17 @@ jobs:
           replace_once(
               "tests/state-authority-bootstrap-replay.test.ts",
               '''  fs.writeFileSync(launcher, `console.log(JSON.stringify({
-            marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
-            oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
-          })); process.exitCode = 23;\\n`);''',
+              marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
+              oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
+            })); process.exitCode = 23;\\n`);''',
               '''  fs.writeFileSync(launcher, `console.log(JSON.stringify({
-            marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
-            oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
-          })); process.exitCode = 23;\\n`);
-            fs.writeFileSync(
-              path.join(repository, "scripts/sensitive-environment.mjs"),
-              "export function stripSensitiveEnvironment(source = process.env) { return { ...source }; }\\n",
-            );''',
+              marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
+              oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
+            })); process.exitCode = 23;\\n`);
+              fs.writeFileSync(
+                path.join(repository, "scripts/sensitive-environment.mjs"),
+                "export function stripSensitiveEnvironment(source = process.env) { return { ...source }; }\\n",
+              );''',
               "bootstrap replay policy fixture",
           )
           PY
