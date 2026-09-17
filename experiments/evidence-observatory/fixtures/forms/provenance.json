@@ -1,0 +1,52 @@
+{
+  "schema": "navsentinel.form-fixture-provenance.v1",
+  "producerHead": "e1777987b3e98bb0582a7f26916a2b42caad798e",
+  "producerTree": "526dd94eacbcc2a329fa766ddae6a699815a08cb",
+  "workflowRun": 34787575293,
+  "artifactId": 10327545994,
+  "artifactSha256": "78638c572e038849331741fd5fb2c91b8d046b88857ae19129c4eec9d74c4d0a",
+  "gzipSha256": "5a31a52def7b1878ef1e972924b7f744e2fb791ffa6c159e9fefed3ef52a8ad1",
+  "selection": "Ten recorded synthetic traces selected for viewer regression, not a representative efficacy sample. JSON objects are unchanged; whitespace was compacted into a bounded gzip JSON array.",
+  "originalFiles": [
+    {
+      "file": "action-substitution-baseline.form-trace.json",
+      "sha256": "8760ec7c140e0026faeb560b5a18de75d26e351508a2acb8318327a7f6bcc98d"
+    },
+    {
+      "file": "action-substitution-protected.form-trace.json",
+      "sha256": "de925f556bf7712cf75b54b053d4e6ccee101a8f002878e631349a41c44f4c11"
+    },
+    {
+      "file": "alternate-submitter-baseline.form-trace.json",
+      "sha256": "267f6aa63a5d525f31103f5c83e25ba25898f536707d85f1543551e0a4ae1716"
+    },
+    {
+      "file": "alternate-submitter-protected.form-trace.json",
+      "sha256": "7388b193733e47f88281fc1bcb194b7fe58a47d7ece0f98c7305f1861476c595"
+    },
+    {
+      "file": "late-submit-baseline.form-trace.json",
+      "sha256": "d629e42dfbccd733566bc96c138f34a75989c172890ed267204ff08b2fb97cb5"
+    },
+    {
+      "file": "late-submit-protected.form-trace.json",
+      "sha256": "0fb7f3958beee2bc264fb5db439012f031d8f11b228bdafc2d3a10844725796f"
+    },
+    {
+      "file": "replay-baseline.form-trace.json",
+      "sha256": "80054945b5b6cd877ac42bb4fe60ea19b4a7bdf811cbaf1f0f579995f60eafb2"
+    },
+    {
+      "file": "replay-protected.form-trace.json",
+      "sha256": "08ede5b008f48fc23457059a500e53a4005d3b8e73499007e3bb383b36b079ca"
+    },
+    {
+      "file": "empty-target-protected.form-trace.json",
+      "sha256": "9272af78285467933387d71459dabdefab2267c06ff704a7fb84da260c70a286"
+    },
+    {
+      "file": "mixed-protected.form-trace.json",
+      "sha256": "e05d4aa6c5cb254b31c34d06dd3e1bd29e476bab784bcd3c208a83f41d250612"
+    }
+  ]
+}
