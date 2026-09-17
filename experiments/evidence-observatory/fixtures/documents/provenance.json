@@ -1,0 +1,97 @@
+{
+  "schema": "navsentinel.observatory.pinned-documents.v1",
+  "evidencePolicy": "RECORDED_SYNTHETIC_INSPECTION_NOT_EFFICACY_SAMPLE",
+  "producerHead": "684df3cfbcb6f4c1ce4cd2d0a0ca0c78474124dd",
+  "producerTree": "4bda754f991f4c30c503d61f316655ce7e08f745",
+  "workflowRun": 34791757796,
+  "artifactId": 10328547884,
+  "zipSha256": "cdd437829321251a9fdc64e7db3c20f2abe4e90696f3b3cf454ec29bcd8878fe",
+  "gzipSha256": "4c231504c06ad8ed9f3e2b9572e017a63419ab32bb5343273fbdf5b78087b7a6",
+  "records": [
+    {
+      "path": "test-results/form-documents/form-document-lifecycle--r-6c916--same-frame-same-URL-reload-regression/document-lifecycle.form-trace.json",
+      "originalSha256": "79f2acddc9a2ff3c416525895ffd33b782049a9c711341f93646a41221cb0e32",
+      "runId": "8c7357ce-1f26-492b-b317-c28ea44c16e3",
+      "experiment": "same-frame-reload",
+      "variant": "exact-request",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-documents/form-document-lifecycle--r-7ea15-ver-share-document-identity-regression/document-lifecycle.form-trace.json",
+      "originalSha256": "8284c25342a5020fb37d55b5d387ff09dcd372e9e172eb225b468912c1ae350e",
+      "runId": "ce1614ae-977c-4cae-88cb-303b5af620a3",
+      "experiment": "frame-replacement",
+      "variant": "exact-request",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-documents/form-document-lifecycle--r-8998d-on-keeps-its-observed-realm-regression/document-lifecycle.form-trace.json",
+      "originalSha256": "5be0b04dc5df28f80307c2008984d20d2efef674b122e35c9669d3c89e7c3189",
+      "runId": "c5df95be-e558-4077-848c-ec098cbd8c3f",
+      "experiment": "same-document-navigation",
+      "variant": "exact-request",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-documents/form-document-lifecycle--r-b517f-s-not-prove-caller-identity-regression/document-lifecycle.form-trace.json",
+      "originalSha256": "a5c125a28379e5937f717302d4038af14f019c7b608f2db64602aedb1d00eb5b",
+      "runId": "07c6e120-484c-4c47-80a6-f35ecfd7b411",
+      "experiment": "borrowed-reporting-function",
+      "variant": "exact-request",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-documents/form-document-lifecycle--r-bed0e-RL-sibling-reports-separate-regression/document-lifecycle.form-trace.json",
+      "originalSha256": "30d63bc720660e71f0c8e7296deb4cfe993e343e08650f193d2844ac2530d9d7",
+      "runId": "43db25dd-e3ac-41e1-a6b3-90da1bc7a3b7",
+      "experiment": "same-url-siblings",
+      "variant": "exact-request",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-documents/form-document-lifecycle--r-c3826-ed-observer-accepts-nothing-regression/document-lifecycle.form-trace.json",
+      "originalSha256": "41ece54c878e7d7f619aa82452def8ed51705ac0f397d3c34bda35cd8bfd45bb",
+      "runId": "2e83102c-1413-4aea-9673-7d99ca59792c",
+      "experiment": "spoofed-identity-disposal",
+      "variant": "exact-request",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-full/issue688-form-intent--regr-49608--POST-COMMIT-never-pre-harm-regression/late-submit-protected.form-trace.json",
+      "originalSha256": "d8e9d8439d1a62cf1d8f98e3022ee04534a29f8f85b9848b0de157cfd1eea98d",
+      "runId": "9d876df3-9515-4b34-ba68-d835917804db",
+      "experiment": "form-campaign",
+      "variant": "late-submit",
+      "protectedArm": true
+    },
+    {
+      "path": "test-results/form-full/issue688-form-intent--regr-6f23b--then-allow-one-fresh-click-regression/mixed-protected.form-trace.json",
+      "originalSha256": "b5867d82c09e657f01c2ee6a96869a01da15685a8f42b92f51b6d357a5fb5f05",
+      "runId": "ebb009fb-4440-4e2f-9fb2-274abe1d8e32",
+      "experiment": "form-campaign",
+      "variant": "mixed",
+      "protectedArm": true
+    },
+    {
+      "path": "test-results/form-full/issue688-form-intent--regr-95a6b-rm-protected-pre-call-block-regression/action-substitution-baseline.form-trace.json",
+      "originalSha256": "1526e0465b0f0b5eac859a53890628a0ccb88e55c328e36c98d902a1aa90952b",
+      "runId": "f9bbd58e-bdeb-4334-bf82-3c456c3d7dec",
+      "experiment": "form-campaign",
+      "variant": "action-substitution",
+      "protectedArm": false
+    },
+    {
+      "path": "test-results/form-full/issue688-form-intent--regr-95a6b-rm-protected-pre-call-block-regression/action-substitution-protected.form-trace.json",
+      "originalSha256": "1fb372d514e4c40da8815238650a54e2b3f96b4b34735634993830fa904a7c87",
+      "runId": "a29f10d6-60dd-4b1d-b1a6-11939e1d1abf",
+      "experiment": "form-campaign",
+      "variant": "action-substitution",
+      "protectedArm": true
+    }
+  ],
+  "notes": [
+    "Objects unchanged; whitespace compacted inside this bounded gzip.",
+    "Six lifecycle exercises are not full attack campaigns: missing input/health windows remain explicit.",
+    "Only the separate producer head executed these scenarios, not the importing viewer head."
+  ]
+}
