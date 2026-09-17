@@ -134,6 +134,10 @@ describe("DOM-bound first-attempt authority (#688)", () => {
     b.gate.capture(b, 30, 20);
     expect(b.gate.authorize(ID, b.intent, 10, 25)).toBe(false);
   });
+  it("revokes with only bridge-safe cancellation metadata", () => {
+    const b = armed();
+    expect(b.gate.revoke()).toEqual({ attemptId: ID, gestureTime: 10 });
+  });
   it("captures no request body or field values", () => {
     const b = fixture(); b.form.insertAdjacentHTML("beforeend", '<input type="password" value="never-serialize-me">');
     expect(JSON.stringify(resolveFormIntent(b.form, b.submitter))).not.toContain("never-serialize-me");
