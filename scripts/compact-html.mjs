@@ -30,7 +30,7 @@ function isStructuralBoundary(token, closing) {
   return !!match && !!match[1] === closing && STRUCTURAL_TAGS.has(match[2].toLowerCase());
 }
 
-function compactNormalHtml(html, stripCrossOrigin = false) {
+function compactNormalHtml(html, stripCrossOrigin = false, preserveInterElementWhitespace = false) {
   const withoutComments = html.replace(/<!--(?!\[if\b)[\s\S]*?-->/gi, "");
   const tokens = withoutComments.split(/(<[^>]*>)/g).map((token) => {
     if (token.startsWith("<")) return compactTag(token, stripCrossOrigin);
@@ -41,7 +41,7 @@ function compactNormalHtml(html, stripCrossOrigin = false) {
     .map((token, index) => {
       const previous = tokens[index - 1] ?? "";
       const next = tokens[index + 1] ?? "";
-      if (token === " " && (isStructuralTag(previous) || isStructuralTag(next))) return "";
+      if (!preserveInterElementWhitespace && token === " " && (isStructuralTag(previous) || isStructuralTag(next))) return "";
       if (!token || token.startsWith("<")) return token;
       const withoutLeading = token.startsWith(" ") && isStructuralBoundary(previous, false)
         ? token.slice(1)
@@ -69,13 +69,16 @@ function stripOptionalEndTags(html) {
  * the exact contents of raw-text elements. This is a packaging optimization;
  * it does not alter scripts, styles, preformatted text, or textarea content.
  */
-export function compactHtml(html, { stripCrossOrigin = false } = {}) {
+export function compactHtml(html, {
+  stripCrossOrigin = false,
+  preserveInterElementWhitespace = false,
+} = {}) {
   const output = [];
   let cursor = 0;
   let match;
 
   while ((match = RAW_TAG.exec(html)) !== null) {
-    output.push(compactNormalHtml(html.slice(cursor, match.index), stripCrossOrigin));
+    output.push(compactNormalHtml(html.slice(cursor, match.index), stripCrossOrigin, preserveInterElementWhitespace));
     const tagName = match[1];
     const close = new RegExp(`</${tagName}\\s*>`, "ig");
     close.lastIndex = match.index + match[0].length;
@@ -92,6 +95,6 @@ export function compactHtml(html, { stripCrossOrigin = false } = {}) {
     RAW_TAG.lastIndex = cursor;
   }
 
-  output.push(compactNormalHtml(html.slice(cursor), stripCrossOrigin));
+  output.push(compactNormalHtml(html.slice(cursor), stripCrossOrigin, preserveInterElementWhitespace));
   return stripOptionalEndTags(output.join(""));
 }
