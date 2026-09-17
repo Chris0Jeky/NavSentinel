@@ -1,0 +1,147 @@
+name: Patch form redirect start boundary
+
+on:
+  push:
+    branches:
+      - fix/688-effective-form-authority-20260913
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply fail-closed repeated-start repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          sw = Path('extension/src/sw/sw.ts')
+          text = sw.read_text(encoding='utf-8')
+          old = '\n'.join([
+              'function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, now: number): void {',
+              '  // A server redirect can emit another onBeforeNavigate before the eventual',
+              '  // form_submit commit. Keep the original matched start while that navigation',
+              '  // is in flight; consumeForm still requires the final form_submit transition',
+              '  // and, for a changed URL, the server_redirect qualifier. A second unrelated',
+              '  // start therefore cannot spend the capability, while a mismatched first',
+              '  // start remains terminal.',
+              '  if (form.phase === "s" && form.startedUrl !== url && now < formDeadline(form)) return;',
+              '  if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt || !formDestinationMatches(form, target, url)) {',
+          ]) + '\n'
+          new = '\n'.join([
+              'function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, now: number): void {',
+              '  // webNavigation exposes no stable request/navigation ID that can prove a',
+              '  // changed second onBeforeNavigate belongs to the first form navigation rather',
+              '  // than to a replacement submission. The arm is one-use, so every second start',
+              '  // burns it. A server-redirect commit may still be accepted when Chrome reports',
+              '  // one matched start, but a repeated changed start is conservatively untrusted.',
+              '  if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt || !formDestinationMatches(form, target, url)) {',
+          ]) + '\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one startForm boundary, found {text.count(old)}')
+          sw.write_text(text.replace(old, new), encoding='utf-8')
+
+          rollback = Path('tests/sw-rollback.test.ts')
+          text = rollback.read_text(encoding='utf-8')
+          old = '\n'.join([
+              '  it("keeps a form capability through repeated starts in one server redirect", async () => {',
+              '    const mock = await setup(); arm(mock); start(mock);',
+              '    start(mock, "https://redirect.test/done");',
+              '    expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(true);',
+              '  });',
+          ])
+          new = '\n'.join([
+              '  it("burns a form capability when a changed second start cannot be tied to the original navigation", async () => {',
+              '    const mock = await setup(); arm(mock); start(mock);',
+              '    start(mock, "https://redirect.test/done");',
+              '    expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(false);',
+              '  });',
+          ])
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one repeated-start regression, found {text.count(old)}')
+          rollback.write_text(text.replace(old, new), encoding='utf-8')
+
+          e2e = Path('tests/e2e/issue688-form-intent.spec.ts')
+          text = e2e.read_text(encoding='utf-8')
+          old = 'const benign: FormCase[] = ["exact-submit", "exact-request", "native", "server-redirect", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "validation"];'
+          new = 'const benign: FormCase[] = ["exact-submit", "exact-request", "native", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "validation"];'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one benign matrix, found {text.count(old)}')
+          text = text.replace(old, new)
+          anchor = 'test("@regression #688 dialog is not a navigation", async ({}, info) => {\n'
+          addition = '\n'.join([
+              'test("@regression #688 server-redirect: an unproven changed start is rolled back post-commit", async ({}, info) => {',
+              '  test.setTimeout(45000);',
+              '  const result = await runArm("server-redirect", true, info);',
+              '  expect(result.attempts).toHaveLength(1);',
+              '  expect(result.attempts[0]).toMatchObject({ role: "benign", accepted: true });',
+              '  expect(result.topUrl).toBe(result.parentUrl);',
+              '});',
+          ]) + '\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'expected one dialog anchor, found {text.count(anchor)}')
+          e2e.write_text(text.replace(anchor, addition + anchor), encoding='utf-8')
+
+          docs = Path('docs/security/CHILD_FORM_AUTHORITY_688.md')
+          text = docs.read_text(encoding='utf-8')
+          old = '\n'.join([
+              '   navigation never spends a form grant. A server redirect is accepted only after',
+              '   the matching start; client redirects/history do not transfer it.',
+          ]) + '\n'
+          new = '\n'.join([
+              '   navigation never spends a form grant. A server redirect is accepted only when',
+              '   Chrome reports one matching start. Any second top-frame start burns the arm:',
+              '   `webNavigation` supplies no stable request/navigation ID that can prove a changed',
+              '   start belongs to the original redirect chain rather than a replacement form.',
+              '   Client redirects/history do not transfer it.',
+          ]) + '\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one redirect authority paragraph, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '   Neither duplicate start nor commit extends it. Session-backed phase and\n'
+          new = '   Neither duplicate/changed start nor commit extends it. Session-backed phase and\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one duplicate-start sentence, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '\n'.join([
+              'Location writes and mutation in later native `submit`/`formdata` listeners may',
+              'already reach the network. A return to the source page is',
+              '`ROLLED_BACK_POST_COMMIT`, never `BLOCKED_PRE_HARM`. Native formdata mutation,',
+          ]) + '\n'
+          new = '\n'.join([
+              'Location writes and mutation in later native `submit`/`formdata` listeners may',
+              'already reach the network. A return to the source page is',
+              '`ROLLED_BACK_POST_COMMIT`, never `BLOCKED_PRE_HARM`. A cross-process server',
+              'redirect that produces a changed second `onBeforeNavigate` is also conservatively',
+              'rolled back after commit because its chain identity is unavailable. Native formdata mutation,',
+          ]) + '\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one post-commit boundary paragraph, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = 'wrapped benign submissions, server redirect, slow response, explicit-empty target,\n'
+          new = 'wrapped benign submissions, conservative server-redirect rollback, slow response, explicit-empty target,\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one matrix sentence, found {text.count(old)}')
+          docs.write_text(text.replace(old, new), encoding='utf-8')
+
+          Path('.github/workflows/patch-form-redirect-start-boundary.yml').unlink()
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run focused worker regression
+        run: npx vitest run tests/sw-rollback.test.ts
+
+      - name: Commit final tree
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extension/src/sw/sw.ts tests/sw-rollback.test.ts tests/e2e/issue688-form-intent.spec.ts \
+            docs/security/CHILD_FORM_AUTHORITY_688.md .github/workflows/patch-form-redirect-start-boundary.yml
+          git commit -m "fix: burn unproven repeated form navigation starts"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
