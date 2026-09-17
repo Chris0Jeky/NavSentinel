@@ -2,7 +2,7 @@
 export const TRACE_V2 = 'navsentinel.observatory.trace.v2';
 export const EVENT_SOURCES = Object.freeze({
   'run.start': 'runner', 'input.dispatched': 'runner', 'observation.end': 'runner', 'observer.gap': 'runner',
-  'observer.health': 'runner', 'attack.intent': 'page', 'attack.attempt': 'page', 'dom.changed': 'page',
+  'observer.health': 'runner', 'fault.injected': 'runner', 'worker.stopped': 'browser', 'worker.restarted': 'browser', 'attack.intent': 'page', 'attack.attempt': 'page', 'dom.changed': 'page',
   'decision.block': 'extension', 'decision.allow': 'extension', 'decision.warn': 'extension', 'decision.hold': 'extension', 'decision.rollback': 'extension',
   'navigation.committed': 'browser', 'navigation.restored': 'browser', 'request.observed': 'browser',
   'control.completed': 'browser', 'sink.receipt': 'sink', 'scene.sample': 'browser', 'frame.attached': 'browser', 'frame.detached': 'browser',
@@ -13,7 +13,7 @@ const num = (x, max = 1000000) => Number.isSafeInteger(x) && x >= 0 && x <= max;
 const object = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 function fields(x, allowed) { if (!object(x) || Object.keys(x).some(k => !allowed.includes(k))) throw new Error('CAPTURE_FIELDS_INVALID'); }
 function requireThat(ok, code) { if (!ok) throw new Error(code); }
-const faultCodes = ['CLOCK_REGRESSION', 'CRITICAL_EVENT_OVERFLOW', 'PRIMARY_FRAME_DETACHED', 'PRIMARY_FRAME_NAVIGATED', 'WORKER_EPOCH_CHANGED', 'PRODUCT_OBSERVER_FAILED', 'PAGE_REPORT_REJECTED', 'PAGE_ERROR', 'SCENE_SAMPLE_FAILED', 'EGRESS_ATTEMPT', 'RECEIVER_BINDING_MISMATCH', 'RUNNER_FAILED', 'SOURCE_CHANGED', 'RECEIVER_COUNTER_MISMATCH'];
+export const FAULT_CODES = Object.freeze(['CLOCK_REGRESSION', 'CRITICAL_EVENT_OVERFLOW', 'PRIMARY_FRAME_DETACHED', 'PRIMARY_FRAME_NAVIGATED', 'WORKER_EPOCH_CHANGED', 'PRODUCT_OBSERVER_FAILED', 'PAGE_REPORT_REJECTED', 'PAGE_ERROR', 'SCENE_SAMPLE_FAILED', 'EGRESS_ATTEMPT', 'RECEIVER_BINDING_MISMATCH', 'RUNNER_FAILED', 'SOURCE_CHANGED', 'RECEIVER_COUNTER_MISMATCH']);
 
 export function validateEventMetadata(e) {
   const output = {};
@@ -73,7 +73,7 @@ export function validateRunCapture(run, scenarioId) {
   fields(value, ['contextId', 'instrumentation', 'harmTargetId', 'benignTargetId', 'baselineMode', 'startHealth', 'endHealth', 'faults']);
   requireThat(['contextId', 'harmTargetId', 'benignTargetId'].every(k => validToken(value[k])) && value.harmTargetId !== value.benignTargetId &&
     ['full', 'minimal'].includes(value.instrumentation) && ['extension-absent', 'enabled'].includes(value.baselineMode), 'RUN_CAPTURE_INVALID');
-  requireThat(Array.isArray(value.faults) && value.faults.length <= 32 && value.faults.every(c => faultCodes.includes(c)), 'FAULT_CODE_INVALID');
+  requireThat(Array.isArray(value.faults) && value.faults.length <= 32 && value.faults.every(c => FAULT_CODES.includes(c)), 'FAULT_CODE_INVALID');
   const startHealth = health(value.startHealth), endHealth = health(value.endHealth);
   const gaps = [...value.faults];
   if (!startHealth?.healthy || !endHealth?.healthy) gaps.push('RECEIVER_HEALTH_INCOMPLETE');

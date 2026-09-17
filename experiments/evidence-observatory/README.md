@@ -136,3 +136,41 @@ illustrations, never executed security evidence.
 campaign, checks all eight case scenes and receiver links, and records screenshots
 and an immutable projected report in `test-results/observatory-recorded-scenes/`.
 This runs after capture and cannot affect the attack or protection decision.
+
+## Monitor-fault and frozen-challenge lanes
+
+On this continuation branch, in a clean full checkout with locked dependencies and
+Playwright Chromium installed:
+
+```bash
+node experiments/evidence-observatory/run-campaign.mjs faults
+node experiments/evidence-observatory/check-faults.mjs
+node experiments/evidence-observatory/smoke-faults.mjs
+
+node experiments/evidence-observatory/run-campaign.mjs challenges
+node experiments/evidence-observatory/smoke-recorded.mjs challenges
+```
+
+These are separate from the unchanged default `run-campaign.mjs` lane. Each builds
+and verifies its inputs, refuses existing raw/report output directories, and uses
+zero retries. Use a fresh worktree for another execution; do not delete selected
+failed cases to produce a green result. All evidence stays under `test-results/`.
+
+`faults` deliberately stops the receiver, removes/replaces the primary frame,
+stops/restarts the extension worker in a disposable profile, floods page reports,
+and makes a secondary receiver observer fail. A **FAULT_DETECTED** test-system
+result means the corresponding real effect was observed and prevention remained
+unsupported. It is not a claim that an attack was blocked. The original diagnostic
+trace and its gaps/harm remain unchanged; `fault-check.json` carries the separate
+monitor-test verdict. A fault announcement or generic runner failure alone cannot
+satisfy the check. Ordinary fault codes now also appear as bounded timeline events.
+
+`challenges` freezes two additional reinsertion timing/viewport combinations before
+qualification. Both repeat all four arms with detailed/minimal recording; they do
+not change detector settings. Once seen, these are regression challenges, not an
+independent unseen attack population. See `docs/observability/FAULT_AND_CHALLENGE_PLAN.md`
+and `docs/observability/RESILIENCE_QUALIFICATION.md` for exact evidence and limits.
+
+The `Observatory fault and challenge checks` workflow qualifies each lane separately
+and retains artifacts for seven days. Live recording (#702) and child-form policy
+integration (#698/#700) are not activated by these commands.
