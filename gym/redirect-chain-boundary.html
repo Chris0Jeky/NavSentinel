@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Redirect Chain Boundary - Back/Forward</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 48rem; padding: 0 1rem; }
+    a { display: inline-block; margin: 0.5rem 0; padding: 0.6rem 0.9rem; }
+    code, output { background: #f3f4f6; border-radius: 0.25rem; padding: 0.15rem 0.35rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Redirect chain boundary</h1>
+    <p id="journey-status"></p>
+    <p>Page lifecycle: <output id="bfcache-status">initial load</output></p>
+    <p id="next-action"></p>
+    <p>
+      <a id="factor-probe" href="#factor-probe-target">Check current NRS factors</a>
+    </p>
+    <p>
+      Keep NavSentinel's debug overlay enabled. Build all three landings promptly,
+      check the factors, then use Chrome's physical Back and Forward controls.
+    </p>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const redirectStep = Number(params.get("redirect"));
+    const landingStep = Number(params.get("step"));
+    const status = document.getElementById("journey-status");
+    const nextAction = document.getElementById("next-action");
+
+    if (Number.isInteger(redirectStep) && redirectStep >= 1 && redirectStep <= 3) {
+      status.textContent = `Client redirect ${redirectStep} is committing...`;
+      setTimeout(() => {
+        location.replace(`redirect-chain-boundary.html?step=${redirectStep}`);
+      }, 150);
+    } else {
+      const step = Number.isInteger(landingStep) && landingStep >= 1 && landingStep <= 3
+        ? landingStep
+        : 0;
+      status.textContent = step === 0
+        ? "Start page: no redirect chain has been built."
+        : `Landing ${step} of 3.`;
+      if (step < 3) {
+        const link = document.createElement("a");
+        link.id = "next-redirect";
+        link.href = `redirect-chain-boundary.html?redirect=${step + 1}`;
+        link.textContent = step === 0
+          ? "Start redirect journey"
+          : `Continue to landing ${step + 1}`;
+        nextAction.appendChild(link);
+      } else {
+        nextAction.textContent = "Journey complete. Check factors before using Back.";
+      }
+    }
+
+    document.getElementById("factor-probe").addEventListener("click", (event) => {
+      event.preventDefault();
+    });
+    window.addEventListener("pageshow", (event) => {
+      document.getElementById("bfcache-status").textContent = event.persisted
+        ? "BFCache restored: yes"
+        : "BFCache restored: no";
+    });
+  </script>
+</body>
+</html>

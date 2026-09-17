@@ -13,7 +13,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   getGymBaseUrl,
-  readBuiltMainUiGuardRevision,
+  readBuiltUiGuardRevision,
   updateNavigationSettings,
   waitForNavSentinelBridge,
 } from "./extension_test_utils";
@@ -91,7 +91,7 @@ async function childFrame(page: Page, fixtureCase: string, instance?: number): P
     document.documentElement.getAttribute("data-navsentinel-capture-ready") === "1" &&
     document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1" &&
     document.documentElement.getAttribute("data-navsentinel-ui-guard") === expectedGuard,
-  readBuiltMainUiGuardRevision(), { timeout: 10_000 });
+  readBuiltUiGuardRevision(), { timeout: 10_000 });
   return frame;
 }
 

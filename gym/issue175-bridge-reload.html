@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="local-fixture-targets.js"></script>
+  <script>
+    (() => {
+      "use strict";
+      const root = document.documentElement;
+      root.dataset.fixtureDocument = crypto.randomUUID();
+      root.dataset.fixtureReady = "0";
+      document.addEventListener("DOMContentLoaded", () => {
+        root.dataset.fixtureReady = "1";
+      }, { once: true });
+    })();
+  </script>
+  <title>Issue 175 bridge reload recovery fixture</title>
+</head>
+<body>
+  <main>
+    <h1>Issue 175 bridge reload recovery fixture</h1>
+    <p>This loopback-only fixture has one ordinary native link and no injected input or external action.</p>
+    <a id="benign-control"
+       target="_blank"
+       rel="noreferrer"
+       data-navsentinel-local-target="benign"
+       data-navsentinel-scenario="NS-ADV-SELF-004">Open benign local target</a>
+  </main>
+</body>
+</html>

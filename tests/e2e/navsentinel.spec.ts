@@ -1953,6 +1953,51 @@ test("Level 6 blocks programmatic click new tab @regression", async () => {
   }
 });
 
+test("Level 6 programmatic click reaches the typed local harm sink without extension @regression", async () => {
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-e2e-"));
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: ["--disable-extensions"]
+    });
+
+    try {
+      const page = await context.newPage();
+      await page.goto(`${baseUrl}/level6-programmatic-click.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000
+      });
+
+      const originalUrl = page.url();
+      const beforePages = context.pages().length;
+      const popupPromise = context.waitForEvent("page", { timeout: 5000 });
+      await page.click("#real");
+      const popup = await popupPromise;
+      await popup.waitForLoadState("domcontentloaded", { timeout: 5000 });
+      const popupUrl = new URL(popup.url());
+      const fixtureUrl = new URL(originalUrl);
+      expect(popupUrl.pathname).toBe("/local-fixture-sink.html");
+      expect(popupUrl.origin).toBe(fixtureUrl.origin);
+      expect(popupUrl.searchParams.get("role")).toBe("harm");
+      expect(popupUrl.searchParams.get("scenario_id")).toBe("NS-ADV-SELF-003");
+      expect(popupUrl.searchParams.get("consequence")).toBe("wrong-target-navigation");
+      await expect(popup.locator("html")).toHaveAttribute("data-fixture-sink-valid", "1");
+      await expect(popup.locator("html")).toHaveAttribute("data-harm-reached", "1");
+      expect(page.url()).toBe(originalUrl);
+      expect(context.pages()).toHaveLength(beforePages + 1);
+      await popup.close();
+    } finally {
+      await context.close();
+    }
+  } finally {
+    if (gym) await gym.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 /** Click a button, assert the resulting new-tab attempt is blocked, and verify the page URL. */
 async function assertClickBlocked(
   page: import("@playwright/test").Page,

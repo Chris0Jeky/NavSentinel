@@ -369,6 +369,20 @@ test("a child-frame modified anchor keeps its handler without opener allowance @
   }
 });
 
+test("a child-frame modifier handler cannot spend the typed-origin exemption on top navigation @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
+
+  const { opener, cleanup } = await openFreshScenario();
+  try {
+    const frame = opener.frameLocator("#child-frame");
+    await expect(frame.locator("html")).toHaveAttribute("data-navsentinel-capture-ready", "1");
+    await frame.locator("#child-top-control").click({ modifiers: ["Control"], button: "left" });
+    await expect(opener).toHaveURL(/issue566-modifier-retry\.html/, { timeout: 10_000 });
+  } finally {
+    await cleanup();
+  }
+});
+
 test("an unrelated closed-shadow middle-click reaches its page control @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 

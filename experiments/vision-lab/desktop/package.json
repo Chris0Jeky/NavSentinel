@@ -1,0 +1,1 @@
+{"name":"navsentinel-desktop-lab","version":"0.1.0","private":true,"description":"Optional native shell for the isolated NavSentinel vision prototypes","main":"main.cjs","scripts":{"start":"electron ."},"devDependencies":{"electron":"44.2.0"}}

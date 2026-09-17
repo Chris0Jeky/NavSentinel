@@ -66,6 +66,20 @@ function createChromeMock(initial: Store = {}) {
 }
 
 describe("suite storage and allowlist migration", () => {
+  it("defaults autosave on, validates its type, and round-trips the disabled preference", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { getSuiteSettings, updateSuiteSettings, exportAll, importAll, SUITE_SETTINGS_KEY } = await import("../extension/src/shared/storage");
+    expect((await getSuiteSettings()).autoSave).toBe(true);
+    await updateSuiteSettings({ autoSave: false });
+    const exported = await exportAll();
+    expect(exported.settings.autoSave).toBe(false);
+    await updateSuiteSettings({ autoSave: true });
+    await importAll({ settings: exported.settings });
+    expect((await getSuiteSettings()).autoSave).toBe(false);
+    store[SUITE_SETTINGS_KEY] = { autoSave: "false" };
+    expect((await getSuiteSettings()).autoSave).toBe(true);
+  });
   beforeEach(() => {
     vi.resetModules();
   });
@@ -491,6 +505,40 @@ describe("suite storage and allowlist migration", () => {
     expect(settings.credential.mode).toBe("strict");
   });
 
+  it("rejects a simultaneous conflicting Options patch while preserving disjoint patches (#647)", async () => {
+    const { chrome } = createChromeMock();
+    Object.assign(chrome, {
+      runtime: {
+        id: "suite-test",
+        getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { getSuiteSettings, handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
+    const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+    const baseline = await getSuiteSettings();
+
+    const [first, conflicting] = await Promise.all([
+      handleSuiteSettingsUpdateMessage(
+        { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } }, expected: baseline }, options,
+      ),
+      handleSuiteSettingsUpdateMessage(
+        { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "strict" } }, expected: baseline }, options,
+      ),
+    ]);
+    expect(first.nav.defaultMode).toBe("off");
+    expect(conflicting).toMatchObject({ conflict: true, nav: { defaultMode: "off" } });
+
+    const current = await getSuiteSettings();
+    const disjoint = await handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { credential: { mode: "strict" } }, expected: baseline }, options,
+    );
+    expect(disjoint.credential.mode).toBe("strict");
+    expect(current.nav.defaultMode).toBe("off");
+    expect((await getSuiteSettings()).credential.mode).toBe("strict");
+  });
+
   it("rejects untrusted and malformed suite-settings worker messages (#558)", async () => {
     const { chrome } = createChromeMock();
     Object.assign(chrome, {
@@ -516,6 +564,9 @@ describe("suite storage and allowlist migration", () => {
     )).rejects.toThrow("invalid");
     await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: JSON.parse('{"__proto__":{}}') }, popup,
+    )).rejects.toThrow("invalid");
+    await expect(handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { nav: { defaultMode: "off" } }, expected: [] }, popup,
     )).rejects.toThrow("invalid");
     await expect(handleSuiteSettingsUpdateMessage(
       { type: "ns-suite-settings-update", patch: { logLimit: 999999 } }, popup,
@@ -598,6 +649,42 @@ describe("suite storage and allowlist migration", () => {
     const silentKept = storedLog.filter((e) => e.kind === "nav_silent_allow");
     expect(silentKept).toHaveLength(10);
     expect(silentKept.map((e) => e.id)).toEqual(silent.slice(-10).map((e) => e.id)); // newest 10
+  });
+
+  it("normalizes imported pageSite hostnames and omits URL-shaped values (#585)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        { id: "ordinary", ts: 1, kind: "nav_click_block", pageSite: "Portal.Example.Test." },
+        { id: "ipv4", ts: 2, kind: "nav_click_block", pageSite: "127.0.0.1" },
+        { id: "ipv4-noncanonical", ts: 3, kind: "nav_click_block", pageSite: "127.000.000.001" },
+        { id: "ipv6", ts: 4, kind: "nav_click_block", pageSite: "[2001:DB8::1]" },
+        { id: "ipv6-noncanonical", ts: 5, kind: "nav_click_block", pageSite: "[2001:0DB8:0:0:0:0:0:1]" },
+        { id: "empty", ts: 6, kind: "nav_click_block", pageSite: "" },
+        { id: "full-url", ts: 7, kind: "nav_click_block", pageSite: "https://portal.example.test/account?token=secret#fragment" },
+        { id: "path", ts: 8, kind: "nav_click_block", pageSite: "portal.example.test/account" },
+        { id: "invalid", ts: 9, kind: "nav_click_block", pageSite: "not a hostname" },
+      ],
+    });
+
+    const stored = store["sentinelsuite:event_log_v1"] as Array<{ id: string; pageSite?: string }>;
+    expect(stored.map((entry) => entry.pageSite)).toEqual([
+      "portal.example.test",
+      "127.0.0.1",
+      "127.0.0.1",
+      "2001:db8::1",
+      "2001:db8::1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(JSON.stringify(stored)).not.toContain("/account");
+    expect(JSON.stringify(stored)).not.toContain("token=secret");
+    expect(JSON.stringify(stored)).not.toContain("#fragment");
   });
 
   it("caps an all-silent imported event log to the newest N via trimEventLog (#252)", async () => {

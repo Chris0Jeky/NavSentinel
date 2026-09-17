@@ -201,7 +201,199 @@ limitations, not a reason to reopen the completed gate.
 
 ---
 
+## Active guide: AI-39 — issue #601 extension-origin Proceed once
+
+> **POST-MERGE CONSOLIDATION under
+> [`D-2026-09-12-P`](DECISIONS.md#d-2026-09-12-p--named-human-gated-candidates-may-merge-before-the-consolidated-chrome-check):**
+> the pre-merge Chrome execution was waived for PR #608, not passed. If #608
+> merges, run this complete procedure as the former-AI-39 sub-result in AI-47
+> against the then-current consolidated `main` artifact. The identity check in
+> step 1 therefore pins `main` and the #608 merge ancestry instead of the
+> historical stacked base.
+
+1. Record PR #608's merged 40-character head and merge commit from live GitHub,
+   plus the 40-character `main` SHA being tested. Require the test worktree's
+   `git rev-parse HEAD` to equal that `main` SHA and require the #608 merge commit
+   to be its ancestor. Stop on any mismatch or uncommitted product change. If
+   Defender quarantines
+   `tests/clickfix-detector.property.test.ts`, do not inspect, restore, stage, or
+   work around it; record the limitation.
+2. Require the tested `main` head's Build / Unit and E2E checks to be green and
+   every #608 review finding triaged. Run `npm ci`, `npm run build`,
+   `npm run check:content-loader`, `npm run check:perf-budget`, and
+   `npm run security:check`. Record the build's `ui-guard=<revision>` value.
+3. In a fresh temporary Chrome profile, load this worktree's `extension/dist`
+   unpacked. After every rebuild, click **Reload** in `chrome://extensions`
+   before reloading the target page. Record the Chrome version.
+4. Serve a synthetic loopback Gym page with a suspicious HTTP(S) `_blank`
+   destination whose path, query, and fragment contain a unique non-secret
+   marker. Trigger the held navigation. Confirm no tab opens and the page toast
+   contains **Dismiss** only — no Proceed, Allow once, Always allow, or Undo.
+5. Open NavSentinel from the Chrome toolbar before the 30-second deadline. The
+   **Navigation held** card must show only source origin → destination origin
+   and seconds remaining. Inspect its DOM: the unique path/query/fragment marker
+   and opaque delivery token must not appear.
+6. Activate **Proceed once** with the mouse. Exactly one tab must open at the
+   complete expected synthetic URL. On that destination, require
+   `window.opener === null`; any live opener fails the gate. Reopen the popup
+   and confirm the decision is absent. A rapid double-click or any attempted
+   replay must not open a second tab. Repeat once with keyboard Tab + Enter.
+7. Trigger again and wait past 30 seconds before acting. The card must expire
+   and no tab may open. Trigger again, switch to a different active HTTP tab,
+   and open NavSentinel there; the original decision must not be offered or
+   executable. Navigate the original document before acting and confirm its
+   old decision is unavailable.
+8. In the extension service-worker console, inspect
+   `chrome.storage.session.get("ns_sw:pendingDecision")` while a synthetic
+   decision is pending. Only bounded origins, hashes, timestamps, and opaque
+   identifiers may exist; the unique path/query/fragment marker must not.
+9. Inspect page, popup, and service-worker consoles for new errors. On a pass,
+   record `AI-47 step 2 / former AI-39 passed on main at <40-character SHA>;
+   PR #608 merge <40-character SHA>; Chrome <version>`. On any mismatch, record
+   `AI-47 step 2 / former AI-39 failed on main at <SHA>: <step and observed>`
+   and leave AI-47 open.
+
+Only Chris can record AI-47's former-AI-39 sub-result complete. Unit tests
+prove token burn, context
+binding, URL minimization, and replay rejection; headed Playwright proves the
+page warning has no protection-lowering control. Neither proves that real Chrome
+accepts the worker-created exact destination tab, leaves it openerless, and
+delivers the best-effort outcome receipt to the source document.
+
+---
+
+## Retained guide: AI-41 - issue #593 child-frame navigation authority
+
+> **POST-MERGE QUEUE since 2026-09-12 — read before step 1.** Under
+> [`D-2026-09-12-P`](DECISIONS.md), PR #636 may merge after its non-human gates
+> without completing this branded-Chrome check first. If it merges, preserve
+> every step below as the former AI-41 sub-result inside consolidated AI-47 on
+> current `main`; this guide is neither a renewed pre-merge gate nor evidence
+> that the human check passed.
+
+Run this only after PR #636 (branch `fix/issue593-child-frame-location-20260904`)
+actually merges and every automated check for its reconciled head is green.
+
+1. Record the then-current 40-character `main` SHA containing PR #636. In the
+   implementation worktree, require `git rev-parse HEAD` to equal that value.
+   `git status --short` must contain no uncommitted product changes. The known
+   Defender quarantine may appear only as
+   ` D tests/clickfix-detector.property.test.ts`; do not restore, inspect, stage,
+   execute, or allow that fixture. Stop for any other mismatch.
+2. On that exact head run `npm run build`, then create a fresh, unsigned-in
+   Chrome profile, enable Developer mode at `chrome://extensions`, and load that
+   exact `extension/dist` unpacked. Record the Chrome version and confirm the
+   service worker registers without an error. Loading and reloading the unpacked
+   extension is Chris-owned; after any rebuild, click **Reload** for NavSentinel
+   once, then reload the fixture page. On every fixture load verify the page
+   reports `capture="1"`, `bridge="1"`, and the built UI-guard revision on
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard`. In Options use Smart Navigation mode and confirm
+   neither `localhost` nor `127.0.0.1` is allowlisted or trusted.
+3. Start the tracked Gym with `npm run gym:serve`. This gate needs a real
+   cross-site hop, so open the fixture on `localhost` and let it navigate to a
+   `127.0.0.1` destination — a same-host journey is skipped by design and proves
+   nothing. Wait at least six seconds after the page loads before clicking:
+   navigations within five seconds of a typed/address-bar load are treated as
+   part of that user-requested navigation.
+4. Deceptive case. On a page whose visible control is covered by a nearly
+   transparent same-origin iframe, click the visible control once. Confirm the
+   tab does **not** silently settle on the third-party destination: NavSentinel
+   must return the tab to the source page and show its "rolled back a suspicious
+   redirect" notice with a working **Proceed** action. Take **Proceed** once and
+   confirm the destination then loads and stays.
+5. Benign control A — declared child navigation. On a page with a visible,
+   ordinary embedded frame containing a real link with `target="_top"`, focus
+   that link and press **Enter**. The destination must load and the tab must
+   stay there with no rollback and no prompt.
+6. Benign control B — top-frame script navigation. On an ordinary page, click a
+   visible button whose own script navigates the tab a moment later. The
+   destination must load and stay, unchanged from before this branch.
+7. Benign control C — everyday browsing. In the same profile, visit three sites
+   you normally use that embed third-party frames (for example a video embed, a
+   consent or login frame, and a site with ads), interact for a minute each, and
+   confirm no rollback notice appears on a navigation you asked for.
+8. Inspect the fixture page console and the extension service-worker console for
+   new errors. Record either `AI-47 child-frame sub-result (former AI-41) passed
+   on main at <40-character SHA>; Chrome <version>` or `AI-47 child-frame
+   sub-result (former AI-41) failed on main at <SHA>: <step and observed>` and
+   leave consolidated AI-47 open until every named sub-result is present.
+
+Only Chris can record this AI-47 sub-result complete. The modelled Playwright
+regression (`tests/e2e/issue593-hidden-media-layer.spec.ts`) supports but does
+not replace this exact-head branded-Chrome gate, and it cannot speak to real
+embeds on the open web, which is what step 7 exists to sample.
+
+---
+
+## AI-47 former AI-38 PR 600 current-main toast-control subprocedure
+
+**POST-MERGE:** PR #600 merged as
+`c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2`. Its human Chrome check is now the
+owned-controls sub-result of AI-47, not an open-PR gate and not evidence that
+the check has passed. Only Chris can record this sub-result. It does not close
+AI-47 until every applicable former-AI sub-result is recorded.
+
+1. Use a clean checkout of current `main`. Run `git fetch origin main`, then
+   require `git rev-parse HEAD` to exactly equal `git rev-parse origin/main`
+   before building or loading the extension. Also require
+   `git merge-base --is-ancestor c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2 HEAD`
+   to succeed, then record that shared 40-character SHA. Do not substitute PR
+   #600's former branch or its historical head. If the known Defender quarantine
+   line ` D tests/clickfix-detector.property.test.ts` appears, leave it untouched;
+   do not open, restore, stage, execute, or allow that fixture. Stop for any
+   other uncommitted product change.
+2. On that current `main` head, run `npm ci`, `npm run build`, and
+   `npm run check:content-loader`. Record the emitted `ui-guard=<revision>`
+   value and do not rebuild during the browser pass unless Chris reloads the
+   rebuilt unpacked extension and the fixture page before continuing.
+3. In a fresh branded-Chrome profile, Chris loads or reloads that exact
+   `extension/dist` at `chrome://extensions`; agents must not operate that page
+   or infer acceptance from a page reload. Record the Chrome version. After any
+   rebuild, Chris clicks **Reload** for NavSentinel before reloading a test page.
+4. Open a real media-embed page that previously showed inert controls (or
+   `http://127.0.0.1:5173/evasion-01-opacity-009.html` from `npm run gym:serve`
+   as the site-neutral stand-in). Confirm the document reports `capture="1"`,
+   `bridge="1"`, and the step-2 `ui-guard` revision on the
+   `data-navsentinel-capture-ready`, `data-navsentinel-bridge-ready`, and
+   `data-navsentinel-ui-guard` attributes. Stop on a missing or old marker.
+5. Trigger a regular block card (click the deceptive overlay or the page's
+   trap). With the mouse, click **Dismiss**: the card must leave, no new tab may
+   open, and no second "blocked" notice may follow the click. Trigger the card
+   again and click **Allow once**: exactly one approved tab must open.
+6. Trigger the card again, Tab to **Dismiss**, and press Enter; repeat with
+   Space. The card must leave each time without a page reaction.
+7. With overlay cleanup enabled in the popup, confirm on a page whose cleanup
+   card appears (for example `mutation-01-delayed-overlay.html`) that **Undo**
+   still restores the layer with mouse and keyboard.
+8. On the media page, wait for any page layer that re-appears after the card
+   (or in DevTools append a `position:fixed; inset:0; z-index:2147483647`
+   element to `<html>`). The card must remain on top and its controls must
+   still respond.
+9. Inspect page, popup, and service-worker consoles for new errors. On a pass,
+   reply `AI-47 owned-controls sub-result (former AI-38 / #600) passed on main
+   at <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-47
+   owned-controls sub-result (former AI-38 / #600) failed on main at <SHA>:
+   <step and observed>` and leave AI-47 open. A sub-result pass is not a
+   consolidated Gate-3 pass.
+
+The trusted-input Playwright coverage in `tests/e2e/toast-input-fence.spec.ts`
+supports but does not replace this current-`main` real-page gate.
+
+---
+
 ## Active guide: AI-33 — issue #530 popup trust-pill contrast
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #582 merged on
+> 2026-08-27 (head `02b8e5c4504ff5127a9b6c4af7cf8cc30fd07da2`, merge commit
+> `d1895b51763a6c6b7b5280f0ea80664d2f0c796d`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-33 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-33 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 Run this only after the #530 implementation PR is ready and every automated
 check for its current head is green.
@@ -252,8 +444,8 @@ check for its current head is green.
    returns without clipping or stale text.
 7. Inspect the popup console for new errors, then stop the Gym server. On a pass,
    reply `AI-33 done;
-   Gate-3 passed on PR #<n> at <40-character SHA>; Chrome <version>`. On any
-   mismatch, reply `AI-33 failed on PR #<n> at <SHA>: <step and observed>` and
+   Gate-3 passed on main at <40-character SHA>; Chrome <version>`. On any
+   mismatch, reply `AI-33 failed on main at <SHA>: <step and observed>` and
    leave the item open.
 
 Only Chris can record AI-33 complete. The computed WCAG test supports but does
@@ -262,6 +454,17 @@ not replace this exact-head visual and keyboard gate.
 ---
 
 ## Active guide: AI-30 - PR #570 Back/Forward history integrity
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #570 merged on
+> 2026-08-27 (head `20fad0ac9d19bcbe3a1ca6b2d43ab14c7438ce53`, merge commit
+> `ff063a677b6c633c1eca4955dbfe9b277e529f3a`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-30 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-30 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 Run this only after PR #570 is ready and every automated check for its current
 head is green.
@@ -313,12 +516,64 @@ head is green.
    the destination briefly commits before NavSentinel returns to the Level 10
    page. This proves a later page-initiated redirect is still evaluated normally.
 6. Inspect the History fixture, Level 10, and extension service-worker consoles
-   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on PR #570 at
+   for new errors. On a pass, reply `AI-30 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>`. On any mismatch, reply `AI-30 failed on
-   PR #570 at <SHA>: <step and observed>` and leave the item open.
+   main at <SHA>: <step and observed>` and leave the item open.
 
 Only Chris can record AI-30 complete. Automated Playwright evidence supports but
 does not replace this exact-head manual browser gate.
+
+---
+
+## AI-47 subprocedure: former AI-40 - #609 stale redirect-chain boundary
+
+Run this as step 3 of AI-47 only after PR #609 has merged under
+`D-2026-09-12-P` and every non-human gate is green. The procedure and evidence
+fields below are retained from the former AI-40 gate; moving the check after
+merge is not a test result.
+
+1. Resolve the then-current `main`: run `git fetch origin main`, require
+   `git rev-parse HEAD` to exactly equal `git rev-parse origin/main`, and record
+   that shared 40-character SHA before building or loading. `git status --short`
+   must contain no uncommitted product changes. The known Defender quarantine may
+   appear only as ` D tests/clickfix-detector.property.test.ts`; do not restore,
+   inspect, stage, execute, or allow that fixture. Stop for any other mismatch.
+2. On that exact head, run `npm ci`, `npm run build`, and the focused automated
+   journey: `npx playwright test tests/e2e/phase2-detections.spec.ts
+   --project=phase2 --workers=1 -g "chain-05 Back and Forward"`. Create a fresh,
+   unsigned-in Chrome profile, enable Developer mode at `chrome://extensions`,
+   and load that exact `extension/dist` unpacked. Record the Chrome version and
+   confirm the extension service worker registers without an error. In Options,
+   use Smart Navigation mode, enable the debug overlay, and confirm neither
+   `localhost` nor `127.0.0.1` is allowlisted or trusted.
+3. Start the tracked Gym with `npm run gym:serve`, then open
+   `http://localhost:5173/redirect-chain-boundary.html`. Follow **Start redirect
+   journey** and each **Continue** link within five seconds of the prior landing.
+   On landing 3, click **Check current NRS factors**. The debug panel must list
+   both `nrs_redirect_chain_depth` and `nrs_redirect_via_known_redirector`; stop
+   if the precondition is absent.
+4. Use Chrome's physical **Back** control. Confirm landing 2 remains visible and
+   the page says `BFCache restored: yes`. A normal reload or a `no` result does
+   not prove this branch; retry once in the same disposable profile, then report
+   the gate unproven if Chrome still does not retain the page. Click **Check
+   current NRS factors** and confirm neither redirect-chain factor appears.
+5. Use Chrome's physical **Forward** control. Confirm landing 3 reports
+   `BFCache restored: yes`, remains stable, and another factor check contains
+   neither redirect-chain factor. No stale-chain warning, rollback, or prompt may
+   appear after either traversal.
+6. Return to the fixture start URL, rebuild the three landings within five
+   seconds each, and confirm the factors are initially present. Wait at least 16
+   seconds without navigating, check again, and confirm both factors are absent.
+7. Inspect the fixture and extension service-worker consoles for new errors. On
+   a pass, record `AI-47 step 3 (former AI-40) passed on main at <40-character
+   SHA>; Chrome <version>`. On any mismatch, record `AI-47 step 3 failed on main
+   at <SHA>: <step and observed>` and leave AI-47 open.
+
+Only Chris can record this AI-47 sub-result. A step-3 pass is not a consolidated
+AI-47 or Gate-3 pass; AI-47 stays open until every applicable sub-result is
+recorded. The normal Playwright project disables BFCache, so its real-302
+Back/Forward journey supports but does not replace this exact-head
+branded-Chrome lifecycle check.
 
 ---
 
@@ -367,6 +622,17 @@ SHA written elsewhere: a stale pin is exactly what made the AI-13 guide abort on
 precheck.
 
 ## AI-36 — #558 popup/Options patch-save synchronization Gate-3
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #589 merged on
+> 2026-08-27 (head `ee75bf408e04f528b0ee08006471f318fba3ef96`, merge commit
+> `003905094982b9a772cc5f06fe504d372c99dd6b`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-36 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-36 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 **🚨 OPEN: AI-36 — Run the #558 popup/Options patch-save synchronization
 Gate-3 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This bounded
@@ -460,13 +726,24 @@ that remain in #558. Only Chris can record this item complete.
    failure. Close the disposable profile and remove only that profile; do not
    alter an established profile or disable security software.
 9. Only Chris may record completion. Reply
-   `AI-36 done; Gate-3 passed on branch fix/issue558-patch-save-sync at
+   `AI-36 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>` with console observations, or
-   `AI-36 failed on branch fix/issue558-patch-save-sync at <SHA>: <step and
+   `AI-36 failed on main at <SHA>: <step and
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
 ## AI-35 — #539 cross-host child-event attribution Gate-3
+
+> **POST-MERGE since 2026-09-04 — read before step 1.** PR #586 merged on
+> 2026-08-27 (head `96be8e09cfe51168e4231625154ed366a408940b`, merge commit
+> `b68f403a7f14379305cf1376f3ee4f188ef31493`) with this gate still open, and no waiver
+> record for that merge was found in `ACTION_ITEMS.md`, `HANDOFF.md`, or
+> `DECISIONS.md`; no waiver or owner decision is claimed. The gate now applies
+> to current `main`: skip the open-PR, branch, and exact-PR-head prechecks
+> below, build `main` from a clean checkout, and record its 40-character head
+> instead. Reply `AI-35 done; Gate-3 passed on main at <40-character SHA>;
+> Chrome <version>` or `AI-35 failed on main at <SHA>: <step and observed>`.
+> Every per-PR or per-branch reply line below is superseded by these two.
 
 **🚨 OPEN: AI-35 — Run the #539 cross-host child-event attribution Gate-3
 (GUIDE PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This browser-surface
@@ -604,9 +881,9 @@ Only Chris can record this item complete.
    Ctrl+C, close the disposable Chrome profile, and remove only that disposable
    profile. Do not alter an established profile or disable security software.
 7. Only Chris may record completion. Reply
-   `AI-35 done; Gate-3 passed on branch fix/issue539-page-attribution at
+   `AI-35 done; Gate-3 passed on main at
    <40-character SHA>; Chrome <version>` with console observations, or
-   `AI-35 failed on branch fix/issue539-page-attribution at <SHA>: <step and
+   `AI-35 failed on main at <SHA>: <step and
    observed result>`. Do not merge on a partial pass; recheck exact head, CI,
    comments, and the repository merge gate afterward.
 
@@ -617,6 +894,9 @@ Only Chris can record this item complete.
 | AI-13 | #356 MAIN-world compatibility | in [`../../ACTION_ITEMS.md`](../../ACTION_ITEMS.md) |
 | AI-21 | #464 synthetic navigation | [below](#ai-21--pr-464-synthetic-navigation-gate-3) |
 | AI-22 | #466 pending-decision service worker | [below](#ai-22--pr-466-pending-decision-service-worker-gate-3) |
+| AI-47 step 2 (former AI-39) | #601 extension-origin Proceed once | [above](#active-guide-ai-39--issue-601-extension-origin-proceed-once) |
+| AI-47 step 3 (former AI-40) | #609 stale redirect-chain boundary | [above](#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) |
+| AI-38 | #560 inert toast-control repair | [above](#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 

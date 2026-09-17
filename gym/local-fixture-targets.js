@@ -19,6 +19,7 @@
   });
   const SCENARIO_HARM_CONSEQUENCES = Object.freeze({
     "NS-ADV-WIN-001": "unauthorized-browsing-context",
+    "NS-ADV-CLIP-005": "inert-shell-paste",
   });
   const ORIGIN_MODES = new Set(["same-loopback", "alternate-loopback"]);
 

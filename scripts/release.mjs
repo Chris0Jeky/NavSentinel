@@ -2,7 +2,7 @@
 
 /**
  * Release script for NavSentinel.
- * Usage: node scripts/release.mjs <major|minor|patch> [--dry-run]
+ * Usage: npm run release:<major|minor|patch> or npm run release:dry
  *
  * Steps:
  * 1. Validates clean working tree
@@ -15,10 +15,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { inspectBloomFilter, MIN_REAL_FILTER_BITS } from "./check-bloom-real.mjs";
 import { resolveReleaseProfile } from "./release-profile.mjs";
+import {
+  RELEASE_MUTABLE_PATHS,
+  assertExactCommittedInputs,
+  assertReleaseCommitScope,
+  capturePreparedReleaseChanges,
+  createSanitizedGitEnvironment,
+  resolveReleaseCommand,
+  runReleaseGit,
+} from "./release-input-integrity.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,8 +37,15 @@ const root = path.resolve(__dirname, "..");
 // Helpers
 // ---------------------------------------------------------------------------
 
-function run(cmd, opts = {}) {
-  return execSync(cmd, { cwd: root, encoding: "utf8", ...opts }).trim();
+function runInvocation(invocation, opts = {}) {
+  return execFileSync(invocation.command, invocation.args, {
+    cwd: root,
+    encoding: "utf8",
+    // npm may invoke Git for git-backed dependencies. Scrub the full
+    // release trust-boundary environment before the child starts.
+    env: opts.env ?? createSanitizedGitEnvironment(process.env),
+    stdio: opts.stdio ?? ["ignore", "pipe", "pipe"],
+  }).trim();
 }
 
 function readJSON(filePath) {
@@ -75,20 +91,42 @@ const dryRun = args.includes("--dry-run");
 const bumpType = args.find((a) => ["major", "minor", "patch"].includes(a));
 
 if (!bumpType) {
-  console.error("Usage: node scripts/release.mjs <major|minor|patch> [--dry-run]");
+  console.error("Usage: npm run release:<major|minor|patch> or npm run release:dry");
   process.exit(1);
 }
 
-// 1. Validate clean working tree
-const status = run("git status --porcelain");
-if (status) {
-  console.error("Working tree is not clean. Commit or stash changes first.");
-  if (!dryRun) process.exit(1);
-  console.log("[dry-run] WARNING: working tree is dirty -- real release would abort.");
+// Resolve the npm JavaScript entry point before any release metadata is
+// changed. Real releases must run through an npm script so npm_execpath
+// names the current toolchain without invoking a .cmd shim or shell.
+const npmLockfileInvocation = dryRun
+  ? null
+  : resolveReleaseCommand("npm", [
+    "install",
+    "--package-lock-only",
+    "--ignore-scripts",
+  ]);
+
+// 1. Pin exact committed inputs and compare them with raw filesystem bytes.
+//    This deliberately does not trust git status/diff/hash-object because clean
+//    filters and line-ending conversion can hide bytes that release tooling reads.
+let initialReleaseSnapshot;
+try {
+  initialReleaseSnapshot = assertExactCommittedInputs(root);
+} catch (err) {
+  console.error(`Refusing to release: ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
 }
+console.log(
+  `Release source: commit=${initialReleaseSnapshot.commit}; tree=${initialReleaseSnapshot.tree}`,
+);
 
 // Validate we're on the main branch
-const branch = run("git rev-parse --abbrev-ref HEAD");
+let branch = "HEAD";
+try {
+  branch = String(runReleaseGit(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]));
+} catch {
+  // Detached heads remain represented as HEAD and fail the existing branch gate.
+}
 if (branch !== "main") {
   console.error(`Release must be run from main branch (currently on ${branch})`);
   if (!dryRun) process.exit(1);
@@ -150,7 +188,10 @@ if (!/^\d+\.\d+\.\d+$/.test(newVersion)) {
 }
 
 // 3b. Abort if tag already exists
-const existingTags = run("git tag --list").split("\n").map(t => t.trim()).filter(Boolean);
+const existingTags = String(runReleaseGit(root, ["tag", "--list"]))
+  .split("\n")
+  .map((tag) => tag.trim())
+  .filter(Boolean);
 if (existingTags.includes(`v${newVersion}`)) {
   console.error(`Tag v${newVersion} already exists. Aborting.`);
   process.exit(1);
@@ -215,17 +256,59 @@ fs.writeFileSync(changelogPath, changelog, "utf8");
 console.log(`Updated CHANGELOG.md with [${newVersion}] - ${releaseDate}`);
 
 // 6b. Sync package-lock.json
-if (!dryRun) {
-  run("npm install --package-lock-only --ignore-scripts");
+if (npmLockfileInvocation) {
+  runInvocation(npmLockfileInvocation);
 }
 
-// 7. Stage and commit
-run("git add package.json extension/manifest.json CHANGELOG.md package-lock.json");
-run(`git commit -m "Release v${newVersion}"`);
+// 6c. Recheck the original commit/tree immediately before staging. Only the
+//     declared release metadata may differ; all other tracked and untracked
+//     project inputs must still match the initial raw-byte snapshot.
+let preparedReleaseChanges;
+try {
+  preparedReleaseChanges = capturePreparedReleaseChanges(initialReleaseSnapshot, {
+    allowedChangedPaths: RELEASE_MUTABLE_PATHS,
+  });
+} catch (err) {
+  console.error(
+    `Refusing to commit release metadata: ${err instanceof Error ? err.message : String(err)}`,
+  );
+  process.exit(1);
+}
+
+// 7. Stage and commit only the declared release metadata.
+runReleaseGit(root, ["add", "--", ...RELEASE_MUTABLE_PATHS]);
+runReleaseGit(root, ["commit", "-m", `Release v${newVersion}`]);
 console.log(`Committed: Release v${newVersion}`);
 
-// 8. Create annotated tag
-run(`git tag -a "v${newVersion}" -m "v${newVersion}"`);
+// Re-attest the release commit, prove that it is a one-parent child of the
+// original snapshot and that exactly the four declared paths changed, then
+// check raw bytes once more at the irreversible tag boundary. The tag names an
+// explicit commit object, so a later worktree mutation cannot alter its target.
+let releaseSnapshot;
+try {
+  releaseSnapshot = assertExactCommittedInputs(root);
+  assertReleaseCommitScope(initialReleaseSnapshot, releaseSnapshot, {
+    allowedChangedPaths: RELEASE_MUTABLE_PATHS,
+    preparedChanges: preparedReleaseChanges,
+  });
+  assertExactCommittedInputs(root, {
+    expectedCommit: releaseSnapshot.commit,
+    expectedTree: releaseSnapshot.tree,
+  });
+} catch (err) {
+  console.error(`Refusing to tag release: ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+}
+
+// 8. Create annotated tag for the explicitly attested release commit.
+runReleaseGit(root, [
+  "tag",
+  "-a",
+  `v${newVersion}`,
+  "-m",
+  `v${newVersion}`,
+  releaseSnapshot.commit,
+], { environment: createSanitizedGitEnvironment(process.env) });
 console.log(`Tagged: v${newVersion}`);
 
 // 9. Done

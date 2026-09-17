@@ -2,11 +2,43 @@ import type { BehaviouralDataLane, BehaviouralResetResult } from "../shared/beha
 import type {
   ImportAllResult,
   PromptOutcome,
+  SuiteSettings,
 } from "../shared/storage";
-export {
-  deriveOptionsSettingsPatch,
-  rebaseOptionsSettingsDraft,
-} from "../shared/storage";
+
+/** Only divergent edits to the same leaf require a user's choice. */
+export function findSettingsConflicts(baseline: SuiteSettings, draft: SuiteSettings, incoming: SuiteSettings): string[] {
+  const conflicts: string[] = [];
+  function visit(base: Record<string, unknown>, local: Record<string, unknown>, remote: Record<string, unknown>, prefix = ""): void {
+    for (const key of Object.keys(local)) {
+      const value = local[key];
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (value && typeof value === "object") {
+        visit(base[key] as Record<string, unknown>, value as Record<string, unknown>, remote[key] as Record<string, unknown>, path);
+      } else if (value !== base[key] && remote[key] !== base[key] && remote[key] !== value) {
+        conflicts.push(path);
+      }
+    }
+  }
+  visit(baseline as unknown as Record<string, unknown>, draft as unknown as Record<string, unknown>, incoming as unknown as Record<string, unknown>);
+  return conflicts;
+}
+
+/** Replace only the conflicted leaves; unrelated draft edits survive. */
+export function acceptExternalSettings(draft: SuiteSettings, incoming: SuiteSettings, paths: string[]): SuiteSettings {
+  const result = structuredClone(draft);
+  for (const path of paths) {
+    const keys = path.split(".");
+    const leaf = keys.pop()!;
+    let target = result as unknown as Record<string, unknown>;
+    let source = incoming as unknown as Record<string, unknown>;
+    for (const key of keys) {
+      target = target[key] as Record<string, unknown>;
+      source = source[key] as Record<string, unknown>;
+    }
+    target[leaf] = source[leaf];
+  }
+  return result;
+}
 
 export function pct(n: number, total: number): string {
   if (total === 0) return "--";
@@ -27,7 +59,6 @@ export function fmtTime(ts: number): string {
   }
 }
 
-export { parseOptionsInt as parseIntSafe } from "../shared/storage";
 
 /** Display strings for the options Prompt Statistics panel. */
 export interface PromptOutcomeStats {

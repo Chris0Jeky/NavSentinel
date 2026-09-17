@@ -52,7 +52,7 @@ describe("final content-script loader identity", () => {
     const changed = `${finalized.content} changed`;
 
     expect(() => assertUiGuardRevision(changed)).toThrow(
-      "MAIN-world loader UI guard revision is stale",
+      "UI-guard loader revision is stale",
     );
   });
 });

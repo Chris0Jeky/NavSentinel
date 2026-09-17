@@ -22,6 +22,164 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
+test("Options autosaves validated edits and resolves cross-window conflicts explicitly @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-autosave-"));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+    await expect(options.locator("#dirtyStatus")).toHaveText("All changes saved");
+    await expect(options.locator("#autoSave")).toBeChecked();
+    await options.locator("#dismiss").click();
+    await expect(options.locator("#cleanupStatus")).toHaveText("Active");
+    await options.locator('#navModeSeg [data-value="smart"]').focus();
+    await options.keyboard.press("ArrowLeft");
+    await expect(options.locator("#cleanupStatus")).toHaveText("Paused · Navigation Off");
+    await options.locator("#mediumRiskThreshold").fill("");
+    await expect(options.locator("#dirtyStatus")).toContainText("enter valid numbers");
+    await expect(options.locator("#save")).toBeDisabled();
+    const other = await context.newPage();
+    await other.goto(options.url());
+    await expect(other.locator("#mediumRiskThreshold")).toHaveValue("40");
+    await other.locator("#warnOnPaste").click();
+    await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("");
+    await options.locator("#mediumRiskThreshold").fill("55");
+    await expect(other.locator("#mediumRiskThreshold")).toHaveValue("55");
+
+    await options.locator("#autoSave").uncheck();
+    await expect(other.locator("#autoSave")).not.toBeChecked();
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await options.locator("#blockHttpPasswordSubmit").click();
+    await expect(options.locator("#dirtyStatus")).toHaveText("Unsaved changes");
+    await other.locator('#navModeSeg [data-value="smart"]').click();
+    await other.locator("#save").click();
+    await expect(options.locator("#settingsConflict")).toBeVisible();
+    await expect(options.locator("#save")).toBeDisabled();
+    await options.locator("#useExternal").click();
+    await expect(options.locator('#navModeSeg [data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator("#blockHttpPasswordSubmit")).toHaveAttribute("aria-checked", "false");
+    await options.locator("#discard").click();
+    await expect(options.locator("#blockHttpPasswordSubmit")).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator("#dirtyStatus")).toHaveText("All changes saved");
+
+    await options.locator("#mediumRiskThreshold").fill("");
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await other.locator('#navModeSeg [data-value="off"]').click();
+    await other.locator("#save").click();
+    await expect(options.locator("#settingsConflict")).toBeVisible();
+    await options.locator("#useExternal").click();
+    await expect(options.locator('#navModeSeg [data-value="off"]')).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("");
+    await options.locator("#mediumRiskThreshold").fill("54");
+    await options.locator("#discard").click();
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("55");
+
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await other.locator('#navModeSeg [data-value="smart"]').click();
+    await other.locator("#save").click();
+    await expect(options.locator("#settingsConflict")).toBeVisible();
+    await options.locator("#keepDraft").click();
+    await options.locator("#save").click();
+    await expect(other.locator('#navModeSeg [data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+    await options.locator("#autoSave").check();
+    await expect(other.locator("#autoSave")).toBeChecked();
+    await options.reload();
+    await expect(options.locator("#autoSave")).toBeChecked();
+    await expect(options.locator("#cleanupStatus")).toHaveText("Active");
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Options exposes a conflict for simultaneous same-field saves @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-options-cas-"));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const first = await context.newPage();
+    const second = await context.newPage();
+    const optionsUrl = `chrome-extension://${extensionId}/src/options/options.html`;
+    await Promise.all([first.goto(optionsUrl), second.goto(optionsUrl)]);
+    await first.locator("#autoSave").uncheck();
+    await expect(second.locator("#autoSave")).not.toBeChecked();
+
+    await first.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
+    await second.locator('#navModeSeg .seg-btn[data-value="off"]').click();
+    await Promise.all([first.locator("#save").click(), second.locator("#save").click()]);
+
+    const firstConflict = await first.locator("#settingsConflict").isVisible();
+    const secondConflict = await second.locator("#settingsConflict").isVisible();
+    expect(Number(firstConflict) + Number(secondConflict)).toBe(1);
+
+    const loser = firstConflict ? first : second;
+    const expectedMode = firstConflict ? "strict" : "off";
+    await expect(loser.locator("#dirtyStatus")).toContainText("Conflicting changes");
+    await expect(loser.locator(`#navModeSeg .seg-btn[data-value="${expectedMode}"]`))
+      .toHaveAttribute("aria-checked", "true");
+
+    await loser.locator("#keepDraft").click();
+    await loser.locator("#save").click();
+    const worker = await getServiceWorker(context);
+    await expect.poll(() => worker.evaluate(async key => {
+      const stored = await chrome.storage.local.get(key);
+      return stored[key]?.nav?.defaultMode;
+    }, SUITE_SETTINGS_KEY)).toBe(expectedMode);
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Options import cancels a pending autosave before replacing settings @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-import-autosave-"));
+  const importPath = path.join(userDataDir, "authoritative-import.json");
+  fs.writeFileSync(importPath, JSON.stringify({ settings: { nav: { defaultMode: "off" } } }));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+    await options.evaluate(() => {
+      const originalText = File.prototype.text;
+      File.prototype.text = async function(): Promise<string> {
+        await new Promise(resolve => window.setTimeout(resolve, 350));
+        return originalText.call(this);
+      };
+      const originalSend = chrome.runtime.sendMessage;
+      chrome.runtime.sendMessage = ((message: unknown, ...args: unknown[]) => {
+        if ((message as { type?: unknown })?.type === "ns-suite-settings-update") {
+          return new Promise(resolve => window.setTimeout(() => resolve(Reflect.apply(originalSend, chrome.runtime, [message, ...args])), 500));
+        }
+        return Reflect.apply(originalSend, chrome.runtime, [message, ...args]);
+      }) as typeof chrome.runtime.sendMessage;
+    });
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await options.locator("#importFile").setInputFiles(importPath);
+    await expect(options.locator('#navModeSeg [data-value="off"]')).toHaveAttribute("aria-checked", "true");
+    await options.waitForTimeout(800);
+    const worker = await getServiceWorker(context);
+    await expect.poll(() => worker.evaluate(async key => (await chrome.storage.local.get(key))[key]?.nav?.defaultMode, SUITE_SETTINGS_KEY)).toBe("off");
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test("options normalizes trusted-domain input and persists protection changes @smoke", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
@@ -46,6 +204,8 @@ test("options normalizes trusted-domain input and persists protection changes @s
       await expect(options.locator('#navModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="smart"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator("#dismiss")).toHaveAttribute("aria-checked", "false");
+      await options.locator("#autoSave").uncheck();
+      await expect(options.locator("#autoSave")).toBeEnabled();
 
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await options.locator('#credModeSeg .seg-btn[data-value="strict"]').click();
@@ -225,6 +385,11 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
           return result;
         }) as typeof chrome.runtime.sendMessage;
       }, SUITE_SETTINGS_KEY);
+      const worker = await getServiceWorker(context);
+      await worker.evaluate(async key => {
+        const stored = await chrome.storage.local.get(key);
+        await chrome.storage.local.set({ [key]: { ...stored[key], autoSave: false } });
+      }, SUITE_SETTINGS_KEY);
       await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
         waitUntil: "domcontentloaded",
         timeout: 20_000,
@@ -264,7 +429,7 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
       await expect(options.locator('#credModeSeg .seg-btn[data-value="off"]'))
         .toHaveAttribute("aria-checked", "true");
       await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "false");
-      await options.locator("#mediumRiskThreshold").fill("120");
+      await options.locator("#mediumRiskThreshold").fill("100");
 
       await options.locator("#save").click();
       await options.waitForFunction(() => {
@@ -274,7 +439,7 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
 
       // A same-field edit made after the worker persists the submitted patch,
       // but before Save receives its response, must remain visible and dirty.
-      // A submitted out-of-range value must still adopt the worker's clamp.
+      // A valid submitted numeric value must remain canonical.
       await options.locator("#warnOnPaste").click();
       await expect(options.locator("#warnOnPaste")).toHaveAttribute("aria-checked", "true");
       await options.evaluate(() => {
@@ -308,8 +473,8 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
         credMode: "off",
       });
 
-      // A completed import supersedes an older Save response that is still in
-      // flight; releasing that response must not repaint the imported settings.
+      // Import waits for an older Save response, then becomes authoritative.
+      // A delayed Save must never overwrite the imported settings afterward.
       await options.evaluate(() => {
         const state = window as Window & { __nsArmSettingsUpdate?: () => void };
         state.__nsArmSettingsUpdate?.();
@@ -331,9 +496,9 @@ test("Options keeps popup changes while saving an unrelated dirty setting @regre
           },
         })),
       });
-      await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]'))
+      await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]'))
         .toHaveAttribute("aria-checked", "true");
-      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "false");
+      await expect(options.locator("#navDebug")).toHaveAttribute("aria-checked", "true");
       await options.evaluate(() => {
         const state = window as Window & { __nsReleaseSettingsUpdate?: () => void };
         state.__nsReleaseSettingsUpdate?.();
@@ -465,7 +630,7 @@ test("options import and export preserve normalized trusted-domain and allowlist
         settings: {
           nav: { defaultMode: "off", debug: true },
           credential: { mode: "strict", mediumRiskThreshold: 55 },
-          logLimit: 120
+          logLimit: 55
         },
         allowlist: {
           " Example.com ": [" Login.Example.com "]
@@ -501,6 +666,8 @@ test("options import and export preserve normalized trusted-domain and allowlist
         timeout: 20_000
       });
       await expect(options.locator("#allowlist")).toContainText("No allowlist entries yet.");
+      await options.locator("#autoSave").uncheck();
+      await expect(options.locator("#autoSave")).toBeEnabled();
 
       // Import is authoritative: it must replace, not silently retain, a dirty
       // draft whose values differ from the imported backup. A malformed file,
@@ -513,12 +680,21 @@ test("options import and export preserve normalized trusted-domain and allowlist
       await options.locator("#importFile").setInputFiles(importPath);
       await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-checked", "true");
       await expect(options.locator('#credModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
-      await expect(options.locator("#logLimit")).toHaveValue("120");
+      await expect(options.locator("#logLimit")).toHaveValue("55");
+      expect(await options.locator("#logLimit").evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(true);
       await expect(options.locator("#allowlist")).toContainText("example.com");
       await expect(options.locator("#allowlist")).toContainText("login.example.com");
       await expect(options.locator("#trustedList")).toContainText("example.com");
       await expect(options.locator("#trustedList")).toContainText("127.0.0.1");
       await expect(options.locator("#eventLog")).toContainText("cred_trust_domain");
+
+      // Every bounded integer accepted by import must leave subsequent edits saveable.
+      await options.locator('#navModeSeg .seg-btn[data-value="smart"]').click();
+      const worker = await getServiceWorker(context);
+      await expect.poll(() => worker.evaluate(async key => {
+        const settings = (await chrome.storage.local.get(key))[key];
+        return { mode: settings?.nav?.defaultMode, logLimit: settings?.logLimit };
+      }, SUITE_SETTINGS_KEY)).toEqual({ mode: "smart", logLimit: 55 });
 
       const downloadPromise = options.waitForEvent("download");
       await options.locator("#exportBtn").click();
@@ -532,9 +708,9 @@ test("options import and export preserve normalized trusted-domain and allowlist
         trustedDomains: string[];
       };
 
-      expect(exported.settings.nav.defaultMode).toBe("off");
+      expect(exported.settings.nav.defaultMode).toBe("smart");
       expect(exported.settings.credential.mode).toBe("strict");
-      expect(exported.settings.logLimit).toBe(120);
+      expect(exported.settings.logLimit).toBe(55);
       expect(exported.allowlist).toEqual({
         "example.com": ["login.example.com"]
       });

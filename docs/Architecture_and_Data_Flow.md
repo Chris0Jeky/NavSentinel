@@ -23,11 +23,11 @@ This is the architecture of a pre-alpha development project with no established
 adoption. The separation and local-first design are substantial, but several
 current development paths are not production-capable:
 
-- `ui_toast.ts` and `credential_modal.ts` currently let page-injected UI
-  authorize protection-lowering actions. Script rejection/closed roots alone do
-  not solve page-controlled host redressing. RI-01 moves proceed/allow/trust/
-  resume authority to tab-bound extension-origin UI; injected UI becomes
-  warn/cancel only.
+- RI-01 remains incomplete. The #601 first vertical moves **Proceed once** for a
+  suspicious isolated `_blank` navigation to the extension popup, leaving the
+  injected toast warning/Dismiss-only for that path. Other navigation,
+  credential, trust, resume, and security-relevant Undo paths still authorize
+  through page-injected UI. AI-39 retains the real-Chrome activation gate.
 - RI-02 removes the non-functional visual-sim viewport-capture path, its
   public asset, scoring hook, and persisted state. Local artifact proof is
   green; the required human Gate-3 remains before this beta blocker can close.
@@ -365,11 +365,17 @@ remains with #215.
 - pending rollback and forward-offer state
 - DoubleClickjacking child-window tracking
 - OAuth flow state per tab
-- redirect chain correlation
+- redirect chain correlation with a latest-hop expiry and explicit user-navigation boundaries
 
 All 15 ephemeral Maps/Sets are backed by `chrome.storage.session` via a write-through cache (`extension/src/shared/session_state.ts`). In-memory Maps are the primary sync read path; every write is mirrored to session storage (fire-and-forget). On SW restart, `hydrate()` restores state from session storage before the first event is processed (handlers gate on a hydrate-ready promise). Session storage is cleared when the browser closes.
 
 It listens to `chrome.webNavigation` events to decide when a committed navigation should be treated as legitimate, rolled back, or offered back to the user.
+
+Redirect-chain state is pruned when it is read as well as when a new hop arrives.
+Typed, bookmark, address-bar, Back, and Forward commits clear the prior journey;
+a redirect qualifier on that boundary starts a fresh chain rather than extending
+or discarding the old one. Content-side scoring honors the worker's absolute
+latest-hop expiry and drops its cached answer on a BFCache `pageshow` restore.
 
 ### PushState guard
 
@@ -384,10 +390,23 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 ### Suspicious popup or `_blank` navigation
 
 1. `capture_isolated.ts` captures the click context and computes CDS.
-2. `main_guard.ts` traps the popup or navigation side effect.
-3. If the destination is suspicious and not allowlisted, the isolated-world script shows a toast prompt.
-4. Allow-once sends a short-lived allowance and replays the blocked action.
-5. Always-allow records the destination host in the per-site allowlist and then replays it.
+2. For a suspicious isolated HTTP(S) `_blank` anchor with no overlay-cleanup
+   recovery action, it prevents navigation, retains the exact destination only
+   in a bounded document-local slot, and asks the worker to create a 30-second
+   `blank-target-blocked` decision. Interceptions carrying the existing
+   security-relevant Undo action remain on the legacy prompt in this slice.
+3. The worker derives tab/window/frame/document/source/top context from trusted
+   browser state. Session persistence contains URL hashes, display origins,
+   timestamps, and opaque capabilities — never raw paths, queries, or fragments.
+4. The page toast is warning/Dismiss-only. The extension popup lists the
+   URL-free origin pair and one broker-authorized **Proceed once** action.
+5. Popup consumption burns the worker token before an exact
+   tab/frame/document delivery. The content client requires the current visible
+   source document, clears its raw-URL slot before attempting one direct open,
+   and rejects replay, expiry, navigation, malformed messages, or failed opens.
+6. MAIN action-ID, rollback/forward, Always-allow, credential, trust, resume,
+   and security-relevant Undo paths are outside this first vertical and retain
+   their existing behavior pending later RI-01 slices.
 
 ### Risky credential submit
 
@@ -448,13 +467,17 @@ It listens to `chrome.webNavigation` events to decide when a committed navigatio
 - Excludes only isolated-world-owned NavSentinel UI nodes through WeakSet identity;
   page-created elements cannot gain an exemption by spoofing an extension-like ID
 - Keeps the cleanup Undo card beside unrelated warnings. A synchronous
-  document-start fence in the generated MAIN-world loader consumes trusted
-  pointer, mouse, touch, click, and keyboard input on the extension-owned toast
-  host before page capture listeners can observe it, then relays only a click or
-  keyboard activation's bounded control token through the existing
-  verified MessagePort. The isolated world accepts the token only when it still
-  identifies a live control in the current owned shadow root and invokes its
-  WeakMap-held action; the shadow root remains the fallback boundary in unit DOMs.
+  document-start fence in the generated isolated-world capture loader consumes
+  trusted pointer, mouse, touch, click, and keyboard input whose composed path
+  includes the extension-owned toast host before page capture listeners can
+  observe it, then hands a click or keyboard activation to `ui_toast` in the
+  same isolated world. Activation is accepted only for the host this module
+  created (identity, never id) and only for a control held in its WeakMap, so a
+  page-forged host or attribute cannot activate a real control, and the user's
+  own controls never depend on the MAIN-world bridge. The toast host also lives
+  in the top layer (`popover=manual`) so a page layer inserted later at the
+  same maximum z-index cannot paint above it and swallow clicks; the shadow root
+  remains the fallback boundary in unit DOMs.
 - Records bounded cleanup outcomes in the existing local event log for review;
   no new permission, endpoint, or remote telemetry path is introduced.
 - Feeds mutation alert count into the debug overlay

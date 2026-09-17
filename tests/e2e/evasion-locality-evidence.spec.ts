@@ -57,28 +57,31 @@ type Arm = {
 
 type ArmId = "baseline" | "protected" | "benign" | "mixed";
 
-type MutationId = "control" | "opacity-010" | "zindex-9997" | "dom-depth-1" | "class-token-a7c1" | "transform-scale-101";
+type MutationId = "control" | "opacity-010" | "zindex-9997" | "dom-depth-1" | "class-token-a7c1" | "transform-scale-101" | "filter-opacity-099";
 
-type MutationAxis = "control" | "opacity" | "zIndex" | "domDepth" | "classList" | "transform";
+type MutationAxis = "control" | "opacity" | "zIndex" | "domDepth" | "classList" | "transform" | "filter";
 
 type MutationDefinition = {
   id: MutationId;
   declaredOpacity: string;
   declaredZIndex: string;
   declaredTransform: string;
+  declaredFilter: string;
   computedOpacity: string;
   computedZIndex: string;
   computedTransform: string;
+  computedFilter: string;
   axis: MutationAxis;
 };
 
 const MUTATION_DEFINITIONS: readonly MutationDefinition[] = [
-  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "control" },
-  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.1", computedZIndex: "9998", computedTransform: "none", axis: "opacity" },
-  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9997", computedTransform: "none", axis: "zIndex" },
-  { id: "dom-depth-1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "domDepth" },
-  { id: "class-token-a7c1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", axis: "classList" },
-  { id: "transform-scale-101", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "scale(1.01)", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "matrix(1.01, 0, 0, 1.01, 0, 0)", axis: "transform" },
+  { id: "control", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", declaredFilter: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", computedFilter: "none", axis: "control" },
+  { id: "opacity-010", declaredOpacity: "0.10", declaredZIndex: "9998", declaredTransform: "none", declaredFilter: "none", computedOpacity: "0.1", computedZIndex: "9998", computedTransform: "none", computedFilter: "none", axis: "opacity" },
+  { id: "zindex-9997", declaredOpacity: "0.09", declaredZIndex: "9997", declaredTransform: "none", declaredFilter: "none", computedOpacity: "0.09", computedZIndex: "9997", computedTransform: "none", computedFilter: "none", axis: "zIndex" },
+  { id: "dom-depth-1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", declaredFilter: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", computedFilter: "none", axis: "domDepth" },
+  { id: "class-token-a7c1", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", declaredFilter: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", computedFilter: "none", axis: "classList" },
+  { id: "transform-scale-101", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "scale(1.01)", declaredFilter: "none", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "matrix(1.01, 0, 0, 1.01, 0, 0)", computedFilter: "none", axis: "transform" },
+  { id: "filter-opacity-099", declaredOpacity: "0.09", declaredZIndex: "9998", declaredTransform: "none", declaredFilter: "opacity(0.99)", computedOpacity: "0.09", computedZIndex: "9998", computedTransform: "none", computedFilter: "opacity(0.99)", axis: "filter" },
 ];
 
 type RectFingerprint = { x: number; y: number; width: number; height: number; top: number; right: number; bottom: number; left: number };
@@ -92,6 +95,7 @@ type MutationFingerprint = {
     opacity: string;
     zIndex: string;
     transform: string;
+    filter: string;
     cursor: string;
     width: string;
     height: string;
@@ -118,6 +122,7 @@ type MutationObservation = MutationDefinition & {
   invalid: string | null;
   computedOpacity: string;
   computedZIndex: string;
+  computedFilter: string;
   fingerprint: MutationFingerprint;
 };
 
@@ -535,6 +540,7 @@ async function readMutationObservation(page: Page, definition: MutationDefinitio
       invalid: root.getAttribute("data-navsentinel-fixture-invalid"),
       computedOpacity: trapStyle?.opacity ?? "missing-trap",
       computedZIndex: trapStyle?.zIndex ?? "missing-trap",
+      computedFilter: trapStyle?.filter ?? "missing-trap",
       fingerprint: {
         classList: trap ? Array.from(trap.classList) : [],
         parentTag: trap?.parentElement?.tagName ?? null,
@@ -544,6 +550,7 @@ async function readMutationObservation(page: Page, definition: MutationDefinitio
           opacity: trapStyle?.opacity ?? "missing-trap",
           zIndex: trapStyle?.zIndex ?? "missing-trap",
           transform: trapStyle?.transform ?? "missing-trap",
+          filter: trapStyle?.filter ?? "missing-trap",
           cursor: trapStyle?.cursor ?? "missing-trap",
           width: trapStyle?.width ?? "missing-trap",
           height: trapStyle?.height ?? "missing-trap",
@@ -580,6 +587,8 @@ async function readMutationObservation(page: Page, definition: MutationDefinitio
     .toBe(definition.computedZIndex);
   expect(observed.fingerprint.computedStyle.transform, "The trap transform must match the mutation definition")
     .toBe(definition.computedTransform);
+  expect(observed.computedFilter, "The trap filter must match the mutation definition")
+    .toBe(definition.computedFilter);
   return { ...definition, ...observed };
 }
 
@@ -600,6 +609,9 @@ function assertMutationAxes(
   expect(mutant.fingerprint.targetReady).toBe(control.fingerprint.targetReady);
   expect(mutant.fingerprint.localTargetsReady).toBe(control.fingerprint.localTargetsReady);
   expect(mutant.fingerprint.benignLink).toEqual(control.fingerprint.benignLink);
+  if (changedAxis !== "filter") {
+    expect(mutant.fingerprint.computedStyle.filter).toBe(control.fingerprint.computedStyle.filter);
+  }
   if (changedAxis !== "transform") {
     expect(mutant.fingerprint.rect).toEqual(control.fingerprint.rect);
   }
@@ -610,6 +622,14 @@ function assertMutationAxes(
     expect(mutant.fingerprint.computedStyle.opacity).not.toBe(control.fingerprint.computedStyle.opacity);
     expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
     expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+  } else if (changedAxis === "filter") {
+    expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
+    expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
+    expect(mutant.fingerprint.ancestorDepthFromBody).toBe(control.fingerprint.ancestorDepthFromBody);
+    expect(mutant.fingerprint.computedStyle.opacity).toBe(control.fingerprint.computedStyle.opacity);
+    expect(mutant.fingerprint.computedStyle.zIndex).toBe(control.fingerprint.computedStyle.zIndex);
+    expect(mutant.fingerprint.computedStyle.transform).toBe(control.fingerprint.computedStyle.transform);
+    expect(mutant.fingerprint.computedStyle.filter).not.toBe(control.fingerprint.computedStyle.filter);
   } else if (changedAxis === "zIndex") {
     expect(mutant.fingerprint.classList).toEqual(control.fingerprint.classList);
     expect(mutant.fingerprint.parentTag).toBe(control.fingerprint.parentTag);
@@ -753,8 +773,8 @@ async function writeReceipt(
       arms.some((arm) => arm.violations.length > 0) ? "Fixture attempted undeclared network egress" : "",
     ].filter(Boolean).join("; "),
     limitations: [
-      "This receipt proves the shared local-target contract and one representative composite journey across control plus five deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
-      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, class-token, or transform axis at a time; the transform case requires deterministic 1.01 center-origin geometry. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
+      "This receipt proves the shared local-target contract and one representative composite journey across control plus six deterministic CSS and structural neighbours, not mutation robustness across all twelve evasion fixtures.",
+      "The mutation campaign changes only one declared trap opacity, z-index, DOM-depth, class-token, transform, or filter axis at a time; the transform case requires deterministic 1.01 center-origin geometry. Its allowlisted query selector cannot select destinations, roles, authorities, or sink URLs.",
       "The existing evasion regression suite remains product-event coupled; its twelve protected fixtures are checked separately and are not promoted beyond MODELLED here.",
       "Bundled Chromium is not branded Chrome, owner Gate-3, open-web efficacy, or release evidence.",
       "Playwright page.addInitScript is privileged harness configuration only; it supplies no hostile or authored-page authority evidence, and SP-F-014 remains PARTIAL.",
@@ -793,7 +813,7 @@ async function writeReceipt(
       cases: campaignCases,
       payload_sha256: campaignPayloadSha256,
       hash_method: "SHA-256(UTF-8 bytes of JSON.stringify({cases: mutation_campaign.cases}))",
-      qualification: "Five deterministic CSS and structural neighbours only; query selection cannot change target authority.",
+      qualification: "Six deterministic CSS and structural neighbours only; query selection cannot change target authority.",
     },
     network_violations: campaign.flatMap((entry) => entry.networkViolations),
     blocked_external_attempts: campaign.flatMap((entry) => entry.blockedExternalAttempts),
@@ -1326,15 +1346,18 @@ test("#449 evasion targets stay local with attack, protected, benign, and mixed 
   const domDepth = campaign.find((entry) => entry.mutation.id === "dom-depth-1");
   const classToken = campaign.find((entry) => entry.mutation.id === "class-token-a7c1");
   const transform = campaign.find((entry) => entry.mutation.id === "transform-scale-101");
+  const filter = campaign.find((entry) => entry.mutation.id === "filter-opacity-099");
   expect(opacity).toBeDefined();
   expect(zIndex).toBeDefined();
   expect(domDepth).toBeDefined();
   expect(classToken).toBeDefined();
   expect(transform).toBeDefined();
+  expect(filter).toBeDefined();
   assertMutationAxes(control!.mutation, opacity!.mutation, "opacity");
   assertMutationAxes(control!.mutation, zIndex!.mutation, "zIndex");
   assertMutationAxes(control!.mutation, domDepth!.mutation, "domDepth");
   assertMutationAxes(control!.mutation, classToken!.mutation, "classList");
   assertMutationAxes(control!.mutation, transform!.mutation, "transform");
+  assertMutationAxes(control!.mutation, filter!.mutation, "filter");
   await writeReceipt(testInfo, control!, campaign, allArms, releaseProfile);
 });

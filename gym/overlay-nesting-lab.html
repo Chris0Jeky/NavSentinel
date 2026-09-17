@@ -41,6 +41,10 @@
     const childParams = new URLSearchParams({ case: fixtureCase });
     if (localSink) childParams.set("sink", localSink);
     if (programmeChurn) childParams.set("churn", "1");
+    if (params.get("observatory") === "1") {
+      childParams.set("observatory", "1");
+      childParams.set("record", params.get("record") === "1" ? "1" : "0");
+    }
     document.getElementById("media-frame").src =
       `${location.protocol}//${childHost}:${location.port}/overlay-nesting-frame.html?${childParams}`;
   </script>

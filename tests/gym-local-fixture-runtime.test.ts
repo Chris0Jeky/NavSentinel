@@ -222,4 +222,26 @@ describe("Gym local-fixture target runtime contract", () => {
       .toThrow("legacy-target-override-rejected");
     expect(rejectedWindow.document.documentElement.dataset.navsentinelLocalTargetsReady).toBe("0");
   });
+
+  it("maps CLIP-005 to the typed inert shell-paste consequence", () => {
+    const window = loadFixture(
+      "http://127.0.0.1:5173/clickfix-05-delayed-rewrite.html",
+      undefined,
+      undefined,
+      [],
+      "harm",
+      "NS-ADV-CLIP-005",
+    );
+    const target = new URL(localTargets(window).url("harm", "NS-ADV-CLIP-005"));
+    const staticSink = fs.readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "gym", "local-fixture-sink.html"),
+      "utf8",
+    );
+
+    expect(target.pathname).toBe("/local-fixture-sink.html");
+    expect(target.searchParams.get("scenario_id")).toBe("NS-ADV-CLIP-005");
+    expect(target.searchParams.get("consequence")).toBe("inert-shell-paste");
+    expect(target.searchParams.get("sentinel")).toBe("NAVSENTINEL_SENTINEL_DO_NOT_RUN");
+    expect(staticSink).toContain('"NS-ADV-CLIP-005": "inert-shell-paste"');
+  });
 });
