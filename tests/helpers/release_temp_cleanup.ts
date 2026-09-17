@@ -20,6 +20,7 @@ const RELEASE_TEMP_REMOVE_OPTIONS: ReleaseTempRemoveOptions = {
 };
 
 const RETRYABLE_REMOVE_CODES = new Set(["EBUSY", "EMFILE", "ENFILE", "ENOTEMPTY", "EPERM"]);
+const MAX_OUTER_RETRIES = 2;
 const RETRY_SLEEP = new Int32Array(new SharedArrayBuffer(4));
 
 function waitForRetry(delay: number): void {
@@ -38,7 +39,7 @@ export function removeReleaseTempRoot(
       const code = error && typeof error === "object" && "code" in error
         ? (error as { code?: unknown }).code
         : undefined;
-      if (retry >= RELEASE_TEMP_REMOVE_OPTIONS.maxRetries || !RETRYABLE_REMOVE_CODES.has(String(code))) {
+      if (retry >= MAX_OUTER_RETRIES || !RETRYABLE_REMOVE_CODES.has(String(code))) {
         throw error;
       }
       waitForRetry(RELEASE_TEMP_REMOVE_OPTIONS.retryDelay * (retry + 1));
