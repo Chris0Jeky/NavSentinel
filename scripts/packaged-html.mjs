@@ -1,5 +1,12 @@
+import { compactHtml } from "./compact-html.mjs";
+
 const OPTIONS_ARTIFACT_PATH = "options/options.html";
-const OPTIONS_SCRIPT_SRC = /^\/assets\/options\.html-[A-Za-z0-9_-]+\.js$/;
+const COMPACT_ARTIFACT_SCRIPTS = new Map([
+  ["options/options.html", /^\/assets\/options\.html-[A-Za-z0-9_-]+\.js$/],
+  ["popup/popup.html", /^\/assets\/popup\.html-[A-Za-z0-9_-]+\.js$/],
+  ["onboarding/onboarding.html", /^\/assets\/onboarding-[A-Za-z0-9_-]+\.js$/],
+  ["evidence/evidence.html", /^\/assets\/evidence-[A-Za-z0-9_-]+\.js$/],
+]);
 const PACKAGED_STYLESHEET_HREF = /^\/assets\/[A-Za-z0-9._~-]+\.css$/;
 
 // This is deliberately broader than today's Options markup. If a future page
@@ -7,6 +14,8 @@ const PACKAGED_STYLESHEET_HREF = /^\/assets\/[A-Za-z0-9._~-]+\.css$/;
 // its original whitespace and let the aggregate size gate report the growth.
 const WHITESPACE_SENSITIVE_HTML =
   /<\s*\/?\s*(?:pre|textarea|style|template|xmp|listing|plaintext|iframe|noembed|noframes|svg|math)\b/i;
+const UNSAFE_EMBEDDED_HTML =
+  /<\s*\/?\s*(?:template|xmp|listing|plaintext|iframe|noembed|noframes|svg|math)\b/i;
 const INLINE_STYLE_OR_XML_SPACE = /\s(?:style|xml:space)\s*=/i;
 
 function parseStrictAttributes(raw) {
@@ -46,7 +55,7 @@ function parseStrictAttributes(raw) {
   return attributes;
 }
 
-function hasOnlyExpectedExternalScript(html) {
+function hasOnlyExpectedExternalScript(html, scriptPattern) {
   const starts = html.match(/<script\b/gi) ?? [];
   const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];
   if (starts.length !== 1 || scripts.length !== 1 || scripts[0][2] !== "") return false;
@@ -56,7 +65,7 @@ function hasOnlyExpectedExternalScript(html) {
   return attributes.get("type") === "module" &&
     attributes.get("crossorigin") === null &&
     typeof attributes.get("src") === "string" &&
-    OPTIONS_SCRIPT_SRC.test(attributes.get("src"));
+    scriptPattern.test(attributes.get("src"));
 }
 
 function cssUsesOnlyCollapsingWhitespace(css) {
@@ -143,26 +152,24 @@ function linkedStylesheetsAreSafe(html, stylesheetsByHref) {
   return stylesheetCount > 0;
 }
 
-function stripIndentBeforeTags(html) {
-  return html
-    .split("\n")
-    .map((line) => {
-      let offset = 0;
-      while (line[offset] === " " || line[offset] === "\t") offset += 1;
-      return offset > 0 && line[offset] === "<" ? line.slice(offset) : line;
-    })
-    .join("\n");
-}
-
 /**
- * Compact only the known built Options page, and only while its entire style and
- * script surface proves that inter-tag indentation collapses. Any uncertainty
- * returns the original bytes; the performance gate then fails closed.
+ * Compact only known built extension pages, and only while their entire style
+ * and script surfaces prove that ordinary HTML whitespace collapses. Any
+ * uncertainty returns the original bytes; the performance gate then fails
+ * closed.
  */
 export function compactKnownOptionsHtml(relativePath, html, stylesheetsByHref) {
-  if (relativePath.replaceAll("\\", "/") !== OPTIONS_ARTIFACT_PATH) return html;
-  if (WHITESPACE_SENSITIVE_HTML.test(html) || INLINE_STYLE_OR_XML_SPACE.test(html)) return html;
-  if (!hasOnlyExpectedExternalScript(html)) return html;
+  const artifactPath = relativePath.replaceAll("\\", "/");
+  const scriptPattern = COMPACT_ARTIFACT_SCRIPTS.get(artifactPath);
+  if (!scriptPattern) return html;
+  const whitespaceSensitive = artifactPath === OPTIONS_ARTIFACT_PATH
+    ? WHITESPACE_SENSITIVE_HTML
+    : UNSAFE_EMBEDDED_HTML;
+  if (whitespaceSensitive.test(html) || INLINE_STYLE_OR_XML_SPACE.test(html)) return html;
+  if (!hasOnlyExpectedExternalScript(html, scriptPattern)) return html;
   if (!linkedStylesheetsAreSafe(html, stylesheetsByHref)) return html;
-  return stripIndentBeforeTags(html);
+  // Vite emits bare `crossorigin` on same-extension module/style resources.
+  // Those resources have no cookies or cross-origin credentials to carry, so
+  // the attribute is redundant in the shipped extension HTML.
+  return compactHtml(html, { stripCrossOrigin: true });
 }

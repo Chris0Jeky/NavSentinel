@@ -112,7 +112,7 @@ function installEarlyUiFence() {
   fs.writeFileSync(finalLoaderPath, fencedLoader, "utf8");
   if (finalLoaderPath !== loaderPath) fs.rmSync(loaderPath, { force: true });
   captureEntry.js[0] = finalCaptureScript;
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
   return revision;
 }
 
