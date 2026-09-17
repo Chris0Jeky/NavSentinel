@@ -50,7 +50,7 @@ try {
     const c = await choose(experiment);
     await page.getByRole('button',{name:'Show operation snapshot',exact:true}).click();
     assert.equal(await page.locator('#form-attribution').getAttribute('data-association'),'no-reported-input');
-    assert.match(await page.locator('#form-attribution').innerText(),/No reported input/);
+    assert.match(await page.locator('#form-attribution').innerText(),/No earlier reported snapshot/);
     assert.deepEqual(await page.locator('[data-field="action"] td').allTextContents(),['Not recorded','benign']);
     assert.match(await page.locator('#form-panel').innerText(),/No clicked input or native initiator is established/);
     assert.doesNotMatch(await page.locator('#form-panel').innerText(),/Compare the clicked form\/submitter/);
