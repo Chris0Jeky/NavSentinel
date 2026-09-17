@@ -130,7 +130,11 @@ function application() {
   function renderForm(c) {
     const panel = $('form-panel'); panel.hidden = !c.formEvidence; panel.replaceChildren();
     if (!c.formEvidence) return;
-    panel.append(make('h3', 'Form intent snapshots'), make('p', 'Compare the clicked form/submitter with the later reported operation. These are fixture reports, not proof that the browser executed the requested intent.', 'muted'));
+    const lifecycleExercise = c.formEvidence.experiment && c.formEvidence.experiment !== 'form-campaign';
+    const formIntroduction = lifecycleExercise
+      ? 'Compare earlier and selected snapshots reported during this observer lifecycle exercise. No clicked input or native initiator is established.'
+      : 'Compare the clicked form/submitter with the later reported operation. These are fixture reports, not proof that the browser executed the requested intent.';
+    panel.append(make('h3', 'Form intent snapshots'), make('p', formIntroduction, 'muted'));
     const jump = (id, label) => {
       const button = make('button', label, 'small');
       button.addEventListener('click', () => { const index = c.events.findIndex(e => e.id === id); if (index >= 0) { cursor = index; $('scrub').value = String(index); renderEvent(); } }); return button;
@@ -160,12 +164,18 @@ function application() {
     if (!current) panel.append(make('p', 'No form snapshot in this document interval at the selected event. Earlier snapshots are not carried across an observed navigation.', 'notice'));
     else {
       if (current.binding) {
-        const attribution = make('p', `${current.binding.documentId} / ${current.binding.frameId}: ${initial ? 'input and selected report belong to the same reporting document' : 'No reported input for this reporting document'}. This is temporal association, not native causality.`, 'notice');
+        const associationText = lifecycleExercise
+          ? `${initial ? 'Earlier and selected reports belong to the same reporting document' : 'No earlier reported snapshot for this reporting document'}. This is reporting-document association, not interaction or native causality.`
+          : `${initial ? 'Input and selected report belong to the same reporting document' : 'No reported input for this reporting document'}. This is temporal association, not native causality.`;
+        const attribution = make('p', `${current.binding.documentId} / ${current.binding.frameId}: ${associationText}`, 'notice');
         attribution.id = 'form-attribution'; attribution.dataset.association = state.association; panel.append(attribution);
       }
       panel.append(make('p', `Selected: ${current.phase}, ${current.primitive} · ${current.eventId} · received at +${current.elapsedMs} ms`, 'target-flow'));
       const table = make('table', undefined, 'form-intents'); table.setAttribute('aria-label', 'Earlier and selected form intent categories');
-      const header = make('tr'); for (const label of ['Field', 'Earlier snapshot', 'Selected snapshot']) header.append(make('th', label)); table.append(header);
+      const labels = lifecycleExercise
+        ? ['Field', 'Earlier reported snapshot', 'Selected reported snapshot']
+        : ['Field', 'Earlier snapshot', 'Selected snapshot'];
+      const header = make('tr'); for (const label of labels) header.append(make('th', label)); table.append(header);
       const rows = [['form','Form identity'],['submitter','Submitter identity'],['declaredAction','Form action'],['action','Effective action'],['actionSource','Action selected from'],['method','Effective method'],['encoding','Encoding'],['target','Target context'],['targetSource','Target selected from'],['targetOverride','Submitter target override'],['methodOverride','Submitter method override'],['ownerMatches','Submitter belongs to form']];
       for (const [key, label] of rows) {
         const row = make('tr'); row.dataset.field = key;

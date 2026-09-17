@@ -43,6 +43,7 @@ try {
   await page.getByRole('button',{name:'Show operation snapshot',exact:true}).click();
   assert.equal(await page.locator('#form-attribution').getAttribute('data-association'),'same-reporting-document');
   assert.deepEqual(await page.locator('[data-field="action"] td').allTextContents(),['benign','harm']);
+  assert.match(await page.locator('#form-panel').innerText(),/Compare the clicked form\/submitter/);
   assert.match(await page.locator('#document-panel').innerText(),/reporting function/);
   await page.locator('#form-panel').screenshot({path:path.join(output,'bound-action-substitution.png')});
   for (const experiment of ['same-url-siblings','same-frame-reload','frame-replacement']) {
@@ -51,6 +52,8 @@ try {
     assert.equal(await page.locator('#form-attribution').getAttribute('data-association'),'no-reported-input');
     assert.match(await page.locator('#form-attribution').innerText(),/No reported input/);
     assert.deepEqual(await page.locator('[data-field="action"] td').allTextContents(),['Not recorded','benign']);
+    assert.match(await page.locator('#form-panel').innerText(),/No clicked input or native initiator is established/);
+    assert.doesNotMatch(await page.locator('#form-panel').innerText(),/Compare the clicked form\/submitter/);
     assert.equal(await page.locator('.form-changed').count(),0,'no fabricated change from a different document');
     await page.locator('#form-panel').screenshot({path:path.join(output,`${experiment}.png`)});
     await step(c.events.length-1);assert.equal(await page.locator('#form-panel table').count(),0);
@@ -61,6 +64,8 @@ try {
   await choose('borrowed-reporting-function');await page.getByRole('button',{name:'Show operation snapshot',exact:true}).click();
   assert.equal(await page.locator('#form-attribution').getAttribute('data-association'),'same-reporting-document');
   assert.match(await page.locator('#document-panel').innerText(),/same-origin code can borrow/);
+  assert.match(await page.locator('#form-panel').innerText(),/Earlier and selected reports belong to the same reporting document/);
+  assert.match(await page.locator('#form-panel').innerText(),/not interaction or native causality/);
   await page.locator('#form-panel').screenshot({path:path.join(output,'borrowed-reporting-limit.png')});
   const bad = await choose('spoofed-identity-disposal');assert.ok(bad.gaps.includes('PROBE_REJECTED'));
   await step(bad.events.length-1);assert.equal(await page.locator('#form-panel table').count(),0);
