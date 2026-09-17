@@ -278,7 +278,6 @@ describe("signalChipClass (#205)", () => {
   it("classifies risk-reducing reason codes as ok (green)", () => {
     for (const r of [
       "nrs_allowlisted",
-      "nrs_user_activation_active",
       "nrs_explicit_new_tab_intent",
       "nrs_opener_previously_allowed",
       "keyboard_activation",
@@ -291,6 +290,7 @@ describe("signalChipClass (#205)", () => {
 
   it("classifies threat/neutral reason codes as warn (orange)", () => {
     for (const r of [
+      "nrs_user_activation_active",
       "clickfix_command_with_overlay",
       "nav_anomaly",
       "high_entropy_subdomain",
@@ -313,7 +313,6 @@ describe("isRiskReducingReason (#205 R1: exact predicate, mirrors buildPlainMess
   it("matches the risk-reducing reason codes the toast filters out", () => {
     for (const r of [
       "nrs_allowlisted",
-      "nrs_user_activation_active",
       "nrs_explicit_new_tab_intent",
       "nrs_opener_previously_allowed",
       "keyboard_activation",
@@ -325,8 +324,8 @@ describe("isRiskReducingReason (#205 R1: exact predicate, mirrors buildPlainMess
   });
 
   it("does NOT green a risk-increasing code that merely contains a token (startsWith/exact, not substring)", () => {
-    // user_activation is matched EXACTLY, keyboard_/legit_ via startsWith — so a
-    // hypothetical spoof/fake variant stays a warning (no false reassurance).
+    // User activation remains a positive NRS factor, so it and spoofed variants
+    // stay warnings; keyboard_/legit_ prefix matches are reserved for mitigations.
     expect(isRiskReducingReason("spoofed_user_activation")).toBe(false);
     expect(isRiskReducingReason("fake_legit_overlay")).toBe(false);
     expect(isRiskReducingReason("no_keyboard_activation")).toBe(false);
