@@ -1,6 +1,15 @@
 const RAW_TAG = /<(script|style|pre|textarea)\b[^>]*>/gi;
-const SIMPLE_ATTRIBUTE = /(\s[A-Za-z_:][A-Za-z0-9_.:-]*=)"([A-Za-z0-9_.:-]+)"/g;
+const SIMPLE_ATTRIBUTE = /(\s[A-Za-z_:][A-Za-z0-9_.:-]*=)"([^\s"'`=<>]+)"/g;
 const VOID_TAG = /^(<(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b[^>]*?)\s*\/>$/i;
+const TAG_NAME = /^<(\/?)\s*([A-Za-z][A-Za-z0-9:-]*)/;
+const STRUCTURAL_TAGS = new Set([
+  "address", "article", "aside", "blockquote", "body", "dd", "details", "dialog", "div", "dl", "dt",
+  "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head",
+  "header", "hgroup", "html", "legend", "li", "link", "main", "menu", "meta", "nav", "ol", "optgroup",
+  "option", "p", "section", "select", "summary", "table", "tbody", "td", "template", "tfoot", "th",
+  "thead", "title", "tr", "ul",
+]);
+const OPTIONAL_P_END = /<\/p>(?=<(?:(?:address|article|aside|blockquote|details|div|dl|fieldset|figcaption|figure|footer|form|h[1-6]|header|hgroup|hr|main|menu|nav|ol|p|pre|search|section|table|ul)\b|\/(?:article|aside|blockquote|body|details|dialog|div|fieldset|footer|form|main|nav|section)>))/gi;
 
 function compactTag(tag, stripCrossOrigin = false) {
   const isLocalAsset = /\b(?:src|href)\s*=\s*["']\/assets\//i.test(tag);
@@ -11,18 +20,48 @@ function compactTag(tag, stripCrossOrigin = false) {
   return unquoted.replace(VOID_TAG, "$1>");
 }
 
+function isStructuralTag(token) {
+  const name = TAG_NAME.exec(token)?.[2];
+  return name ? STRUCTURAL_TAGS.has(name.toLowerCase()) : false;
+}
+
+function isStructuralBoundary(token, closing) {
+  const match = TAG_NAME.exec(token);
+  return !!match && !!match[1] === closing && STRUCTURAL_TAGS.has(match[2].toLowerCase());
+}
+
 function compactNormalHtml(html, stripCrossOrigin = false) {
   const withoutComments = html.replace(/<!--(?!\[if\b)[\s\S]*?-->/gi, "");
-  const tokens = withoutComments.split(/(<[^>]*>)/g);
+  const tokens = withoutComments.split(/(<[^>]*>)/g).map((token) => {
+    if (token.startsWith("<")) return compactTag(token, stripCrossOrigin);
+    return token.replace(/\s+/g, " ");
+  });
 
   return tokens
     .map((token, index) => {
-      if (token.startsWith("<")) return compactTag(token, stripCrossOrigin);
-      const collapsed = token.replace(/\s+/g, " ");
-      return collapsed;
+      const previous = tokens[index - 1] ?? "";
+      const next = tokens[index + 1] ?? "";
+      if (token === " " && (isStructuralTag(previous) || isStructuralTag(next))) return "";
+      if (!token || token.startsWith("<")) return token;
+      const withoutLeading = token.startsWith(" ") && isStructuralBoundary(previous, false)
+        ? token.slice(1)
+        : token;
+      return withoutLeading.endsWith(" ") && isStructuralBoundary(next, true)
+        ? withoutLeading.slice(0, -1)
+        : withoutLeading;
     })
     .join("")
     .trim();
+}
+
+function stripOptionalEndTags(html) {
+  return html
+    .replace(/<\/option>(?=<option\b|<\/(?:optgroup|select)>)/gi, "")
+    .replace(OPTIONAL_P_END, "")
+    .replace(/<\/head><body>/gi, "")
+    .replace(/<\/head>(?=<body\b)/gi, "")
+    .replace(/<\/body>(?=<\/html>)/gi, "")
+    .replace(/<\/html>$/i, "");
 }
 
 /**
@@ -54,5 +93,5 @@ export function compactHtml(html, { stripCrossOrigin = false } = {}) {
   }
 
   output.push(compactNormalHtml(html.slice(cursor), stripCrossOrigin));
-  return output.join("");
+  return stripOptionalEndTags(output.join(""));
 }
