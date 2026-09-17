@@ -51,7 +51,8 @@ export interface FormNavigationEntry {
   attemptId: string;
   sourceFrameId: number;
   sourceDocumentId: string;
-  intent: FormIntent;
+  get: boolean;
+  top: boolean;
   issuedAt: number;
   expiresAt: number;
   phase: "a" | "s" | "p";

@@ -1,6 +1,7 @@
 import {
   FORM_INTENT_TTL_MS,
-  formDestinationMatches,
+  isFormIntent,
+  isHttpFormIntent,
   type FormNavigationEntry,
 } from "../shared/form_intent";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
@@ -43,7 +44,7 @@ import {
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
-import { isValidFormNavigation, swState } from "../shared/session_state";
+import { swState, type AllowTargetEntry } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
 import {
   createDefaultPendingDecisionRuntimeBroker,
@@ -629,8 +630,18 @@ function formDeadline(form: FormNavigationEntry): number {
   return form.phase === "s" && form.startedAt !== undefined ? form.startedAt + 10_000 : form.expiresAt;
 }
 
-function startForm(form: FormNavigationEntry, url: string, now: number): void {
-  if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt || !formDestinationMatches(form.intent, url)) {
+function formDestinationMatches(form: FormNavigationEntry, target: Pick<AllowTargetEntry, "url">, destination: string): boolean {
+  try {
+    const expected = new URL(target.url);
+    const actual = new URL(destination);
+    expected.hash = actual.hash = "";
+    if (form.get) expected.search = actual.search = "";
+    return expected.href === actual.href;
+  } catch { return false; }
+}
+
+function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, now: number): void {
+  if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt || !formDestinationMatches(form, target, url)) {
     form.phase = "p";
     delete form.startedUrl;
     delete form.startedAt;
@@ -641,11 +652,11 @@ function startForm(form: FormNavigationEntry, url: string, now: number): void {
   form.startedAt = now;
 }
 
-function consumeForm(form: FormNavigationEntry, url: string, transition: string, qualifiers: readonly string[], now: number): boolean {
-  const allowed = form.phase === "s" && now < formDeadline(form) && form.intent[4] === "top" &&
-    transition === "form_submit" && !!form.startedUrl && formDestinationMatches(form.intent, form.startedUrl) &&
+function consumeForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, transition: string, qualifiers: readonly string[], now: number): boolean {
+  const allowed = form.phase === "s" && now < formDeadline(form) && form.top &&
+    transition === "form_submit" && !!form.startedUrl && formDestinationMatches(form, target, form.startedUrl) &&
     !qualifiers.includes("forward_back") && !qualifiers.includes("client_redirect") &&
-    (formDestinationMatches(form.intent, url) || qualifiers.includes("server_redirect"));
+    (formDestinationMatches(form, target, url) || qualifiers.includes("server_redirect"));
   form.phase = "p";
   delete form.startedUrl;
   delete form.startedAt;
@@ -674,7 +685,8 @@ function handleChildFormMessage(
   }
   const now = Date.now();
   const issuedAt = message.issuedAt;
-  if (typeof message.attemptId !== "string" || current?.attemptId === message.attemptId ||
+  if (typeof message.attemptId !== "string" || !/^[a-f0-9]{32}$/.test(message.attemptId) ||
+      current?.attemptId === message.attemptId || !isFormIntent(message.formIntent) || !isHttpFormIntent(message.formIntent) ||
       typeof issuedAt !== "number" || !Number.isFinite(issuedAt) || issuedAt > now || now >= issuedAt + FORM_INTENT_TTL_MS) return false;
   let formCount = 0;
   for (const [id, target] of allowTargetByTab) {
@@ -683,12 +695,14 @@ function handleChildFormMessage(
     else formCount++;
   }
   if (formCount >= 256 && !current) return false;
-  const form = {
+  const form: FormNavigationEntry = {
     attemptId: message.attemptId, sourceFrameId: frameId, sourceDocumentId: documentId,
-    intent: message.formIntent, issuedAt, expiresAt: issuedAt + FORM_INTENT_TTL_MS, phase: "a" as const,
+    get: message.formIntent[1] === "get", top: message.formIntent[4] === "top",
+    issuedAt, expiresAt: issuedAt + FORM_INTENT_TTL_MS, phase: "a",
   };
-  if (!isValidFormNavigation(form)) return false;
-  const target = { url: form.intent[0], expiresAt: form.expiresAt, form };
+  const target: AllowTargetEntry = {
+    url: message.formIntent[0], expiresAt: form.expiresAt, form,
+  };
   allowTargetByTab.set(tabId, target);
   allowUntilByTab.delete(tabId);
   gestureUntilByTab.delete(tabId);
@@ -1157,7 +1171,10 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 });
 function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationParentedCallbackDetails): void {
   const form = allowTargetByTab.get(details.tabId)?.form;
-  if (form) startForm(form, details.url, Date.now());
+  if (form) {
+    const target = allowTargetByTab.get(details.tabId);
+    if (target) startForm(form, target, details.url, Date.now());
+  }
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =
@@ -1206,7 +1223,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const targetAllowance = allowTargetByTab.get(details.tabId);
   const form = targetAllowance?.form;
   const formObserved = !!form && now < formDeadline(form);
-  const formAllowed = !!form && consumeForm(form, details.url, details.transitionType, details.transitionQualifiers ?? [], now);
+  const formAllowed = !!form && !!targetAllowance && consumeForm(form, targetAllowance, details.url, details.transitionType, details.transitionQualifiers ?? [], now);
   const targetAllowed =
     !!targetAllowance && !form &&
     now <= targetAllowance.expiresAt &&

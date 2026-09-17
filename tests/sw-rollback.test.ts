@@ -2481,6 +2481,25 @@ describe("child-form worker capability (#688)", () => {
     expect(commit(mock).entry?.allowedAtCommit).toBe(true);
     expect(commit(mock).entry?.allowedAtCommit).toBe(false);
   });
+  it("persists only the worker destination capability, not the DOM tuple", async () => {
+    const mock = await setup(); expect(arm(mock)).toEqual({ ok: true }); await flushMicrotasks();
+    const stored = mock.chrome.storage.session._store["ns_sw:allowTarget"] as Record<string, { url?: string; matchQueryPrefix?: boolean; form?: Record<string, unknown> }>;
+    expect(stored["71"]).toMatchObject({ url, form: { get: false, top: true } });
+    expect(stored["71"]?.matchQueryPrefix).toBeUndefined();
+    expect(stored["71"]?.form).not.toHaveProperty("intent");
+  });
+  it("does not let a corrupted generic query flag widen a persisted POST form", async () => {
+    const original = await setup(); arm(original); start(original); await flushMicrotasks();
+    const snapshot = structuredClone(original.chrome.storage.session._store) as Record<string, Record<string, { matchQueryPrefix?: boolean }>>;
+    snapshot["ns_sw:allowTarget"]!["71"]!.matchQueryPrefix = true;
+    vi.resetModules();
+    const restored = createChromeMock(); Object.assign(restored.chrome.storage.session._store, snapshot);
+    vi.stubGlobal("chrome", restored.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw"); await flushMicrotasks();
+    const result = commit(restored, "https://sink.test/accept?field=2");
+    expect(result.shouldRollback).toBe(true);
+    expect(result.entry?.allowedAtCommit).toBe(false);
+  });
   it("accepts a server redirect only after its matched form start", async () => {
     const mock = await setup(); arm(mock); start(mock);
     expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(true);
