@@ -224,6 +224,48 @@ export class PendingDecisionStore {
     return attempt;
   }
 
+async removeForScope(
+  tabId: number,
+  scope: Pick<PendingDecision, "documentId" | "frameId" | "kind">,
+): Promise<
+  | { status: "missing"; removedCount: 0; removedDecisionIds: [] }
+  | { status: "removed"; removedCount: number; removedDecisionIds: string[] }
+> {
+  if (
+    !isTabId(tabId) ||
+    !isTabId(scope.frameId) ||
+    typeof scope.documentId !== "string" ||
+    scope.documentId.length === 0 ||
+    (scope.kind !== "navigation" && scope.kind !== "credential")
+  ) {
+    throw new TypeError("Invalid pending-decision scope removal request");
+  }
+  const scopeKey = pendingDecisionScopeKey(scope);
+  await this.hydrate();
+
+  return this.runSerialized(async () => {
+    const current = this.recordsByTab.get(tabId);
+    if (!current) {
+      return { status: "missing", removedCount: 0, removedDecisionIds: [] };
+    }
+    const removed = current.filter(
+      (record) => pendingDecisionScopeKey(record) === scopeKey,
+    );
+    if (removed.length === 0) {
+      return { status: "missing", removedCount: 0, removedDecisionIds: [] };
+    }
+    const retained = current.filter(
+      (record) => pendingDecisionScopeKey(record) !== scopeKey,
+    );
+    await this.replaceTabWithRollback(tabId, retained);
+    return {
+      status: "removed",
+      removedCount: removed.length,
+      removedDecisionIds: removed.map((record) => record.id),
+    };
+  });
+}
+
   async create(
     verifiedContext: PendingDecisionVerifiedContext,
     untrustedSemantics: PendingDecisionSemantics,
