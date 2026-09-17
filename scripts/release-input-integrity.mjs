@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { stripSensitiveEnvironment } from "./sensitive-environment.mjs";
 
 export const RELEASE_MUTABLE_PATHS = Object.freeze([
   "CHANGELOG.md",
@@ -74,14 +75,9 @@ function assertValidRelativePath(relativePath) {
 }
 
 export function createSanitizedGitEnvironment(source = process.env) {
-  const environment = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (value === undefined) continue;
-    const normalizedKey = key.toUpperCase();
-    if (normalizedKey.startsWith("GIT_") && !PRESERVED_GIT_IDENTITY_KEYS.has(normalizedKey)) continue;
-    environment[key] = value;
-  }
-
+  const environment = stripSensitiveEnvironment(source, {
+    preserveNormalizedKeys: [...PRESERVED_GIT_IDENTITY_KEYS],
+  });
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_OPTIONAL_LOCKS = "0";
@@ -91,13 +87,27 @@ export function createSanitizedGitEnvironment(source = process.env) {
 }
 
 export function resolveReleaseCommand(command, args, options = {}) {
-  if ((options.platform ?? process.platform) !== "win32") {
-    return { command, args: [...args] };
+  if (command !== "npm") return { command, args: [...args] };
+  const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
+  if (typeof npmExecPath !== "string" || !path.isAbsolute(npmExecPath)) {
+    throw integrityError(
+      "absolute npm CLI path is unavailable; invoke release through an npm release script so npm_execpath is set",
+    );
   }
-
+  let resolvedNpmExecPath;
+  try {
+    resolvedNpmExecPath = fs.realpathSync.native(npmExecPath);
+  } catch (error) {
+    throw integrityError(
+      `npm_execpath cannot be resolved: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!fs.lstatSync(resolvedNpmExecPath).isFile()) {
+    throw integrityError("npm_execpath does not name an ordinary file");
+  }
   return {
-    command: options.comspec ?? process.env.ComSpec ?? process.env.COMSPEC ?? "cmd.exe",
-    args: ["/d", "/s", "/c", command, ...args],
+    command: options.nodeExecutable ?? process.execPath,
+    args: [resolvedNpmExecPath, ...args],
   };
 }
 

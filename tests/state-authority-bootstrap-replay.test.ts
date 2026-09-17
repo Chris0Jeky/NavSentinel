@@ -10,7 +10,9 @@ const bootstrap = path.resolve("scripts/launch-state-authority-campaign.mjs");
 const roots: string[] = [];
 
 function fixture(format: "sha1" | "sha256") {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nav bootstrap replay "));
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), "nav bootstrap replay ")),
+  );
   roots.push(root);
   const home = path.join(root, "home");
   const repository = path.join(root, "repository with spaces");
@@ -25,6 +27,10 @@ function fixture(format: "sha1" | "sha256") {
     marker: "committed-launcher-ran", file: process.argv[1], args: process.argv.slice(2),
     oid: process.env.NAVSENTINEL_EXPECTED_LAUNCHER_OID
   })); process.exitCode = 23;\n`);
+    fs.writeFileSync(
+      path.join(repository, "scripts/sensitive-environment.mjs"),
+      "export function stripSensitiveEnvironment(source = process.env) { return { ...source }; }\n",
+    );
   const git = (args: string[]) => execFileSync("git", args, {
     cwd: repository, env: environment, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
   }).trim();

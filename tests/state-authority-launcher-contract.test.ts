@@ -64,6 +64,20 @@ function extractCommittedLauncher(): {
     "run-state-authority-campaign.mjs",
   );
   fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+  const sensitiveEnvironmentOid = git([
+    "rev-parse",
+    "HEAD:scripts/sensitive-environment.mjs",
+  ]);
+  const sensitiveEnvironmentBytes = execFileSync(
+    "git",
+    ["cat-file", "blob", sensitiveEnvironmentOid],
+    { cwd: repositoryRoot },
+  );
+  fs.writeFileSync(
+    path.join(temporaryRoot, "sensitive-environment.mjs"),
+    sensitiveEnvironmentBytes,
+    { mode: 0o600 },
+  );
   return { launcherOid, launcherPath };
 }
 
@@ -188,6 +202,23 @@ describe("state-authority launcher replay boundary", () => {
     expect(normalizedKeys).not.toContain("NODE_OPTIONS");
     expect(normalizedKeys).not.toContain("NODE_PATH");
     expect(normalizedKeys).not.toContain("EXTENSION_PATH");
+  });
+
+  it("keeps the outer bootstrap independent of the mutable helper import", () => {
+    const bootstrap = fs.readFileSync(
+      path.join(repositoryRoot, "scripts", "launch-state-authority-campaign.mjs"),
+      "utf8",
+    );
+
+    expect(bootstrap).not.toContain(
+      'from "./sensitive-environment.mjs"',
+    );
+    expect(bootstrap).toContain(
+      "stripBootstrapSensitiveEnvironment",
+    );
+    expect(bootstrap).toContain(
+      "extracted below and by the release trust boundary",
+    );
   });
 
   it("scrubs every sensitive environment spelling case-insensitively", async () => {

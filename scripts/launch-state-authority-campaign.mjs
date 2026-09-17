@@ -8,26 +8,42 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";
+const SENSITIVE_ENVIRONMENT_REPOSITORY_PATH = "scripts/sensitive-environment.mjs";
+const SENSITIVE_ENVIRONMENT_PREFIXES = Object.freeze([
+  "GIT_",
+  "NAVSENTINEL_STATE_AUTHORITY_",
+]);
+const SENSITIVE_ENVIRONMENT_EXACT_KEYS = Object.freeze([
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "EXTENSION_PATH",
+]);
 
 function fail(message) {
   throw new Error(`State-authority bootstrap failed: ${message}`);
 }
 
-export function sanitizedBootstrapEnvironment(source = process.env) {
+// This outer bootstrap must be dependency-free: it runs before Git has
+// verified any worktree blob. The same classification is used by the
+// committed helper extracted below and by the release trust boundary.
+function stripBootstrapSensitiveEnvironment(source = process.env) {
   const environment = {};
   for (const [key, value] of Object.entries(source)) {
-    const normalizedKey = key.toUpperCase();
+    if (value === undefined) continue;
+    const normalized = String(key).toUpperCase();
     if (
-      normalizedKey.startsWith("GIT_")
-      || normalizedKey.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
-      || normalizedKey === "NODE_OPTIONS"
-      || normalizedKey === "NODE_PATH"
-      || normalizedKey === "EXTENSION_PATH"
+      SENSITIVE_ENVIRONMENT_EXACT_KEYS.includes(normalized)
+      || SENSITIVE_ENVIRONMENT_PREFIXES.some(prefix => normalized.startsWith(prefix))
     ) {
       continue;
     }
     environment[key] = value;
   }
+  return environment;
+}
+
+export function sanitizedBootstrapEnvironment(source = process.env) {
+  const environment = stripBootstrapSensitiveEnvironment(source);
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_OPTIONAL_LOCKS = "0";
@@ -54,6 +70,12 @@ function git(args, { cwd, environment, encoding } = {}) {
     encoding,
     maxBuffer: 128 * 1024 * 1024,
   });
+}
+
+function createCanonicalTemporaryRoot(prefix) {
+  return fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), prefix)),
+  );
 }
 
 export function main(args = process.argv.slice(2)) {
@@ -99,8 +121,19 @@ export function main(args = process.argv.slice(2)) {
   if (gitObjectId("blob", launcherBytes, objectFormat) !== launcherOid) {
     fail("extracted launcher bytes do not match the committed object ID");
   }
-  const temporaryRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+  const sensitiveEnvironmentOid = git(
+    ["-C", repositoryRoot, "rev-parse", `HEAD:${SENSITIVE_ENVIRONMENT_REPOSITORY_PATH}`],
+    { environment, encoding: "utf8" },
+  ).trim();
+  const sensitiveEnvironmentBytes = git(
+    ["-C", repositoryRoot, "cat-file", "blob", sensitiveEnvironmentOid],
+    { environment },
+  );
+  if (gitObjectId("blob", sensitiveEnvironmentBytes, objectFormat) !== sensitiveEnvironmentOid) {
+    fail("extracted sensitive-environment bytes do not match the committed object ID");
+  }
+  const temporaryRoot = createCanonicalTemporaryRoot(
+    "navsentinel-state-authority-bootstrap-",
   );
   try {
     const launcherPath = path.join(
@@ -108,6 +141,11 @@ export function main(args = process.argv.slice(2)) {
       "run-state-authority-campaign.mjs",
     );
     fs.writeFileSync(launcherPath, launcherBytes, { mode: 0o600 });
+    fs.writeFileSync(
+      path.join(temporaryRoot, "sensitive-environment.mjs"),
+      sensitiveEnvironmentBytes,
+      { mode: 0o600 },
+    );
     environment.NAVSENTINEL_EXPECTED_LAUNCHER_OID = launcherOid;
     const result = spawnSync(
       process.execPath,

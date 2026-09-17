@@ -16,6 +16,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { stripSensitiveEnvironment } from "./sensitive-environment.mjs";
 
 const LAUNCHER_REPOSITORY_PATH = "scripts/run-state-authority-campaign.mjs";
 const HELPER_REPOSITORY_PATH = "tests/e2e/extension_build_provenance.ts";
@@ -26,6 +27,7 @@ const MANIFEST_REPOSITORY_PATH =
 const REQUIRED_CAMPAIGN_INPUTS = new Set([
   LAUNCHER_REPOSITORY_PATH,
   "scripts/launch-state-authority-campaign.mjs",
+  "scripts/sensitive-environment.mjs",
   MANIFEST_REPOSITORY_PATH,
   "tests/e2e/state-authority-sink.spec.ts",
   HELPER_REPOSITORY_PATH,
@@ -76,21 +78,7 @@ function fail(code, message) {
 }
 
 export function sanitizedEnvironment(source = process.env) {
-  const environment = {};
-  for (const [key, value] of Object.entries(source)) {
-    const normalizedKey = key.toUpperCase();
-    if (
-      value === undefined
-      || normalizedKey.startsWith("GIT_")
-      || normalizedKey.startsWith("NAVSENTINEL_STATE_AUTHORITY_")
-      || normalizedKey === "NODE_OPTIONS"
-      || normalizedKey === "NODE_PATH"
-      || normalizedKey === "EXTENSION_PATH"
-    ) {
-      continue;
-    }
-    environment[key] = value;
-  }
+  const environment = stripSensitiveEnvironment(source);
   environment.GIT_NO_REPLACE_OBJECTS = "1";
   environment.GIT_NO_LAZY_FETCH = "1";
   environment.GIT_OPTIONAL_LOCKS = "0";
@@ -132,6 +120,12 @@ function gitText(repositoryRoot, args) {
 function gitBuffer(repositoryRoot, args) {
   const output = git(repositoryRoot, args, { encoding: "buffer" });
   return Buffer.isBuffer(output) ? output : Buffer.from(output);
+}
+
+function createCanonicalTemporaryRoot(prefix) {
+  return fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), prefix)),
+  );
 }
 
 function hashAlgorithm(objectFormat) {
@@ -1100,8 +1094,8 @@ async function main() {
     );
   }
 
-  const temporaryRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "navsentinel-state-authority-launch-"),
+  const temporaryRoot = createCanonicalTemporaryRoot(
+    "navsentinel-state-authority-launch-",
   );
   const campaignRoot = path.join(temporaryRoot, "campaign");
   fs.mkdirSync(campaignRoot, { mode: 0o700 });
