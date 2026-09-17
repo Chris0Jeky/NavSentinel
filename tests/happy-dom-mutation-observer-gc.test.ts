@@ -1,15 +1,20 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const retentionHelper = pathToFileURL(
+  path.join(root, "tests/helpers/happy-dom-mutation-observer-retention.mjs"),
+).href;
 
 it("keeps an active Happy DOM MutationObserver listener alive across forced GC", () => {
   const script = String.raw`
     import { Window } from "happy-dom";
+    import { installHappyDomMutationObserverRetention } from ${JSON.stringify(retentionHelper)};
 
     const window = new Window();
+    installHappyDomMutationObserverRetention(window);
     const target = window.document.createElement("div");
     const delivered = [];
     let observer = new window.MutationObserver(records => delivered.push(...records));
