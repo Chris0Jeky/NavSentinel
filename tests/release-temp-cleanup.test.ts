@@ -11,8 +11,8 @@ describe("release test temporary-root cleanup (#723)", () => {
     expect(remove).toHaveBeenCalledWith("/tmp/fixture", {
       recursive: true,
       force: true,
-      maxRetries: 5,
-      retryDelay: 50,
+      maxRetries: 10,
+      retryDelay: 100,
     });
   });
 
