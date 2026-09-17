@@ -79,9 +79,7 @@ export class FormObservation {
     if (this.options.documentBound && !this.liveBinding(binding)) { this.fail("DOCUMENT_BINDING_INVALID"); return; }
     const v = value as Record<string, unknown> | null;
     if ((!v || typeof v !== "object" || Array.isArray(v)) || typeof v.phase !== "string" || typeof v.primitive !== "string" || Object.keys(v).sort().join() !== "intent,phase,primitive" || !["input", "operation", "submit-event", "late-mutation", "prepared"].includes(String(v.phase)) ||
-        !["native", "submit", "requestSubmit", "location"].includes(String(v.primitive)) || !isFormIntent(v.intent)) {
-      this.dropped = Math.min(1000000, this.dropped + 1); this.gaps.add("PROBE_REJECTED"); return;
-    }
+        !["native", "submit", "requestSubmit", "location"].includes(String(v.primitive)) || !isFormIntent(v.intent)) return;
     this.add("page", "form.intent", { phase: v.phase, primitive: v.primitive, intent: v.intent }, true, binding);
   }
   browser(version: string): void { if (this.finished) throw new Error("FORM_RECORDER_FINISHED"); if (!/^[0-9]+(?:\.[0-9]+){1,4}$/.test(version)) throw new Error("BROWSER_VERSION_INVALID"); this.browserVersion = version; }

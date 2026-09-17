@@ -2470,14 +2470,34 @@ describe("child-form worker capability (#688)", () => {
   function arm(mock: _ChromeMock, formIntent: FormIntent = intent, attemptId = id) {
     return mock.dispatchRuntimeMessage({ type: "ns-form-intent", formIntent, attemptId, issuedAt: Date.now() }, source);
   }
-  function start(mock: _ChromeMock, destination = url) { mock.emitBeforeNavigate({ tabId: 71, frameId: 0, url: destination }); }
+  function markSourceSubmitted(mock: _ChromeMock, attemptId = id, sender = source) {
+    return mock.dispatchRuntimeMessage({ type: "ns-form-intent-submitted", attemptId }, sender);
+  }
+  function start(mock: _ChromeMock, destination = url, sourceSubmitted = true) {
+    if (sourceSubmitted) markSourceSubmitted(mock);
+    mock.emitBeforeNavigate({ tabId: 71, frameId: 0, url: destination });
+  }
   function commit(mock: _ChromeMock, destination = url, transitionType = "form_submit", transitionQualifiers: string[] = []) {
     mock.emitCommitted({ tabId: 71, frameId: 0, url: destination, transitionType, transitionQualifiers });
     return mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 71 } }) as { shouldRollback: boolean; entry?: { allowedAtCommit?: boolean } };
   }
+  it("does not spend a child-form capability on an unrelated top-frame form", async () => {
+    const mock = await setup();
+    arm(mock);
+    start(mock, url, false);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
+  it("ignores a source-submit marker from a sibling child document", async () => {
+    const mock = await setup();
+    arm(mock);
+    markSourceSubmitted(mock, id, { ...source, documentId: "sibling-document" });
+    start(mock, url, false);
+    expect(commit(mock).entry?.allowedAtCommit).toBe(false);
+  });
   it("allows an exact form start and commit once, including a slow response", async () => {
     const mock = await setup(); expect(arm(mock)).toEqual({ ok: true });
-    start(mock); vi.setSystemTime(15000);
+    markSourceSubmitted(mock);
+    start(mock, url, false); vi.setSystemTime(15000);
     expect(commit(mock).entry?.allowedAtCommit).toBe(true);
     expect(commit(mock).entry?.allowedAtCommit).toBe(false);
   });

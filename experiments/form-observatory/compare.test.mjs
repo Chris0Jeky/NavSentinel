@@ -74,6 +74,11 @@ const changed = (mutate) => {
   mutate(rows);
   return validateFormTraces(rows);
 };
+const renumber = (events) => events.forEach((entry, index) => {
+  entry.id = `e${index + 1}`;
+  entry.sequence = index + 1;
+  entry.elapsedMs = index;
+});
 
 // Consequence parity remains independent from trace certification.
 test("all 45 explicit arms are required", () => {
@@ -149,6 +154,46 @@ test("rejects a populated trace that loses a required later operation", () => {
   });
   assert.equal(result.matched, false);
   assert.ok(result.differences.some((code) => code.startsWith("FORM_TRACE_REPORT_SEQUENCE:replay:true")));
+});
+test("rejects form reports outside the receiver health interval", () => {
+  assert.equal(changed((rows) => {
+    const events = rows[0].events;
+    const report = events.splice(events.findIndex((entry) => entry.kind === "form.intent"), 1)[0];
+    events.splice(1, 0, report);
+    renumber(events);
+  }).matched, false);
+  assert.equal(changed((rows) => {
+    const events = rows[0].events;
+    const report = events.splice(events.findIndex((entry) => entry.kind === "form.intent"), 1)[0];
+    events.splice(events.length - 1, 0, report);
+    renumber(events);
+  }).matched, false);
+});
+test("rejects unexpected trailing page reports", () => {
+  const result = changed((rows) => {
+    const events = rows[0].events;
+    const next = events.length + 1;
+    events.splice(-1, 0, {
+      id: `e${next}`, sequence: next, elapsedMs: events.at(-2).elapsedMs + 1,
+      source: "page", kind: "form.intent",
+      data: { phase: "input", primitive: "native", intent: { ...intent } },
+    });
+    renumber(events);
+  });
+  assert.equal(result.matched, false);
+  assert.ok(result.differences.some((code) => code.startsWith("FORM_TRACE_REPORT_SEQUENCE:")));
+});
+test("allows only prepared reports trailing a complete arm", () => {
+  const result = changed((rows) => {
+    const events = rows[0].events;
+    events.splice(events.length - 2, 0, {
+      id: "pending", sequence: 0, elapsedMs: 0,
+      source: "page", kind: "form.intent",
+      data: { phase: "prepared", primitive: "native", intent: { ...intent } },
+    });
+    renumber(events);
+  });
+  assert.equal(result.matched, true, JSON.stringify(result.differences));
 });
 test("known gaps, dropped records and contradictory completion cannot certify", () => {
   assert.equal(changed((rows) => { rows[0].gaps = ["RECEIVER_CALLBACK_LOSS"]; }).matched, false);

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ChildFormAuthority } from "../extension/src/content/child_form_authority";
 import { implicitSubmitBinding } from "../extension/src/content/form_intent";
 
 function captureBinding(target: Element, init: KeyboardEventInit): ReturnType<typeof implicitSubmitBinding> {
@@ -73,5 +74,46 @@ describe("implicit keyboard form authority (#688)", () => {
     const target = document.querySelector<Element>("#q")!;
 
     expect(captureBinding(target, init)).toBeNull();
+  });
+
+  it("reports an approved replay submit to the worker", async () => {
+    const intent = [
+      "https://sink.test/accept",
+      "post",
+      "application/x-www-form-urlencoded",
+      "child-target",
+      "other",
+    ] as const;
+    const sendMessage = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    const post = vi.fn();
+    const authority = new ChildFormAuthority({ enabled: () => true, post, reject: vi.fn() });
+    const form = document.createElement("form");
+    form.action = intent[0]; form.method = "post"; form.target = "child-target";
+    document.body.append(form);
+
+    authority.recordBlocked({ id: "replay", kind: "form_submit", formIntent: intent });
+    expect(authority.approveAction("replay")).toBe(true);
+    expect(authority.handleBridge({ type: "ns-form-replay-request", id: "replay", formIntent: intent })).toBe(true);
+    await Promise.resolve(); await Promise.resolve();
+    const ready = post.mock.calls.find(([type]) => type === "ns-form-replay-ready")?.[1];
+    expect(ready?.ok).toBe(true);
+
+    sendMessage.mockClear();
+    expect(authority.handleBridge({ type: "ns-form-intent-submitted", attemptId: ready.attemptId })).toBe(true);
+    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-submitted", attemptId: ready.attemptId });
+
+    sendMessage.mockClear();
+    const event = {
+      target: form,
+      submitter: null,
+      isTrusted: true,
+      preventDefault: vi.fn(),
+      stopImmediatePropagation: vi.fn(),
+    } as unknown as SubmitEvent;
+    authority.submit(event);
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-submitted", attemptId: ready.attemptId });
+    expect(event.preventDefault).not.toHaveBeenCalled();
   });
 });
