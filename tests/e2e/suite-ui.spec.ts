@@ -116,7 +116,10 @@ test("Options exposes a conflict for simultaneous same-field saves @regression",
 
     await first.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
     await second.locator('#navModeSeg .seg-btn[data-value="off"]').click();
-    await Promise.all([first.locator("#save").click(), second.locator("#save").click()]);
+    // Dispatch both handlers together: a real locator click can wait for the
+    // competing page's storage event to disable its Save button before the
+    // second click is dispatched, turning this concurrency test into a hang.
+    await Promise.all([first.locator("#save").dispatchEvent("click"), second.locator("#save").dispatchEvent("click")]);
 
     const firstConflict = await first.locator("#settingsConflict").isVisible();
     const secondConflict = await second.locator("#settingsConflict").isVisible();
