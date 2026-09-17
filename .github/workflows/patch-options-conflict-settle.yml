@@ -1,0 +1,52 @@
+name: Patch Options conflict settle
+
+on:
+  push:
+    branches:
+      - test/options-conflict-settle-20260917
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Apply bounded review repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          source_path = Path("tests/e2e/suite-ui.spec.ts")
+          text = source_path.read_text(encoding="utf-8")
+          old = '''    const firstConflict = await first.locator("#settingsConflict").isVisible();
+              const secondConflict = await second.locator("#settingsConflict").isVisible();
+              expect(Number(firstConflict) + Number(secondConflict)).toBe(1);
+          '''
+          new = '''    let firstConflict = false;
+              let secondConflict = false;
+              await expect.poll(async () => {
+                [firstConflict, secondConflict] = await Promise.all([
+                  first.locator("#settingsConflict").isVisible(),
+                  second.locator("#settingsConflict").isVisible(),
+                ]);
+                return Number(firstConflict) + Number(secondConflict);
+              }).toBe(1);
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one target block, found {text.count(old)}")
+          source_path.write_text(text.replace(old, new), encoding="utf-8")
+          Path(".github/workflows/patch-options-conflict-settle.yml").unlink()
+
+      - name: Commit final tree
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/e2e/suite-ui.spec.ts .github/workflows/patch-options-conflict-settle.yml
+          git commit -m "test: wait for concurrent Options saves to settle"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
