@@ -26,9 +26,13 @@ samples is not a statistical proof of zero observer effect.
 
 The read-only scoped workflow runs these commands and retains exact-source archive,
 source identity, explicit result files, full traces and parity summary for seven
-days. The normal repository CI still runs its unchanged performance budgets.
-The scoped browser check is not a release check and cannot waive an inherited
-budget failure. Download evidence before retention expires.
+days. The independent certifier strictly parses every top-level and event field,
+source-to-kind contract, event ID, sequence and receive time, source/build identity,
+pair/run identity, browser version, terminal ordering, receiver-health boundary and
+fixed per-arm report prefix. Unknown fields or malformed evidence fail certification.
+The normal repository CI still runs its unchanged performance budgets. The scoped
+browser check is not a release check and cannot waive an inherited budget failure.
+Download evidence before retention expires.
 
 ## Recorded boundaries
 
@@ -55,10 +59,14 @@ The first boundary is zero. Separate streams are:
 
 The page sampler uses authored operation sites, not prototype monkey patches.
 It preserves original delay values and does not await page-to-runner telemetry.
-Only fixed form/submitter IDs and effective action/method/encoding/target categories
-are recorded. No password/input/clipboard value, DOM text, request body, full URL,
-query, token, screenshot or arbitrary error prose is exported in the form trace.
-Legacy result attachments remain synthetic-lab diagnostics, not a live-data export.
+The page receives only the primary best-effort reporting binding and cannot choose
+runner gap codes. A missing binding or rejected delivery is detected independently:
+the recorder and certifier require the fixed prepared/input/operation/submit-event/
+late-mutation prefix for that exact campaign arm. Only fixed form/submitter IDs and
+effective action/method/encoding/target categories are recorded. No password/input/
+clipboard value, DOM text, request body, full URL, query, token, screenshot or
+arbitrary error prose is exported in the form trace. Legacy result attachments
+remain synthetic-lab diagnostics, not a live-data export.
 
 ## Failure handling
 
@@ -66,11 +74,14 @@ Ordinary page records cannot fill the capacity reserved for consequential/termin
 records. Overflow and malformed probes are explicit; positive accepted consequences
 remain visible. Receiver observers receive copies and cannot mutate the underlying
 receipt. One failed observer does not prevent another observer from receiving it.
-Each started recorder writes a terminal attachment in `finally`; launch/operation
-failure or incomplete cleanup remains failed. Cleanup attempts all owned resources,
-retains the original operation exception and never silently replaces it with a
-later cleanup exception. Missing preflight build/identity cannot produce a valid
-trace and fails before starting the recorder.
+Any gap, dropped record, missing browser version, unhealthy or missing receiver
+boundary, or missing required per-arm page-report stage forces `completed: false`.
+The certifier independently repeats these checks and rejects contradictory or
+malformed completion claims. Each started recorder writes a terminal attachment in
+`finally`; launch/operation failure or incomplete cleanup remains failed. Cleanup
+attempts all owned resources, retains the original operation exception and never
+silently replaces it with a later cleanup exception. Missing preflight build/identity
+cannot produce a valid trace and fails before starting the recorder.
 
 ## Interpretation limits
 
@@ -83,9 +94,11 @@ certificate. Receiver rejection is not a NavSentinel block.
 
 Supplied Git/build hashes and the workflow source archive support correlation.
 The producer does not embed #684's full raw-input verifier, attest dependency
-integrity or authenticate imported JSON. Page reports can be forged or lost.
-This does not certify open-web efficacy, request contents, branded Chrome or OS
-protection. #702's consented browsing recorder is not activated or implemented.
+integrity or authenticate imported JSON. Page intent reports remain forgeable and
+are not native causality; transport loss prevents certification rather than being
+silently presented as complete evidence. This does not certify open-web efficacy,
+request contents, branded Chrome or OS protection. #702's consented browsing
+recorder is not activated or implemented.
 
 ## Primary references
 
