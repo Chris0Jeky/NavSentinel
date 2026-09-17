@@ -116,11 +116,32 @@ test("Options exposes a conflict for simultaneous same-field saves @regression",
 
     await first.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
     await second.locator('#navModeSeg .seg-btn[data-value="off"]').click();
-    await Promise.all([first.locator("#save").click(), second.locator("#save").click()]);
+    // Dispatch both handlers together: a real locator click can wait for the
+    // competing page's storage event to disable its Save button before the
+    // second click is dispatched, turning this concurrency test into a hang.
+    await Promise.all([first.locator("#save").dispatchEvent("click"), second.locator("#save").dispatchEvent("click")]);
 
-    const firstConflict = await first.locator("#settingsConflict").isVisible();
-    const secondConflict = await second.locator("#settingsConflict").isVisible();
+    const savedStatus = "Saved.";
+    const conflictStatus = "Settings changed in another window.";
+    const settledStatus = /^(?:Saved\.|Settings changed in another window\.)$/;
+    const readSettledStatus = async (page: typeof first): Promise<string> => {
+      const status = page.locator("#saveStatus");
+      await expect(status).toHaveText(settledStatus);
+      return status.innerText();
+    };
+    const [firstStatus, secondStatus] = await Promise.all([
+      readSettledStatus(first),
+      readSettledStatus(second),
+    ]);
+    expect([firstStatus, secondStatus].sort()).toEqual([savedStatus, conflictStatus]);
+
+    const [firstConflict, secondConflict] = await Promise.all([
+      first.locator("#settingsConflict").isVisible(),
+      second.locator("#settingsConflict").isVisible(),
+    ]);
     expect(Number(firstConflict) + Number(secondConflict)).toBe(1);
+    expect(firstConflict).toBe(firstStatus === conflictStatus);
+    expect(secondConflict).toBe(secondStatus === conflictStatus);
 
     const loser = firstConflict ? first : second;
     const expectedMode = firstConflict ? "strict" : "off";
