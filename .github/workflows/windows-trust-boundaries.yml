@@ -50,6 +50,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Preserve committed raw bytes
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git checkout-index -a -f
+
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
