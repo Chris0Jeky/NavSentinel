@@ -1,11 +1,6 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
-const happyDomRetentionHelpers = [
-  "tests/helpers/happy-dom-mutation-observer-retention.mjs",
-  "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
-];
-
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -39,13 +34,14 @@ export default tseslint.config(
     },
   },
   {
-    files: happyDomRetentionHelpers,
+    files: [
+      "tests/helpers/happy-dom-mutation-observer-retention.mjs",
+      "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
+    ],
     languageOptions: {
       parserOptions: {
-        projectService: {
-          allowDefaultProject: happyDomRetentionHelpers,
-        },
-        tsconfigRootDir: import.meta.dirname,
+        project: false,
+        projectService: false,
       },
     },
   },
