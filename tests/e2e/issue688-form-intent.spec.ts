@@ -110,7 +110,7 @@ for (const variant of ["location-same", "location-different", "late-submit"] as 
   expect(protectedResult.attempts.filter(row => row.role === "harm" && row.accepted)).toHaveLength(1);
   expect(protectedResult.topUrl).toBe(protectedResult.parentUrl);
 });
-const benign: FormCase[] = ["exact-submit", "exact-request", "native", "server-redirect", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "validation"];
+const benign: FormCase[] = ["exact-submit", "exact-request", "native", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "validation"];
 for (const variant of benign) test(`@regression #688 benign ${variant}`, async ({}, info) => {
   test.setTimeout(45000);
   const result = await runArm(variant, true, info);
@@ -118,6 +118,13 @@ for (const variant of benign) test(`@regression #688 benign ${variant}`, async (
   if (["empty-target", "self"].includes(variant)) expect(result.topUrl).toBe(result.parentUrl);
   else expect(result.topUrl.startsWith(result.sinkOrigin + "/")).toBe(true);
   if (["empty-method", "invalid-method"].includes(variant)) expect(result.attempts[0]?.method).toBe("GET");
+});
+test("@regression #688 server-redirect: an unproven changed start is rolled back post-commit", async ({}, info) => {
+  test.setTimeout(45000);
+  const result = await runArm("server-redirect", true, info);
+  expect(result.attempts).toHaveLength(1);
+  expect(result.attempts[0]).toMatchObject({ role: "benign", accepted: true });
+  expect(result.topUrl).toBe(result.parentUrl);
 });
 test("@regression #688 dialog is not a navigation", async ({}, info) => {
   const result = await runArm("dialog", true, info); expect(result.attempts).toEqual([]); expect(result.dialogClosed).toBe(true);
