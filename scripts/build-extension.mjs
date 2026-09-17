@@ -105,20 +105,25 @@ function installEarlyUiFence() {
   // from its own WeakMap, so a page-forged host or attribute never activates a
   // real control, and the user's own controls do not depend on the MAIN-world
   // bridge.
-  const fencedLoaderTemplate = `(function(){'use strict';document.documentElement?.setAttribute('data-navsentinel-ui-guard','${UI_GUARD_REVISION_PLACEHOLDER}');let sink=null;const guard=e=>{if(!e.isTrusted)return;const path=e.composedPath();let host=null;for(let i=0;i<path.length;i++){const n=path[i];if(n instanceof Element&&n.id==='__navsentinel_toast_host'){host=n;break}}if(!host)return;const type=e.type,key=(type==='keydown'||type==='keyup')&&(e.key==='Enter'||e.key===' ');if(type==='click'||type==='auxclick'||type==='contextmenu'||key)e.preventDefault();e.stopImmediatePropagation();if(sink&&(type==='click'||type==='keyup'&&key))sink(host,path)};for(const type of ['pointerdown','pointerup','pointercancel','mousedown','mouseup','touchstart','touchend','touchcancel','click','dblclick','auxclick','contextmenu','keydown','keyup'])window.addEventListener(type,guard,{capture:true,passive:false});const injectTime=performance.now();(async()=>{const m=await import(chrome.runtime.getURL(${JSON.stringify(chunkPath)}));sink=m.activateUiControl??null;m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
+  const fencedLoaderTemplate = `(function(){'use strict';document.documentElement?.setAttribute('data-navsentinel-ui-guard','${UI_GUARD_REVISION_PLACEHOLDER}');let sink=null;const guard=e=>{if(!e.isTrusted)return;const path=e.composedPath();let host=null;for(let i=0;i<path.length;i++){const n=path[i];if(n instanceof Element&&n.id==='__navsentinel_toast_host'){host=n;break}}if(!host)return;const type=e.type,key=(type==='keydown'||type==='keyup')&&(e.key==='Enter'||e.key===' ');if(type==='click'||type==='auxclick'||type==='contextmenu'||key)e.preventDefault();e.stopImmediatePropagation();if(sink&&(type==='click'||type==='keyup'&&key))sink(host,path)};for(const type of ['pointerdown','pointerup','pointercancel','mousedown','mouseup','touchstart','touchend','touchcancel','click','dblclick','auxclick','contextmenu','keydown','keyup'])window.addEventListener(type,guard,{capture:true,passive:false});const injectTime=performance.now();(async()=>{const m=await import(chrome.runtime.getURL(${JSON.stringify(chunkPath)}));sink=m.activateUiControl??null;m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();`;
   const { content: fencedLoader, revision } = finalizeUiGuardLoader(fencedLoaderTemplate);
   const finalCaptureScript = contentAddressedLoaderPath(captureScript, fencedLoader);
   const finalLoaderPath = path.join(dist, finalCaptureScript);
   fs.writeFileSync(finalLoaderPath, fencedLoader, "utf8");
   if (finalLoaderPath !== loaderPath) fs.rmSync(loaderPath, { force: true });
   captureEntry.js[0] = finalCaptureScript;
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest), "utf8");
   return revision;
 }
 
 console.log(`[build] profile=${profile.id}; releaseEligible=${profile.releaseEligible}`);
 const env = { [RELEASE_PROFILE_ENV]: profile.id };
 runNode(viteBin, ["build", "--config", path.join(root, "vite.config.ts")], env);
+const serviceWorkerLoaderPath = path.join(root, "extension", "dist", "service-worker-loader.js");
+const serviceWorkerLoader = fs.readFileSync(serviceWorkerLoaderPath);
+if (serviceWorkerLoader.at(-1) === 0x0a) {
+  fs.writeFileSync(serviceWorkerLoaderPath, serviceWorkerLoader.subarray(0, -1));
+}
 const uiGuardRevision = installEarlyUiFence();
 runNode(path.join(root, "scripts", "check-content-loader-identity.mjs"));
 compactPackagedHtml();

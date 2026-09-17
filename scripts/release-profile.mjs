@@ -89,7 +89,7 @@ export function createReleaseProfileReceipt(profile) {
 }
 
 export function serializeReleaseProfileReceipt(profile) {
-  return `${JSON.stringify(createReleaseProfileReceipt(profile))}\n`;
+  return JSON.stringify(createReleaseProfileReceipt(profile));
 }
 
 export function configureManifestForProfile(baseManifest, profile) {
