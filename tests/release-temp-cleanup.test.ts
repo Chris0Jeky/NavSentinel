@@ -16,6 +16,19 @@ describe("release test temporary-root cleanup (#723)", () => {
     });
   });
 
+  it("retries transient ENOTEMPTY cleanup before succeeding", () => {
+    let attempts = 0;
+
+    removeReleaseTempRoot("/tmp/fixture", () => {
+      attempts += 1;
+      if (attempts < 3) {
+        throw Object.assign(new Error("directory still has entries"), { code: "ENOTEMPTY" });
+      }
+    });
+
+    expect(attempts).toBe(3);
+  });
+
   it("does not mask a persistent cleanup failure", () => {
     const failure = Object.assign(new Error("persistent cleanup failure"), {
       code: "ENOTEMPTY",

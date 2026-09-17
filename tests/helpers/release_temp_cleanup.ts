@@ -19,9 +19,29 @@ const RELEASE_TEMP_REMOVE_OPTIONS: ReleaseTempRemoveOptions = {
   retryDelay: 50,
 };
 
+const RETRYABLE_REMOVE_CODES = new Set(["EBUSY", "EMFILE", "ENFILE", "ENOTEMPTY", "EPERM"]);
+const RETRY_SLEEP = new Int32Array(new SharedArrayBuffer(4));
+
+function waitForRetry(delay: number): void {
+  if (delay > 0) Atomics.wait(RETRY_SLEEP, 0, 0, delay);
+}
+
 export function removeReleaseTempRoot(
   root: string,
   remove: RemoveReleaseTempTree = fs.rmSync as RemoveReleaseTempTree,
 ): void {
-  remove(root, RELEASE_TEMP_REMOVE_OPTIONS);
+  for (let retry = 0; ; retry += 1) {
+    try {
+      remove(root, RELEASE_TEMP_REMOVE_OPTIONS);
+      return;
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+      if (retry >= RELEASE_TEMP_REMOVE_OPTIONS.maxRetries || !RETRYABLE_REMOVE_CODES.has(String(code))) {
+        throw error;
+      }
+      waitForRetry(RELEASE_TEMP_REMOVE_OPTIONS.retryDelay * (retry + 1));
+    }
+  }
 }
