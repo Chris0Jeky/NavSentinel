@@ -37,3 +37,17 @@ test('full ordinary buffer retains gap event, harm receipt and terminal record',
   assert.equal(run.events.at(-1).kind, 'observation.end');
   assert.ok(run.observer.droppedEvents > 0);
 });
+
+test('multiple gap events cannot consume the reserved harm receipt slot', () => {
+  const { recorder } = setup(16);
+  for (let i = 0; i < 100; i++) recorder.record('page', 'attack.attempt', { code: 'flood' });
+  for (const code of [
+    'PRIMARY_FRAME_DETACHED', 'PRIMARY_FRAME_NAVIGATED', 'WORKER_EPOCH_CHANGED',
+    'PRODUCT_OBSERVER_FAILED', 'PAGE_REPORT_REJECTED', 'PAGE_ERROR', 'SCENE_SAMPLE_FAILED',
+  ]) recorder.gap(code);
+  recorder.receipt({ sequence: 1, runId: 'fault-unit', scenarioId: 'NS-ADV-UI-004', role: 'attack', consequence: 'wrong-target-navigation', targetId: 'harm', method: 'GET', sentinelSha256: '9'.repeat(64) });
+  const run = recorder.finish({ completed: true });
+  assert.equal(run.events.filter(e => e.kind === 'sink.receipt' && e.consequence === 'harm').length, 1);
+  assert.equal(run.events.at(-1).kind, 'observation.end');
+  assert.ok(run.observer.droppedEvents > 0);
+});

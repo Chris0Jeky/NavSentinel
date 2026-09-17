@@ -23,7 +23,11 @@ export function createRunRecorder({ runId, arm, contextId, harmTargetId, benignT
     validateEventMetadata(extra);
     const critical = ['sink.receipt', 'observation.end', 'observer.health', 'observer.gap'].includes(kind);
     const reserve = Math.min(8, Math.floor(maxEvents / 2));
-    if (events.length >= maxEvents - (critical ? 1 : reserve) && kind !== 'observation.end') {
+    // Keep one slot for a receipt and one for the terminal event. Gap/health
+    // events are important, but must not consume the only remaining harm slot.
+    const criticalReserve = ['observer.health', 'observer.gap'].includes(kind) ? 2 : 1;
+    const reservation = critical ? criticalReserve : reserve;
+    if (events.length >= maxEvents - reservation && kind !== 'observation.end') {
       dropped++; if (critical) faults.add('CRITICAL_EVENT_OVERFLOW'); return null;
     }
     const id = `${runId}-e${events.length + 1}`;
