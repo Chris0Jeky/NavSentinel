@@ -72,6 +72,12 @@ function git(args, { cwd, environment, encoding } = {}) {
   });
 }
 
+function createCanonicalTemporaryRoot(prefix) {
+  return fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), prefix)),
+  );
+}
+
 export function main(args = process.argv.slice(2)) {
   if (args.some((argument) => argument !== "--preflight-only")) {
     fail("only --preflight-only is accepted");
@@ -126,8 +132,8 @@ export function main(args = process.argv.slice(2)) {
   if (gitObjectId("blob", sensitiveEnvironmentBytes, objectFormat) !== sensitiveEnvironmentOid) {
     fail("extracted sensitive-environment bytes do not match the committed object ID");
   }
-  const temporaryRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "navsentinel-state-authority-bootstrap-"),
+  const temporaryRoot = createCanonicalTemporaryRoot(
+    "navsentinel-state-authority-bootstrap-",
   );
   try {
     const launcherPath = path.join(

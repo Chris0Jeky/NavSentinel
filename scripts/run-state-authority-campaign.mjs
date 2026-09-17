@@ -122,6 +122,12 @@ function gitBuffer(repositoryRoot, args) {
   return Buffer.isBuffer(output) ? output : Buffer.from(output);
 }
 
+function createCanonicalTemporaryRoot(prefix) {
+  return fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), prefix)),
+  );
+}
+
 function hashAlgorithm(objectFormat) {
   if (objectFormat === "sha1" || objectFormat === "sha256") return objectFormat;
   fail(
@@ -1088,8 +1094,8 @@ async function main() {
     );
   }
 
-  const temporaryRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "navsentinel-state-authority-launch-"),
+  const temporaryRoot = createCanonicalTemporaryRoot(
+    "navsentinel-state-authority-launch-",
   );
   const campaignRoot = path.join(temporaryRoot, "campaign");
   fs.mkdirSync(campaignRoot, { mode: 0o700 });
