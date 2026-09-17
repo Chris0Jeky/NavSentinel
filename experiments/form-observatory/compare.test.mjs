@@ -79,6 +79,23 @@ const renumber = (events) => events.forEach((entry, index) => {
   entry.sequence = index + 1;
   entry.elapsedMs = index;
 });
+const documentRows = () => {
+  const rows = traces();
+  rows[0].schema = "navsentinel.observatory.form.v2";
+  rows[0].bindingPolicy = "CDP_DEFAULT_WORLD_DOCUMENT";
+  rows[0].experiment = "form-campaign";
+  const binding = { frameId: "frame-1", documentId: "document-1", scope: "top" };
+  rows[0].events.splice(2, 0,
+    { id: "e2", sequence: 2, elapsedMs: 1, source: "browser", kind: "document.started", data: {}, binding },
+  );
+  const healthEnd = rows[0].events.findIndex((entry) => entry.kind === "receiver.health" && entry.data.phase === "end");
+  rows[0].events.splice(healthEnd, 0,
+    { id: `e${rows[0].events.length}`, sequence: rows[0].events.length, elapsedMs: rows[0].events.length, source: "browser", kind: "document.ended", data: { reason: "collector-closed" }, binding },
+  );
+  rows[0].events.filter((entry) => entry.kind === "form.intent").forEach((entry) => { entry.binding = binding; });
+  renumber(rows[0].events);
+  return rows;
+};
 
 // Consequence parity remains independent from trace certification.
 test("all 45 explicit arms are required", () => {
@@ -199,4 +216,34 @@ test("known gaps, dropped records and contradictory completion cannot certify", 
   assert.equal(changed((rows) => { rows[0].gaps = ["RECEIVER_CALLBACK_LOSS"]; }).matched, false);
   assert.equal(changed((rows) => { rows[0].dropped = 1; }).matched, false);
   assert.equal(changed((rows) => { rows[0].completed = false; }).matched, false);
+});
+
+test("document-bound traces retain binding attribution and strict completeness", () => {
+  const rows = documentRows();
+  assert.equal(validateFormTraces(rows).matched, true);
+  const binding = rows[0].events.find((entry) => entry.kind === "document.started").binding;
+  rows[0].events.find((entry) => entry.kind === "form.intent").binding = { ...binding, documentId: "bad" };
+  assert.equal(validateFormTraces(rows).matched, false);
+});
+test("document-bound intents must reference a live document lifetime", () => {
+  const beforeStart = documentRows();
+  const eventsBefore = beforeStart[0].events;
+  const start = eventsBefore.splice(eventsBefore.findIndex((entry) => entry.kind === "document.started"), 1)[0];
+  const firstReport = eventsBefore.findIndex((entry) => entry.kind === "form.intent");
+  eventsBefore.splice(firstReport + 1, 0, start);
+  renumber(eventsBefore);
+  assert.equal(validateFormTraces(beforeStart).matched, false);
+
+  const afterEnd = documentRows();
+  const eventsAfter = afterEnd[0].events;
+  const end = eventsAfter.splice(eventsAfter.findIndex((entry) => entry.kind === "document.ended"), 1)[0];
+  const lastReport = eventsAfter.findLastIndex((entry) => entry.kind === "form.intent");
+  eventsAfter.splice(lastReport, 0, end);
+  renumber(eventsAfter);
+  assert.equal(validateFormTraces(afterEnd).matched, false);
+
+  const unknown = documentRows();
+  const report = unknown[0].events.find((entry) => entry.kind === "form.intent");
+  report.binding = { ...report.binding, documentId: "document-99" };
+  assert.equal(validateFormTraces(unknown).matched, false);
 });

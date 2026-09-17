@@ -22,8 +22,17 @@ const TOP_LEVEL_KEYS = [
   "identity", "mode", "pairId", "protectedArm", "requiredObservationMs", "runId",
   "scenarioId", "schema", "variant",
 ].sort();
+const DOCUMENT_TRACE_SCHEMA = "navsentinel.observatory.form.v2";
+const DOCUMENT_BINDING_POLICY = "CDP_DEFAULT_WORLD_DOCUMENT";
+const DOCUMENT_EXPERIMENTS = new Set([
+  "form-campaign", "same-url-siblings", "same-frame-reload", "same-document-navigation",
+  "frame-replacement", "spoofed-identity-disposal", "borrowed-reporting-function",
+]);
+const DOCUMENT_TOP_LEVEL_KEYS = [...TOP_LEVEL_KEYS, "bindingPolicy", "experiment"].sort();
 const IDENTITY_KEYS = ["extensionSha256", "fixtureSha256", "head", "tree"].sort();
 const EVENT_KEYS = ["data", "elapsedMs", "id", "kind", "sequence", "source"].sort();
+const EVENT_BINDING_KEYS = [...EVENT_KEYS, "binding"].sort();
+const BINDING_KEYS = ["documentId", "frameId", "scope"].sort();
 const INTENT_KEYS = [
   "action", "actionSource", "declaredAction", "encoding", "form", "method",
   "methodOverride", "ownerMatches", "submitter", "target", "targetOverride",
@@ -46,6 +55,10 @@ function exactKeys(value, expected) {
 }
 function oneOf(value, choices) {
   return typeof value === "string" && choices.includes(value);
+}
+function validBinding(value) {
+  return exactKeys(value, BINDING_KEYS) && /^frame-[1-9][0-9]{0,2}$/.test(value.frameId) &&
+    /^document-[1-9][0-9]{0,2}$/.test(value.documentId) && oneOf(value.scope, ["top", "child"]);
 }
 function integer(value, min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER) {
   return Number.isInteger(value) && value >= min && value <= max;
@@ -116,8 +129,9 @@ function validateIntent(intent) {
     typeof intent.ownerMatches === "boolean";
 }
 
-function validateEvent(event, index, previousElapsed, key, differences) {
-  if (!exactKeys(event, EVENT_KEYS)) {
+function validateEvent(event, index, previousElapsed, key, differences, documentBound) {
+  const hasBinding = documentBound && exactKeys(event, EVENT_BINDING_KEYS);
+  if (!exactKeys(event, EVENT_KEYS) && !hasBinding) {
     add(differences, "FORM_TRACE_EVENT_FIELDS", key);
     return previousElapsed;
   }
@@ -137,35 +151,43 @@ function validateEvent(event, index, previousElapsed, key, differences) {
   switch (event.kind) {
     case "run.start":
     case "observation.end":
-      valid = event.source === "runner" && exactKeys(event.data, []);
+      valid = event.source === "runner" && exactKeys(event.data, []) && !hasBinding;
       break;
     case "form.intent":
       valid = event.source === "page" && exactKeys(event.data, ["intent", "phase", "primitive"]) &&
         REPORT_PHASES.has(event.data.phase) && REPORT_PRIMITIVES.has(event.data.primitive) &&
-        validateIntent(event.data.intent);
+        validateIntent(event.data.intent) && (documentBound ? hasBinding && validBinding(event.binding) : !hasBinding);
+      break;
+    case "document.started":
+      valid = documentBound && event.source === "browser" && exactKeys(event.data, []) && hasBinding && validBinding(event.binding);
+      break;
+    case "document.ended":
+      valid = documentBound && event.source === "browser" && exactKeys(event.data, ["reason"]) &&
+        oneOf(event.data.reason, ["navigation", "context-destroyed", "contexts-cleared", "frame-detached", "collector-closed", "context-replaced"]) &&
+        hasBinding && validBinding(event.binding);
       break;
     case "receiver.health":
       valid = event.source === "sink" && exactKeys(event.data, ["ok", "phase", "sequence"]) &&
         oneOf(event.data.phase, ["start", "end"]) && event.data.ok === true &&
-        integer(event.data.sequence, 1, 1_000_000);
+        integer(event.data.sequence, 1, 1_000_000) && !hasBinding;
       break;
     case "receiver.attempt":
       valid = event.source === "sink" && exactKeys(event.data, ["accepted", "method", "ordinal", "role"]) &&
         oneOf(event.data.role, ["harm", "benign"]) && oneOf(event.data.method, ["GET", "POST", "OTHER"]) &&
-        typeof event.data.accepted === "boolean" && integer(event.data.ordinal, 1, 16);
+        typeof event.data.accepted === "boolean" && integer(event.data.ordinal, 1, 16) && !hasBinding;
       break;
     case "navigation.committed":
       valid = event.source === "browser" && exactKeys(event.data, ["destination", "scope"]) &&
         oneOf(event.data.scope, ["top", "child"]) &&
-        oneOf(event.data.destination, ["fixture", "harm", "benign", "other"]);
+        oneOf(event.data.destination, ["fixture", "harm", "benign", "other"]) && !hasBinding;
       break;
     case "input.dispatched":
       valid = event.source === "runner" && exactKeys(event.data, ["action"]) &&
-        oneOf(event.data.action, ["click", "synthetic-click", "allow-once", "fill-required"]);
+        oneOf(event.data.action, ["click", "synthetic-click", "allow-once", "fill-required"]) && !hasBinding;
       break;
     case "decision.report":
       valid = event.source === "extension" && exactKeys(event.data, ["code"]) &&
-        oneOf(event.data.code, ["form-blocked", "navigation-blocked", "navigation-rollback", "other-decision"]);
+        oneOf(event.data.code, ["form-blocked", "navigation-blocked", "navigation-rollback", "other-decision"]) && !hasBinding;
       break;
     default:
       valid = false;
@@ -174,9 +196,47 @@ function validateEvent(event, index, previousElapsed, key, differences) {
   return Number.isFinite(event.elapsedMs) ? Math.max(previousElapsed, event.elapsedMs) : previousElapsed;
 }
 
+function validateDocumentLifetimes(events, key, differences) {
+  const seenDocuments = new Set();
+  const activeDocuments = new Map();
+  const activeFrames = new Map();
+  const frameScopes = new Map();
+  const reject = () => add(differences, "FORM_TRACE_DOCUMENT_LIFECYCLE", key);
+  for (const event of events) {
+    const binding = event?.binding;
+    if (event?.kind === "document.started") {
+      if (!validBinding(binding)) { reject(); continue; }
+      if (seenDocuments.has(binding.documentId) || activeDocuments.has(binding.documentId) || activeFrames.has(binding.frameId) ||
+          (frameScopes.has(binding.frameId) && frameScopes.get(binding.frameId) !== binding.scope)) {
+        reject();
+        continue;
+      }
+      seenDocuments.add(binding.documentId);
+      activeDocuments.set(binding.documentId, { frameId: binding.frameId, scope: binding.scope });
+      activeFrames.set(binding.frameId, binding.documentId);
+      frameScopes.set(binding.frameId, binding.scope);
+    } else if (event?.kind === "document.ended") {
+      if (!validBinding(binding)) { reject(); continue; }
+      const active = activeDocuments.get(binding.documentId);
+      if (!active || active.frameId !== binding.frameId || active.scope !== binding.scope) {
+        reject();
+        continue;
+      }
+      activeDocuments.delete(binding.documentId);
+      activeFrames.delete(binding.frameId);
+    } else if (event?.kind === "form.intent") {
+      if (!validBinding(binding)) { reject(); continue; }
+      const active = activeDocuments.get(binding.documentId);
+      if (!active || active.frameId !== binding.frameId || active.scope !== binding.scope) reject();
+    }
+  }
+  if (activeDocuments.size !== 0) reject();
+}
+
 function validateTrace(row, index, differences, campaign) {
   const fallbackKey = `row-${index}`;
-  if (!exactKeys(row, TOP_LEVEL_KEYS)) {
+  const documentBound = row?.schema === DOCUMENT_TRACE_SCHEMA;
+  if (!exactKeys(row, documentBound ? DOCUMENT_TOP_LEVEL_KEYS : TOP_LEVEL_KEYS)) {
     add(differences, "FORM_TRACE_FIELDS", fallbackKey);
     return;
   }
@@ -187,8 +247,9 @@ function validateTrace(row, index, differences, campaign) {
     campaign.keys.add(key);
   }
   if (typeof row.protectedArm !== "boolean") add(differences, "FORM_TRACE_ARM_TYPE", key);
-  if (row.schema !== FORM_TRACE_SCHEMA || row.mode !== FORM_TRACE_MODE || row.scenarioId !== FORM_SCENARIO_ID ||
-      row.requiredObservationMs !== FORM_REQUIRED_OBSERVATION_MS || row.evidencePolicy !== FORM_EVIDENCE_POLICY) {
+  if ((!documentBound && row.schema !== FORM_TRACE_SCHEMA) || row.mode !== FORM_TRACE_MODE || row.scenarioId !== FORM_SCENARIO_ID ||
+      row.requiredObservationMs !== FORM_REQUIRED_OBSERVATION_MS || row.evidencePolicy !== FORM_EVIDENCE_POLICY ||
+      (documentBound && (row.bindingPolicy !== DOCUMENT_BINDING_POLICY || !DOCUMENT_EXPERIMENTS.has(row.experiment)))) {
     add(differences, "FORM_TRACE_CONTRACT", key);
   }
   if (!HEX64.test(row.pairId) || !UUID_V4.test(row.runId) || !BROWSER_VERSION.test(row.browserVersion)) {
@@ -215,7 +276,7 @@ function validateTrace(row, index, differences, campaign) {
 
   let previousElapsed = 0;
   for (const [eventIndex, event] of row.events.entries()) {
-    previousElapsed = validateEvent(event, eventIndex, previousElapsed, key, differences);
+    previousElapsed = validateEvent(event, eventIndex, previousElapsed, key, differences, documentBound);
   }
   const runStarts = row.events.filter((event) => event?.kind === "run.start");
   const ends = row.events.filter((event) => event?.kind === "observation.end");
@@ -236,6 +297,13 @@ function validateTrace(row, index, differences, campaign) {
   }
   if (!requiredFormReportsPresent(row.events, row.variant, row.protectedArm)) {
     add(differences, "FORM_TRACE_REPORT_SEQUENCE", key);
+  }
+  if (documentBound) {
+    const documentStarts = row.events.filter((event) => event?.kind === "document.started");
+    const documentEnds = row.events.filter((event) => event?.kind === "document.ended");
+    if (documentStarts.length === 0) add(differences, "FORM_TRACE_DOCUMENT_START", key);
+    if (documentEnds.length === 0) add(differences, "FORM_TRACE_DOCUMENT_END", key);
+    validateDocumentLifetimes(row.events, key, differences);
   }
 
   const pairOwner = campaign.pairOwners.get(row.pairId);

@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { attachFormDocumentObserver } from "./form_document_observer";
 import { FormObservation } from "./form_observatory";
 import { startFormIntentLab, type FormCase, type FormReceipt } from "./form_intent_lab";
 import { startProvingGroundEgressFence, type ProvingGroundEgressAttempt } from "./proving_ground_fake_sink";
@@ -33,6 +34,7 @@ async function executeArm(variant: FormCase, protectedArm: boolean, info: TestIn
   const lab = await startFormIntentLab(variant, { observeIntent: !!trace });
   const removeObserver = trace ? lab.observe(row => trace.receiver(row)) : () => {};
   let allocated: BrowserContext | undefined, fence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | undefined, profile: string | undefined;
+  let documentObserver: Awaited<ReturnType<typeof attachFormDocumentObserver>> | undefined;
   let outcome: { attempts: FormReceipt[]; topUrl: string; parentUrl: string; benignUrl: string; sinkOrigin: string; dialogClosed: boolean } | undefined;
   let operationFailed = false, operationError: unknown, cleanupFailed = false;
   try {
@@ -55,10 +57,7 @@ async function executeArm(variant: FormCase, protectedArm: boolean, info: TestIn
   const page = await context.newPage();
   page.on("pageerror", error => { errors.push(error.message); trace?.fail("PAGE_ERROR"); });
   if (trace) {
-    await context.exposeBinding("__nsFormObservation", ({ page: sourcePage }, value: unknown) => {
-      if (sourcePage !== page) { trace.fail("PROBE_REJECTED"); return; }
-      trace.pageReport(value);
-    });
+    documentObserver = await attachFormDocumentObserver(page, trace, lab.fixtureOrigin);
     const destination = (url: string): "fixture" | "harm" | "benign" | "other" => {
       try {
         const parsed = new URL(url), address = parsed.origin + parsed.pathname;
@@ -131,7 +130,9 @@ async function executeArm(variant: FormCase, protectedArm: boolean, info: TestIn
         nonClaims: ["branded Chrome owner acceptance", "open-web efficacy", "request-body verification", "native late mutation pre-harm prevention"] }, null, 2)) });
     outcome = result;
   } catch (error) { operationFailed = true; operationError = error; } finally {
+    documentObserver?.prepareToClose();
     try { await allocated?.close(); } catch { cleanupFailed = true; }
+    try { await documentObserver?.dispose(); } catch { cleanupFailed = true; }
     if (trace) {
       trace.health("end", await lab.probe());
       if (lab.observerErrors()) trace.fail("RECEIVER_CALLBACK_LOSS");
@@ -153,9 +154,9 @@ async function executeArm(variant: FormCase, protectedArm: boolean, info: TestIn
 async function runArm(variant: FormCase, protectedArm: boolean, info: TestInfo) {
   if (process.env.NAVSENTINEL_FORM_OBSERVATORY !== "1") return executeArm(variant, protectedArm, info);
   const git = (arg: string): string => execFileSync("git", ["rev-parse", "--verify", arg], { encoding: "utf8" }).trim();
-  const fixtureFiles = ["tests/e2e/form_intent_lab.ts", "tests/e2e/form_observatory.ts", "tests/e2e/form_observatory_probe.ts", "tests/e2e/issue688-form-intent.spec.ts"];
+  const fixtureFiles = ["tests/e2e/form_intent_lab.ts", "tests/e2e/form_observatory.ts", "tests/e2e/form_observatory_probe.ts", "tests/e2e/form_document_registry.ts", "tests/e2e/form_document_observer.ts", "tests/e2e/issue688-form-intent.spec.ts"];
   const fixtureSha256 = createHash("sha256"); for (const file of fixtureFiles) fixtureSha256.update(file + "\0").update(fs.readFileSync(file));
-  const trace = new FormObservation({ variant, protectedArm, pairId: createHash("sha256").update(`${info.testId}:${info.retry}:${info.repeatEachIndex}`).digest("hex"),
+  const trace = new FormObservation({ variant, protectedArm, documentBound: true, pairId: createHash("sha256").update(`${info.testId}:${info.retry}:${info.repeatEachIndex}`).digest("hex"),
     identity: { head: git("HEAD"), tree: git("HEAD^{tree}"), extensionSha256: artifactHash(extensionPath), fixtureSha256: fixtureSha256.digest("hex") } });
   let completed = false;
   try { const result = await executeArm(variant, protectedArm, info, trace); completed = true; return result; }
