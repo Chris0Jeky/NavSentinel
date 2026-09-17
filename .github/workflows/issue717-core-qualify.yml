@@ -452,6 +452,28 @@ jobs:
           )
           PY
 
+      - name: Commit generated qualification tree before provenance checks
+        shell: bash --noprofile --norc -e -o pipefail {0}
+        run: |
+          git config user.name "NavSentinel Qualification"
+          git config user.email "navsentinel-qualification@example.invalid"
+          git add \
+            scripts/sensitive-environment.mjs \
+            scripts/sensitive-environment.d.mts \
+            scripts/release-input-integrity.mjs \
+            scripts/release-input-integrity.d.mts \
+            scripts/release.mjs \
+            scripts/launch-state-authority-campaign.mjs \
+            scripts/run-state-authority-campaign.mjs \
+            tests/e2e/state-authority-campaign-inputs.json \
+            tests/sensitive-environment-boundary.test.ts \
+            tests/release-input-integrity.test.ts \
+            tests/state-authority-launcher-contract.test.ts \
+            tests/state-authority-bootstrap-replay.test.ts
+          git diff --cached --check
+          git commit -m "fix: centralize release and launcher environment boundaries"
+          test -z "$(git status --porcelain)"
+
       - name: Verify syntax and focused trust-boundary contracts
         shell: bash --noprofile --norc -e -o pipefail {0}
         run: |
@@ -493,6 +515,6 @@ jobs:
             tests/state-authority-bootstrap-replay.test.ts
           git rm .github/workflows/issue717-core-qualify.yml
           git diff --cached --check
-          git commit -m "fix: centralize release and launcher environment boundaries"
+          git commit --amend --no-edit
           test -z "$(git status --porcelain)"
           git push origin HEAD:fix/717-sensitive-environment-core-20260917
