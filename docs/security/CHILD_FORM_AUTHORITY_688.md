@@ -38,14 +38,17 @@ No controls, field values, passwords, or request bodies enter this tuple.
    child-frame and document identity. Its per-tab typed entry revokes earlier
    generic windows. First top navigation start consumes the arm on match or
    mismatch. A commit must be `form_submit`; a URL-equivalent `link` or Location
-   navigation never spends a form grant. A server redirect is accepted only after
-   the matching start; client redirects/history do not transfer it.
+   navigation never spends a form grant. A server redirect is accepted only when
+   Chrome reports one matching start. Any second top-frame start burns the arm:
+   `webNavigation` supplies no stable request/navigation ID that can prove a changed
+   start belongs to the original redirect chain rather than a replacement form.
+   Client redirects/history do not transfer it.
    The persisted worker capability retains only the action URL, GET-vs-POST query
    mode, top-target bit, sender identity, phase and timing; the full effective tuple
    remains confined to the DOM-bound MAIN/isolated gates.
 6. Acquisition expires after 1.5 seconds. A timely, matching start has a bounded
    10-second response window so a slow server is not confused with a stale click.
-   Neither duplicate start nor commit extends it. Session-backed phase and
+   Neither duplicate/changed start nor commit extends it. Session-backed phase and
    identity survive worker restart; cancellation, source-frame replacement,
    navigation failure and tab cleanup burn/remove the entry.
 
@@ -98,7 +101,9 @@ bodies or independently proving those properties on every browser request.
 
 Location writes and mutation in later native `submit`/`formdata` listeners may
 already reach the network. A return to the source page is
-`ROLLED_BACK_POST_COMMIT`, never `BLOCKED_PRE_HARM`. Native formdata mutation,
+`ROLLED_BACK_POST_COMMIT`, never `BLOCKED_PRE_HARM`. A cross-process server
+redirect that produces a changed second `onBeforeNavigate` is also conservatively
+rolled back after commit because its chain identity is unavailable. Native formdata mutation,
 wholesale MAIN patch replacement and cross-realm natives remain outside the
 pre-call claim. The wrapper is also bounded by asynchronous bridge readiness;
 a synchronous page handler before policy approval can be conservatively blocked.
@@ -136,7 +141,7 @@ it is not permission to bypass managed browser policy.
 The matrix includes alternate submitter/action/target/method/encoding, late base
 href/target, reassociation, expiry, synthetic clicks, mismatch burn, exact replay,
 Location same/different URLs, a late native submit mutation, exact native and
-wrapped benign submissions, server redirect, slow response, explicit-empty target,
+wrapped benign submissions, conservative server-redirect rollback, slow response, explicit-empty target,
 inherited base target, invalid/empty method, self, dialog, validation recovery,
 trusted Allow once with/without mutation, and mixed block-then-fresh-click recovery.
 

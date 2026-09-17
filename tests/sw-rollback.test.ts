@@ -2504,10 +2504,10 @@ describe("child-form worker capability (#688)", () => {
     const mock = await setup(); arm(mock); start(mock);
     expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(true);
   });
-  it("keeps a form capability through repeated starts in one server redirect", async () => {
+  it("burns a form capability when a changed second start cannot be tied to the original navigation", async () => {
     const mock = await setup(); arm(mock); start(mock);
     start(mock, "https://redirect.test/done");
-    expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(true);
+    expect(commit(mock, "https://redirect.test/done", "form_submit", ["server_redirect"]).entry?.allowedAtCommit).toBe(false);
   });
   it("GET replaces the action query, rather than matching a misleading prefix", async () => {
     const mock = await setup(); arm(mock, [intent[0], "get", intent[2], intent[3], intent[4]]);
