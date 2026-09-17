@@ -9,6 +9,9 @@ const topology = resolveE2eTopology();
 export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: "**/*.spec.ts",
+  // The state-authority spec is launcher-only. Ordinary Playwright collection
+  // must not import it without the committed-object execution boundary.
+  testIgnore: "**/state-authority-sink.spec.ts",
   fullyParallel: topology.fullyParallel,
   workers: topology.workers,
   retries: process.env.CI ? 1 : 0,

@@ -1,0 +1,54 @@
+name: Observatory fault and challenge checks
+on:
+  pull_request:
+    paths:
+      - 'experiments/evidence-observatory/**'
+      - 'tests/e2e/observatory*'
+      - 'tests/e2e/proving_ground_fake_sink.ts'
+      - 'gym/overlay-nesting-*.html'
+      - '.github/workflows/observatory-resilience.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [faults, challenges]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: node --test experiments/evidence-observatory/tests/*.test.mjs
+      - run: npm run typecheck && npm run lint
+      - run: npx vitest run tests/observatory-sink-health.test.ts tests/proving-ground-fake-sink.test.ts
+      - run: npx playwright install --with-deps chromium
+      - name: Execute the fixed exact-input lane, retries disabled
+        run: node experiments/evidence-observatory/run-campaign.mjs ${{ matrix.lane }}
+      - name: Require independently observed fault effects, never prevention
+        if: always() && matrix.lane == 'faults'
+        run: node experiments/evidence-observatory/check-faults.mjs
+      - name: Inspect actual fault records and invalidated geometry
+        if: success() && matrix.lane == 'faults'
+        run: node experiments/evidence-observatory/smoke-faults.mjs
+      - name: Validate and inspect actual frozen challenge captures
+        if: success() && matrix.lane == 'challenges'
+        run: node experiments/evidence-observatory/smoke-recorded.mjs challenges
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: observatory-${{ matrix.lane }}-evidence
+          path: |
+            test-results/observatory-fault*/
+            test-results/observatory-fault-input-binding.json
+            test-results/observatory-challenge*/
+            test-results/observatory-challenge-input-binding.json
+          retention-days: 7
