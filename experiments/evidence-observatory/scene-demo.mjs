@@ -8,12 +8,14 @@ export function sceneDemonstration() {
     lockSha256: 'd'.repeat(64), settingsSha256: 'e'.repeat(64), rawVerified: false };
   for (const run of raw.runs) {
     const harmId = `${run.arm}-harm`, benignId = `${run.arm}-benign`;
-    let hidden = run.arm === 'benign', sinkCount = 0;
-    const context = { pageId: 'teaching-page', frameId: 'child-frame', documentId: 'child-document', parentFrameId: 'top-frame' };
+    let hidden = run.arm === 'benign', sinkCount = 0, documentEpoch = 1;
+    const context = () => ({ pageId: 'teaching-page', frameId: 'child-frame',
+      documentId: documentEpoch === 1 ? 'child-document' : `child-document-${documentEpoch}`, parentFrameId: 'top-frame' });
     const events = [];
     for (const original of run.events) {
       const e = { ...original, causes: [] };
-      if (e.frame === 'child') e.context = { ...context };
+      if (e.frame === 'child' && e.kind === 'navigation.committed') documentEpoch++;
+      if (e.frame === 'child') e.context = context();
       if (e.kind === 'sink.receipt') {
         sinkCount++;
         e.receiver = { runId: run.runId, scenarioId: raw.scenarioId, targetId: e.consequence === 'harm' ? harmId : benignId, method: 'GET',
@@ -22,10 +24,11 @@ export function sceneDemonstration() {
       events.push(e);
       if (e.kind === 'decision.block') hidden = true;
       if (['dom.changed', 'decision.block', 'control.completed'].includes(e.kind)) {
-        const identity = { frameId: 'child-frame', documentId: 'child-document', parentFrameId: 'top-frame' };
+        const { frameId, documentId, parentFrameId } = context();
+        const identity = { frameId, documentId, parentFrameId };
         const box = (id, kind, state, x, y, width, height, target = 'none') => ({ id, ...identity, kind, state, x, y, width, height,
           declaredTarget: target, effectiveTarget: target, targetScope: target === 'none' ? 'none' : 'new-context' });
-        events.push({ id: 'temporary', sequence: 0, elapsedMs: e.elapsedMs, source: 'browser', kind: 'scene.sample', frame: 'child', causes: [], context: { ...context },
+        events.push({ id: 'temporary', sequence: 0, elapsedMs: e.elapsedMs, source: 'browser', kind: 'scene.sample', frame: 'child', causes: [], context: context(),
           scene: { width: 1280, height: 900, boxes: [box('media-frame','frame','visible',90,90,1100,650), box('playback-control','control','visible',140,650,200,60),
             box('attack-layer','attack',hidden?'hidden':'visible',hidden?0:90,hidden?0:90,hidden?0:1100,hidden?0:650,'harm-receiver')] } });
       }
