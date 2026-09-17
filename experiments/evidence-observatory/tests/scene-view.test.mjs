@@ -33,9 +33,9 @@ test('viewer exposes measured scene and authority-neutral receipt panels',()=>{
  const html=renderReport(buildReport([JSON.stringify(demonstration())]));
  assert.ok(html.includes('id="scene-panel"')); assert.ok(html.includes('id="receiver-panel"'));
  assert.ok(html.includes('Sampled geometry')); assert.ok(html.includes('createElementNS'));
- assert.ok(html.includes('Receiver receipt inbox'));
+ assert.ok(html.includes('Independent receiver inbox'));
  assert.ok(html.includes('Producer-reported receipt; receiver binding unavailable.'));
- assert.ok(!html.includes('Independent receiver inbox'));
+ assert.ok(html.includes('receiver.rejected'));
 });
 
 
