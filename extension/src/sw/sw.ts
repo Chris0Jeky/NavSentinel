@@ -813,6 +813,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   }
 
+  if (message.type === "ns-modified-anchor-context") {
+    return runWhenHydrated(() => {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === "number") {
+        // A trusted cross-site modifier anchor can invoke a native opener
+        // path without sending ns-nav-gesture. Cancel only the typed-address
+        // bar exemption for that tab; this message grants no opener,
+        // redirect, gesture, or tab-wide navigation authority.
+        typedOriginByTab.delete(tabId);
+        swState.persistMap(typedOriginByTab, "typedOrigin");
+      }
+      sendResponse?.({ ok: true });
+    });
+  }
+
   if (message.type === "ns-allow-target-nav") {
     return runWhenHydrated(() => {
       const tabId = sender.tab?.id;
@@ -859,8 +874,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tabId = sender.tab?.id;
       if (typeof tabId === "number") {
         const entry = lastCommittedByTab.get(tabId);
+        const shouldRollback = !!entry && !entry.allowedAtCommit;
+        // The content-side rollback poll can be the first delivery path when
+        // the destination document wins the ready-message race. Arm the
+        // return boundary before replying so its immediate location.replace()
+        // cannot race ahead of ns-begin-rollback and be classified as a new
+        // unauthorized navigation.
+        if (shouldRollback && entry?.prevUrl && /^https?:\/\//i.test(entry.prevUrl)) {
+          rollbackReturnByTab.set(tabId, {
+            url: entry.prevUrl,
+            expiresAt: Date.now() + ROLLBACK_RETURN_TTL_MS
+          });
+          swState.persistMap(rollbackReturnByTab, "rollbackReturn");
+        }
         sendResponse?.({
-          shouldRollback: !!entry && !entry.allowedAtCommit,
+          shouldRollback,
           entry,
           prevUrl: entry?.prevUrl
         });

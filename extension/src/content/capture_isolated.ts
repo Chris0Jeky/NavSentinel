@@ -752,6 +752,14 @@ function notifyNavContext(): void {
   }
 }
 
+function notifyModifiedAnchorContext(): void {
+  try {
+    chrome.runtime.sendMessage({ type: "ns-modified-anchor-context" });
+  } catch {
+    // ignore
+  }
+}
+
 function notifyAllowedTarget(
   url: string,
   ttlMs = NAV_TARGET_ALLOW_TTL_MS,
@@ -1365,6 +1373,20 @@ function shouldIsolateModifiedAnchorFromPage(
   );
 }
 
+function shouldResetTypedOriginForModifiedAnchor(
+  e: MouseEvent,
+  anchor: HTMLAnchorElement | null = findAnchorFromEvent(e),
+): boolean {
+  return !!(
+    settings.defaultMode !== "off" &&
+    isTrustedModifiedAnchorGesture(e) &&
+    isTopFrame() &&
+    anchor &&
+    /^https?:$/i.test(anchor.protocol) &&
+    isCrossSiteDestinationHost(anchor.hostname)
+  );
+}
+
 function allowOnce(url: string, target?: string, features?: string): void {
   notifyNavAllow();
   postToMain("ns-allow-once");
@@ -1659,6 +1681,12 @@ window.addEventListener(
     // inside a child frame that can navigate the top context. ns-nav-context
     // grants no navigation authority and the worker ignores page-supplied URLs.
     notifyNavContext();
+    if (shouldResetTypedOriginForModifiedAnchor(e)) {
+      // This is a narrow cancellation of the typed-address-bar exemption for
+      // the current native cross-site modifier gesture. It grants no opener,
+      // redirect, or tab-wide navigation allowance.
+      notifyModifiedAnchorContext();
+    }
     lastDown = capturePointerDown(e);
     const token = makeToken({
       siteKey: siteKeyFromLocation(),
