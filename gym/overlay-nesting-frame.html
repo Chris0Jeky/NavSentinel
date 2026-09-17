@@ -24,11 +24,28 @@
     #accessible-error-dialog { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: #111; color: #fff; }
     #accessible-error-confirm { position: absolute; right: 12px; bottom: 12px; min-width: 72px; min-height: 36px; }
   </style>
+  <script src="local-fixture-targets.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const fixtureCase = params.get("case") || "exact";
     const programmeChurn = params.get("churn") === "1";
+    const observatoryMode = params.get("observatory") === "1";
+    // Optional page reports only. No await, navigation, product call or protection
+    // decision depends on the recorder. Minimal/full runs use identical attacks.
+    function observatoryReport(kind, code) {
+      if (!observatoryMode || params.get("record") !== "1" ||
+          typeof window.__nsObservatoryReport !== "function") return;
+      try {
+        void window.__nsObservatoryReport({ kind, code, at: performance.now() })
+          .catch(() => {});
+      } catch { /* A missing observer never changes the authored attack. */ }
+    }
     const localSink = (() => {
+      // Observatory targets come from the existing immutable, document-bound
+      // typed-sink bootstrap, never from a supplied destination query string.
+      if (observatoryMode) return window.NavSentinelLocalTargets.url(
+        "harm", "NS-ADV-UI-004", "alternate-loopback",
+      );
       const raw = params.get("sink");
       if (!raw) return "";
       try {
@@ -72,6 +89,7 @@
       frame.style.cssText = "width:100%!important;height:100%!important;position:fixed!important;left:0!important;right:0!important;top:0!important;bottom:0!important;z-index:2147483647!important;padding:0!important;margin:0!important;border:0!important";
       document.documentElement.appendChild(frame);
       writeStaticContainer(frame, label);
+      observatoryReport("attack.attempt", "layer-appended");
       return frame;
     }
 
@@ -92,6 +110,7 @@
       if (!attack) return;
       attack.style.setProperty("display", "block", "important");
       document.documentElement.dataset.hostilePhase = "style-rewritten";
+      observatoryReport("dom.changed", "display-rewritten");
     }
 
     function replaceAttack(id, nextId) {
@@ -354,6 +373,17 @@
         };
         renderControl();
         document.body.appendChild(host);
+        if (observatoryMode) {
+          const receiverLink = document.createElement("a");
+          receiverLink.id = "observatory-benign-receiver";
+          receiverLink.textContent = "Open the explicitly requested local destination";
+          receiverLink.href = window.NavSentinelLocalTargets.url(
+            "benign", "NS-ADV-UI-004", "alternate-loopback",
+          );
+          receiverLink.target = "_blank";
+          receiverLink.rel = "noopener";
+          document.body.appendChild(receiverLink);
+        }
         window.setTimeout(() => {
           renderControl();
           document.documentElement.dataset.programmeBenignRerendered = "1";

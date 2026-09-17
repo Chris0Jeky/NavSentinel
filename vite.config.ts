@@ -57,6 +57,10 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // MV3 targets Chrome, where modulepreload is available. The hints are an
+    // optional startup optimization; omitting them keeps both profile artifacts
+    // under the aggregate package budget without changing runtime imports.
+    modulePreload: false,
     rolldownOptions: {
       input: {
         onboarding: resolve(import.meta.dirname, "extension/src/onboarding/onboarding.html"),
@@ -68,9 +72,10 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
-              // Keep form authority statically linked: MV3 disallows import().
-              name: "form-navigation-runtime",
-              test: /[\\/]src[\\/]sw[\\/]form_navigation\.ts$/,
+              // Keep the session-backed worker state in a static module so the
+              // MV3 worker entry stays below its byte budget.
+              name: "session-state-runtime",
+              test: /[\\/]src[\\/]shared[\\/]session_state\.ts$/,
               entriesAware: true,
               priority: 10
             },

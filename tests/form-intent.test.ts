@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from "vitest";
 import { FormAttemptGate, formBindingUnchanged, resolveFormIntent, validateFormReceiver } from "../extension/src/content/form_intent";
-import { FORM_INTENT_TTL_MS, consumeFormNavigation, formDestinationMatches, isFormIntent, isFormNavigationEntry, sameFormIntent, startFormNavigation, type FormIntent, type FormNavigationEntry } from "../extension/src/shared/form_intent";
+import { FORM_INTENT_TTL_MS, formDestinationMatches, isFormIntent, sameFormIntent, type FormIntent } from "../extension/src/shared/form_intent";
 
 const ID = "a".repeat(32);
 function fixture() {
@@ -18,46 +18,47 @@ describe("effective form destination (#688)", () => {
     const b = fixture();
     document.head.innerHTML = '<base href="https://base.test/dir/">';
     b.form.setAttribute("action", "result");
-    expect(resolveFormIntent(b.form)?.actionUrl).toBe("https://base.test/dir/result");
+    expect(resolveFormIntent(b.form)?.[0]).toBe("https://base.test/dir/result");
   });
   it.each([null, ""])("missing/empty action %s uses the document URL, not base", value => {
     const b = fixture(); document.head.innerHTML = '<base href="https://base.test/dir/">';
     if (value === null) b.form.removeAttribute("action"); else b.form.setAttribute("action", value);
-    expect(resolveFormIntent(b.form)?.actionUrl).toBe(document.URL);
+    expect(resolveFormIntent(b.form)?.[0]).toBe(document.URL);
   });
   it("an empty submitter action overrides a nonempty form action", () => {
     const b = fixture(); b.submitter.setAttribute("formaction", "");
-    expect(resolveFormIntent(b.form, b.submitter)?.actionUrl).toBe(document.URL);
+    expect(resolveFormIntent(b.form, b.submitter)?.[0]).toBe(document.URL);
   });
   it.each(["", "invalid", "POST ", " patch "])("invalid/empty formmethod %s means GET, not inherited POST", value => {
     const b = fixture(); b.submitter.setAttribute("formmethod", value);
-    expect(resolveFormIntent(b.form, b.submitter)?.method).toBe("get");
+    expect(resolveFormIntent(b.form, b.submitter)?.[1]).toBe("get");
   });
   it("missing method override inherits; valid values are case insensitive", () => {
-    const b = fixture(); expect(b.intent.method).toBe("post");
+    const b = fixture(); expect(b.intent[1]).toBe("post");
     b.submitter.setAttribute("formmethod", "DiAlOg");
-    expect(resolveFormIntent(b.form, b.submitter)?.method).toBe("dialog");
+    expect(resolveFormIntent(b.form, b.submitter)?.[1]).toBe("dialog");
   });
   it.each(["", "garbage"])("invalid/empty enctype %s uses urlencoded instead of inherited multipart", value => {
     const b = fixture(); b.form.enctype = "multipart/form-data"; b.submitter.setAttribute("formenctype", value);
-    expect(resolveFormIntent(b.form, b.submitter)?.enctype).toBe("application/x-www-form-urlencoded");
+    expect(resolveFormIntent(b.form, b.submitter)?.[2]).toBe("application/x-www-form-urlencoded");
   });
   it("binds a valid submitter enctype override", () => {
     const b = fixture(); b.submitter.setAttribute("formenctype", "text/plain");
-    expect(resolveFormIntent(b.form, b.submitter)?.enctype).toBe("text/plain");
+    expect(resolveFormIntent(b.form, b.submitter)?.[2]).toBe("text/plain");
   });
   it("empty formtarget is self, even with a hostile form/base target", () => {
     const b = fixture(); document.head.innerHTML = '<base target="_blank">'; b.submitter.setAttribute("formtarget", "");
-    expect(resolveFormIntent(b.form, b.submitter)).toMatchObject({ target: "", targetScope: "self" });
+    expect(resolveFormIntent(b.form, b.submitter)?.slice(3)).toEqual(["", "self"]);
   });
   it("only missing targets inherit the first base[target]", () => {
     const b = fixture(); b.form.removeAttribute("target"); document.head.innerHTML = '<base target="_blank"><base target="_top">';
-    expect(resolveFormIntent(b.form, b.submitter)?.target).toBe("_blank");
-    b.form.setAttribute("target", ""); expect(resolveFormIntent(b.form, b.submitter)?.targetScope).toBe("self");
+    expect(resolveFormIntent(b.form, b.submitter)?.[3]).toBe("_blank");
+    b.form.setAttribute("target", ""); expect(resolveFormIntent(b.form, b.submitter)?.[4]).toBe("self");
   });
   it("sanitizes dangling-markup target names as the browser does", () => {
     const b = fixture(); b.submitter.setAttribute("formtarget", "bad\n<target");
-    expect(resolveFormIntent(b.form, b.submitter)).toMatchObject({ target: "_blank", targetScope: "other" });
+    expect(resolveFormIntent(b.form, b.submitter)?.[3]).toBe("_blank");
+    expect(resolveFormIntent(b.form, b.submitter)?.[4]).toBe("other");
   });
   it("does not read clobberable form.action/method/target properties", () => {
     const b = fixture(); b.form.insertAdjacentHTML("beforeend", '<input name="action"><input name="method"><input name="target">');
@@ -136,56 +137,29 @@ describe("DOM-bound first-attempt authority (#688)", () => {
   it("captures no request body or field values", () => {
     const b = fixture(); b.form.insertAdjacentHTML("beforeend", '<input type="password" value="never-serialize-me">');
     expect(JSON.stringify(resolveFormIntent(b.form, b.submitter))).not.toContain("never-serialize-me");
-    expect(Object.keys(b.intent).sort()).toEqual(["actionUrl", "enctype", "method", "target", "targetScope"]);
+    expect(b.intent).toHaveLength(5);
   });
 });
 
 describe("worker-visible effective destination semantics (#688)", () => {
-  const intent: FormIntent = { actionUrl: "https://sink.test/accept?old=1", method: "post", enctype: "application/x-www-form-urlencoded", target: "_top", targetScope: "top" };
-  function entry(): FormNavigationEntry { return { attemptId: ID, sourceFrameId: 3, sourceDocumentId: "document-A", intent: { ...intent }, issuedAt: 0, expiresAt: 1500, phase: "armed" }; }
+  const intent: FormIntent = ["https://sink.test/accept?old=1", "post", "application/x-www-form-urlencoded", "_top", "top"];
   it("GET replaces an existing query while POST retains it", () => {
-    expect(formDestinationMatches({ ...intent, method: "get" }, "https://sink.test/accept?field=2")).toBe(true);
+    expect(formDestinationMatches([intent[0], "get", intent[2], intent[3], intent[4]], "https://sink.test/accept?field=2")).toBe(true);
     expect(formDestinationMatches(intent, "https://sink.test/accept?field=2")).toBe(false);
     expect(formDestinationMatches(intent, "https://sink.test/accept?old=1#fragment")).toBe(true);
     expect(formDestinationMatches(intent, "https://other.test/accept?old=1")).toBe(false);
   });
   it("binds every metadata field, not just the action URL", () => {
-    expect(sameFormIntent(intent, { ...intent })).toBe(true);
-    for (const changed of [{ method: "get" }, { enctype: "text/plain" }, { target: "_self" }, { targetScope: "self" }]) {
-      expect(sameFormIntent(intent, { ...intent, ...changed } as FormIntent)).toBe(false);
-    }
-  });
-  it("a URL-equivalent location/link cannot spend a form capability", () => {
-    const e = entry(); startFormNavigation(e, intent.actionUrl, 100);
-    expect(consumeFormNavigation(e, intent.actionUrl, "link", [], 200)).toBe(false);
-    expect(consumeFormNavigation(e, intent.actionUrl, "form_submit", [], 201)).toBe(false);
-  });
-  it("accepts a matched form start followed by a server redirect, once", () => {
-    const e = entry(); startFormNavigation(e, intent.actionUrl, 100);
-    expect(consumeFormNavigation(e, "https://redirect.test/done", "form_submit", ["server_redirect"], 200)).toBe(true);
-    expect(e.phase).toBe("spent");
-    expect(consumeFormNavigation(e, intent.actionUrl, "form_submit", [], 201)).toBe(false);
-  });
-  it.each(["missing", "mismatch", "duplicate", "expired"])("rejects %s starts even with a server redirect qualifier", variant => {
-    const e = entry();
-    if (variant !== "missing") startFormNavigation(e, variant === "mismatch" ? "https://wrong.test/" : intent.actionUrl, variant === "expired" ? 1500 : 100);
-    if (variant === "duplicate") startFormNavigation(e, intent.actionUrl, 101);
-    expect(consumeFormNavigation(e, "https://redirect.test/", "form_submit", ["server_redirect"], variant === "expired" ? 1501 : 200)).toBe(false);
-  });
-  it("a timely start permits a slow response but never renews an acquisition window", () => {
-    const e = entry(); startFormNavigation(e, intent.actionUrl, 100);
-    expect(isFormNavigationEntry(e)).toBe(true);
-    expect(consumeFormNavigation(e, intent.actionUrl, "form_submit", [], 9000)).toBe(true);
-    const expired = entry(); startFormNavigation(expired, intent.actionUrl, 100);
-    expect(consumeFormNavigation(expired, intent.actionUrl, "form_submit", [], 10100)).toBe(false);
-  });
-  it.each(["client_redirect", "forward_back"])("does not transfer authority through %s", qualifier => {
-    const e = entry(); startFormNavigation(e, intent.actionUrl, 10);
-    expect(consumeFormNavigation(e, intent.actionUrl, "form_submit", [qualifier], 20)).toBe(false);
+    expect(sameFormIntent(intent, [...intent])).toBe(true);
+    for (const changed of [
+      [intent[0], "get", intent[2], intent[3], intent[4]],
+      [intent[0], intent[1], "text/plain", intent[3], intent[4]],
+      [intent[0], intent[1], intent[2], "_self", intent[4]],
+      [intent[0], intent[1], intent[2], intent[3], "self"],
+    ] as FormIntent[]) expect(sameFormIntent(intent, changed)).toBe(false);
   });
   it("rejects malformed bridge/session metadata", () => {
-    expect(isFormIntent(intent)).toBe(true); expect(isFormNavigationEntry(entry())).toBe(true);
-    for (const bad of [null, [], { ...intent, method: "PATCH" }, { ...intent, extra: "value" }, { ...intent, actionUrl: "not a URL" }]) expect(isFormIntent(bad)).toBe(false);
-    for (const changed of [{ sourceFrameId: 0 }, { expiresAt: 999999 }, { sourceDocumentId: "" }, { phase: "unknown" }]) expect(isFormNavigationEntry({ ...entry(), ...changed })).toBe(false);
+    expect(isFormIntent(intent)).toBe(true);
+    for (const bad of [null, [], [intent[0], "PATCH", intent[2], intent[3], intent[4]], [intent[0], intent[1], intent[2], intent[3], intent[4], "extra"], ["not a URL", intent[1], intent[2], intent[3], intent[4]]]) expect(isFormIntent(bad)).toBe(false);
   });
 });

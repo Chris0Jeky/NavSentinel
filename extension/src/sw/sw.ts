@@ -1,5 +1,9 @@
-import { handleChildFormMessage } from "./form_navigation";
-import { formNavigationDeadline, startFormNavigation, consumeFormNavigation } from "../shared/form_intent";
+import {
+  FORM_INTENT_TTL_MS,
+  isFormIntent,
+  isHttpFormIntent,
+  type FormNavigationEntry,
+} from "../shared/form_intent";
 import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 import {
   getReputationStatus,
@@ -40,7 +44,7 @@ import {
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
-import { swState } from "../shared/session_state";
+import { swState, type AllowTargetEntry } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
 import {
   createDefaultPendingDecisionRuntimeBroker,
@@ -98,7 +102,6 @@ const allowUntilByTab = swState.allowUntilByTab;
 const gestureUntilByTab = swState.gestureUntilByTab;
 const allowStartedByTab = swState.allowStartedByTab;
 const allowTargetByTab = swState.allowTargetByTab;
-const formNavigationByTab = swState.formNavigationByTab;
 const userNavContextUntilByTab = swState.userNavContextUntilByTab;
 const suppressUntilByTab = swState.suppressUntilByTab;
 const typedOriginByTab = swState.typedOriginByTab;
@@ -623,6 +626,102 @@ function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
   return keepPortOpen;
 }
 
+function formDeadline(form: FormNavigationEntry): number {
+  return form.phase === "s" && form.startedAt !== undefined ? form.startedAt + 10_000 : form.expiresAt;
+}
+
+function formDestinationMatches(form: FormNavigationEntry, target: Pick<AllowTargetEntry, "url">, destination: string): boolean {
+  try {
+    const expected = new URL(target.url);
+    const actual = new URL(destination);
+    expected.hash = actual.hash = "";
+    if (form.get) expected.search = actual.search = "";
+    return expected.href === actual.href;
+  } catch { return false; }
+}
+
+function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, now: number): void {
+  // A server redirect can emit another onBeforeNavigate before the eventual
+  // form_submit commit. Keep the original matched start while that navigation
+  // is in flight; consumeForm still requires the final form_submit transition
+  // and, for a changed URL, the server_redirect qualifier. A second unrelated
+  // start therefore cannot spend the capability, while a mismatched first
+  // start remains terminal.
+  if (form.phase === "s" && form.startedUrl !== url && now < formDeadline(form)) return;
+  if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt || !formDestinationMatches(form, target, url)) {
+    form.phase = "p";
+    delete form.startedUrl;
+    delete form.startedAt;
+    return;
+  }
+  form.phase = "s";
+  form.startedUrl = url;
+  form.startedAt = now;
+}
+
+function consumeForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, transition: string, qualifiers: readonly string[], now: number): boolean {
+  const allowed = form.phase === "s" && now < formDeadline(form) && form.top &&
+    transition === "form_submit" && !!form.startedUrl && formDestinationMatches(form, target, form.startedUrl) &&
+    !qualifiers.includes("forward_back") && !qualifiers.includes("client_redirect") &&
+    (formDestinationMatches(form, target, url) || qualifiers.includes("server_redirect"));
+  form.phase = "p";
+  delete form.startedUrl;
+  delete form.startedAt;
+  return allowed;
+}
+
+function handleChildFormMessage(
+  message: Record<string, unknown>,
+  sender: chrome.runtime.MessageSender,
+): boolean {
+  const tabId = sender.tab?.id;
+  const frameId = sender.frameId;
+  const documentId = sender.documentId;
+  if (sender.id !== chrome.runtime.id || typeof tabId !== "number" ||
+      !Number.isSafeInteger(frameId) || !frameId || frameId < 0 ||
+      typeof documentId !== "string" || !documentId || documentId.length > 128) return false;
+  const current = allowTargetByTab.get(tabId)?.form;
+  if (message.type === "ns-form-intent-cancel") {
+    if (current && current.attemptId === message.attemptId && current.sourceFrameId === frameId && current.sourceDocumentId === documentId) {
+      current.phase = "p";
+      delete current.startedUrl;
+      delete current.startedAt;
+      swState.persistMap(allowTargetByTab, "allowTarget");
+    }
+    return true;
+  }
+  const now = Date.now();
+  const issuedAt = message.issuedAt;
+  if (typeof message.attemptId !== "string" || !/^[a-f0-9]{32}$/.test(message.attemptId) ||
+      current?.attemptId === message.attemptId || !isFormIntent(message.formIntent) || !isHttpFormIntent(message.formIntent) ||
+      typeof issuedAt !== "number" || !Number.isFinite(issuedAt) || issuedAt > now || now >= issuedAt + FORM_INTENT_TTL_MS) return false;
+  let formCount = 0;
+  for (const [id, target] of allowTargetByTab) {
+    if (!target.form) continue;
+    if (formDeadline(target.form) <= now) allowTargetByTab.delete(id);
+    else formCount++;
+  }
+  if (formCount >= 256 && !current) return false;
+  const form: FormNavigationEntry = {
+    attemptId: message.attemptId, sourceFrameId: frameId, sourceDocumentId: documentId,
+    get: message.formIntent[1] === "get", top: message.formIntent[4] === "top",
+    issuedAt, expiresAt: issuedAt + FORM_INTENT_TTL_MS, phase: "a",
+  };
+  const target: AllowTargetEntry = {
+    url: message.formIntent[0], expiresAt: form.expiresAt, form,
+  };
+  allowTargetByTab.set(tabId, target);
+  allowUntilByTab.delete(tabId);
+  gestureUntilByTab.delete(tabId);
+  allowStartedByTab.delete(tabId);
+  typedOriginByTab.delete(tabId);
+  rememberUserNavigationContext(tabId, now);
+  const topUrl = sender.tab?.url;
+  if (typeof topUrl === "string" && topUrl) lastUrlByTab.set(tabId, topUrl);
+  swState.persistAll();
+  return true;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
@@ -727,7 +826,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "ns-form-intent" || message.type === "ns-form-intent-cancel") {
     return runWhenHydrated(() => {
-      sendResponse?.({ ok: handleChildFormMessage(message, sender, rememberUserNavigationContext) });
+      sendResponse?.({ ok: handleChildFormMessage(message, sender) });
     });
   }
 
@@ -736,8 +835,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tabId = sender.tab?.id;
       if (typeof tabId === "number") {
         const ttl = clampTtl(message.ttlMs, NAV_ALLOW_TTL_MS);
-        formNavigationByTab.delete(tabId);
-        swState.persistMap(formNavigationByTab, "formNavigation");
+        if (allowTargetByTab.get(tabId)?.form) allowTargetByTab.delete(tabId);
         allowUntilByTab.set(tabId, Date.now() + ttl);
         swState.persistMap(allowUntilByTab, "allowUntil");
       }
@@ -751,7 +849,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (typeof tabId === "number") {
         const ttl = clampTtl(message.ttlMs, NAV_GESTURE_TTL_MS, MAX_GESTURE_TTL_MS);
         const now = Date.now();
-        formNavigationByTab.delete(tabId);
+        if (allowTargetByTab.get(tabId)?.form) allowTargetByTab.delete(tabId);
         gestureUntilByTab.set(tabId, now + ttl);
         const topUrl = typeof sender.tab?.url === "string" ? sender.tab.url : "";
         if (topUrl) {
@@ -1057,11 +1155,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   if (details.frameId !== 0) {
     const invalidate = () => {
-      const entry = formNavigationByTab.get(details.tabId);
+      const entry = allowTargetByTab.get(details.tabId)?.form;
       if (entry?.sourceFrameId === details.frameId) {
-        entry.phase = "spent";
+        entry.phase = "p";
         delete entry.startedUrl;
-        swState.persistMap(formNavigationByTab, "formNavigation");
+        delete entry.startedAt;
+        swState.persistMap(allowTargetByTab, "allowTarget");
       }
     };
     if (!swState.hydrated) void hydrateReady.then(invalidate);
@@ -1078,8 +1177,11 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
   onBeforeNavigateHandler(details);
 });
 function onBeforeNavigateHandler(details: chrome.webNavigation.WebNavigationParentedCallbackDetails): void {
-  const form = formNavigationByTab.get(details.tabId);
-  if (form) startFormNavigation(form, details.url, Date.now());
+  const form = allowTargetByTab.get(details.tabId)?.form;
+  if (form) {
+    const target = allowTargetByTab.get(details.tabId);
+    if (target) startForm(form, target, details.url, Date.now());
+  }
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =
@@ -1125,12 +1227,12 @@ chrome.webNavigation.onCommitted.addListener((details) => {
 function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitionCallbackDetails): void {
   rollbackReturnByTab.delete(details.tabId);
   const now = Date.now();
-  const form = formNavigationByTab.get(details.tabId);
-  const formObserved = !!form && now < formNavigationDeadline(form);
-  const formAllowed = !!form && consumeFormNavigation(form, details.url, details.transitionType, details.transitionQualifiers ?? [], now);
   const targetAllowance = allowTargetByTab.get(details.tabId);
+  const form = targetAllowance?.form;
+  const formObserved = !!form && now < formDeadline(form);
+  const formAllowed = !!form && !!targetAllowance && consumeForm(form, targetAllowance, details.url, details.transitionType, details.transitionQualifiers ?? [], now);
   const targetAllowed =
-    !!targetAllowance &&
+    !!targetAllowance && !form &&
     now <= targetAllowance.expiresAt &&
     allowTargetMatchesCommit(targetAllowance, details.url);
   if (targetAllowance) {
@@ -1332,8 +1434,8 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
   onErrorOccurredHandler(details);
 });
 function onErrorOccurredHandler(details: { tabId: number; frameId: number; url?: string }): void {
-  const form = formNavigationByTab.get(details.tabId);
-  if (form) { form.phase = "spent"; delete form.startedUrl; }
+  const form = allowTargetByTab.get(details.tabId)?.form;
+  if (form) { form.phase = "p"; delete form.startedUrl; }
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =

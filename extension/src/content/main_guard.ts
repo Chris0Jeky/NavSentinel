@@ -701,10 +701,10 @@ function patchForms(): void {
       } finally { activeChildFormCall = false; }
     };
     const allowed = () => {
-      postAllowed({ kind, ...(intent ? { url: intent.actionUrl, target: intent.target } : {}) });
+      postAllowed({ kind, ...(intent ? { url: intent[0], target: intent[3] } : {}) });
       // Child forms never turn a metadata tuple into generic worker authority.
       if (!isSubframe() && intent && isHttpFormIntent(intent)) {
-        notifyAllowedTarget(intent.actionUrl, { matchQueryPrefix: intent.method === "get" });
+        notifyAllowedTarget(intent[0], { matchQueryPrefix: intent[1] === "get" });
       }
       native();
     };
@@ -712,20 +712,20 @@ function patchForms(): void {
     if (isSubframe()) {
       const spent = intent ? childFormGate.consume(form, submitter, intent, nowMs())
         : { allowed: false, ...childFormGate.revoke() };
-      if (intent && (intent.targetScope === "self" || intent.method === "dialog")) {
+      if (intent && (intent[4] === "self" || intent[1] === "dialog")) {
         if (spent.attemptId || spent.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", { ...spent });
         allowed();
         return;
       }
       if (spent.allowed && intent && isHttpFormIntent(intent)) { allowed(); return; }
       if (spent.attemptId || spent.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", { ...spent });
-    } else if (intent?.method === "dialog" || consumeRedirectAllowance(intent?.actionUrl) !== "none") {
+    } else if (intent?.[1] === "dialog" || consumeRedirectAllowance(intent?.[0]) !== "none") {
       allowed();
       return;
     }
     registerBlockedAction({
       kind,
-      ...(intent ? { url: intent.actionUrl, target: intent.target } : {}),
+      ...(intent ? { url: intent[0], target: intent[3] } : {}),
       ...(binding ? { formBinding: binding } : {}),
       // The closure is not a frozen destination. Re-resolve DOM identity and
       // ALL effective attributes immediately before every approved replay.

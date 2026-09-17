@@ -40,6 +40,9 @@ No controls, field values, passwords, or request bodies enter this tuple.
    mismatch. A commit must be `form_submit`; a URL-equivalent `link` or Location
    navigation never spends a form grant. A server redirect is accepted only after
    the matching start; client redirects/history do not transfer it.
+   The persisted worker capability retains only the action URL, GET-vs-POST query
+   mode, top-target bit, sender identity, phase and timing; the full effective tuple
+   remains confined to the DOM-bound MAIN/isolated gates.
 6. Acquisition expires after 1.5 seconds. A timely, matching start has a bounded
    10-second response window so a slow server is not confused with a stale click.
    Neither duplicate start nor commit extends it. Session-backed phase and
