@@ -194,6 +194,23 @@ describe("overlay cleanup", () => {
     expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
   });
 
+  it("still restores the hidden subset through undo when the budget is exhausted", () => {
+    const hidden: HTMLElement[] = [];
+    let last: ReturnType<typeof reconcileDetectedOverlay> = null;
+    for (let index = 0; index <= MAX_ACTIVE_OVERLAY_SUPPRESSIONS; index += 1) {
+      const overlay = makeOverlay();
+      last = reconcileDetectedOverlay(mutationAlert(overlay), true);
+      if (index < MAX_ACTIVE_OVERLAY_SUPPRESSIONS) hidden.push(overlay);
+    }
+
+    expect(last?.action).toBe("budget_exhausted");
+    expect(last?.undo()).toBe(true);
+    for (const overlay of hidden) {
+      expect(overlay.style.display).toBe("flex");
+    }
+    expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
+  });
+
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {
     const overlay = makeOverlay();
     const child = document.createElement("button");
