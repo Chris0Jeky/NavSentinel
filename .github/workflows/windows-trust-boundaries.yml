@@ -112,6 +112,39 @@ jobs:
           tests/state-authority-windows-bootstrap.test.ts
           --maxWorkers=2
 
+      - name: Prove deterministic Windows package bytes
+        shell: pwsh
+        run: |
+          npm run build
+          npm run package:ext
+          $archives = @(Get-ChildItem -LiteralPath artifacts -Filter '*.zip' -File)
+          if ($archives.Count -ne 1) {
+            throw "Expected exactly one extension archive, found $($archives.Count)."
+          }
+          $archive = $archives[0]
+          $firstHash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash
+
+          $changedTime = [DateTime]::Parse(
+            '2040-12-31T23:59:58Z',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AdjustToUniversal
+          )
+          Get-ChildItem -LiteralPath extension/dist -Recurse -File | ForEach-Object {
+            $_.LastWriteTimeUtc = $changedTime
+          }
+
+          npm run package:ext
+          $secondHash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash
+          if ($firstHash -ne $secondHash) {
+            throw "Package hash changed after source mtime changes: $firstHash -> $secondHash"
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP 'navsentinel-package-extract'
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extractPath -Force
+          if (-not (Test-Path -LiteralPath (Join-Path $extractPath 'manifest.json') -PathType Leaf)) {
+            throw 'Windows could not extract manifest.json at the archive root.'
+          }
+
       - name: Run the external PowerShell bootstrap preflight
         shell: pwsh
         run: ./scripts/launch-state-authority-campaign.ps1 -PreflightOnly
