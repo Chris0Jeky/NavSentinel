@@ -11,12 +11,14 @@ on:
       - "scripts/content-loader-contract.mjs"
       - "scripts/deterministic-zip.mjs"
       - "scripts/package.mjs"
+      - "scripts/safe-release-path.mjs"
       - "scripts/release-input-integrity.*"
       - "scripts/release.mjs"
       - "scripts/run-state-authority-campaign.mjs"
       - "scripts/sensitive-environment.mjs"
       - "scripts/sensitive-environment.*"
       - "tests/deterministic-release-archive.test.ts"
+      - "tests/safe-release-path.test.ts"
       - "tests/e2e/extension_build_provenance.ts"
       - "tests/e2e/extension_test_utils.ts"
       - "tests/e2e/local_fixture_target_bootstrap.ts"
@@ -46,12 +48,14 @@ on:
       - "scripts/content-loader-contract.mjs"
       - "scripts/deterministic-zip.mjs"
       - "scripts/package.mjs"
+      - "scripts/safe-release-path.mjs"
       - "scripts/release-input-integrity.*"
       - "scripts/release.mjs"
       - "scripts/run-state-authority-campaign.mjs"
       - "scripts/sensitive-environment.mjs"
       - "scripts/sensitive-environment.*"
       - "tests/deterministic-release-archive.test.ts"
+      - "tests/safe-release-path.test.ts"
       - "tests/e2e/extension_build_provenance.ts"
       - "tests/e2e/extension_test_utils.ts"
       - "tests/e2e/local_fixture_target_bootstrap.ts"
@@ -105,6 +109,7 @@ jobs:
         run: >-
           npx vitest run
           tests/deterministic-release-archive.test.ts
+          tests/safe-release-path.test.ts
           tests/release-input-integrity.test.ts
           tests/sensitive-environment-boundary.test.ts
           tests/state-authority-bootstrap-replay.test.ts
