@@ -55,3 +55,18 @@ describe("GitHub Actions supply-chain boundary", () => {
     expect(mutable, `Mutable workflow dependencies:\n${mutable.join("\n")}`).toEqual([]);
   });
 });
+
+describe("Observatory recorded campaign integration trigger", () => {
+  it("runs on bounded qualifying main pushes rather than a retired feature branch", () => {
+    const source = fs.readFileSync(
+      path.join(workflowDirectory, "observatory-campaign.yml"),
+      "utf8",
+    );
+    const pushBlock = source.match(/\n  push:\n([\s\S]*?)\n  workflow_dispatch:/u)?.[1] ?? "";
+
+    expect(pushBlock).toContain("branches: [main]");
+    expect(pushBlock).toContain("paths:");
+    expect(pushBlock).toContain("'experiments/evidence-observatory/**'");
+    expect(source).not.toContain("feat/observatory-campaign-20260913");
+  });
+});
