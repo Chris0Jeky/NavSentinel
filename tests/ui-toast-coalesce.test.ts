@@ -122,6 +122,20 @@ describe("ui_toast burst coalescing", () => {
     expect(p.getAttribute("aria-label")).toContain("blocked");
   });
 
+  it("keeps the count pill targetable while the host passes through page input", () => {
+    block();
+    block();
+    block();
+
+    const host = document.documentElement.querySelector<HTMLElement>(
+      "#__navsentinel_toast_host",
+    );
+    const css = getRoot()?.querySelector("style")?.textContent ?? "";
+
+    expect(host?.style.pointerEvents).toBe("none");
+    expect(css).toContain(".pill{pointer-events:auto;");
+  });
+
   it("expands to a full card with the earlier-count on click", () => {
     block();
     block();
