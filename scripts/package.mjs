@@ -13,6 +13,7 @@ import {
   collectDeterministicZipEntries,
   createDeterministicZip,
 } from "./deterministic-zip.mjs";
+import { assertRepositoryPath } from "./safe-release-path.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,39 +31,18 @@ function fail(message) {
   process.exit(1);
 }
 
-function requireRegularFile(filePath, label) {
-  let stat;
+function requireRepositoryPath(filePath, expectedType, label) {
   try {
-    stat = fs.lstatSync(filePath);
-  } catch {
-    fail(`${label} not found.`);
-  }
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    fail(`${label} must be a regular file, not a link or special file.`);
+    return assertRepositoryPath(root, filePath, { expectedType, label });
+  } catch (error) {
+    fail(`${label} is not a safe repository ${expectedType}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function requireDirectory(filePath, label) {
-  let stat;
-  try {
-    stat = fs.lstatSync(filePath);
-  } catch {
-    fail(`${label} not found.`);
-  }
-  if (stat.isSymbolicLink() || !stat.isDirectory()) {
-    fail(`${label} must be a real directory, not a link or special file.`);
-  }
-}
-
-function isInside(parent, candidate) {
-  const relative = path.relative(parent, candidate);
-  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`));
-}
-
-requireRegularFile(packagePath, "package.json");
-requireDirectory(distDir, "Build output");
-requireRegularFile(manifestPath, "Build manifest.json");
-requireRegularFile(licensePath, "Root LICENSE");
+requireRepositoryPath(packagePath, "file", "package.json");
+requireRepositoryPath(distDir, "directory", "Build output");
+requireRepositoryPath(manifestPath, "file", "Build manifest.json");
+requireRepositoryPath(licensePath, "file", "Root LICENSE");
 
 // Reject links, special files and cross-platform path collisions before any
 // build-tree file is interpreted or replaced. The final writer repeats this
@@ -89,24 +69,18 @@ console.log(`[package:ext] Verified release profile: ${builtProfile.id}`);
 // Binary distributions must carry the GPL terms alongside the extension files.
 // Use lstat rather than existsSync so a broken link cannot redirect this write.
 try {
-  const stat = fs.lstatSync(distLicensePath);
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    fail("Build LICENSE must be a regular file before replacement.");
-  }
+  fs.lstatSync(distLicensePath);
+  requireRepositoryPath(distLicensePath, "file", "Build LICENSE");
 } catch (error) {
   if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
     throw error;
   }
 }
 fs.writeFileSync(distLicensePath, licenseText.replace(/\r\n?/g, "\n"), "utf8");
+requireRepositoryPath(distLicensePath, "file", "Build LICENSE");
 
 fs.mkdirSync(artifactsDir, { recursive: true });
-requireDirectory(artifactsDir, "Artifacts directory");
-const rootRealPath = fs.realpathSync.native(root);
-const artifactsRealPath = fs.realpathSync.native(artifactsDir);
-if (!isInside(rootRealPath, artifactsRealPath)) {
-  fail("Artifacts directory resolves outside the repository.");
-}
+requireRepositoryPath(artifactsDir, "directory", "Artifacts directory");
 
 const pkg = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 const version = String(pkg.version ?? "0.0.0");
@@ -118,6 +92,10 @@ const baseName = String(pkg.name ?? "extension")
 const archivePath = path.join(artifactsDir, `${baseName}-v${version}.zip`);
 
 try {
+  // Re-check the logical/physical ancestry immediately before the final walk so
+  // a replaced `extension` or `dist` directory cannot redirect packaging.
+  requireRepositoryPath(distDir, "directory", "Build output");
+  requireRepositoryPath(artifactsDir, "directory", "Artifacts directory");
   const result = createDeterministicZip(distDir, archivePath);
   console.log(
     `[package:ext] Created ${result.archivePath} (${result.entries.length} files, ${result.byteLength} bytes)`,
