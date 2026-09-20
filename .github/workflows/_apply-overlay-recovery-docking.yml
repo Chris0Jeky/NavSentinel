@@ -30,7 +30,11 @@ jobs:
           cache: npm
 
       - name: Apply retained-recovery docking
-        run: python scripts/_apply_overlay_recovery_docking.py
+        shell: bash
+        run: |
+          python scripts/_normalize_overlay_patch.py
+          python scripts/_apply_overlay_recovery_docking.py
+          rm scripts/_normalize_overlay_patch.py
 
       - name: Check patch shape
         run: git diff --check
