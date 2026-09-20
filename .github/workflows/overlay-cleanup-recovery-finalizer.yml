@@ -121,42 +121,25 @@ jobs:
               "    overlayCleanupRecovery.clear();\n    overlayCleanupBudgetWarned = false;",
               "feature shutdown cleanup",
           )
+          budget_marker = '  if (cleanup.action === "budget_exhausted") {\n'
           capture = replace_once(
               capture,
-              '''  if (cleanup.action === "budget_exhausted") {
-            if (!overlayCleanupBudgetWarned) {
-          ''',
-              '''  if (cleanup.action === "budget_exhausted") {
-            overlayCleanupRecovery.present(cleanup.undo);
-            if (!overlayCleanupBudgetWarned) {
-          ''',
+              budget_marker,
+              budget_marker + "    overlayCleanupRecovery.present(cleanup.undo);\n",
               "budget recovery presentation",
           )
-          capture = replace_once(
-              capture,
-              '''  if (cleanup.undo !== lastOverlayCleanupToastUndo) {
-            lastOverlayCleanupToastUndo = cleanup.undo;
-            sendIconUpdate("yellow");
-            const undo = () => {
-              const restored = cleanup.undo();
-              if (lastOverlayCleanupToastUndo === cleanup.undo) {
-                lastOverlayCleanupToastUndo = null;
-              }
-              appendEventSafely({
-                kind: "mutation_alert",
-                site: siteKeyFromLocation(),
-                url: location.href,
-                reasons: ["overlay_cleanup_undo"],
-                extra: { overlayCleanupOutcome: "restored", restored },
-              });
-              return restored;
-            };
-            showOverlayCleanupToast(undo);
-          }
-          ''',
-              '''  overlayCleanupRecovery.present(cleanup.undo);
-          ''',
-              "normal cleanup recovery presentation",
+          normal_start = '  if (cleanup.undo !== lastOverlayCleanupToastUndo) {'
+          normal_end = '\n  return true;\n}\n\nfunction handleMutationAlert'
+          start = capture.find(normal_start)
+          end = capture.find(normal_end, start)
+          if start < 0 or end < 0:
+              raise SystemExit(
+                  f"normal cleanup recovery presentation: start={start}, end={end}"
+              )
+          capture = (
+              capture[:start]
+              + "  overlayCleanupRecovery.present(cleanup.undo);"
+              + capture[end:]
           )
           if "lastOverlayCleanupToastUndo" in capture:
               raise SystemExit("retired recovery state still referenced")
