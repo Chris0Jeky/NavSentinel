@@ -4,10 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 // @ts-expect-error Release helpers are plain ESM and intentionally have no declaration file.
-import {
-  createDeterministicZip,
-  validatePortableArchivePaths,
-} from "../scripts/deterministic-zip.mjs";
+import { createDeterministicZip, validatePortableArchivePaths } from "../scripts/deterministic-zip.mjs";
 
 const temporaryDirectories: string[] = [];
 
