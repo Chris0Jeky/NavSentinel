@@ -42,6 +42,22 @@ jobs:
           node-version: 20
           cache: npm
 
+      # Temporary draft-PR step: materialize npm's canonical lock update in the
+      # hosted environment because this agent has connector-only repository access.
+      # The resulting lock is consumed into the next commit and this step removed.
+      - name: Regenerate dependency lock for audit
+        if: github.head_ref == 'audit/happy-dom-native-retention'
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Upload regenerated dependency lock
+        if: github.head_ref == 'audit/happy-dom-native-retention'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: happy-dom-lock-${{ github.run_id }}
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Install dependencies
         run: npm ci
 
