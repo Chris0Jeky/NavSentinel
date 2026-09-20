@@ -30,7 +30,11 @@ jobs:
           cache: npm
 
       - name: Apply receiver-owned shadow correlation
-        run: python scripts/_apply_shadow_guard_arrival.py
+        shell: bash
+        run: |
+          python scripts/_normalize_shadow_patch.py
+          python scripts/_apply_shadow_guard_arrival.py
+          rm scripts/_normalize_shadow_patch.py
 
       - name: Check patch shape
         run: git diff --check
