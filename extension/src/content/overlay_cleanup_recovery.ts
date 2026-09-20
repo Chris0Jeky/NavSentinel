@@ -20,7 +20,7 @@ export function createOverlayCleanupRecoveryController(
     if (activeSuppression === suppression) return;
     activeSuppression = suppression;
 
-    options.present(() => {
+    const undo: OverlaySuppression = () => {
       let restored = false;
       try {
         restored = suppression();
@@ -31,7 +31,16 @@ export function createOverlayCleanupRecoveryController(
         if (activeSuppression === suppression) activeSuppression = null;
         options.onRestore(restored);
       }
-    });
+    };
+
+    try {
+      options.present(undo);
+    } catch (error) {
+      // A renderer failure created no usable recovery surface, so retaining the
+      // identity would suppress every later retry for the same hidden group.
+      if (activeSuppression === suppression) activeSuppression = null;
+      throw error;
+    }
   };
 
   return {
