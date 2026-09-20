@@ -9,7 +9,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectBuiltReleaseProfile } from "./check-release-profile.mjs";
-import { createDeterministicZip } from "./deterministic-zip.mjs";
+import {
+  collectDeterministicZipEntries,
+  createDeterministicZip,
+} from "./deterministic-zip.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +64,15 @@ requireDirectory(distDir, "Build output");
 requireRegularFile(manifestPath, "Build manifest.json");
 requireRegularFile(licensePath, "Root LICENSE");
 
+// Reject links, special files and cross-platform path collisions before any
+// build-tree file is interpreted or replaced. The final writer repeats this
+// walk after LICENSE is materialized, closing ordinary mutation windows.
+try {
+  collectDeterministicZipEntries(distDir);
+} catch (error) {
+  fail(`Unsafe build output: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 const licenseText = fs.readFileSync(licensePath, "utf8");
 if (!licenseText.includes("Version 3, 29 June 2007")) {
   fail("Root LICENSE does not contain the expected GPL terms.");
@@ -75,12 +87,15 @@ try {
 console.log(`[package:ext] Verified release profile: ${builtProfile.id}`);
 
 // Binary distributions must carry the GPL terms alongside the extension files.
-// Refuse an existing link before writing so a hostile build tree cannot redirect
-// this write outside extension/dist.
-if (fs.existsSync(distLicensePath)) {
+// Use lstat rather than existsSync so a broken link cannot redirect this write.
+try {
   const stat = fs.lstatSync(distLicensePath);
   if (stat.isSymbolicLink() || !stat.isFile()) {
     fail("Build LICENSE must be a regular file before replacement.");
+  }
+} catch (error) {
+  if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+    throw error;
   }
 }
 fs.writeFileSync(distLicensePath, licenseText.replace(/\r\n?/g, "\n"), "utf8");
