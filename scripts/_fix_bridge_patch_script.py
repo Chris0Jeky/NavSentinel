@@ -40,8 +40,7 @@ replace_once(
 text = text[:start] + capture_replacement + text[end:]
 
 # Preserve the describe-block indentation in the legacy PushState contract.
-test_needle = 'dedent("""' + '\\' + '\n    it("returns false after stale period (>10s)"'
-test_inner = text.index(test_needle)
+test_inner = text.index('it("returns false after stale period (>10s)"')
 test_start = text.rfind("replace_once(", 0, test_inner)
 test_end = text.index('Path("tests/main-world-clock.test.ts").write_text(', test_inner)
 test_replacement = '''replace_once(
