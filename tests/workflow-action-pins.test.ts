@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const workflowDirectory = path.resolve(import.meta.dirname, "../.github/workflows");
 const immutableRevision = /^[0-9a-f]{40}$/i;
+const immutableContainer = /^docker:\/\/.+@sha256:[0-9a-f]{64}$/i;
 
 interface WorkflowUse {
   file: string;
@@ -31,11 +32,18 @@ function workflowUses(): WorkflowUse[] {
 }
 
 describe("GitHub Actions supply-chain boundary", () => {
-  it("pins every remote action to an immutable full commit SHA", () => {
+  it("pins every remote action or container to immutable content", () => {
     const mutable: string[] = [];
 
     for (const use of workflowUses()) {
-      if (use.reference.startsWith("./") || use.reference.startsWith("docker://")) continue;
+      if (use.reference.startsWith("./")) continue;
+      if (use.reference.startsWith("docker://")) {
+        if (!immutableContainer.test(use.reference)) {
+          mutable.push(`${use.file}:${use.line} ${use.reference}`);
+        }
+        continue;
+      }
+
       const separator = use.reference.lastIndexOf("@");
       const action = separator < 0 ? use.reference : use.reference.slice(0, separator);
       const revision = separator < 0 ? "" : use.reference.slice(separator + 1);
@@ -44,6 +52,6 @@ describe("GitHub Actions supply-chain boundary", () => {
       }
     }
 
-    expect(mutable, `Mutable GitHub Action references:\n${mutable.join("\n")}`).toEqual([]);
+    expect(mutable, `Mutable workflow dependencies:\n${mutable.join("\n")}`).toEqual([]);
   });
 });
