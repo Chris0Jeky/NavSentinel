@@ -67,4 +67,22 @@ describe("overlay cleanup recovery authority", () => {
 
     expect(present).toHaveBeenCalledTimes(2);
   });
+
+  it("releases authority when the recovery surface cannot be presented", () => {
+    const present = vi
+      .fn<(undo: OverlaySuppression) => void>()
+      .mockImplementationOnce(() => {
+        throw new Error("surface unavailable");
+      });
+    const controller = createOverlayCleanupRecoveryController({
+      present,
+      onRestore: vi.fn(),
+    });
+    const suppression = vi.fn(() => true);
+
+    expect(() => controller.present(suppression)).toThrow("surface unavailable");
+    controller.present(suppression);
+
+    expect(present).toHaveBeenCalledTimes(2);
+  });
 });
