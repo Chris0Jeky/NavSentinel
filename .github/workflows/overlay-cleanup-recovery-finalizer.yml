@@ -1,0 +1,188 @@
+name: Overlay cleanup recovery finalizer
+
+on:
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.head_ref == 'fix/overlay-cleanup-recovery-retention-20260920'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply and verify recovery wiring
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          ui_path = Path("extension/src/content/ui_toast.ts")
+          ui = ui_path.read_text()
+          ui = replace_once(
+              ui,
+              "  if (opts.briefRecovery) {\n    outsidePointerDown = (event: PointerEvent) => {",
+              "  if (opts.briefRecovery && opts.timeoutMs !== 0) {\n    outsidePointerDown = (event: PointerEvent) => {",
+              "brief recovery passive-dismiss guard",
+          )
+          ui = replace_once(
+              ui,
+              "    persistent: true,\n    briefRecovery: true,\n  });",
+              "    persistent: true,\n    briefRecovery: true,\n    timeoutMs: 0,\n  });",
+              "retained cleanup toast",
+          )
+          ui_path.write_text(ui)
+
+          capture_path = Path("extension/src/content/capture_isolated.ts")
+          capture = capture_path.read_text()
+          capture = replace_once(
+              capture,
+              '''import {
+            reconcileDetectedOverlay,
+            restoreActiveOverlaySuppressions,
+            suppressHighSeverityOverlayInPath,
+            type OverlaySuppression,
+          } from "./overlay_cleanup";
+          ''',
+              '''import {
+            reconcileDetectedOverlay,
+            restoreActiveOverlaySuppressions,
+            suppressHighSeverityOverlayInPath,
+            type OverlaySuppression,
+          } from "./overlay_cleanup";
+          import { createOverlayCleanupRecoveryController } from "./overlay_cleanup_recovery";
+          ''',
+              "recovery controller import",
+          )
+          capture = replace_once(
+              capture,
+              '''let mutationMonitorState = 0;
+          let lastOverlayCleanupToastUndo: OverlaySuppression | null = null;
+          let overlayCleanupBudgetWarned = false;
+
+          function overlayToastControls(suppression: OverlaySuppression | null, coalesce = false) {
+            return {
+              actions: suppression ? [{ label: "Undo", onClick: suppression }] : undefined,
+              coalesce: coalesce && !suppression,
+            };
+          }
+          ''',
+              '''let mutationMonitorState = 0;
+          let overlayCleanupBudgetWarned = false;
+          const overlayCleanupRecovery = createOverlayCleanupRecoveryController({
+            present: (undo) => {
+              sendIconUpdate("yellow");
+              showOverlayCleanupToast(undo);
+            },
+            onRestore: (restored) => {
+              overlayCleanupBudgetWarned = false;
+              appendEventSafely({
+                kind: "mutation_alert",
+                site: siteKeyFromLocation(),
+                url: location.href,
+                reasons: ["overlay_cleanup_undo"],
+                extra: { overlayCleanupOutcome: "restored", restored },
+              });
+            },
+          });
+
+          function overlayToastControls(
+            suppression: OverlaySuppression | null,
+            coalesce = false,
+          ) {
+            return overlayCleanupRecovery.toastControls(suppression, coalesce);
+          }
+          ''',
+              "recovery authority state",
+          )
+          capture = replace_once(
+              capture,
+              "    lastOverlayCleanupToastUndo = null;\n    overlayCleanupBudgetWarned = false;",
+              "    overlayCleanupRecovery.clear();\n    overlayCleanupBudgetWarned = false;",
+              "feature shutdown cleanup",
+          )
+          capture = replace_once(
+              capture,
+              '''  if (cleanup.action === "budget_exhausted") {
+            if (!overlayCleanupBudgetWarned) {
+          ''',
+              '''  if (cleanup.action === "budget_exhausted") {
+            overlayCleanupRecovery.present(cleanup.undo);
+            if (!overlayCleanupBudgetWarned) {
+          ''',
+              "budget recovery presentation",
+          )
+          capture = replace_once(
+              capture,
+              '''  if (cleanup.undo !== lastOverlayCleanupToastUndo) {
+            lastOverlayCleanupToastUndo = cleanup.undo;
+            sendIconUpdate("yellow");
+            const undo = () => {
+              const restored = cleanup.undo();
+              if (lastOverlayCleanupToastUndo === cleanup.undo) {
+                lastOverlayCleanupToastUndo = null;
+              }
+              appendEventSafely({
+                kind: "mutation_alert",
+                site: siteKeyFromLocation(),
+                url: location.href,
+                reasons: ["overlay_cleanup_undo"],
+                extra: { overlayCleanupOutcome: "restored", restored },
+              });
+              return restored;
+            };
+            showOverlayCleanupToast(undo);
+          }
+          ''',
+              '''  overlayCleanupRecovery.present(cleanup.undo);
+          ''',
+              "normal cleanup recovery presentation",
+          )
+          if "lastOverlayCleanupToastUndo" in capture:
+              raise SystemExit("retired recovery state still referenced")
+          capture_path.write_text(capture)
+          PY
+
+          npm ci
+          npm run lint
+          npm run typecheck
+          npx vitest run \
+            tests/overlay-cleanup-recovery.test.ts \
+            tests/overlay-cleanup-recovery-ui.test.ts \
+            tests/overlay-cleanup.test.ts \
+            tests/ui-toast.test.ts
+          npm run build
+          npm run check:content-loader
+          npm run check:perf-budget
+          git diff --check
+
+          git config user.name "NavSentinel Audit"
+          git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
+          git rm .github/workflows/overlay-cleanup-recovery-finalizer.yml
+          git add extension/src/content/capture_isolated.ts \
+            extension/src/content/ui_toast.ts \
+            extension/src/content/overlay_cleanup_recovery.ts \
+            tests/overlay-cleanup-recovery.test.ts \
+            tests/overlay-cleanup-recovery-ui.test.ts
+          git commit -m "fix: retain overlay cleanup recovery authority"
+          git push origin HEAD:${GITHUB_HEAD_REF}
