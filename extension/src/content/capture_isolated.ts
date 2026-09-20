@@ -53,7 +53,8 @@ import {
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
-import { recordClipboardWrite, scanForClickFix } from "./clickfix_detector";
+import { scanForClickFix } from "./clickfix_detector";
+import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -593,11 +594,14 @@ function handleBridgeMessage(message: unknown): void {
     return;
   }
 
+  const receivedAtMs = Date.now();
+
   if (data.type === "ns-clipboard-write") {
-    const ts = typeof data.ts === "number" ? data.ts : Date.now();
-    const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
-    const cmdLike = typeof data.looksLikeCommand === "boolean" ? data.looksLikeCommand : false;
-    recordClipboardWrite({ ts, contentLength, looksLikeCommand: cmdLike });
+    recordClipboardBridgeWrite({
+      ts: data.ts,
+      contentLength: data.contentLength,
+      looksLikeCommand: data.looksLikeCommand,
+    }, receivedAtMs);
     if (settings.defaultMode !== "off") {
       handleClickFixScan();
     }
@@ -606,7 +610,7 @@ function handleBridgeMessage(message: unknown): void {
 
   // --- DoubleClickjacking bridge messages from main_guard ---
   {
-    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data);
+    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data, receivedAtMs);
     if (dblResult.handled) {
       // Forward to the SW so it can notify the opener tab.
       // This capture_isolated is running in the CHILD window; the opener tab
@@ -623,7 +627,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   // --- PushState abuse bridge messages from main_guard ---
-  if (handlePushStateBridgeMessage(data.type ?? "", data)) {
+  if (handlePushStateBridgeMessage(data.type ?? "", data, receivedAtMs)) {
     if (settings.defaultMode !== "off") {
       appendEventSafely({
         kind: "pushstate_abuse",

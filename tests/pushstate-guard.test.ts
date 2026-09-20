@@ -47,13 +47,13 @@ describe("pushstate_guard", () => {
       expect(isPushStateAbuseActive()).toBe(true);
     });
 
-    it("returns false after stale period (>10s)", () => {
+    it("does not let a stale producer timestamp expire a fresh receipt", () => {
       const oldTs = Date.now() - 11_000;
       handlePushStateBridgeMessage("ns-pushstate-suspicious", {
         ts: oldTs,
         url: "/accounts.chase.com/login",
       });
-      expect(isPushStateAbuseActive()).toBe(false);
+      expect(isPushStateAbuseActive()).toBe(true);
     });
 
     it("returns false after reset", () => {
