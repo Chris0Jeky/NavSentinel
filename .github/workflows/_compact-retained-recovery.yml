@@ -32,9 +32,10 @@ jobs:
       - name: Apply size compaction
         shell: bash
         run: |
+          python scripts/_fix_compaction_duplicate.py
           python scripts/_preserve_compaction_indentation.py
           python scripts/_compact_retained_recovery.py
-          rm scripts/_preserve_compaction_indentation.py
+          rm scripts/_fix_compaction_duplicate.py scripts/_preserve_compaction_indentation.py
 
       - name: Check patch shape
         run: git diff --check
