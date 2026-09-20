@@ -104,27 +104,6 @@ jobs:
               raise SystemExit('unexpected Vitest setup shape')
           vitest_path.write_text(text)
 
-          eslint_path = Path('eslint.config.js')
-          text = eslint_path.read_text()
-          block = '''  {
-            files: [
-              "tests/helpers/happy-dom-mutation-observer-retention.mjs",
-              "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
-            ],
-            languageOptions: {
-              parserOptions: {
-                project: false,
-                projectService: false,
-              },
-            },
-          },
-          '''
-          if block in text:
-              text = text.replace(block, '', 1)
-          elif 'happy-dom-mutation-observer-retention.mjs' in text:
-              raise SystemExit('unexpected ESLint shim override shape')
-          eslint_path.write_text(text)
-
           for path in [
               Path('tests/helpers/happy-dom-mutation-observer-retention.mjs'),
               Path('tests/helpers/happy-dom-mutation-observer-retention-setup.mjs'),
@@ -140,7 +119,7 @@ jobs:
 
           git config user.name "NavSentinel Audit"
           git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
-          git add package-lock.json tests/clickfix-detector.test.ts vitest.config.ts eslint.config.js
+          git add package-lock.json tests/clickfix-detector.test.ts vitest.config.ts
           git add -u tests/helpers
           if ! git diff --cached --quiet; then
             git commit -m "test: use native Happy DOM observer retention"
