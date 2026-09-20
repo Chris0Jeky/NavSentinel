@@ -85,6 +85,42 @@ describe("Protection Center wired UI", () => {
     expect(localStorage.getItem("ns-evidence-theme")).toBe("paper");
     expect(localStorage.length).toBe(1);
   });
+  it("honors the scored-only filter", async () => {
+    mocks.getEventLog.mockResolvedValue([
+      { id: "private-scored", ts: 1_700_000_000_000, kind: "nav_click_block", site: "source.test", destHost: "target.test", reasons: ["no_accessible_name"], score: 40 },
+      { id: "private-plain", ts: 1_700_000_000_001, kind: "nav_click_block", site: "source.test", destHost: "target.test", reasons: ["no_accessible_name"] },
+    ]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("total").textContent).toBe("2"));
+    expect(document.querySelectorAll("details.event")).toHaveLength(2);
+    get<HTMLInputElement>("scoredOnly").checked = true;
+    get("scoredOnly").dispatchEvent(new Event("input"));
+    expect(document.querySelectorAll("details.event")).toHaveLength(1);
+    expect(get("events").textContent).toContain("40");
+  });
+  it("accepts an 8 MiB export and refuses one extra byte", async () => {
+    const OriginalBlob = Blob;
+    const sizes = [8 * 1024 * 1024, 8 * 1024 * 1024 + 1];
+    vi.stubGlobal("Blob", class MockBlob {
+      readonly type: string;
+      private readonly textValue: string;
+      readonly size: number;
+      constructor(parts: BlobPart[] = [], options: BlobPropertyBag = {}) {
+        this.textValue = String(parts[0] ?? "");
+        this.type = options.type ?? "";
+        this.size = sizes.shift() ?? new OriginalBlob(parts, options).size;
+      }
+      text() { return Promise.resolve(this.textValue); }
+    });
+    get("export").click();
+    expect(get<HTMLDialogElement>("exportDialog").open).toBe(true);
+    expect(get<HTMLTextAreaElement>("exportPreview").value.length).toBeGreaterThan(0);
+    get("cancelExport").click();
+    await vi.waitFor(() => expect(get<HTMLTextAreaElement>("exportPreview").value).toBe(""));
+    get("export").click();
+    expect(get("status").textContent).toContain("exceeds 8 MiB");
+    expect(get<HTMLDialogElement>("exportDialog").open).toBe(false);
+  });
   it("has labelled native filters, semantic disclosure controls and live status", () => {
     for (const id of ["search", "category", "theme"]) expect(document.querySelector(`label[for="${id}"]`)).not.toBeNull();
     expect(get("scoredOnly").closest("label")).not.toBeNull();
