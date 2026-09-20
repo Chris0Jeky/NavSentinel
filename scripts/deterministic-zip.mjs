@@ -104,7 +104,12 @@ function readRegularFile(rootRealPath, absolutePath, archivePath) {
     throw new Error(`PACKAGE_PATH_ESCAPE: ${archivePath}`);
   }
 
-  const noFollow = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
+  // O_NOFOLLOW closes the lstat/open race on POSIX. Windows does not implement
+  // this flag, so the lstat + realpath + fstat checks remain the bounded fallback.
+  const noFollow =
+    process.platform !== "win32" && typeof fs.constants.O_NOFOLLOW === "number"
+      ? fs.constants.O_NOFOLLOW
+      : 0;
   let descriptor;
   try {
     descriptor = fs.openSync(absolutePath, fs.constants.O_RDONLY | noFollow);
