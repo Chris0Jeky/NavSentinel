@@ -86,6 +86,7 @@ import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
 } from "./pushstate_guard";
+import { correlatesShadowGuardPrompt } from "./shadow_guard_correlation";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
@@ -110,7 +111,6 @@ const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
 const MAX_BRIDGE_RETRY_MS = 1000;
 const MAX_BRIDGE_INIT_MS = 10000;
-const SHADOW_GUARD_CORRELATION_MS = 500;
 const SHADOW_GUARD_ARRIVAL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
@@ -459,6 +459,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.session !== bridgeSession) return;
+  const receivedAtMs = Date.now();
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();
@@ -509,13 +510,17 @@ function handleBridgeMessage(message: unknown): void {
 
     const localPrompt = recentLocalBlankPrompt;
     if (
-      data.kind === "shadow_anchor" &&
       localPrompt &&
-      typeof data.ts === "number" &&
-      Date.now() - localPrompt.shownAt <= SHADOW_GUARD_ARRIVAL_MS &&
-      Math.abs(data.ts - localPrompt.shownAt) <= SHADOW_GUARD_CORRELATION_MS &&
-      localPrompt.params.url === url &&
-      (localPrompt.params.target ?? "_blank") === (data.target || "_blank")
+      correlatesShadowGuardPrompt({
+        kind: data.kind,
+        receivedAtMs,
+        promptShownAtMs: localPrompt.shownAt,
+        maxArrivalMs: SHADOW_GUARD_ARRIVAL_MS,
+        messageUrl: url,
+        promptUrl: localPrompt.params.url,
+        messageTarget: data.target,
+        promptTarget: localPrompt.params.target,
+      })
     ) {
       if (data.id !== undefined) localPrompt.params.actionId = data.id;
       recentLocalBlankPrompt = null;
@@ -593,8 +598,6 @@ function handleBridgeMessage(message: unknown): void {
     }
     return;
   }
-
-  const receivedAtMs = Date.now();
 
   if (data.type === "ns-clipboard-write") {
     recordClipboardBridgeWrite({
