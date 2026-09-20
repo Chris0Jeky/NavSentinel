@@ -30,7 +30,11 @@ jobs:
           cache: npm
 
       - name: Apply size compaction
-        run: python scripts/_compact_retained_recovery.py
+        shell: bash
+        run: |
+          python scripts/_preserve_compaction_indentation.py
+          python scripts/_compact_retained_recovery.py
+          rm scripts/_preserve_compaction_indentation.py
 
       - name: Check patch shape
         run: git diff --check
