@@ -1,24 +1,40 @@
-name: Happy DOM audit finalizer
+name: CI
 
 on:
+  push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
+    # Deliberately unfiltered. `pull_request.branches` filters on the BASE branch,
+    # so `[main]` silently gave stacked PRs (base != main) no CI at all -- not red,
+    # not pending, never run -- while `mergeStateStatus` still reported CLEAN, so
+    # they looked mergeable. This repo's own documented workflow uses stacked
+    # branches (docs/agentic/GIT_WORKFLOW.md "Stacked branches and CI"), so the gap
+    # applied exactly to the larger dependent changes that need CI most. It hid a real
+    # broken build in PR #535. See #537. Do not re-add a branches filter here.
+    #
+    # Deliberately no `types:` either. Retargeting a stacked child fires `edited`,
+    # not `synchronize`, so a retarget produces no run -- but adding `edited` would
+    # also rebuild on every title/body edit. The cheaper answer is to merge the new
+    # base into the child after retargeting, which changes the head SHA, fires
+    # `synchronize`, and tests the tree that will actually merge. See the
+    # "Stacked branches and CI" section of docs/agentic/GIT_WORKFLOW.md.
     branches: ["**"]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  finalize:
-    if: github.head_ref == 'audit/happy-dom-native-retention'
+  build-and-unit:
+    name: Build / Unit
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Keep dependency installation, tests, and packaging bounded if a tool
+    # process stops responding.
+    timeout-minutes: 30
     steps:
-      - name: Checkout PR head
+      - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -26,102 +42,150 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Materialize and verify final audit changes
-        shell: bash
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify versions
+        run: npm run verify:versions
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Check top-sites generated data
+        run: npm run check:topsites
+
+      - name: Rebuild deterministic research reputation fixture
+        run: npm run build:bloom:test
+
+      - name: Check research reputation fixture
+        run: npm run check:bloom-size
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Check final content-loader identity
+        run: npm run check:content-loader
+
+      - name: Check performance budget
+        run: npm run check:perf-budget
+
+      - name: Package extension
+        run: npm run package:ext
+
+      - name: Upload packaged extension
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: navsentinel-extension
+          path: artifacts/*.zip
+          if-no-files-found: error
+
+      - name: Build non-release reputation research profile
+        run: npm run build:research-reputation
+
+      - name: Check research content-loader identity
+        run: npm run check:content-loader
+
+      - name: Check research profile performance budget
+        run: npm run check:perf-budget
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    needs: build-and-unit
+    # Bound a hung browser/test process while leaving the evidence-upload step
+    # time to run after the test-step timeout fires.
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify versions
+        run: npm run verify:versions
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Check final content-loader identity
+        run: npm run check:content-loader
+
+      - name: Check performance budget
+        run: npm run check:perf-budget
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        timeout-minutes: 30
+        run: xvfb-run -a npm run test:e2e
+
+      - name: Upload E2E report and failure evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: navsentinel-e2e-evidence
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-and-unit, e2e]
+    runs-on: ubuntu-latest
+    # A tag release must not hold a runner indefinitely if packaging or the
+    # release action stalls.
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on main
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          test_path = Path('tests/clickfix-detector.test.ts')
-          text = test_path.read_text()
-          old_import = 'import { describe, expect, it, beforeEach } from "vitest";'
-          new_import = 'import { afterEach, beforeEach, describe, expect, it } from "vitest";'
-          if old_import in text:
-              text = text.replace(old_import, new_import, 1)
-          elif new_import not in text:
-              raise SystemExit('unexpected Vitest import')
-
-          start = text.index('describe("hasLegitCaptcha", () => {')
-          end_marker = '\n});\n\n// --- #206: a spoofed captcha iframe'
-          end = text.index(end_marker, start) + len('\n});')
-          section = text[start:end]
-          if 'const mount = (html = "")' not in section:
-              lines = section.splitlines(keepends=True)
-              converted = []
-              index = 0
-              count = 0
-              marker = ' = document.createElement("div");'
-              while index < len(lines):
-                  line = lines[index]
-                  stripped = line.strip()
-                  if stripped.startswith('const ') and stripped.endswith(marker):
-                      indent = line[:len(line) - len(line.lstrip())]
-                      name = stripped[len('const '):-len(marker)]
-                      next_line = lines[index + 1] if index + 1 < len(lines) else ''
-                      prefix = f'{name}.innerHTML = '
-                      if next_line.strip().startswith(prefix) and next_line.strip().endswith(';'):
-                          value = next_line.strip()[len(prefix):-1]
-                          converted.append(f'{indent}const {name} = mount({value});\n')
-                          index += 2
-                      else:
-                          converted.append(f'{indent}const {name} = mount();\n')
-                          index += 1
-                      count += 1
-                      continue
-                  converted.append(line)
-                  index += 1
-              if count != 15:
-                  raise SystemExit(f'unexpected mounted fixture count: {count}')
-              section = ''.join(converted)
-              intro = '''describe("hasLegitCaptcha", () => {
-            const mount = (html = ""): HTMLDivElement => {
-              const root = document.body.appendChild(document.createElement("div"));
-              root.innerHTML = html;
-              return root;
-            };
-
-            afterEach(() => {
-              document.body.replaceChildren();
-            });
-
-            it("does not treat a detached provider iframe as rendered", () => {
-              const div = document.createElement("div");
-              div.innerHTML = '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
-              expect(hasLegitCaptcha(div)).toBe(false);
-            });
-
-          '''
-              section = intro + section[len('describe("hasLegitCaptcha", () => {\n'):]
-              text = text[:start] + section + text[end:]
-          test_path.write_text(text)
-
-          vitest_path = Path('vitest.config.ts')
-          text = vitest_path.read_text()
-          setup = '    setupFiles: ["tests/helpers/happy-dom-mutation-observer-retention-setup.mjs"],\n'
-          if setup in text:
-              text = text.replace(setup, '', 1)
-          elif 'happy-dom-mutation-observer-retention-setup' in text:
-              raise SystemExit('unexpected Vitest setup shape')
-          vitest_path.write_text(text)
-
-          for path in [
-              Path('tests/helpers/happy-dom-mutation-observer-retention.mjs'),
-              Path('tests/helpers/happy-dom-mutation-observer-retention-setup.mjs'),
-          ]:
-              path.unlink(missing_ok=True)
-          PY
-
-          npm install --package-lock-only --ignore-scripts
-          npm ci
-          npx vitest run tests/happy-dom-mutation-observer-gc.test.ts tests/clickfix-detector.test.ts
-          npx eslint tests/happy-dom-mutation-observer-gc.test.ts tests/clickfix-detector.test.ts
-          git diff --check
-
-          git config user.name "NavSentinel Audit"
-          git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
-          git add package-lock.json tests/clickfix-detector.test.ts vitest.config.ts
-          git add -u tests/helpers
-          if ! git diff --cached --quiet; then
-            git commit -m "test: use native Happy DOM observer retention"
-            git push origin HEAD:${GITHUB_HEAD_REF}
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag must point to a commit on main"
+            exit 1
           fi
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - run: npm run verify:versions
+      - run: npm run build
+      - run: npm run check:content-loader
+      - run: npm run check:release-profile -- --release
+      - run: npm run check:perf-budget
+
+      - name: Package extension
+        run: npm run package:ext
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda  # v2.2.1
+        with:
+          files: artifacts/*.zip
+          generate_release_notes: true
