@@ -62,7 +62,7 @@ describe("Observatory recorded campaign integration trigger", () => {
       path.join(workflowDirectory, "observatory-campaign.yml"),
       "utf8",
     );
-    const pushBlock = source.match(/\n  push:\n([\s\S]*?)\n  workflow_dispatch:/u)?.[1] ?? "";
+    const pushBlock = source.match(/\n {2}push:\n([\s\S]*?)\n {2}workflow_dispatch:/u)?.[1] ?? "";
 
     expect(pushBlock).toContain("branches: [main]");
     expect(pushBlock).toContain("paths:");
