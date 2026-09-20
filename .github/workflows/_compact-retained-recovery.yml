@@ -1,0 +1,89 @@
+name: Compact retained recovery
+
+on:
+  push:
+    branches:
+      - fix/overlay-cleanup-recovery-retention-20260920
+
+permissions:
+  contents: write
+
+concurrency:
+  group: compact-retained-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/overlay-cleanup-recovery-retention-20260920
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply size compaction
+        run: python scripts/_compact_retained_recovery.py
+
+      - name: Check patch shape
+        run: git diff --check
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused recovery and toast contracts
+        run: >-
+          npx vitest run
+          tests/overlay-cleanup-recovery-ui.test.ts
+          tests/overlay-cleanup-recovery.test.ts
+          tests/ui-toast.test.ts
+          tests/ui-toast-coalesce.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Enforce unchanged performance budgets
+        run: npm run check:perf-budget
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run retained recovery regression scenarios
+        run: >-
+          xvfb-run -a npx playwright test
+          tests/e2e/overlay-cleanup-nesting.spec.ts
+          --project=regression
+          --grep "cleanup recovery notice|cleanup notice briefly"
+
+      - name: Run retained recovery phase-two scenarios
+        run: |
+          xvfb-run -a npx playwright test \
+            tests/e2e/overlay-cleanup-nesting.spec.ts \
+            --project=phase2 \
+            --grep "twelve-frame mixed nesting"
+          xvfb-run -a npx playwright test \
+            tests/e2e/phase2-detections.spec.ts \
+            --project=phase2 \
+            --grep "retained recovery keeps later cleanup active"
+
+      - name: Commit verified compaction
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: compact retained recovery UI"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
