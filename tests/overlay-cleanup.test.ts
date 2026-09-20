@@ -194,6 +194,43 @@ describe("overlay cleanup", () => {
     expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
   });
 
+  it("still restores the hidden subset through undo when the budget is exhausted", () => {
+    const hidden: HTMLElement[] = [];
+    let last: ReturnType<typeof reconcileDetectedOverlay> = null;
+    for (let index = 0; index <= MAX_ACTIVE_OVERLAY_SUPPRESSIONS; index += 1) {
+      const overlay = makeOverlay();
+      last = reconcileDetectedOverlay(mutationAlert(overlay), true);
+      if (index < MAX_ACTIVE_OVERLAY_SUPPRESSIONS) hidden.push(overlay);
+    }
+
+    expect(last?.action).toBe("budget_exhausted");
+    expect(last?.undo()).toBe(true);
+    for (const overlay of hidden) {
+      expect(overlay.style.display).toBe("flex");
+    }
+    expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
+  });
+
+  it("undo removes the suppression stamp when the overlay had no prior inline display", () => {
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.color = "red";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+
+    const suppression = suppressOverlayElement(overlay);
+    expect(suppression).not.toBeNull();
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+    expect(overlay.style.getPropertyPriority("display")).toBe("important");
+
+    expect(suppression?.()).toBe(true);
+    expect(overlay.style.getPropertyValue("display")).toBe("");
+    expect(overlay.style.color).toBe("red");
+  });
+
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {
     const overlay = makeOverlay();
     const child = document.createElement("button");
