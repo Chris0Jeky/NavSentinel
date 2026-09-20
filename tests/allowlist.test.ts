@@ -161,6 +161,8 @@ describe("getAllowlist", () => {
     ["zero", 0],
     ["an empty string", ""],
     ["an array", ["not", "an", "allowlist"]],
+    ["a non-empty string", "junk"],
+    ["a positive integer", 42],
   ])("migrates legacy when the new key holds %s (#306)", async (_label, badValue) => {
     store[ALLOWLIST_KEY] = badValue;
     store[LEGACY_KEY] = { "old.com": ["target.com"] };
@@ -213,6 +215,12 @@ describe("addAllowlistEntry", () => {
     const result = await addAllowlistEntry("SITE.COM", "DEST.COM");
     expect(isAllowlisted(result, "site.com", "dest.com")).toBe(true);
   });
+
+  it("persists the updated list to chrome.storage.local", async () => {
+    await addAllowlistEntry("site.com", "dest.com");
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["dest.com"] });
+    expect(chrome.storage.local.set).toHaveBeenCalled();
+  });
 });
 
 describe("removeAllowlistEntry", () => {
@@ -245,6 +253,13 @@ describe("removeAllowlistEntry", () => {
     store[ALLOWLIST_KEY] = { "site.com": ["dest.com"] };
     const result = await removeAllowlistEntry("SITE.COM", "DEST.COM");
     expect(result["site.com"]).toBeUndefined();
+  });
+
+  it("persists the updated list to chrome.storage.local", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com", "b.com"] };
+    await removeAllowlistEntry("site.com", "a.com");
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["b.com"] });
+    expect(chrome.storage.local.set).toHaveBeenCalled();
   });
 });
 
