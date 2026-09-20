@@ -2,6 +2,9 @@ from pathlib import Path
 
 patch_path = Path("scripts/_apply_bridge_clock_patch.py")
 text = patch_path.read_text(encoding="utf-8")
+
+# Replace the formatting-sensitive capture_isolated multiline edit with three
+# narrow exact replacements. This keeps every source-shape assertion fail-closed.
 needle = 'dedent("""' + '\\' + '\n      if (data.type === "ns-clipboard-write")'
 inner = text.index(needle)
 start = text.rfind("replace_once(", 0, inner)
@@ -11,7 +14,7 @@ end_marker = (
     '    \'  if (handlePushStateBridgeMessage'
 )
 end = text.index(end_marker, inner)
-replacement = '''replace_once(
+capture_replacement = '''replace_once(
     "extension/src/content/capture_isolated.ts",
     '  if (data.type === "ns-clipboard-write") {\\n',
     '  const receivedAtMs = Date.now();\\n\\n  if (data.type === "ns-clipboard-write") {\\n',
@@ -34,4 +37,33 @@ replace_once(
     '    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data, receivedAtMs);\\n',
 )
 '''
-patch_path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+text = text[:start] + capture_replacement + text[end:]
+
+# Preserve the describe-block indentation in the legacy PushState contract.
+test_needle = 'dedent("""' + '\\' + '\n    it("returns false after stale period (>10s)"'
+test_inner = text.index(test_needle)
+test_start = text.rfind("replace_once(", 0, test_inner)
+test_end = text.index('Path("tests/main-world-clock.test.ts").write_text(', test_inner)
+test_replacement = '''replace_once(
+    "tests/pushstate-guard.test.ts",
+    '    it("returns false after stale period (>10s)", () => {\\n'
+    '      const oldTs = Date.now() - 11_000;\\n'
+    '      handlePushStateBridgeMessage("ns-pushstate-suspicious", {\\n'
+    '        ts: oldTs,\\n'
+    '        url: "/accounts.chase.com/login",\\n'
+    '      });\\n'
+    '      expect(isPushStateAbuseActive()).toBe(false);\\n'
+    '    });\\n',
+    '    it("does not let a stale producer timestamp expire a fresh receipt", () => {\\n'
+    '      const oldTs = Date.now() - 11_000;\\n'
+    '      handlePushStateBridgeMessage("ns-pushstate-suspicious", {\\n'
+    '        ts: oldTs,\\n'
+    '        url: "/accounts.chase.com/login",\\n'
+    '      });\\n'
+    '      expect(isPushStateAbuseActive()).toBe(true);\\n'
+    '    });\\n',
+)
+
+'''
+text = text[:test_start] + test_replacement + text[test_end:]
+patch_path.write_text(text, encoding="utf-8")
