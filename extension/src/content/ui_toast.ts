@@ -27,6 +27,12 @@ type ToastOptions = {
    * `onDismiss` or any recovery action.
    */
   briefRecovery?: boolean;
+  /**
+   * Retain overlay-cleanup Undo until explicit activation or feature shutdown.
+   * The initial chip docks to a smaller edge control after the brief window or
+   * a trusted outside interaction, preserving authority without obstructing the page.
+   */
+  retainedRecovery?: boolean;
 };
 
 /** Number of coalescible blocks within the window before collapsing to a pill. */
@@ -111,6 +117,8 @@ function ensureHost() {
   host.style.flexDirection = "column";
   host.style.alignItems = "flex-end";
   host.style.gap = "8px";
+  // Only extension-owned controls accept input; the host box never blocks the page.
+  host.style.pointerEvents = "none";
 
   root = host.attachShadow({ mode: "open" });
 
@@ -126,7 +134,7 @@ function ensureHost() {
 
   const style = document.createElement("style");
   // This literal ships verbatim, so compact CSS avoids consuming the extension size budget.
-  style.textContent = `.wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;width:360px;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:12px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);color:#f6efe1;overflow:hidden;border:1px solid #2a2530;animation:ns-slide-up 0.2s ease-out;}@keyframes ns-slide-up{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}.head{display:flex;align-items:center;gap:8px;padding:10px 12px 0;}.head-dot{width:6px;height:6px;border-radius:50%;background:#f5a623;box-shadow:0 0 8px rgba(245,166,35,0.5);animation:pulse 1.6s infinite;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}.head-label{font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:#756a5a;font-weight:500;}.body{padding:8px 12px 10px;font-size:13px;line-height:1.4;color:#c4b69c;}.row{display:flex;gap:8px;padding:10px 12px 12px;border-top:1px solid #1c181f;justify-content:flex-end;flex-wrap:wrap;}button{all:unset;cursor:pointer;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid #2a2530;font-size:11px;font-weight:500;color:#c4b69c;transition:background 0.12s;}button:hover{background:rgba(255,255,255,0.1);}button:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.danger{background:rgba(208,69,49,0.12);border-color:rgba(208,69,49,0.3);color:#d04531;}.danger:hover{background:rgba(208,69,49,0.2);}.action{background:rgba(245,166,35,0.1);border-color:rgba(245,166,35,0.25);color:#f5a623;}.action:hover{background:rgba(245,166,35,0.18);}.brief-recovery{width:min(280px,calc(100vw - 24px));display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;border-radius:9px;}.brief-recovery .head{padding:0 0 0 10px;}.brief-recovery .head-label{display:none;}.brief-recovery .body{padding:8px 7px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.brief-recovery .row{padding:5px 7px 5px 0;border:0;flex-wrap:nowrap;}.brief-recovery button{padding:4px 7px;font-size:10px;}.pill{display:flex;align-items:center;gap:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:999px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);border:1px solid #2a2530;color:#c4b69c;padding:8px 14px;font-size:13px;cursor:pointer;animation:ns-slide-up 0.2s ease-out;transition:opacity 0.4s ease;opacity:1;}.pill:hover{opacity:1;}.pill.idle{opacity:0.45;}.pill:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.pill-count{color:#f5a623;font-weight:600;}@media (prefers-reduced-motion:reduce){.wrap,.pill{animation:none;transition:none;}.head-dot{animation:none;}}`;
+  style.textContent = `.wrap{pointer-events:auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;width:360px;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:12px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);color:#f6efe1;overflow:hidden;border:1px solid #2a2530;animation:ns-slide-up 0.2s ease-out;}@keyframes ns-slide-up{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}.head{display:flex;align-items:center;gap:8px;padding:10px 12px 0;}.head-dot{width:6px;height:6px;border-radius:50%;background:#f5a623;box-shadow:0 0 8px rgba(245,166,35,0.5);animation:pulse 1.6s infinite;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}.head-label{font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:#756a5a;font-weight:500;}.body{padding:8px 12px 10px;font-size:13px;line-height:1.4;color:#c4b69c;}.row{display:flex;gap:8px;padding:10px 12px 12px;border-top:1px solid #1c181f;justify-content:flex-end;flex-wrap:wrap;}button{all:unset;cursor:pointer;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid #2a2530;font-size:11px;font-weight:500;color:#c4b69c;transition:background 0.12s;}button:hover{background:rgba(255,255,255,0.1);}button:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.danger{background:rgba(208,69,49,0.12);border-color:rgba(208,69,49,0.3);color:#d04531;}.danger:hover{background:rgba(208,69,49,0.2);}.action{background:rgba(245,166,35,0.1);border-color:rgba(245,166,35,0.25);color:#f5a623;}.action:hover{background:rgba(245,166,35,0.18);}.brief-recovery{width:min(280px,calc(100vw - 24px));display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;border-radius:9px;}.brief-recovery .head{padding:0 0 0 10px;}.brief-recovery .head-label{display:none;}.brief-recovery .body{padding:8px 7px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.brief-recovery .row{padding:5px 7px 5px 0;border:0;flex-wrap:nowrap;}.brief-recovery button{padding:4px 7px;font-size:10px;}.retained-recovery.recovery-docked{position:fixed;top:12px;right:12px;width:auto;min-width:0;grid-template-columns:auto auto;border-radius:999px;animation:none;}.retained-recovery.recovery-docked .head{padding-left:8px;}.retained-recovery.recovery-docked .body{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}.retained-recovery.recovery-docked .row{padding:4px 5px 4px 0;}.retained-recovery.recovery-docked button{padding:4px 7px;}.pill{display:flex;align-items:center;gap:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:999px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);border:1px solid #2a2530;color:#c4b69c;padding:8px 14px;font-size:13px;cursor:pointer;animation:ns-slide-up 0.2s ease-out;transition:opacity 0.4s ease;opacity:1;}.pill:hover{opacity:1;}.pill.idle{opacity:0.45;}.pill:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.pill-count{color:#f5a623;font-weight:600;}@media (prefers-reduced-motion:reduce){.wrap,.pill{animation:none;transition:none;}.head-dot{animation:none;}}`;
   root.appendChild(style);
 
   document.documentElement.appendChild(host);
@@ -173,15 +181,18 @@ function renderFullCard(opts: ToastOptions): void {
       .forEach((card) => removeCard(card));
   }
 
+  const isRecovery = opts.briefRecovery === true || opts.retainedRecovery === true;
   const wrap = document.createElement("div");
-  wrap.className = opts.briefRecovery ? "wrap brief-recovery" : "wrap";
-  wrap.setAttribute("role", opts.briefRecovery ? "status" : "alert");
-  if (opts.briefRecovery) {
+  wrap.className = isRecovery ? "wrap brief-recovery" : "wrap";
+  if (opts.retainedRecovery) wrap.classList.add("retained-recovery");
+  wrap.setAttribute("role", isRecovery ? "status" : "alert");
+  if (isRecovery) {
     wrap.setAttribute("aria-live", "polite");
     wrap.setAttribute("aria-atomic", "true");
     wrap.setAttribute("aria-label", `NavSentinel: ${opts.message}`);
   }
   if (opts.persistent) wrap.dataset.persistent = "true";
+  if (opts.retainedRecovery) wrap.dataset.recoveryDocked = "false";
 
   const head = document.createElement("div");
   head.className = "head";
@@ -203,14 +214,29 @@ function renderFullCard(opts: ToastOptions): void {
   let actionClicked = false;
   let removed = false;
   let timeout = 0;
+  let recoveryDockTimer = 0;
   let outsidePointerDown: ((event: PointerEvent) => void) | null = null;
+  const detachOutsidePointer = () => {
+    if (!outsidePointerDown) return;
+    document.removeEventListener("pointerdown", outsidePointerDown, true);
+    outsidePointerDown = null;
+  };
+  const dockRetainedRecovery = () => {
+    if (removed || !opts.retainedRecovery || wrap.dataset.recoveryDocked === "true") return;
+    if (recoveryDockTimer) {
+      window.clearTimeout(recoveryDockTimer);
+      recoveryDockTimer = 0;
+    }
+    detachOutsidePointer();
+    wrap.classList.add("recovery-docked");
+    wrap.dataset.recoveryDocked = "true";
+  };
   const remove = (notifyDismiss = false) => {
     if (removed) return;
     removed = true;
     if (timeout) window.clearTimeout(timeout);
-    if (outsidePointerDown) {
-      document.removeEventListener("pointerdown", outsidePointerDown, true);
-    }
+    if (recoveryDockTimer) window.clearTimeout(recoveryDockTimer);
+    detachOutsidePointer();
     cardRemovers.delete(wrap);
     // A detached control must never fire again, even if a stale reference
     // reaches activateOwnedToastControl later.
@@ -234,7 +260,7 @@ function renderFullCard(opts: ToastOptions): void {
     row.appendChild(btn);
   }
 
-  if (!opts.briefRecovery) {
+  if (!isRecovery) {
     const dismiss = document.createElement("button");
     dismiss.className = "danger";
     dismiss.textContent = "Dismiss";
@@ -247,7 +273,17 @@ function renderFullCard(opts: ToastOptions): void {
 
   root.appendChild(wrap);
 
-  if (opts.briefRecovery && opts.timeoutMs !== 0) {
+  if (opts.retainedRecovery) {
+    outsidePointerDown = (event: PointerEvent) => {
+      if (!event.isTrusted || event.composedPath().includes(wrap)) return;
+      dockRetainedRecovery();
+    };
+    document.addEventListener("pointerdown", outsidePointerDown, true);
+    recoveryDockTimer = window.setTimeout(
+      dockRetainedRecovery,
+      BRIEF_RECOVERY_DISMISS_MS,
+    );
+  } else if (opts.briefRecovery && opts.timeoutMs !== 0) {
     outsidePointerDown = (event: PointerEvent) => {
       if (!event.isTrusted || event.composedPath().includes(wrap)) return;
       remove();
@@ -255,7 +291,9 @@ function renderFullCard(opts: ToastOptions): void {
     document.addEventListener("pointerdown", outsidePointerDown, true);
   }
 
-  const t = opts.timeoutMs ?? (opts.briefRecovery ? BRIEF_RECOVERY_DISMISS_MS : 4000);
+  const t = opts.retainedRecovery
+    ? 0
+    : opts.timeoutMs ?? (opts.briefRecovery ? BRIEF_RECOVERY_DISMISS_MS : 4000);
   if (t > 0) {
     timeout = window.setTimeout(() => remove(!opts.briefRecovery), t);
   }
@@ -411,14 +449,13 @@ export function showToast(opts: ToastOptions) {
   renderFullCard(opts);
 }
 
-/** Show the bounded, low-stakes recovery surface for automatic overlay cleanup. */
+/** Show retained overlay-cleanup recovery without permanently covering page controls. */
 export function showOverlayCleanupToast(onUndo: () => void): void {
   showToast({
     message: "Overlay hidden; still watching.",
     actions: [{ label: "Undo", onClick: onUndo }],
     persistent: true,
-    briefRecovery: true,
-    timeoutMs: 0,
+    retainedRecovery: true,
   });
 }
 

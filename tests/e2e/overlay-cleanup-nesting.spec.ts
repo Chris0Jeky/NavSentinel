@@ -233,7 +233,7 @@ test("nested cleanup hides the exact cross-origin frame pattern and Undo restore
   }
 });
 
-test("cleanup recovery notice is small and leaves after two seconds or an outside interaction @regression", async () => {
+test("cleanup recovery notice docks without losing Undo after time or outside interaction @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { page, context, cleanup } = await setupNestedTest("overlay-nesting-lab.html?case=exact");
 
@@ -257,15 +257,26 @@ test("cleanup recovery notice is small and leaves after two seconds or an outsid
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.outsideInteractionCount,
     )).toBe("1");
-    await expect(notice).toHaveCount(0);
+    await expect(notice).toHaveAttribute("data-recovery-docked", "true");
+    await expect(notice).toBeVisible();
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
+    await notice.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(frame.locator("#exact-overlay-frame")).toBeVisible();
 
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "exact");
     await waitForFrameToast(frame, /overlay hidden/i);
-    await expect(frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']"))
-      .toHaveCount(0, { timeout: 3000 });
+    const timedNotice = frame.locator(
+      "#__navsentinel_toast_host .wrap[data-persistent='true']",
+    );
+    await expect(timedNotice).toHaveCount(1);
+    await expect(timedNotice).toHaveAttribute(
+      "data-recovery-docked",
+      "true",
+      { timeout: 3000 },
+    );
+    await expect(timedNotice).toBeVisible();
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
   } finally {
     await cleanup();
@@ -305,7 +316,22 @@ test("cleanup notice briefly yields to a preserved accessible player-error dialo
       noticeBox!.y + noticeBox!.height > confirmBox!.y,
     ).toBe(true);
 
-    await expect(notice).toHaveCount(0, { timeout: 3000 });
+    await expect(notice).toHaveAttribute(
+      "data-recovery-docked",
+      "true",
+      { timeout: 3000 },
+    );
+    await expect(notice).toBeVisible();
+    const dockedNoticeBox = await notice.boundingBox();
+    const dockedConfirmBox = await confirm.boundingBox();
+    expect(dockedNoticeBox).not.toBeNull();
+    expect(dockedConfirmBox).not.toBeNull();
+    expect(
+      dockedNoticeBox!.x < dockedConfirmBox!.x + dockedConfirmBox!.width &&
+      dockedNoticeBox!.x + dockedNoticeBox!.width > dockedConfirmBox!.x &&
+      dockedNoticeBox!.y < dockedConfirmBox!.y + dockedConfirmBox!.height &&
+      dockedNoticeBox!.y + dockedNoticeBox!.height > dockedConfirmBox!.y,
+    ).toBe(false);
     await confirm.click();
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.dialogConfirmCount,
@@ -530,8 +556,15 @@ test("nested cleanup handles a twelve-frame mixed nesting matrix without touchin
     for (const [index, fixtureCase] of cases.entries()) {
       if (fixtureCase === "benign") continue;
       const frame = await childFrame(page, fixtureCase, index);
-      await expect(frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']"))
-        .toHaveCount(0, { timeout: 3000 });
+      const recovery = frame.locator(
+        "#__navsentinel_toast_host .wrap[data-persistent='true']",
+      );
+      await expect(recovery).toHaveCount(1);
+      await expect(recovery).toHaveAttribute(
+        "data-recovery-docked",
+        "true",
+        { timeout: 3000 },
+      );
     }
     expect(context.pages()).toHaveLength(pageCount);
   } finally {

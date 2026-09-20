@@ -12,7 +12,7 @@ function getRoot(): ShadowRoot | null {
 }
 
 function getRecoveryCard(): HTMLElement | null {
-  return getRoot()?.querySelector<HTMLElement>(".wrap.brief-recovery") ?? null;
+  return getRoot()?.querySelector<HTMLElement>(".wrap.retained-recovery") ?? null;
 }
 
 describe("overlay cleanup recovery UI", () => {
@@ -33,22 +33,26 @@ describe("overlay cleanup recovery UI", () => {
       .forEach((node) => node.remove());
   });
 
-  it("retains Undo until explicit activation instead of passively dismissing it", () => {
-    const addEventListener = vi.spyOn(document, "addEventListener");
+  it("docks instead of expiring and retains Undo until explicit activation", () => {
     const undo = vi.fn();
 
     showOverlayCleanupToast(undo);
 
     expect(getRecoveryCard()).not.toBeNull();
-    expect(addEventListener).not.toHaveBeenCalledWith(
-      "pointerdown",
-      expect.any(Function),
-      true,
-    );
+    expect(getRecoveryCard()?.dataset.recoveryDocked).toBe("false");
+
+    // Page-synthetic input cannot move or retire an extension recovery control.
+    document.dispatchEvent(new Event("pointerdown", { bubbles: true, composed: true }));
+    expect(getRecoveryCard()?.dataset.recoveryDocked).toBe("false");
+
+    vi.advanceTimersByTime(2_001);
+    expect(getRecoveryCard()).not.toBeNull();
+    expect(getRecoveryCard()?.dataset.recoveryDocked).toBe("true");
+    expect(getRecoveryCard()?.classList.contains("recovery-docked")).toBe(true);
+    expect(undo).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(60_000);
     expect(getRecoveryCard()).not.toBeNull();
-    expect(undo).not.toHaveBeenCalled();
 
     const button = getRecoveryCard()!.querySelector<HTMLButtonElement>("button");
     expect(button?.textContent).toBe("Undo");
