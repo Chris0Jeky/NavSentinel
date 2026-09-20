@@ -32,9 +32,10 @@ jobs:
       - name: Apply receiver-owned shadow correlation
         shell: bash
         run: |
+          python scripts/_fix_shadow_input_types.py
           python scripts/_normalize_shadow_patch.py
           python scripts/_apply_shadow_guard_arrival.py
-          rm scripts/_normalize_shadow_patch.py
+          rm scripts/_fix_shadow_input_types.py scripts/_normalize_shadow_patch.py
 
       - name: Check patch shape
         run: git diff --check
