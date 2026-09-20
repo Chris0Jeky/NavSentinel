@@ -75,6 +75,7 @@ import {
   suppressHighSeverityOverlayInPath,
   type OverlaySuppression,
 } from "./overlay_cleanup";
+import { createOverlayCleanupRecoveryController } from "./overlay_cleanup_recovery";
 import {
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
@@ -337,7 +338,7 @@ onNavSettingsChange((s) => {
         extra: { overlayCleanupOutcome: "restored", restored: true },
       });
     }
-    lastOverlayCleanupToastUndo = null;
+    overlayCleanupRecovery.clear();
     overlayCleanupBudgetWarned = false;
   } else if (!cleanupWasActive && cleanupIsActive) {
     overlayCleanupBudgetWarned = false;
@@ -947,14 +948,29 @@ function handleClickFixScan(): void {
 const MUTATION_START_DELAY_MS = 2000;
 // -1 = early opt-in timer, 0 = normal settle, 1 = armed, 2 = observing.
 let mutationMonitorState = 0;
-let lastOverlayCleanupToastUndo: OverlaySuppression | null = null;
 let overlayCleanupBudgetWarned = false;
+const overlayCleanupRecovery = createOverlayCleanupRecoveryController({
+  present: (undo) => {
+    sendIconUpdate("yellow");
+    showOverlayCleanupToast(undo);
+  },
+  onRestore: (restored) => {
+    overlayCleanupBudgetWarned = false;
+    appendEventSafely({
+      kind: "mutation_alert",
+      site: siteKeyFromLocation(),
+      url: location.href,
+      reasons: ["overlay_cleanup_undo"],
+      extra: { overlayCleanupOutcome: "restored", restored },
+    });
+  },
+});
 
-function overlayToastControls(suppression: OverlaySuppression | null, coalesce = false) {
-  return {
-    actions: suppression ? [{ label: "Undo", onClick: suppression }] : undefined,
-    coalesce: coalesce && !suppression,
-  };
+function overlayToastControls(
+  suppression: OverlaySuppression | null,
+  coalesce = false,
+) {
+  return overlayCleanupRecovery.toastControls(suppression, coalesce);
 }
 
 function isOverlayCleanupEnabled(): boolean {
@@ -982,6 +998,7 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   });
 
   if (cleanup.action === "budget_exhausted") {
+    overlayCleanupRecovery.present(cleanup.undo);
     if (!overlayCleanupBudgetWarned) {
       overlayCleanupBudgetWarned = true;
       sendIconUpdate("yellow");
@@ -993,25 +1010,7 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
     return true;
   }
 
-  if (cleanup.undo !== lastOverlayCleanupToastUndo) {
-    lastOverlayCleanupToastUndo = cleanup.undo;
-    sendIconUpdate("yellow");
-    const undo = () => {
-      const restored = cleanup.undo();
-      if (lastOverlayCleanupToastUndo === cleanup.undo) {
-        lastOverlayCleanupToastUndo = null;
-      }
-      appendEventSafely({
-        kind: "mutation_alert",
-        site: siteKeyFromLocation(),
-        url: location.href,
-        reasons: ["overlay_cleanup_undo"],
-        extra: { overlayCleanupOutcome: "restored", restored },
-      });
-      return restored;
-    };
-    showOverlayCleanupToast(undo);
-  }
+  overlayCleanupRecovery.present(cleanup.undo);
   return true;
 }
 

@@ -247,7 +247,7 @@ function renderFullCard(opts: ToastOptions): void {
 
   root.appendChild(wrap);
 
-  if (opts.briefRecovery) {
+  if (opts.briefRecovery && opts.timeoutMs !== 0) {
     outsidePointerDown = (event: PointerEvent) => {
       if (!event.isTrusted || event.composedPath().includes(wrap)) return;
       remove();
@@ -418,6 +418,7 @@ export function showOverlayCleanupToast(onUndo: () => void): void {
     actions: [{ label: "Undo", onClick: onUndo }],
     persistent: true,
     briefRecovery: true,
+    timeoutMs: 0,
   });
 }
 
