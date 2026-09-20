@@ -6,12 +6,14 @@ type ToastModule = typeof import("../extension/src/content/ui_toast");
 let showToast: ToastModule["showToast"];
 let controlToast: ToastModule["controlToast"];
 let activateOwnedToastControl: ToastModule["activateOwnedToastControl"];
+let showOverlayCleanupToast: ToastModule["showOverlayCleanupToast"];
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
   controlToast = mod.controlToast;
   activateOwnedToastControl = mod.activateOwnedToastControl;
+  showOverlayCleanupToast = mod.showOverlayCleanupToast;
 }
 
 describe("ui_toast", () => {
@@ -287,6 +289,21 @@ describe("ui_toast", () => {
       expect(wrap.getAttribute("role")).toBe("status");
       expect(wrap.getAttribute("aria-live")).toBe("polite");
       expect(getButtons().map((button) => button.textContent)).toEqual(["Undo"]);
+    });
+
+    it("showOverlayCleanupToast uses the brief persistent Undo contract", () => {
+      const undo = vi.fn();
+      showOverlayCleanupToast(undo);
+
+      const wrap = getWrap()!;
+      expect(wrap.classList.contains("brief-recovery")).toBe(true);
+      expect(wrap.getAttribute("role")).toBe("status");
+      expect(wrap.querySelector(".body")!.textContent).toBe("Overlay hidden; still watching.");
+      expect(getButtons().map((button) => button.textContent)).toEqual(["Undo"]);
+
+      getButtons()[0]!.click();
+      expect(undo).toHaveBeenCalledTimes(1);
+      expect(getWraps()).toHaveLength(0);
     });
 
     it("expires brief recovery after two seconds without invoking Undo", () => {
