@@ -34,18 +34,6 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      "tests/helpers/happy-dom-mutation-observer-retention.mjs",
-      "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: false,
-        projectService: false,
-      },
-    },
-  },
-  {
     ignores: [
       "extension/dist/**",
       "dist/**",
