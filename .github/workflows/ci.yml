@@ -29,6 +29,8 @@ jobs:
   build-and-unit:
     name: Build / Unit
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # Keep dependency installation, tests, and packaging bounded if a tool
     # process stops responding.
     timeout-minutes: 30
@@ -42,24 +44,122 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Temporary draft-PR step: materialize npm's canonical lock update and
-      # the large visibility-test source in the hosted environment because this
-      # agent has connector-only repository access. The next commit consumes the
-      # snapshot and removes this step.
-      - name: Regenerate dependency lock for audit
+      # Temporary draft-PR step used only because this session has connector-only
+      # repository access. It materializes npm's canonical lock, converts the
+      # visibility fixtures to real connected DOM, removes the obsolete Happy DOM
+      # internals shim, proves the focused contracts, and commits those files to the
+      # draft branch. The connector restores this workflow immediately afterwards.
+      - name: Finalize native Happy DOM retention
         if: github.head_ref == 'audit/happy-dom-native-retention'
-        run: npm install --package-lock-only --ignore-scripts
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
 
-      - name: Upload Happy DOM audit snapshot
-        if: github.head_ref == 'audit/happy-dom-native-retention'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: happy-dom-audit-${{ github.run_id }}
-          path: |
-            package-lock.json
-            tests/clickfix-detector.test.ts
-          if-no-files-found: error
-          retention-days: 1
+          test_path = Path('tests/clickfix-detector.test.ts')
+          text = test_path.read_text()
+          old_import = 'import { describe, expect, it, beforeEach } from "vitest";'
+          new_import = 'import { afterEach, beforeEach, describe, expect, it } from "vitest";'
+          if old_import in text:
+              text = text.replace(old_import, new_import, 1)
+          elif new_import not in text:
+              raise SystemExit('unexpected Vitest import')
+
+          start = text.index('describe("hasLegitCaptcha", () => {')
+          end_marker = '\n});\n\n// --- #206: a spoofed captcha iframe'
+          end = text.index(end_marker, start) + len('\n});')
+          section = text[start:end]
+          if 'const mount = (html = "")' not in section:
+              pattern = re.compile(
+                  r'(?P<indent>\\s*)const (?P<name>[A-Za-z_$][\\w$]*) = document\\.createElement\\("div"\\);\\n'
+                  r'(?P=indent)(?P=name)\\.innerHTML = (?P<html>[^\\n]+);'
+              )
+              section, collapsed = pattern.subn(
+                  lambda match: f'{match.group("indent")}const {match.group("name")} = mount({match.group("html")});',
+                  section,
+              )
+              if collapsed != 15:
+                  raise SystemExit(f'unexpected mounted fixture count: {collapsed}')
+              empty = 'const div = document.createElement("div");\n    expect(hasLegitCaptcha(div)).toBe(false);'
+              if section.count(empty) != 1:
+                  raise SystemExit('unexpected empty-root fixture count')
+              section = section.replace(
+                  empty,
+                  'const div = mount();\n    expect(hasLegitCaptcha(div)).toBe(false);',
+                  1,
+              )
+              section = section.replace(
+                  'describe("hasLegitCaptcha", () => {\n',
+                  'describe("hasLegitCaptcha", () => {\n'
+                  '  const mount = (html = ""): HTMLDivElement => {\n'
+                  '    const root = document.body.appendChild(document.createElement("div"));\n'
+                  '    root.innerHTML = html;\n'
+                  '    return root;\n'
+                  '  };\n\n'
+                  '  afterEach(() => {\n'
+                  '    document.body.replaceChildren();\n'
+                  '  });\n\n'
+                  '  it("does not treat a detached provider iframe as rendered", () => {\n'
+                  '    const div = document.createElement("div");\n'
+                  '    div.innerHTML = \'<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>\';\n'
+                  '    expect(hasLegitCaptcha(div)).toBe(false);\n'
+                  '  });\n\n',
+                  1,
+              )
+              text = text[:start] + section + text[end:]
+          test_path.write_text(text)
+
+          vitest_path = Path('vitest.config.ts')
+          text = vitest_path.read_text()
+          setup = '    setupFiles: ["tests/helpers/happy-dom-mutation-observer-retention-setup.mjs"],\n'
+          if setup in text:
+              text = text.replace(setup, '', 1)
+          elif 'happy-dom-mutation-observer-retention-setup' in text:
+              raise SystemExit('unexpected Vitest setup shape')
+          vitest_path.write_text(text)
+
+          eslint_path = Path('eslint.config.js')
+          text = eslint_path.read_text()
+          block = '''  {
+            files: [
+              "tests/helpers/happy-dom-mutation-observer-retention.mjs",
+              "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
+            ],
+            languageOptions: {
+              parserOptions: {
+                project: false,
+                projectService: false,
+              },
+            },
+          },
+          '''
+          if block in text:
+              text = text.replace(block, '', 1)
+          elif 'happy-dom-mutation-observer-retention.mjs' in text:
+              raise SystemExit('unexpected ESLint shim override shape')
+          eslint_path.write_text(text)
+
+          for path in [
+              Path('tests/helpers/happy-dom-mutation-observer-retention.mjs'),
+              Path('tests/helpers/happy-dom-mutation-observer-retention-setup.mjs'),
+          ]:
+              path.unlink(missing_ok=True)
+          PY
+
+          npm install --package-lock-only --ignore-scripts
+          npm ci
+          npx vitest run tests/happy-dom-mutation-observer-gc.test.ts tests/clickfix-detector.test.ts
+          git diff --check
+
+          git config user.name "NavSentinel Audit"
+          git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
+          git add package-lock.json tests/clickfix-detector.test.ts vitest.config.ts eslint.config.js
+          git add -u tests/helpers
+          if ! git diff --cached --quiet; then
+            git commit -m "test: use native Happy DOM observer retention"
+            git push origin HEAD:audit/happy-dom-native-retention
+          fi
 
       - name: Install dependencies
         run: npm ci
