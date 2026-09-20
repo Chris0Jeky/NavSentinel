@@ -1,0 +1,64 @@
+name: Apply toast pill pointer fix
+
+on:
+  push:
+    branches:
+      - fix/overlay-cleanup-recovery-retention-20260920
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-toast-pill-pointer-fix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          ref: fix/overlay-cleanup-recovery-retention-20260920
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply pill pointer contract
+        run: python scripts/_apply_toast_pill_pointer_fix.py
+
+      - name: Check patch shape
+        run: git diff --check
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run focused toast regressions
+        run: >-
+          npx vitest run
+          tests/ui-toast-coalesce.test.ts
+          tests/ui-toast.test.ts
+          tests/overlay-cleanup-recovery-ui.test.ts
+          tests/overlay-cleanup-recovery.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: preserve count-pill pointer input"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
