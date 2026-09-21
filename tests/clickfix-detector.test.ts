@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   looksLikeCommand,
   matchesCaptchaPattern,
@@ -380,44 +380,54 @@ describe("clipboard event tracking", () => {
 // --- hasLegitCaptcha hardening ---
 
 describe("hasLegitCaptcha", () => {
-  it("returns false for bare class name without provider iframe", () => {
+  const mount = (html = ""): HTMLDivElement => {
+    const root = document.body.appendChild(document.createElement("div"));
+    root.innerHTML = html;
+    return root;
+  };
+
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it("does not treat a detached provider iframe as rendered", () => {
     const div = document.createElement("div");
-    div.innerHTML = '<div class="g-recaptcha"><span>fake</span></div>';
+    div.innerHTML = '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
+    expect(hasLegitCaptcha(div)).toBe(false);
+  });
+
+  it("returns false for bare class name without provider iframe", () => {
+    const div = mount('<div class="g-recaptcha"><span>fake</span></div>');
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
   it("returns true when class name is backed by provider iframe", () => {
-    const div = document.createElement("div");
-    div.innerHTML = '<div class="g-recaptcha"><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
+    const div = mount('<div class="g-recaptcha"><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>');
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
   it("returns true for standalone provider iframe without class", () => {
-    const div = document.createElement("div");
-    div.innerHTML = '<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>';
+    const div = mount('<iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe>');
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
   it("returns true for hCaptcha iframe", () => {
-    const div = document.createElement("div");
-    div.innerHTML = '<iframe src="https://hcaptcha.com/challenge"></iframe>';
+    const div = mount('<iframe src="https://hcaptcha.com/challenge"></iframe>');
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
   it("returns true for Cloudflare Turnstile iframe", () => {
-    const div = document.createElement("div");
-    div.innerHTML = '<iframe src="https://challenges.cloudflare.com/turnstile"></iframe>';
+    const div = mount('<iframe src="https://challenges.cloudflare.com/turnstile"></iframe>');
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
   it("returns false for empty root", () => {
-    const div = document.createElement("div");
+    const div = mount();
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
   it("detects provider iframe as sibling of class-name element", () => {
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = '<div><div class="g-recaptcha"></div><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>';
+    const wrapper = mount('<div><div class="g-recaptcha"></div><iframe src="https://www.google.com/recaptcha/api2/anchor"></iframe></div>');
     expect(hasLegitCaptcha(wrapper)).toBe(true);
   });
 
@@ -433,17 +443,14 @@ describe("hasLegitCaptcha", () => {
     'iframe src="data:text/html,recaptcha"',
     'iframe src="https://www.google.com/maps"',
   ])("returns false for a spoofed/non-provider iframe (%s) (#206)", (frag) => {
-    const div = document.createElement("div");
-    div.innerHTML = `<${frag} style="display:none"></iframe>`;
+    const div = mount(`<${frag} style="display:none"></iframe>`);
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
   it("still accepts a real provider iframe on a subdomain (recaptcha.net, www.google.com)", () => {
-    const a = document.createElement("div");
-    a.innerHTML = '<iframe src="https://www.recaptcha.net/recaptcha/api2/anchor"></iframe>';
+    const a = mount('<iframe src="https://www.recaptcha.net/recaptcha/api2/anchor"></iframe>');
     expect(hasLegitCaptcha(a)).toBe(true);
-    const b = document.createElement("div");
-    b.innerHTML = '<iframe src="https://newassets.hcaptcha.com/captcha/v1/foo"></iframe>';
+    const b = mount('<iframe src="https://newassets.hcaptcha.com/captcha/v1/foo"></iframe>');
     expect(hasLegitCaptcha(b)).toBe(true);
   });
 
@@ -452,28 +459,24 @@ describe("hasLegitCaptcha", () => {
   it.each(['style="display:none"', "hidden", 'width="0" height="0"', 'style="visibility:hidden"'])(
     "rejects a real-provider iframe hidden via %s",
     (attrs) => {
-      const div = document.createElement("div");
-      div.innerHTML = `<iframe src="https://www.google.com/recaptcha/api2/anchor" ${attrs}></iframe>`;
+      const div = mount(`<iframe src="https://www.google.com/recaptcha/api2/anchor" ${attrs}></iframe>`);
       expect(hasLegitCaptcha(div)).toBe(false);
     },
   );
 
   it("rejects a path-less recaptcha.net root (#206 R1)", () => {
-    const div = document.createElement("div");
-    div.innerHTML = '<iframe src="https://www.recaptcha.net/"></iframe>';
+    const div = mount('<iframe src="https://www.recaptcha.net/"></iframe>');
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
   it("accepts a trailing-dot provider hostname (#206 R1)", () => {
-    const div = document.createElement("div");
-    div.innerHTML = '<iframe src="https://hcaptcha.com./challenge"></iframe>';
+    const div = mount('<iframe src="https://hcaptcha.com./challenge"></iframe>');
     expect(hasLegitCaptcha(div)).toBe(true);
   });
 
   it("rejects a provider host at a non-widget path (path-prefix anchor, #206 R2)", () => {
     // /recaptcha must be a path PREFIX, not just a substring anywhere in the path.
-    const div = document.createElement("div");
-    div.innerHTML = '<iframe src="https://www.google.com/maps/x/recaptcha-not-real"></iframe>';
+    const div = mount('<iframe src="https://www.google.com/maps/x/recaptcha-not-real"></iframe>');
     expect(hasLegitCaptcha(div)).toBe(false);
   });
 
@@ -489,8 +492,7 @@ describe("hasLegitCaptcha", () => {
       // provider domain to suppress ClickFix detection; the segment-anchored matcher
       // (shared via matchProviderHostSrc) now rejects it. The iframe is rendered, so the
       // ONLY reason for false is the path mismatch (not the #206 hidden-decoy guard).
-      const div = document.createElement("div");
-      div.innerHTML = `<iframe src="${src}"></iframe>`;
+      const div = mount(`<iframe src="${src}"></iframe>`);
       expect(hasLegitCaptcha(div), src).toBe(false);
     },
   );
