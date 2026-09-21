@@ -78,7 +78,17 @@ export function validateRunCapture(run, scenarioId) {
   const gaps = [...value.faults];
   if (!startHealth?.healthy || !endHealth?.healthy) gaps.push('RECEIVER_HEALTH_INCOMPLETE');
   if (!(startHealth?.healthSequence > 0 && endHealth?.healthSequence > startHealth.healthSequence)) gaps.push('HEALTH_CHALLENGE_NOT_ADVANCED');
-  if (startHealth?.receiptCount !== 0 || [value.harmTargetId, value.benignTargetId].some(id => startHealth?.targetUses[id] !== 0)) gaps.push('RECEIVER_TARGET_NOT_FRESH');
+  const targetIds = [value.harmTargetId, value.benignTargetId];
+  const targetIdSet = new Set(targetIds);
+  const healthSnapshots = [startHealth, endHealth].filter(Boolean);
+  if (healthSnapshots.some(snapshot => {
+    const ids = Object.keys(snapshot.targetUses);
+    return ids.length !== targetIdSet.size || ids.some(id => !targetIdSet.has(id));
+  })) gaps.push('RECEIVER_AUTHORITY_SET_DISAGREES');
+  if (healthSnapshots.some(snapshot =>
+    Object.values(snapshot.targetUses).reduce((total, uses) => total + uses, 0) !== snapshot.receiptCount
+  )) gaps.push('RECEIVER_HEALTH_ACCOUNTING_DISAGREES');
+  if (startHealth?.receiptCount !== 0 || targetIds.some(id => startHealth?.targetUses[id] !== 0)) gaps.push('RECEIVER_TARGET_NOT_FRESH');
   if (startHealth?.invalidAttempts !== 0 || endHealth?.invalidAttempts !== 0) gaps.push('RECEIVER_REJECTED_ATTEMPTS');
   if (startHealth?.observerErrors !== 0 || endHealth?.observerErrors !== 0) gaps.push('RECEIVER_OBSERVER_LOSS');
   if (run.arm === 'baseline' ? value.baselineMode !== 'extension-absent' : value.baselineMode !== 'enabled') gaps.push('BASELINE_MODE_DISAGREES');
@@ -92,7 +102,7 @@ export function validateRunCapture(run, scenarioId) {
       r.role !== (run.arm === 'mixed' ? 'mixed' : e.consequence === 'benign' ? 'benign' : 'attack')) throw new Error('RECEIVER_BINDING_MISMATCH');
     uses.set(target, (uses.get(target) ?? 0) + 1);
   }
-  for (const id of [value.harmTargetId, value.benignTargetId]) {
+  for (const id of targetIds) {
     if (endHealth?.targetUses[id] !== (uses.get(id) ?? 0) || (uses.get(id) ?? 0) > 1) gaps.push('RECEIVER_AUTHORITY_COUNT_DISAGREES');
   }
   const input = run.events.filter(e => e.kind === 'input.dispatched').at(-1);
