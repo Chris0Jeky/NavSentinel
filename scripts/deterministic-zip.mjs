@@ -57,6 +57,7 @@ function portableComponentKey(component) {
  */
 export function validatePortableArchivePaths(archivePaths) {
   const seen = new Map();
+  const prefixes = new Map();
 
   for (const archivePath of archivePaths) {
     if (
@@ -90,6 +91,24 @@ export function validatePortableArchivePaths(archivePaths) {
       ) {
         throw new Error(`PACKAGE_PATH_UNSAFE: ${JSON.stringify(archivePath)}`);
       }
+    }
+
+    // ZIP omits directory entries, but extraction still creates them. Validate
+    // every prefix so a file cannot also be a directory and differently cased
+    // directory spellings cannot silently collapse on Windows/macOS.
+    for (let index = 0; index < components.length; index += 1) {
+      const original = components.slice(0, index + 1).join("/");
+      const key = components.slice(0, index + 1).map(portableComponentKey).join("/");
+      const directory = index < components.length - 1;
+      const previousPrefix = prefixes.get(key);
+      if (previousPrefix && (
+        previousPrefix.original !== original ||
+        !previousPrefix.directory ||
+        !directory
+      )) {
+        throw new Error(`PACKAGE_PATH_COLLISION: ${previousPrefix.original} <> ${original}`);
+      }
+      prefixes.set(key, { original, directory });
     }
 
     if (Buffer.byteLength(archivePath, "utf8") > ZIP_MAX_UINT16) {
@@ -283,7 +302,8 @@ export function createDeterministicZip(sourceDirectory, archiveFile) {
   );
   try {
     fs.writeFileSync(temporaryPath, archive, { flag: "wx", mode: 0o600 });
-    fs.rmSync(archivePath, { force: true });
+    // Rename replaces an existing regular file without deleting it first.
+    // A refused publication must leave the last good archive untouched.
     fs.renameSync(temporaryPath, archivePath);
   } catch (error) {
     fs.rmSync(temporaryPath, { force: true });

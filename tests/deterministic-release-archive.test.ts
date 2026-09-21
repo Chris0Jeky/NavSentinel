@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -133,4 +134,14 @@ describe("deterministic release archive", () => {
       /PACKAGE_ARCHIVE_INSIDE_SOURCE/,
     );
   });
+});
+
+it("qualifies prefix identity and failure-safe publication in an isolated process", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["--test", path.join(import.meta.dirname, "helpers/release-archive-adversarial.mjs")],
+    { encoding: "utf8", timeout: 10_000 },
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
 });
