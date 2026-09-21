@@ -13,7 +13,18 @@ on:
       - 'gym/local-fixture-targets.js'
       - '.github/workflows/observatory-campaign.yml'
   push:
-    branches: [feat/observatory-campaign-20260913]
+    branches: [main]
+    paths:
+      - 'experiments/evidence-observatory/**'
+      - 'tests/e2e/observatory-overlay.spec.ts'
+      - 'tests/e2e/extension_test_utils.ts'
+      - 'tests/e2e/local_fixture_target_bootstrap.ts'
+      - 'tests/e2e/observatory*'
+      - 'tests/e2e/proving_ground_fake_sink.ts'
+      - 'tests/observatory-sink-health.test.ts'
+      - 'gym/overlay-nesting-*.html'
+      - 'gym/local-fixture-targets.js'
+      - '.github/workflows/observatory-campaign.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,11 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
       - run: npm ci --ignore-scripts
@@ -55,7 +66,7 @@ jobs:
           JS
       - name: Inspect measured scenes from actual recorded campaigns
         run: node experiments/evidence-observatory/smoke-recorded.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: observatory-recorded-overlay-campaign

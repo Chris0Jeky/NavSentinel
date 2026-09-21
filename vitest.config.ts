@@ -20,7 +20,6 @@ export default defineConfig({
   test: {
     root: ".",
     include: ["extension/src/**/*.test.ts", "tests/**/*.test.ts"],
-    setupFiles: ["tests/helpers/happy-dom-mutation-observer-retention-setup.mjs"],
     // The happy-dom a11y tests inject the real popup/options HTML (with
     // `<link rel="stylesheet">` and `<script src>`) into the document. Without this,
     // happy-dom resolves those relative hrefs against its default base and tries to
