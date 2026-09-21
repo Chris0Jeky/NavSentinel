@@ -34,6 +34,17 @@ export default tseslint.config(
     },
   },
   {
+    // This dependency-free Node contract is JavaScript, not part of tsconfig.
+    // Keep normal lint rules active without requiring a TypeScript project.
+    files: ["tests/helpers/release-archive-adversarial.mjs"],
+    languageOptions: {
+      parserOptions: {
+        project: false,
+        projectService: false,
+      },
+    },
+  },
+  {
     ignores: [
       "extension/dist/**",
       "dist/**",
