@@ -1,4 +1,4 @@
-import { chromium, expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, type Worker } from "@playwright/test";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -17,8 +17,161 @@ const extensionPath = process.env.EXTENSION_PATH
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 const fixture = "issue566-modifier-retry.html";
+const issue566DiagnosticKey = "__navsentinelIssue566Diagnostic";
+const issue566DiagnosticSessionKeys = [
+  "ns_sw:lastUrl",
+  "ns_sw:lastCommitted",
+  "ns_sw:pendingRollback",
+  "ns_sw:rollbackReturn",
+  "ns_sw:readyTabs",
+  "ns_sw:typedOrigin",
+  "ns_sw:allowUntil",
+  "ns_sw:gestureUntil",
+  "ns_sw:allowStarted",
+  "ns_sw:suppressUntil",
+  "ns_sw:userNavContextUntil"
+] as const;
+const issue566DiagnosticRingCap = 256;
 
 test.setTimeout(90_000);
+
+function issue566DiagnosticError(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+async function installIssue566DiagnosticObserver(worker: Worker): Promise<void> {
+  await worker.evaluate(
+    ({ diagnosticKey, sessionKeys, ringCap }) => {
+      const root = globalThis as unknown as Record<string, unknown>;
+      if (root[diagnosticKey]) return;
+
+      const state = {
+        installedAt: Date.now(),
+        ringCap,
+        dropped: 0,
+        events: [] as Array<Record<string, unknown>>,
+        errors: [] as string[]
+      };
+      root[diagnosticKey] = state;
+      const recordError = (where: string, error: unknown) => {
+        state.errors.push(`${where}: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`);
+      };
+      const record = (event: Record<string, unknown>) => {
+        if (state.events.length >= state.ringCap) {
+          state.events.shift();
+          state.dropped += 1;
+        }
+        state.events.push({ at: Date.now(), ...event });
+      };
+
+      try {
+        chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+          if (details.frameId !== 0) return;
+          record({
+            kind: "webNavigation.onBeforeNavigate",
+            tabId: details.tabId,
+            frameId: details.frameId,
+            documentId: details.documentId,
+            parentDocumentId: details.parentDocumentId,
+            url: details.url
+          });
+        });
+      } catch (error) {
+        recordError("webNavigation.onBeforeNavigate", error);
+      }
+
+      try {
+        chrome.webNavigation.onCommitted.addListener((details) => {
+          if (details.frameId !== 0) return;
+          record({
+            kind: "webNavigation.onCommitted",
+            tabId: details.tabId,
+            frameId: details.frameId,
+            documentId: details.documentId,
+            parentDocumentId: details.parentDocumentId,
+            url: details.url,
+            transitionType: details.transitionType,
+            transitionQualifiers: details.transitionQualifiers
+          });
+        });
+      } catch (error) {
+        recordError("webNavigation.onCommitted", error);
+      }
+
+      try {
+        chrome.runtime.onMessage.addListener((message, sender) => {
+          const senderWithDocument = sender as typeof sender & {
+            documentId?: string;
+          };
+          record({
+            kind: "runtime.onMessage",
+            messageType:
+              typeof message === "object" && message !== null && "type" in message
+                ? String((message as { type?: unknown }).type)
+                : typeof message,
+            sender: {
+              tabId: sender.tab?.id,
+              frameId: sender.frameId,
+              documentId: senderWithDocument.documentId
+            }
+          });
+        });
+      } catch (error) {
+        recordError("runtime.onMessage", error);
+      }
+
+      try {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+          if (areaName !== "session") return;
+          const selectedChanges: Record<string, unknown> = {};
+          for (const key of sessionKeys) {
+            const change = changes[key];
+            if (change) selectedChanges[key] = { oldValue: change.oldValue, newValue: change.newValue };
+          }
+          if (Object.keys(selectedChanges).length > 0) {
+            record({ kind: "storage.onChanged", areaName, changes: selectedChanges });
+          }
+        });
+      } catch (error) {
+        recordError("storage.onChanged", error);
+      }
+    },
+    {
+      diagnosticKey: issue566DiagnosticKey,
+      sessionKeys: [...issue566DiagnosticSessionKeys],
+      ringCap: issue566DiagnosticRingCap
+    }
+  );
+}
+
+async function readIssue566DiagnosticObserver(worker: Worker): Promise<Record<string, unknown>> {
+  return worker.evaluate(
+    async ({ diagnosticKey, sessionKeys }) => {
+      const root = globalThis as unknown as Record<string, unknown>;
+      const state = root[diagnosticKey] as
+        | { installedAt: number; ringCap: number; dropped: number; events: Array<Record<string, unknown>>; errors: string[] }
+        | undefined;
+      if (!state) throw new Error(`Diagnostic observer state missing: ${diagnosticKey}`);
+      let session: unknown;
+      let sessionReadError: string | undefined;
+      try {
+        session = await chrome.storage.session.get(sessionKeys as string[]);
+      } catch (error) {
+        sessionReadError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      }
+      return {
+        installedAt: state.installedAt,
+        ringCap: state.ringCap,
+        dropped: state.dropped,
+        events: state.events,
+        errors: state.errors,
+        session,
+        sessionReadError
+      };
+    },
+    { diagnosticKey: issue566DiagnosticKey, sessionKeys: [...issue566DiagnosticSessionKeys] }
+  );
+}
 
 type Gesture = "control-click" | "long-control-click" | "middle-click";
 type Scenario = {
@@ -304,15 +457,24 @@ test("a non-current anchor handler gets no MAIN-world opener authority @regressi
   }
 });
 
-test("a non-current anchor handler gets no service-worker opener authority @regression", async () => {
+test("a non-current anchor handler gets no service-worker opener authority @regression", async ({}, testInfo: TestInfo) => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running modifier navigation E2E tests.");
 
   const { baseUrl, context, opener, cleanup } = await openFreshScenario();
+  let serviceWorker: Worker | undefined;
+  let observerInstallError: string | undefined;
+  let initialPageUrls: string[] = [];
   try {
     // This control asserts service-worker rollback. The MAIN/content bridge can
     // be ready before the worker has registered its navigation listeners.
-    await getServiceWorker(context);
+    serviceWorker = await getServiceWorker(context);
+    try {
+      await installIssue566DiagnosticObserver(serviceWorker);
+    } catch (error) {
+      observerInstallError = issue566DiagnosticError(error);
+    }
     const pagesBefore = context.pages().length;
+    initialPageUrls = context.pages().map((page) => page.url());
     const historyBefore = await opener.evaluate(() => history.length);
     await opener.locator("#base-replace-control").click({ modifiers: ["Control"], button: "left" });
     const child = await waitForIssue566Child(context, baseUrl, "base-replace");
@@ -328,8 +490,56 @@ test("a non-current anchor handler gets no service-worker opener authority @regr
     await expect(child).toHaveURL(/issue566-destination\.html\?case=base-replace$/);
     await expect(opener).toHaveURL(/issue566-modifier-retry\.html/);
     expect(await opener.evaluate(() => history.length)).toBe(historyBefore);
-    expect(context.pages()).toHaveLength(pagesBefore + 1);
+    expect(
+      context.pages().map((page) => page.url()),
+      `Initial page URLs: ${JSON.stringify(initialPageUrls)}`,
+    ).toHaveLength(pagesBefore + 1);
   } finally {
+    const diagnostic: Record<string, unknown> = {
+      schemaVersion: 1,
+      capturedAt: Date.now(),
+      initialPageUrls,
+      finalPageUrls: [],
+      openerUrl: "",
+      browserVersion: "",
+      observerInstallError,
+      observer: null,
+      errors: [] as string[]
+    };
+    const errors = diagnostic.errors as string[];
+    try {
+      diagnostic.finalPageUrls = context.pages().map((page) => page.url());
+    } catch (error) {
+      errors.push(`finalPageUrls: ${issue566DiagnosticError(error)}`);
+    }
+    try {
+      diagnostic.openerUrl = opener.url();
+    } catch (error) {
+      errors.push(`openerUrl: ${issue566DiagnosticError(error)}`);
+    }
+    try {
+      diagnostic.browserVersion = context.browser()?.version() ?? "unavailable";
+    } catch (error) {
+      errors.push(`browserVersion: ${issue566DiagnosticError(error)}`);
+    }
+    if (observerInstallError) errors.push(`observerInstall: ${observerInstallError}`);
+    if (serviceWorker) {
+      try {
+        diagnostic.observer = await readIssue566DiagnosticObserver(serviceWorker);
+      } catch (error) {
+        errors.push(`observerRead: ${issue566DiagnosticError(error)}`);
+      }
+    } else {
+      errors.push("observerRead: service worker unavailable");
+    }
+    try {
+      await testInfo.attach("issue566-service-worker-diagnostic", {
+        body: Buffer.from(JSON.stringify(diagnostic, null, 2)),
+        contentType: "application/json"
+      });
+    } catch (error) {
+      errors.push(`testInfo.attach: ${issue566DiagnosticError(error)}`);
+    }
     await cleanup();
   }
 });
