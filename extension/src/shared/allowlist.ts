@@ -48,43 +48,68 @@ export async function getAllowlist(): Promise<Allowlist> {
   return {};
 }
 
-export async function setAllowlist(list: Allowlist): Promise<void> {
+// Serialized write queue (#753). Adds, removes, sets, and clears are
+// read-modify-write sequences; overlapping calls used to read the same
+// snapshot and the last writer silently dropped (or resurrected) the other's
+// update. Mutations run strictly in call order. Reads stay unqueued so nav /
+// options lookups never block behind a write.
+let writeQueue: Promise<void> = Promise.resolve();
+
+function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const result = writeQueue.then(operation, operation);
+  // The chain itself must never reject: a failure reaches only its own caller
+  // while later writes still run.
+  writeQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+async function writeAllowlist(list: Allowlist): Promise<void> {
   await chrome.storage.local.set({ [ALLOWLIST_KEY]: normalizeAllowlist(list) });
   await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
 }
 
+export async function setAllowlist(list: Allowlist): Promise<void> {
+  await enqueueWrite(() => writeAllowlist(list));
+}
+
 export async function addAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
-  const list = await getAllowlist();
-  const key = siteKey.toLowerCase();
-  const host = destHost.toLowerCase();
-  const existing = list[key] ?? [];
-  if (!existing.includes(host)) {
-    existing.push(host);
-  }
-  list[key] = existing;
-  await setAllowlist(list);
-  return list;
+  return enqueueWrite(async () => {
+    const list = await getAllowlist();
+    const key = siteKey.toLowerCase();
+    const host = destHost.toLowerCase();
+    const existing = list[key] ?? [];
+    if (!existing.includes(host)) {
+      existing.push(host);
+    }
+    list[key] = existing;
+    await writeAllowlist(list);
+    return list;
+  });
 }
 
 export async function removeAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
-  const list = await getAllowlist();
-  const key = siteKey.toLowerCase();
-  const host = destHost.toLowerCase();
-  const existing = list[key];
-  if (!existing) return list;
-  const next = existing.filter((entry) => entry !== host);
-  if (next.length === 0) {
-    delete list[key];
-  } else {
-    list[key] = next;
-  }
-  await setAllowlist(list);
-  return list;
+  return enqueueWrite(async () => {
+    const list = await getAllowlist();
+    const key = siteKey.toLowerCase();
+    const host = destHost.toLowerCase();
+    const existing = list[key];
+    if (!existing) return list;
+    const next = existing.filter((entry) => entry !== host);
+    if (next.length === 0) {
+      delete list[key];
+    } else {
+      list[key] = next;
+    }
+    await writeAllowlist(list);
+    return list;
+  });
 }
 
 export async function clearAllowlist(): Promise<void> {
-  await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
-  await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
+  await enqueueWrite(() => writeAllowlist({}));
 }
 
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {

@@ -273,6 +273,40 @@ describe("clearAllowlist", () => {
   });
 });
 
+describe("concurrent writes (#753)", () => {
+  it("keeps both entries when two adds on one key overlap", async () => {
+    const [first, second] = await Promise.all([
+      addAllowlistEntry("site.com", "a.com"),
+      addAllowlistEntry("site.com", "b.com"),
+    ]);
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["a.com", "b.com"] });
+    expect(isAllowlisted(first, "site.com", "a.com")).toBe(true);
+    expect(isAllowlisted(second, "site.com", "b.com")).toBe(true);
+  });
+
+  it("does not resurrect a removed host when an add overlaps the remove", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com", "b.com"] };
+    await Promise.all([
+      removeAllowlistEntry("site.com", "a.com"),
+      addAllowlistEntry("site.com", "c.com"),
+    ]);
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["b.com", "c.com"] });
+  });
+
+  it("applies clear after an overlapping add instead of resurrecting it", async () => {
+    await Promise.all([addAllowlistEntry("site.com", "a.com"), clearAllowlist()]);
+    expect(store[ALLOWLIST_KEY]).toEqual({});
+  });
+
+  it("keeps the queue usable after a rejected write", async () => {
+    vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(new Error("quota"));
+    await expect(addAllowlistEntry("site.com", "doomed.com")).rejects.toThrow("quota");
+    const result = await addAllowlistEntry("site.com", "recovered.com");
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["recovered.com"] });
+    expect(isAllowlisted(result, "site.com", "recovered.com")).toBe(true);
+  });
+});
+
 describe("onAllowlistChange", () => {
   it("registers a storage change listener", () => {
     const cb = vi.fn();
