@@ -15,6 +15,7 @@ import {
   MAX_PENDING_OUTBOUND,
   RESERVED_SCARCE_OUTBOUND_SLOTS,
 } from "./main_guard_constants";
+import { mainWorldNowMs as nowMs } from "./main_world_clock";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -181,10 +182,6 @@ const blockedActions = new Map<
 >();
 
 type NavStatus = "allowed" | "blocked";
-
-function nowMs(): number {
-  return Date.now();
-}
 
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
   if (!debug) return;
