@@ -13,7 +13,8 @@ export type FormCase =
   | "mismatch-burn" | "synthetic" | "location-same" | "location-different" | "late-submit"
   | "exact-submit" | "exact-request" | "native" | "server-redirect" | "slow-response"
   | "empty-target" | "inherited-target" | "empty-method" | "invalid-method" | "self"
-  | "dialog" | "validation" | "replay" | "allow-once" | "allow-mutated" | "mixed";
+  | "dialog" | "validation" | "replay" | "allow-once" | "allow-mutated" | "mixed"
+  | "cancel-replace";
 export interface FormReceipt { role: "harm" | "benign"; method: string; accepted: boolean; ordinal: number }
 
 export async function startFormIntentLab(variant: FormCase) {
@@ -48,7 +49,8 @@ export async function startFormIntentLab(variant: FormCase) {
     if (url.pathname === "/done") { res.end("<h1>Benign redirected result</h1>"); return; }
     if (url.pathname === "/parent") {
       res.end(`<!doctype html><meta charset="utf-8"><title>Form authority lab</title>
-        <h1>Local form task</h1><iframe title="Local form task" src="/child" style="width:900px;height:650px"></iframe>`);
+        <h1>Local form task</h1>${variant === "cancel-replace" ? `<form id="replacement" action="${sinkOrigin + benignPath}" method="post"><button id="replacement-submit">Continue replacement</button></form>` : ""}
+        <iframe title="Local form task" src="/child" style="width:900px;height:650px"></iframe>`);
       return;
     }
     if (url.pathname !== "/child") { res.writeHead(404); res.end("Missing fixture"); return; }
@@ -91,6 +93,7 @@ export async function startFormIntentLab(variant: FormCase) {
       "mixed": `a.setAttribute('formtarget','_top'); ${call}; setTimeout(()=>{ a.removeAttribute('formtarget'); f.action=benign; f.target='_top'; a.onclick=null; document.body.dataset.mixedReady='1'; },300)`,
     };
     if (variant === "late-submit") setup.push(`f.addEventListener('submit',()=>{ f.action=harm; a.setAttribute('formaction',harm); }); f.action=benign;`);
+    if (variant === "cancel-replace") setup.push(`f.addEventListener('submit',e=>{ e.preventDefault(); top.document.getElementById('replacement-submit').click(); });`);
     const script = scripts[variant];
     const delay = variant === "expired" ? 1700 : 100;
     res.end(`<!doctype html><html><head><meta charset="utf-8"><base id="base"><title>Child form</title>
