@@ -5,6 +5,7 @@
  * ambiguous extraction paths instead of following unreviewed filesystem bytes.
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,16 +68,34 @@ try {
 console.log(`[package:ext] Verified release profile: ${builtProfile.id}`);
 
 // Binary distributions must carry the GPL terms alongside the extension files.
-// Use lstat rather than existsSync so a broken link cannot redirect this write.
-try {
-  fs.lstatSync(distLicensePath);
-  requireRepositoryPath(distLicensePath, "file", "Build LICENSE");
-} catch (error) {
-  if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-    throw error;
+// Never truncate the destination inode: a regular file can still be a hard link.
+// Publish an exclusively created sibling instead, leaving old bytes intact if
+// writing or rename fails. A last-moment leaf symlink is replaced, not followed.
+function checkLicenseDestination() {
+  assertRepositoryPath(root, distDir, { expectedType: "directory", label: "Build output" });
+  try {
+    assertRepositoryPath(root, distLicensePath, { expectedType: "file", label: "Build LICENSE" });
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   }
 }
-fs.writeFileSync(distLicensePath, licenseText.replace(/\r\n?/g, "\n"), "utf8");
+
+checkLicenseDestination();
+const temporaryLicensePath = path.join(distDir, `.LICENSE.${randomUUID()}.tmp`);
+let temporaryLicenseCreated = false;
+try {
+  const descriptor = fs.openSync(temporaryLicensePath, "wx", 0o644);
+  temporaryLicenseCreated = true;
+  try {
+    fs.writeFileSync(descriptor, licenseText.replace(/\r\n?/g, "\n"), "utf8");
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  checkLicenseDestination();
+  fs.renameSync(temporaryLicensePath, distLicensePath);
+} finally {
+  if (temporaryLicenseCreated) fs.rmSync(temporaryLicensePath, { force: true });
+}
 requireRepositoryPath(distLicensePath, "file", "Build LICENSE");
 
 fs.mkdirSync(artifactsDir, { recursive: true });
