@@ -27,6 +27,7 @@ function isGaugeScoredEvent(event: EventLogEntry): event is EventLogEntry {
   return (
     !!event.kind &&
     typeof event.score === "number" &&
+    event.score >= 0 && event.score <= 100 &&
     !SILENT_DECISION_KINDS.has(event.kind)
   );
 }
