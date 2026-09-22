@@ -19,11 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
       - name: Offline contracts (no dependency installation)
@@ -40,7 +40,7 @@ jobs:
         run: node experiments/evidence-observatory/smoke-forms.mjs
       - name: Recorded document-lifetime viewer (observer tests, not efficacy)
         run: node experiments/evidence-observatory/smoke-documents.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
           name: observatory-illustrative-preview-and-viewer-smoke

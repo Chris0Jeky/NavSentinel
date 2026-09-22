@@ -2,11 +2,14 @@ import { FORM_INTENT_MAX_URL, FORM_INTENT_TTL_MS, sameFormIntent, type FormInten
 
 // Captured Web-IDL getters preserve branding and avoid form named-property
 // clobbering (a control may itself be called `action`, `method`, or `target`).
-const formAction = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "action")!.get!;
-const buttonType = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, "type")!.get!;
-const inputType = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "type")!.get!;
-const buttonForm = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, "form")!.get!;
-const inputForm = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "form")!.get!;
+function captureGetter(prototype: object, name: string) {
+  return Object.getOwnPropertyDescriptor(prototype, name)!.get!;
+}
+const formAction = captureGetter(HTMLFormElement.prototype, "action");
+const buttonType = captureGetter(HTMLButtonElement.prototype, "type");
+const inputType = captureGetter(HTMLInputElement.prototype, "type");
+const buttonForm = captureGetter(HTMLButtonElement.prototype, "form");
+const inputForm = captureGetter(HTMLInputElement.prototype, "form");
 const implicitSubmissionInput = /^(?:text|search|tel|url|email|password|date|month|week|time|datetime-local|number)$/;
 
 export function submitControlForm(control: HTMLElement): HTMLFormElement | null | false {
