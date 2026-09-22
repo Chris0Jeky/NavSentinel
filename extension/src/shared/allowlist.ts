@@ -3,6 +3,20 @@ export type Allowlist = Record<string, string[]>;
 const LEGACY_ALLOWLIST_KEY = "navsentinel:allowlist";
 export const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
 
+// In-process FIFO write queue (#753). Each mutating helper enqueues its
+// get-mutate-set so it runs only after the previous mutation has settled,
+// even if the previous call rejected. The later-enqueued call wins.
+let writeQueue: Promise<void> = Promise.resolve();
+
+function enqueueAllowlistWrite<T>(op: () => Promise<T>): Promise<T> {
+  const result = writeQueue.then(op, op);
+  writeQueue = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
 export function normalizeAllowlist(value: unknown): Allowlist {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const input = value as Record<string, unknown>;
@@ -54,37 +68,43 @@ export async function setAllowlist(list: Allowlist): Promise<void> {
 }
 
 export async function addAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
-  const list = await getAllowlist();
-  const key = siteKey.toLowerCase();
-  const host = destHost.toLowerCase();
-  const existing = list[key] ?? [];
-  if (!existing.includes(host)) {
-    existing.push(host);
-  }
-  list[key] = existing;
-  await setAllowlist(list);
-  return list;
+  return enqueueAllowlistWrite(async () => {
+    const list = await getAllowlist();
+    const key = siteKey.toLowerCase();
+    const host = destHost.toLowerCase();
+    const existing = list[key] ?? [];
+    if (!existing.includes(host)) {
+      existing.push(host);
+    }
+    list[key] = existing;
+    await setAllowlist(list);
+    return list;
+  });
 }
 
 export async function removeAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
-  const list = await getAllowlist();
-  const key = siteKey.toLowerCase();
-  const host = destHost.toLowerCase();
-  const existing = list[key];
-  if (!existing) return list;
-  const next = existing.filter((entry) => entry !== host);
-  if (next.length === 0) {
-    delete list[key];
-  } else {
-    list[key] = next;
-  }
-  await setAllowlist(list);
-  return list;
+  return enqueueAllowlistWrite(async () => {
+    const list = await getAllowlist();
+    const key = siteKey.toLowerCase();
+    const host = destHost.toLowerCase();
+    const existing = list[key];
+    if (!existing) return list;
+    const next = existing.filter((entry) => entry !== host);
+    if (next.length === 0) {
+      delete list[key];
+    } else {
+      list[key] = next;
+    }
+    await setAllowlist(list);
+    return list;
+  });
 }
 
 export async function clearAllowlist(): Promise<void> {
-  await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
-  await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
+  return enqueueAllowlistWrite(async () => {
+    await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
+    await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
+  });
 }
 
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {

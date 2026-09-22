@@ -313,3 +313,43 @@ describe("onAllowlistChange", () => {
     expect(cb).not.toHaveBeenCalled();
   });
 });
+
+// Overlapping in-process mutations serialize FIFO by enqueue order: each
+// call's get-mutate-set runs only after the previous call settled, so the
+// later-enqueued call's result is what storage holds. (#753)
+describe("allowlist write queue (#753)", () => {
+  it("keeps both hosts from overlapping adds on the same key", async () => {
+    await Promise.all([
+      addAllowlistEntry("site.com", "a.com"),
+      addAllowlistEntry("site.com", "b.com"),
+    ]);
+    expect(await getAllowlist()).toEqual({ "site.com": ["a.com", "b.com"] });
+  });
+
+  it("composes overlapping add vs remove of different hosts", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["drop.com"] };
+    await Promise.all([
+      addAllowlistEntry("site.com", "keep.com"),
+      removeAllowlistEntry("site.com", "drop.com"),
+    ]);
+    expect(await getAllowlist()).toEqual({ "site.com": ["keep.com"] });
+  });
+
+  it("applies the later-enqueued add after a clear (FIFO)", async () => {
+    // Seeded with a different key so a stale-snapshot write would resurrect
+    // "other.com" instead of landing on exactly one serialized outcome.
+    store[ALLOWLIST_KEY] = { "other.com": ["y.com"] };
+    const cleared = clearAllowlist();
+    const added = addAllowlistEntry("site.com", "x.com");
+    await Promise.all([cleared, added]);
+    expect(await getAllowlist()).toEqual({ "site.com": ["x.com"] });
+  });
+
+  it("applies the later-enqueued clear after an add (FIFO)", async () => {
+    store[ALLOWLIST_KEY] = { "other.com": ["y.com"] };
+    const added = addAllowlistEntry("site.com", "x.com");
+    const cleared = clearAllowlist();
+    await Promise.all([added, cleared]);
+    expect(await getAllowlist()).toEqual({});
+  });
+});
