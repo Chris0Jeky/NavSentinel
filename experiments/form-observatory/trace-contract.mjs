@@ -9,7 +9,7 @@ export const FORM_PAIRED_VARIANTS = Object.freeze([
   "alternate-submitter", "action-substitution", "target-mutation", "method-mutation",
   "enctype-mutation", "base-href", "base-target", "reassociation", "expired",
   "mismatch-burn", "synthetic", "location-same", "location-different", "late-submit",
-  "replay",
+  "replay", "cancel-replace",
 ]);
 export const FORM_CONTROL_VARIANTS = Object.freeze([
   "exact-submit", "exact-request", "native", "server-redirect", "slow-response",
@@ -77,6 +77,7 @@ export function requiredFormReports(variant, protectedArm) {
     return [prepared, input, location];
   }
   if (variant === "late-submit") return [prepared, input, submitEvent, lateMutation];
+  if (variant === "cancel-replace") return [prepared, input, submitEvent];
   if (variant === "exact-submit") return [prepared, input, submit];
   if (variant === "exact-request") return [prepared, input, request, submitEvent];
   if (nativeControls.has(variant)) return [prepared, input, submitEvent];

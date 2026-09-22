@@ -98,7 +98,7 @@ const documentRows = () => {
 };
 
 // Consequence parity remains independent from trace certification.
-test("all 45 explicit arms are required", () => {
+test("all explicit arms are required", () => {
   assert.equal(compareFormOutcomes(records(), records()).matched, true);
   assert.equal(compareFormOutcomes(records().slice(1), records()).matched, false);
 });
@@ -129,7 +129,7 @@ test("native dialog and navigation completion are part of parity", () => {
 });
 
 // A complete, strictly shaped campaign is accepted.
-test("strictly validates all 45 complete traces", () => {
+test("strictly validates all complete traces", () => {
   const result = validateFormTraces(traces());
   assert.equal(result.matched, true, JSON.stringify(result.differences));
 });
