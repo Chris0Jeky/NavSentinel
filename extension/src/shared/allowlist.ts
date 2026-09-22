@@ -3,6 +3,26 @@ export type Allowlist = Record<string, string[]>;
 const LEGACY_ALLOWLIST_KEY = "navsentinel:allowlist";
 export const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
 
+export type AllowlistMutationMessage =
+  | { type: "ns-allowlist-mutate"; op: "add" | "remove"; siteKey: string; destHost: string }
+  | { type: "ns-allowlist-mutate"; op: "migrate" }
+  | { type: "ns-allowlist-mutate"; op: "clear" }
+  | { type: "ns-allowlist-mutate"; op: "replace"; list: Allowlist };
+
+type AllowlistMutationResponse =
+  | { ok: true; list: Allowlist }
+  | { ok: false; error: string };
+
+// Options and content scripts have separate module instances. Their writes
+// must meet in the service worker rather than in either module's local queue.
+async function delegateMutation(message: AllowlistMutationMessage): Promise<Allowlist> {
+  const response = await chrome.runtime.sendMessage(message) as AllowlistMutationResponse | undefined;
+  if (!response?.ok) throw new Error(response?.error ?? "Allowlist update was not confirmed");
+  return normalizeAllowlist(response.list);
+}
+
+function hasDocumentContext(): boolean { return typeof document !== "undefined"; }
+
 // In-process FIFO write queue (#753). Each mutating helper enqueues its
 // get-mutate-set so it runs only after the previous mutation has settled,
 // even if the previous call rejected. The later-enqueued call wins.
@@ -39,7 +59,7 @@ export function normalizeAllowlist(value: unknown): Allowlist {
   return out;
 }
 
-export async function getAllowlist(): Promise<Allowlist> {
+async function readAllowlist(delegateMigration: boolean): Promise<Allowlist> {
   const res = await chrome.storage.local.get([ALLOWLIST_KEY, LEGACY_ALLOWLIST_KEY]);
   const stored = res[ALLOWLIST_KEY];
   // Treat the new key as authoritative only when it holds a real object (an
@@ -54,6 +74,7 @@ export async function getAllowlist(): Promise<Allowlist> {
 
   const legacy = normalizeAllowlist(res[LEGACY_ALLOWLIST_KEY]);
   if (Object.keys(legacy).length > 0) {
+    if (delegateMigration) return delegateMutation({ type: "ns-allowlist-mutate", op: "migrate" });
     await chrome.storage.local.set({ [ALLOWLIST_KEY]: legacy });
     await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
     return legacy;
@@ -62,49 +83,63 @@ export async function getAllowlist(): Promise<Allowlist> {
   return {};
 }
 
-export async function setAllowlist(list: Allowlist): Promise<void> {
+export function getAllowlist(): Promise<Allowlist> { return readAllowlist(hasDocumentContext()); }
+
+async function setAllowlistDirect(list: Allowlist): Promise<void> {
   await chrome.storage.local.set({ [ALLOWLIST_KEY]: normalizeAllowlist(list) });
   await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
 }
 
-export async function addAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
+/** Worker-side mutation, also used by non-browser unit tests. */
+export function applyAllowlistMutationDirect(message: AllowlistMutationMessage): Promise<Allowlist> {
   return enqueueAllowlistWrite(async () => {
-    const list = await getAllowlist();
-    const key = siteKey.toLowerCase();
-    const host = destHost.toLowerCase();
-    const existing = list[key] ?? [];
-    if (!existing.includes(host)) {
-      existing.push(host);
+    if (message.op === "migrate") return readAllowlist(false);
+    if (message.op === "clear") {
+      await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
+      await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
+      return {};
     }
-    list[key] = existing;
-    await setAllowlist(list);
+    if (message.op === "replace") {
+      const list = normalizeAllowlist(message.list);
+      await setAllowlistDirect(list);
+      return list;
+    }
+    const list = await readAllowlist(false);
+    const key = message.siteKey.toLowerCase();
+    const host = message.destHost.toLowerCase();
+    const existing = list[key] ?? [];
+    if (message.op === "add") {
+      if (!existing.includes(host)) existing.push(host);
+      list[key] = existing;
+    } else if (existing.length > 0) {
+      const next = existing.filter((entry) => entry !== host);
+      if (next.length === 0) delete list[key];
+      else list[key] = next;
+    }
+    if (message.op === "add" || existing.length > 0) await setAllowlistDirect(list);
     return list;
   });
+}
+
+export async function setAllowlist(list: Allowlist): Promise<void> {
+  if (hasDocumentContext()) { await delegateMutation({ type: "ns-allowlist-mutate", op: "replace", list }); return; }
+  await applyAllowlistMutationDirect({ type: "ns-allowlist-mutate", op: "replace", list });
+}
+
+export async function addAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
+  const message = { type: "ns-allowlist-mutate", op: "add", siteKey, destHost } as const;
+  return hasDocumentContext() ? delegateMutation(message) : applyAllowlistMutationDirect(message);
 }
 
 export async function removeAllowlistEntry(siteKey: string, destHost: string): Promise<Allowlist> {
-  return enqueueAllowlistWrite(async () => {
-    const list = await getAllowlist();
-    const key = siteKey.toLowerCase();
-    const host = destHost.toLowerCase();
-    const existing = list[key];
-    if (!existing) return list;
-    const next = existing.filter((entry) => entry !== host);
-    if (next.length === 0) {
-      delete list[key];
-    } else {
-      list[key] = next;
-    }
-    await setAllowlist(list);
-    return list;
-  });
+  const message = { type: "ns-allowlist-mutate", op: "remove", siteKey, destHost } as const;
+  return hasDocumentContext() ? delegateMutation(message) : applyAllowlistMutationDirect(message);
 }
 
 export async function clearAllowlist(): Promise<void> {
-  return enqueueAllowlistWrite(async () => {
-    await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
-    await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
-  });
+  const message = { type: "ns-allowlist-mutate", op: "clear" } as const;
+  if (hasDocumentContext()) { await delegateMutation(message); return; }
+  await applyAllowlistMutationDirect(message);
 }
 
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {

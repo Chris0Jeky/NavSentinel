@@ -1042,3 +1042,90 @@ describe("suite storage and allowlist migration", () => {
     expect(storedOutcomes).toEqual([]);
   });
 });
+
+describe("worker-owned allowlist mutations (#753)", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const extensionBase = "chrome-extension://test-extension/";
+  const contentSender = (documentId: string) => ({
+    id: "test-extension", tab: { id: 7 }, frameId: 2, documentId,
+    url: "https://site.example/",
+  }) as unknown as chrome.runtime.MessageSender;
+  const optionsSender = {
+    id: "test-extension", url: extensionBase + "src/options/options.html",
+  } as chrome.runtime.MessageSender;
+
+  it("serializes writes from separate content module instances through one worker", async () => {
+    const { chrome, store } = createChromeMock();
+    let sender = contentSender("first");
+    const runtime = {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+      sendMessage: (message: unknown) => handler(message, sender),
+    };
+    vi.stubGlobal("chrome", { ...chrome, runtime } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage: handler } = await import("../extension/src/shared/storage");
+    vi.stubGlobal("document", {});
+    const firstModule = await import("../extension/src/shared/allowlist");
+    const first = firstModule.addAllowlistEntry("site.example", "first.example");
+    sender = contentSender("second");
+    vi.resetModules();
+    const secondModule = await import("../extension/src/shared/allowlist");
+    const second = secondModule.addAllowlistEntry("site.example", "second.example");
+    await Promise.all([first, second]);
+    expect(store[firstModule.ALLOWLIST_KEY]).toEqual({
+      "site.example": ["first.example", "second.example"],
+    });
+  });
+
+  it("orders imported replacement after an in-flight content add", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", { ...chrome, runtime: {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+    } } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage, handleSuiteImportMessage } = await import("../extension/src/shared/storage");
+    const added = handleAllowlistMutationMessage({ type: "ns-allowlist-mutate", op: "add",
+      siteKey: "site.example", destHost: "added.example" }, contentSender("child"));
+    const imported = handleSuiteImportMessage({ type: "ns-suite-import", payload: {
+      allowlist: { "site.example": ["imported.example"] },
+    } }, optionsSender);
+    expect(await added).toMatchObject({ ok: true });
+    expect(await imported).toMatchObject({ ok: true });
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({ "site.example": ["imported.example"] });
+  });
+
+  it("orders legacy migration with a concurrent content add", async () => {
+    const { chrome, store } = createChromeMock({
+      "navsentinel:allowlist": { "site.example": ["legacy.example"] },
+    });
+    const sender = contentSender("child");
+    const runtime = {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+      sendMessage: (message: unknown) => handler(message, sender),
+    };
+    vi.stubGlobal("chrome", { ...chrome, runtime } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage: handler } = await import("../extension/src/shared/storage");
+    vi.stubGlobal("document", {});
+    const { getAllowlist, addAllowlistEntry } = await import("../extension/src/shared/allowlist");
+    await Promise.all([getAllowlist(), addAllowlistEntry("site.example", "new.example")]);
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({
+      "site.example": ["legacy.example", "new.example"],
+    });
+    expect(store).not.toHaveProperty("navsentinel:allowlist");
+  });
+
+  it("rejects a content-script clear and accepts an extension-page clear", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:nav_allowlist_v1": { "site.example": ["saved.example"] },
+    });
+    vi.stubGlobal("chrome", { ...chrome, runtime: {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+    } } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage } = await import("../extension/src/shared/storage");
+    const clear = { type: "ns-allowlist-mutate", op: "clear" };
+    expect(await handleAllowlistMutationMessage(clear, contentSender("child"))).toMatchObject({ ok: false });
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({ "site.example": ["saved.example"] });
+    expect(await handleAllowlistMutationMessage(clear, optionsSender)).toMatchObject({ ok: true });
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({});
+  });
+});
