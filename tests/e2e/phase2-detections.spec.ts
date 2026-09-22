@@ -351,10 +351,12 @@ test.describe("ClickFix", () => {
         8000
       );
 
-      // Verify event log contains clickfix_detected
-      const events = await extractEventLog(context);
-      const clickfixEvents = events.filter((e) => e.kind === "clickfix_detected");
-      expect(clickfixEvents.length, "Should have logged a clickfix_detected event").toBeGreaterThan(0);
+      // The visible toast and worker-owned event write complete independently.
+      // Require the durable event, rather than taking one premature snapshot.
+      await expect.poll(async () => {
+        const events = await extractEventLog(context);
+        return events.filter((event) => event.kind === "clickfix_detected").length;
+      }, { message: "Should have logged a clickfix_detected event" }).toBeGreaterThan(0);
     } finally {
       await cleanup();
     }
