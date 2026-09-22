@@ -74,27 +74,32 @@ export function compactHtml(html, {
   preserveInterElementWhitespace = false,
 } = {}) {
   const output = [];
+  // Each document owns its scan cursor, including an unterminated raw suffix.
+  const rawTag = new RegExp(RAW_TAG);
   let cursor = 0;
   let match;
 
-  while ((match = RAW_TAG.exec(html)) !== null) {
-    output.push(compactNormalHtml(html.slice(cursor, match.index), stripCrossOrigin, preserveInterElementWhitespace));
+  while ((match = rawTag.exec(html)) !== null) {
+    const normal = compactNormalHtml(html.slice(cursor, match.index), stripCrossOrigin, preserveInterElementWhitespace);
     const tagName = match[1];
     const close = new RegExp(`</${tagName}\\s*>`, "ig");
     close.lastIndex = match.index + match[0].length;
     const closing = close.exec(html);
     if (!closing) {
+      output.push(stripOptionalEndTags(normal));
       output.push(html.slice(match.index));
       cursor = html.length;
       break;
     }
-    output.push(compactTag(html.slice(match.index, match.index + match[0].length), stripCrossOrigin));
+    // Include the opening boundary so </p><pre> can still compact, but never
+    // run HTML end-tag substitutions over script/style/pre/textarea bodies.
+    output.push(stripOptionalEndTags(normal + compactTag(match[0], stripCrossOrigin)));
     output.push(html.slice(match.index + match[0].length, closing.index));
     output.push(closing[0]);
     cursor = closing.index + closing[0].length;
-    RAW_TAG.lastIndex = cursor;
+    rawTag.lastIndex = cursor;
   }
 
-  output.push(compactNormalHtml(html.slice(cursor), stripCrossOrigin, preserveInterElementWhitespace));
-  return stripOptionalEndTags(output.join(""));
+  output.push(stripOptionalEndTags(compactNormalHtml(html.slice(cursor), stripCrossOrigin, preserveInterElementWhitespace)));
+  return output.join("");
 }
