@@ -186,6 +186,14 @@ for (const variant of ["location-same", "location-different", "late-submit"] as 
   expect(protectedResult.topUrl).toBe(protectedResult.parentUrl);
 });
 const benign: FormCase[] = ["exact-submit", "exact-request", "native", "slow-response", "empty-target", "inherited-target", "empty-method", "invalid-method", "self", "validation"];
+test("@regression #688 cancelled child submit cannot approve a replacement top form", async ({}, info) => {
+  test.setTimeout(45000);
+  const baseline = await runArm("cancel-replace", false, info);
+  expect(baseline.attempts).toEqual([{ role: "benign", method: "POST", accepted: true, ordinal: 1 }]);
+  const protectedResult = await runArm("cancel-replace", true, info);
+  expect(protectedResult.attempts).toEqual([{ role: "benign", method: "POST", accepted: true, ordinal: 1 }]);
+  expect(protectedResult.topUrl).toBe(protectedResult.parentUrl);
+});
 for (const variant of benign) test(`@regression #688 benign ${variant}`, async ({}, info) => {
   test.setTimeout(45000);
   const result = await runArm(variant, true, info);

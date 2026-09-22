@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChildFormAuthority } from "../extension/src/content/child_form_authority";
 import { implicitSubmitBinding } from "../extension/src/content/form_intent";
 
@@ -20,6 +20,7 @@ beforeEach(() => {
   document.head.innerHTML = "";
   document.body.innerHTML = "";
 });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("implicit keyboard form authority (#688)", () => {
   it("binds Enter on a text field to its owner form without inventing a submitter", () => {
@@ -77,6 +78,7 @@ describe("implicit keyboard form authority (#688)", () => {
   });
 
   it("reports an approved replay submit to the worker", async () => {
+    vi.useFakeTimers();
     const intent = [
       "https://sink.test/accept",
       "post",
@@ -113,7 +115,35 @@ describe("implicit keyboard form authority (#688)", () => {
     } as unknown as SubmitEvent;
     authority.submit(event);
 
+    expect(sendMessage).not.toHaveBeenCalledWith({ type: "ns-form-intent-cancel", attemptId: ready.attemptId, s: 1 });
+    vi.runOnlyPendingTimers();
     expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-cancel", attemptId: ready.attemptId, s: 1 });
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("does not report a child submit that a later page listener cancels", async () => {
+    vi.useFakeTimers();
+    const sendMessage = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("chrome", { runtime: { sendMessage } });
+    const post = vi.fn();
+    const authority = new ChildFormAuthority({ enabled: () => true, post, reject: vi.fn() });
+    const form = document.createElement("form");
+    form.action = "https://sink.test/accept"; form.method = "post"; form.target = "child-target";
+    document.body.append(form);
+    const intent = [form.action, "post", "application/x-www-form-urlencoded", "child-target", "other"] as const;
+    authority.recordBlocked({ id: "replay", kind: "form_submit", formIntent: intent });
+    authority.approveAction("replay");
+    authority.handleBridge({ type: "ns-form-replay-request", id: "replay", formIntent: intent });
+    await Promise.resolve(); await Promise.resolve();
+    const attemptId = post.mock.calls.find(([type]) => type === "ns-form-replay-ready")?.[1]?.attemptId;
+    expect(attemptId).toMatch(/^[a-f0-9]{32}$/);
+    sendMessage.mockClear();
+    const event = { target: form, submitter: null, isTrusted: true, defaultPrevented: false,
+      preventDefault: vi.fn(), stopImmediatePropagation: vi.fn() } as unknown as SubmitEvent;
+    authority.submit(event);
+    (event as unknown as { defaultPrevented: boolean }).defaultPrevented = true;
+    vi.runOnlyPendingTimers();
+    expect(sendMessage).toHaveBeenCalledWith({ type: "ns-form-intent-cancel", attemptId, s: undefined });
+    expect(sendMessage).not.toHaveBeenCalledWith({ type: "ns-form-intent-cancel", attemptId, s: 1 });
   });
 });
