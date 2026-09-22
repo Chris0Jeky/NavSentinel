@@ -55,7 +55,7 @@ function add(differences, code, key) {
 }
 
 function normalized(rows) {
-  if (!Array.isArray(rows) || rows.length !== 45) throw Error("FORM_RESULT_COUNT");
+  if (!Array.isArray(rows) || rows.length !== expectedKeys.length) throw Error("FORM_RESULT_COUNT");
   const map = new Map();
   for (const row of rows) {
     if (!row || Object.keys(row).sort().join() !== "atFixture,atSink,attempts,dialogClosed,protectedArm,variant" ||
@@ -91,7 +91,7 @@ export function compareFormOutcomes(full, control) {
     return {
       schema: "navsentinel.form-observer-parity.v1",
       matched: differences.length === 0,
-      cases: 45,
+      cases: expectedKeys.length,
       differences,
       evidencePolicy: "CONSEQUENCE_PARITY_NOT_ZERO_OBSERVER_EFFECT",
     };
