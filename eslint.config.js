@@ -34,10 +34,9 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      "tests/helpers/happy-dom-mutation-observer-retention.mjs",
-      "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
-    ],
+    // This dependency-free Node contract is JavaScript, not part of tsconfig.
+    // Keep normal lint rules active without requiring a TypeScript project.
+    files: ["tests/helpers/release-archive-adversarial.mjs"],
     languageOptions: {
       parserOptions: {
         project: false,
