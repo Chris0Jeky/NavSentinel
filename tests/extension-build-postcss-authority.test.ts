@@ -15,8 +15,10 @@ function git(repositoryRoot: string, args: string[]): string {
 }
 
 function createRepository(): { root: string; head: string } {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "navsentinel-postcss-authority-"),
+  // Canonicalize an 8.3 short-name TEMP prefix (#764): resolveRepositoryRoot
+  // compares against realpathSync.native, so hand it the canonical root.
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-postcss-authority-")),
   );
   temporaryDirectories.push(root);
   git(root, ["init", "--quiet"]);
