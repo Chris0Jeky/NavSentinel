@@ -120,7 +120,11 @@ export class ChildFormAuthority {
     const replay = this.replay;
     this.replay = null;
     if (event.isTrusted && intent && (spent.allowed || replay && replay.expiresAt > Date.now() && sameFormIntent(replay.intent, intent))) {
-      this.cancel(this.currentId, 1);
+      // A capture listener runs before the page's submit listeners. They may
+      // still cancel this event and start a different form navigation with the
+      // same URL. Report a source submission only after dispatch has settled.
+      const attemptId = this.currentId;
+      setTimeout(() => this.cancel(attemptId, event.defaultPrevented ? undefined : 1), 0);
       return;
     }
     this.cancel();
