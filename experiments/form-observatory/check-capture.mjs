@@ -6,7 +6,7 @@ import { expectedKeys } from './compare.mjs';
 export function checkDocumentCapture(rows) {
   const base = { schema:'navsentinel.form-capture-check.v1',passed:false,records:Array.isArray(rows)?rows.length:0,evidencePolicy:'CAPTURE_COMPLETENESS_NOT_PROTECTION_EVIDENCE' };
   try {
-    if(!Array.isArray(rows)||rows.length!==45)throw Error('CAPTURE_COUNT');
+    if(!Array.isArray(rows)||rows.length!==expectedKeys.length)throw Error('CAPTURE_COUNT');
     const keys=new Set(),runs=new Set(),heads=new Set();
     for(const r of rows){
       const key=`${r?.variant}:${r?.protectedArm}`;
@@ -30,7 +30,7 @@ function read(root){
       if(++visited>1024||e.isSymbolicLink())throw Error('CAPTURE_DIRECTORY_LIMIT');
       const file=path.join(directory,e.name);
       if(e.isDirectory())walk(file,depth+1);
-      else if(e.isFile()&&e.name.endsWith('.form-trace.json')){if(fs.statSync(file).size>1048576||rows.length>=45)throw Error('CAPTURE_SIZE_LIMIT');rows.push(JSON.parse(fs.readFileSync(file,'utf8')));}
+      else if(e.isFile()&&e.name.endsWith('.form-trace.json')){if(fs.statSync(file).size>1048576||rows.length>=expectedKeys.length)throw Error('CAPTURE_SIZE_LIMIT');rows.push(JSON.parse(fs.readFileSync(file,'utf8')));}
     }}finally{entries.closeSync();}
   };walk(root,0);return rows;
 }
