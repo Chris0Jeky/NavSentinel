@@ -1,4 +1,4 @@
-import { FormAttemptGate, clickFormBinding, formBindingUnchanged, resolveFormIntent, validateFormReceiver, type FormBinding } from "./form_intent";
+import { FormAttemptGate, clickFormBinding, formBindingUnchanged, resolveFormIntent, type FormBinding } from "./form_intent";
 import { isFormIntent, isHttpFormIntent, type FormIntent } from "../shared/form_intent";
 // RI-07: resolved by the bundler to `js_behavior_monitor.disabled.ts` (a no-op)
 // unless the active release profile declares `capabilities.jsBehaviorInstrumentation`.
@@ -175,7 +175,7 @@ let lastRapidPushStateEmitAt = 0;
 const blockedActions = new Map<
   string,
   {
-    action: () => void;
+    action: (attemptId?: string) => void;
     expiresAt: number;
     kind: string;
     url?: string;
@@ -444,7 +444,7 @@ function registerBlockedAction(params: {
   url?: string;
   target?: string;
   features?: string;
-  action: () => void;
+  action: (attemptId?: string) => void;
   formBinding?: FormBinding;
 }): void {
   pruneBlockedActions();
@@ -689,7 +689,6 @@ function patchForms(): void {
   function submit(form: HTMLFormElement, submitter: HTMLElement | null, request: boolean): void {
     // Validation must precede authority consumption: invalid requestSubmit
     // arguments retain native TypeError/NotFoundError behavior.
-    validateFormReceiver(form, submitter);
     const intent = resolveFormIntent(form, submitter);
     const kind = request ? "form_request_submit" : "form_submit";
     const binding = intent ? { form, submitter, intent } : null;
@@ -700,7 +699,10 @@ function patchForms(): void {
         else nativeFormSubmit.call(form);
       } finally { activeChildFormCall = false; }
     };
-    const allowed = () => {
+    const allowed = (attemptId?: string) => {
+      // Native submit fires no submit event. Both direct and approved replay
+      // paths report the exact attempt only after their DOM binding checks.
+      if (!request && attemptId) postToIsolated("ns-form-intent-cancel", { attemptId, s: 1 });
       postAllowed({ kind, ...(intent ? { url: intent[0], target: intent[3] } : {}) });
       // Child forms never turn a metadata tuple into generic worker authority.
       if (!isSubframe() && intent && isHttpFormIntent(intent)) {
@@ -718,10 +720,7 @@ function patchForms(): void {
         return;
       }
       if (spent.allowed && intent && isHttpFormIntent(intent)) {
-        // HTMLFormElement.prototype.submit() fires no submit event, so relay the
-        // exact child-gate spend before invoking the native navigation.
-        if (!request) postToIsolated("ns-form-intent-cancel", { ...spent, s: 1 });
-        allowed();
+        allowed(spent.attemptId);
         return;
       }
       if (spent.attemptId || spent.gestureTime !== undefined) postToIsolated("ns-form-intent-cancel", { ...spent });
@@ -735,9 +734,9 @@ function patchForms(): void {
       ...(binding ? { formBinding: binding } : {}),
       // The closure is not a frozen destination. Re-resolve DOM identity and
       // ALL effective attributes immediately before every approved replay.
-      action: () => {
+      action: (attemptId) => {
         if (!binding || !formBindingUnchanged(binding)) return;
-        allowed();
+        allowed(attemptId);
       },
     });
   }
@@ -770,6 +769,10 @@ function patchOpen(): void {
   }
 }
 
+function isFormAttemptId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{32}$/.test(value);
+}
+
 function handleBridgeMessage(message: unknown): void {
   const data = message as {
     source?: string;
@@ -791,8 +794,8 @@ function handleBridgeMessage(message: unknown): void {
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
 
-  if (data.type === "ns-allow-form" && isSubframe() && typeof data.attemptId === "string" &&
-      /^[a-f0-9]{32}$/.test(data.attemptId) && isFormIntent(data.formIntent) && typeof data.gestureTime === "number") {
+  if (data.type === "ns-allow-form" && isSubframe() && isFormAttemptId(data.attemptId) &&
+      isFormIntent(data.formIntent) && typeof data.gestureTime === "number") {
     childFormGate.authorize(data.attemptId, data.formIntent, data.gestureTime, nowMs());
     return;
   }
@@ -800,12 +803,13 @@ function handleBridgeMessage(message: unknown): void {
     const entry = blockedActions.get(data.id);
     if (!entry?.waitingForForm) return;
     blockedActions.delete(data.id); // Acknowledgements and replays are one-use.
-    if (!data.ok || entry.expiresAt <= nowMs() || !entry.formBinding || !formBindingUnchanged(entry.formBinding)) {
+    if (data.ok !== true || !isFormAttemptId(data.attemptId) || entry.expiresAt <= nowMs() ||
+        !entry.formBinding || !formBindingUnchanged(entry.formBinding)) {
       if (typeof data.attemptId === "string") postToIsolated("ns-form-intent-cancel", { attemptId: data.attemptId });
       postToIsolated("ns-form-replay-rejected");
       return;
     }
-    entry.action();
+    entry.action(data.attemptId);
     return;
   }
 
