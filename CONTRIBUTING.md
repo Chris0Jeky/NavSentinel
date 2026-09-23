@@ -6,6 +6,16 @@ This repo is best worked on as a browser-extension project with deterministic lo
 
 - Node.js `^20.19.0 || ^22.13.0 || >=24` (the `package.json` engine range)
 - Chrome or Chromium for MV3 testing
+- Windows checkouts must materialize LF bytes (`core.autocrlf=false`).
+  The provenance / state-authority / release-integrity tests compare raw
+  working-tree bytes against git blobs by design, and the repo's `eol=lf`
+  attributes are not retroactive on existing working-tree files: a checkout
+  made with `autocrlf=true` carries CRLF bytes that fail those tests with
+  `RAW_BYTES_MISMATCH`. Fix an existing checkout with
+  `git config core.autocrlf false` followed by `git add --renormalize .`
+  (commit the renormalization), or clone fresh with `core.autocrlf=false`.
+  The unit-test runner fails fast with this same guidance when it detects
+  CRLF working-tree files (#763).
 
 ## Install and build
 

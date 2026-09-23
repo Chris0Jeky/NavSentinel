@@ -20,6 +20,9 @@ export default defineConfig({
   test: {
     root: ".",
     include: ["extension/src/**/*.test.ts", "tests/**/*.test.ts"],
+    // Fail fast on CRLF Windows checkouts: the provenance suite compares raw
+    // working-tree bytes by design (#763). No other defaults are changed.
+    globalSetup: ["./scripts/checkout-eol.mjs"],
     // The happy-dom a11y tests inject the real popup/options HTML (with
     // `<link rel="stylesheet">` and `<script src>`) into the document. Without this,
     // happy-dom resolves those relative hrefs against its default base and tries to
