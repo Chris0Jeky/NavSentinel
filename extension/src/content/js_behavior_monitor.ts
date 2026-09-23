@@ -94,9 +94,6 @@ export const CREDENTIAL_READ_DEBOUNCE_MS = 500;
 /** Maximum tracked recent form submissions. */
 const MAX_RECENT_FORM_SUBMITS = 10;
 
-/** Maximum tracked recent network requests for correlation. */
-const MAX_RECENT_NETWORK_REQUESTS = 20;
-
 export {
   type JsBehaviorState,
   JS_BEHAVIOR_STATE_TTL_MS,
@@ -121,16 +118,7 @@ interface FormSubmitRecord {
   hasCredentials: boolean;
 }
 
-/** Recent network requests tracked for correlation. */
-interface NetworkRequestRecord {
-  ts: number;
-  destinationOrigin: string;
-  api: "fetch" | "xhr" | "beacon";
-}
-
 let _recentFormSubmits: FormSubmitRecord[] = [];
-let _recentNetworkRequests: NetworkRequestRecord[] = [];
-let _lastCredentialReadTs = 0;
 let _isInsideFormSubmit = false;
 let _config: JsBehaviorMonitorConfig | null = null;
 let _formSubmitPatched = false;
@@ -161,18 +149,52 @@ function snapshotExistingForms(): void {
   }
 }
 
+/**
+ * Resolve a raw action/formaction attribute value the way the browser will
+ * submit it: against the effective document base URL (which honors
+ * `<base href>`), falling back to the document URL when unparseable. (#818)
+ *
+ * This mirrors the #650 contract (`resolveFormActionUrl` in form_action.ts)
+ * used by the MAIN-world enforcement point. Resolving against `location.href`
+ * instead mis-scores any relative action on a page with a `<base href>`.
+ */
+function resolveAgainstBase(raw: string): string {
+  try {
+    return new URL(raw, document.baseURI).toString();
+  } catch {
+    return location.href;
+  }
+}
+
+/**
+ * Effective submit destination with #650 semantics: an explicitly present
+ * `formaction` overrides the form action even when empty (empty means the
+ * document, NOT the form action); only a missing attribute inherits the form
+ * action; a missing/empty effective action means the current document. (#818)
+ */
+function resolveEffectiveSubmitAction(
+  submitterAction: string | null,
+  formAction: string | null,
+): string {
+  const raw = submitterAction ?? formAction ?? "";
+  if (!raw.trim()) return location.href;
+  return resolveAgainstBase(raw);
+}
+
 /** Handle a form submit event and emit signals if suspicious. */
 function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null): void {
   if (!_config || _config.mode === "off") return;
 
   recordOriginalAction(form);
   const hasCredentials = formHasCredentialFields(form);
-  const submitterFormAction = submitter?.getAttribute("formaction") ?? "";
-  const action = submitterFormAction || form.action || location.href;
+  const action = resolveEffectiveSubmitAction(
+    submitter?.getAttribute("formaction") ?? null,
+    form.getAttribute("action"),
+  );
   const crossOrigin = isCrossOriginUrl(action);
   const originalAction = _originalFormActions.get(form) ?? "";
-  const resolvedOriginal = originalAction
-    ? extractOrigin(originalAction)
+  const resolvedOriginal = originalAction.trim()
+    ? extractOrigin(resolveAgainstBase(originalAction))
     : location.origin;
   const resolvedCurrent = extractOrigin(action);
   const actionDynamicallyChanged =
@@ -284,10 +306,6 @@ function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | 
   if (!_config || _config.mode === "off") return;
 
   const now = Date.now();
-  _recentNetworkRequests.push({ ts: now, destinationOrigin, api });
-  if (_recentNetworkRequests.length > MAX_RECENT_NETWORK_REQUESTS) {
-    _recentNetworkRequests.shift();
-  }
 
   if (destinationOrigin === location.origin || !destinationOrigin) return;
 
@@ -506,7 +524,6 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
             const lastRead = _credReadDebounceMap.get(this) ?? 0;
             if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
               _credReadDebounceMap.set(this, now);
-              _lastCredentialReadTs = now;
               const signal: JsCredentialReadSignal = {
                 ts: now,
                 isInsideSubmitHandler: false,
@@ -660,8 +677,6 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
  */
 export function _resetState(): void {
   _recentFormSubmits = [];
-  _recentNetworkRequests = [];
-  _lastCredentialReadTs = 0;
   _isInsideFormSubmit = false;
   _config = null;
 
