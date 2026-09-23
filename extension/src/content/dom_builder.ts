@@ -67,8 +67,11 @@ function readRect(el: Element): { w: number; h: number } | undefined {
 function readStyleHints(el: Element): Partial<ElementHint> {
   const cs = window.getComputedStyle(el);
   const z = cs.zIndex === "auto" ? 0 : Number.parseInt(cs.zIndex, 10);
+  // Detached elements report "" for computed opacity; an unguarded parse
+  // plants NaN in scoring, where every comparison fails open (#853).
+  const o = Number.parseFloat(cs.opacity);
   return {
-    opacity: Number.parseFloat(cs.opacity),
+    opacity: Number.isFinite(o) ? o : 1,
     display: cs.display,
     visibility: cs.visibility,
     pointerEvents: cs.pointerEvents,
