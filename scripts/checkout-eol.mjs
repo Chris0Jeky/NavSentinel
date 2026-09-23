@@ -5,6 +5,9 @@
 // CRLF files, and `git add --renormalize` changes the index, not those bytes.
 // Diagnose the checkout without changing files or weakening integrity checks.
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Return tracked paths with CRLF separators, including mixed LF/CRLF files. */
 export function findCrlfWorktreeFiles(lsFilesOutput) {
@@ -25,10 +28,21 @@ export function findCrlfWorktreeFiles(lsFilesOutput) {
 export default async function checkoutEolCheck() {
   let flagged;
   try {
-    const output = execFileSync("git", ["ls-files", "--eol"], {
+    // Anchor to the project containing this module, not the caller's cwd.
+    // Git can otherwise inherit a parent repository for a nested source copy,
+    // or inspect only a subdirectory when Vitest is launched below the root.
+    const projectRoot = realpathSync.native(fileURLToPath(new URL("../", import.meta.url)));
+    const options = {
+      cwd: projectRoot,
       encoding: "utf8",
+      timeout: 10_000,
       stdio: ["ignore", "pipe", "ignore"],
-    });
+    };
+    const checkoutRoot = realpathSync.native(
+      execFileSync("git", ["rev-parse", "--show-toplevel"], options).replace(/\r?\n$/, ""),
+    );
+    if (relative(projectRoot, checkoutRoot) !== "") return;
+    const output = execFileSync("git", ["ls-files", "--eol"], options);
     flagged = findCrlfWorktreeFiles(output);
   } catch {
     // A tarball or unavailable Git is not checkout evidence. Leave the real

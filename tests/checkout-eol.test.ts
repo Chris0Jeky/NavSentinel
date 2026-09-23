@@ -7,7 +7,51 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error Release helpers are plain ESM and intentionally have no declaration file.
 import { findCrlfWorktreeFiles } from "../scripts/checkout-eol.mjs";
 
-const checkerUrl = pathToFileURL(path.resolve(__dirname, "../scripts/checkout-eol.mjs")).href;
+const checkerPath = path.resolve(__dirname, "../scripts/checkout-eol.mjs");
+
+function withRoot(check: (root: string) => void) {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-eol-")));
+  try {
+    check(root);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function git(root: string, args: string[]) {
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 10_000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function initGit(root: string, contents: string) {
+  fs.mkdirSync(root, { recursive: true });
+  git(root, ["init", "--quiet"]);
+  git(root, ["config", "core.autocrlf", "false"]);
+  git(root, ["config", "core.safecrlf", "false"]);
+  fs.writeFileSync(path.join(root, ".gitattributes"), "* text=auto eol=lf\n");
+  fs.writeFileSync(path.join(root, "input.txt"), "one\ntwo\n");
+  git(root, ["add", "."]);
+  fs.writeFileSync(path.join(root, "input.txt"), contents);
+}
+
+function runChecker(root: string, cwd = root) {
+  // Exercise the default entry point from a module inside the fixture project,
+  // rather than injecting a root argument that production never supplies.
+  const target = path.join(root, "scripts", "checkout-eol.mjs");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(checkerPath, target);
+  const result = spawnSync(process.execPath, [
+    "--input-type=module", "--eval",
+    `import check from ${JSON.stringify(pathToFileURL(target).href)}; await check();`,
+  ], { cwd, encoding: "utf8", timeout: 10_000 });
+  expect(result.error).toBeUndefined();
+  expect(result.signal).toBeNull();
+  return result;
+}
 
 describe("findCrlfWorktreeFiles (#763)", () => {
   it("flags w/crlf entries and reports their paths", () => {
@@ -60,32 +104,14 @@ describe("checkout preflight with real Git bytes", { timeout: 30_000 }, () => {
     ["CRLF", "one\r\ntwo\r\n", true],
     ["mixed", "one\r\ntwo\n", true],
   ] as const)("classifies %s without rewriting local work", (_label, contents, rejected) => {
-    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-eol-")));
-    const git = (args: string[]) => execFileSync("git", args, {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 10_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    try {
-      git(["init", "--quiet"]);
-      git(["config", "core.autocrlf", "false"]);
-      git(["config", "core.safecrlf", "false"]);
-      fs.writeFileSync(path.join(root, ".gitattributes"), "* text=auto eol=lf\n");
+    withRoot((root) => {
+      initGit(root, contents);
       const input = path.join(root, "input.txt");
-      fs.writeFileSync(input, "one\ntwo\n");
-      git(["add", "."]);
-      fs.writeFileSync(input, contents);
-      // This used to be the recommended repair. It must NOT be mistaken for
-      // rematerializing the worktree: only the index is normalized.
-      git(["add", "--renormalize", "."]);
+      // This used to be the recommended repair. It changes the index, not the
+      // worktree: the preflight must still reject contaminated bytes afterward.
+      git(root, ["add", "--renormalize", "."]);
       expect(fs.readFileSync(input, "utf8")).toBe(contents);
-      const result = spawnSync(process.execPath, [
-        "--input-type=module", "--eval",
-        `import check from ${JSON.stringify(checkerUrl)}; await check();`,
-      ], { cwd: root, encoding: "utf8", timeout: 10_000 });
-      expect(result.error).toBeUndefined();
-      expect(result.signal).toBeNull();
+      const result = runChecker(root);
       expect(result.status).toBe(rejected ? 1 : 0);
       if (rejected) {
         expect(result.stderr).toContain("CRLF or mixed line endings");
@@ -93,8 +119,57 @@ describe("checkout preflight with real Git bytes", { timeout: 30_000 }, () => {
         expect(result.stderr).not.toContain("git add --renormalize");
       }
       expect(fs.readFileSync(input, "utf8")).toBe(contents);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
+    });
+  });
+
+  it("ignores a parent checkout's unrelated CRLF files", () => {
+    withRoot((root) => {
+      initGit(root, "one\r\ntwo\r\n");
+      const copy = path.join(root, "source-copy");
+      fs.mkdirSync(copy);
+      expect(runChecker(copy).status).toBe(0);
+    });
+  });
+
+  it("does not borrow a parent index for a source copy without its own Git root", () => {
+    withRoot((root) => {
+      initGit(root, "one\ntwo\n");
+      const copy = path.join(root, "source-copy");
+      fs.mkdirSync(copy);
+      const input = path.join(copy, "parent-tracked.txt");
+      fs.writeFileSync(input, "one\ntwo\n");
+      git(root, ["add", "."]);
+      fs.writeFileSync(input, "one\r\ntwo\r\n");
+      expect(runChecker(copy).status).toBe(0);
+      expect(fs.readFileSync(input, "utf8")).toBe("one\r\ntwo\r\n");
+    });
+  });
+
+  it("accepts a clean nested checkout with its own Git root", () => {
+    withRoot((root) => {
+      initGit(root, "one\r\ntwo\r\n");
+      const nested = path.join(root, "nested");
+      initGit(nested, "one\ntwo\n");
+      expect(runChecker(nested).status).toBe(0);
+    });
+  });
+
+  it("checks the entire project when invoked from a subdirectory", () => {
+    withRoot((root) => {
+      initGit(root, "one\r\ntwo\r\n");
+      const subdirectory = path.join(root, "empty");
+      fs.mkdirSync(subdirectory);
+      expect(runChecker(root, subdirectory).status).toBe(1);
+    });
+  });
+
+  it("does not inspect an unrelated process working directory", () => {
+    withRoot((root) => {
+      const project = path.join(root, "project");
+      const other = path.join(root, "other");
+      initGit(project, "one\ntwo\n");
+      initGit(other, "one\r\ntwo\r\n");
+      expect(runChecker(project, other).status).toBe(0);
+    });
   });
 });
