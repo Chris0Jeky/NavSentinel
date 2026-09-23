@@ -1065,7 +1065,14 @@ function capEventString(value: string): string {
  */
 function sanitizeEventExtra(extra: Record<string, unknown>): Record<string, unknown> | undefined {
   try {
-    return JSON.stringify(extra).length <= MAX_EVENT_EXTRA_BYTES ? extra : undefined;
+    const json = JSON.stringify(extra);
+    // UTF-16 length is only an inexpensive lower bound on the encoded size.
+    if (typeof json !== "string" || json.length > MAX_EVENT_EXTRA_BYTES
+      || new TextEncoder().encode(json).byteLength > MAX_EVENT_EXTRA_BYTES) return undefined;
+    // Persist the admitted snapshot, not a caller-owned object that can grow
+    // while the serialized write waits for storage or an earlier operation.
+    const snapshot: unknown = JSON.parse(json);
+    return isRecord(snapshot) ? snapshot : undefined;
   } catch {
     return undefined;
   }
