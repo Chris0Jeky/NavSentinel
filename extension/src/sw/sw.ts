@@ -1368,6 +1368,9 @@ function onRemovedHandler(tabId: number): void {
   void clearTabIcon(tabId); // fire-and-forget: blank is chain-ordered (#272)
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
+    // Retire the child before notifying its opener, even if sendMessage throws.
+    // The centralized cleanup below may safely repeat this Map.delete. (#803)
+    childWindowByTab.delete(tabId);
     const age = Date.now() - childEntry.createdAt;
     // Only notify the opener if the child actually wrote to opener.location.
     // Without this gate, benign popups (OAuth, help windows) that open and
@@ -1385,11 +1388,8 @@ function onRemovedHandler(tabId: number): void {
     }
   }
 
-  // All per-tab state — the 16 maps previously deleted inline here are exactly
-  // the set SessionStateManager.deleteTab clears — plus the batch persist. The
-  // child entry is only peeked above for the notify decision; its deletion moves
-  // into deleteTab, which is unobservable (the notify send is fire-and-forget
-  // either way). (#803)
+  // Centralize the remaining per-tab cleanup and its batch persist. The early
+  // child deletion above preserves the original failure-path ordering. (#803)
   swState.deleteTab(tabId);
 }
 
