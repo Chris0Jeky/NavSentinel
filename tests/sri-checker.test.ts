@@ -46,7 +46,7 @@ describe("sri_checker - non-credential pages", () => {
     const doc = makeDoc(nonCredentialPage(
       scriptTag(`${EXTERNAL_ORIGIN}/app.js`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.score).toBe(0);
     expect(result.totalExternal).toBe(0);
     expect(result.reasons).toHaveLength(0);
@@ -58,7 +58,7 @@ describe("sri_checker - non-credential pages", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/b.js`) +
       linkTag(`${EXTERNAL_ORIGIN}/style.css`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
     expect(result.withSRI).toBe(0);
     expect(result.withoutSRI).toBe(0);
@@ -77,7 +77,7 @@ describe("sri_checker - non-credential pages", () => {
     const html =
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
       `<body><form><input type="password" name="pw" style="${style}"></form></body></html>`;
-    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(makeDoc(html), PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
     expect(result.score).toBe(0);
   });
@@ -89,7 +89,7 @@ describe("sri_checker - non-credential pages", () => {
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
       `<body><form><input type="password" name="hidden" style="display:none">` +
       `<input type="password" name="real"></form></body></html>`;
-    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(makeDoc(html), PAGE_ORIGIN);
     expect(result.totalExternal).toBe(1);
   });
 
@@ -100,7 +100,7 @@ describe("sri_checker - non-credential pages", () => {
     const html =
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
       `<body><form><input type="password" name="pw" style="content:'display:none'"></form></body></html>`;
-    const result = checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(makeDoc(html), PAGE_ORIGIN);
     expect(result.totalExternal).toBe(1);
   });
 
@@ -111,7 +111,7 @@ describe("sri_checker - non-credential pages", () => {
     const html =
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
       `<body><form><input type="password" name="pw" style="display:none none"></form></body></html>`;
-    expect(checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN).totalExternal).toBe(1);
+    expect(checkSRI(makeDoc(html), PAGE_ORIGIN).totalExternal).toBe(1);
   });
 
   it("DOES scan a field whose inline cascade resolves to visible (#196 R1)", () => {
@@ -120,7 +120,7 @@ describe("sri_checker - non-credential pages", () => {
     const html =
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/app.js`)}</head>` +
       `<body><form><input type="password" name="pw" style="display:none;display:block"></form></body></html>`;
-    expect(checkSRI(makeDoc(html), PAGE_URL, PAGE_ORIGIN).totalExternal).toBe(1);
+    expect(checkSRI(makeDoc(html), PAGE_ORIGIN).totalExternal).toBe(1);
   });
 });
 
@@ -134,17 +134,17 @@ describe("sri_checker - same-origin exclusion", () => {
       scriptTag(`${PAGE_ORIGIN}/app.js`) +
       scriptTag("/local.js")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN, PAGE_URL);
     expect(result.totalExternal).toBe(0);
     expect(result.score).toBe(0);
   });
 
-  it("excludes relative scripts (same origin by definition)", () => {
+  it("excludes relative scripts when the base is same-origin", () => {
     const doc = makeDoc(loginPage(
       scriptTag("./bundle.js") +
       scriptTag("assets/main.js")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN, PAGE_URL);
     expect(result.totalExternal).toBe(0);
   });
 
@@ -153,7 +153,7 @@ describe("sri_checker - same-origin exclusion", () => {
       linkTag(`${PAGE_ORIGIN}/style.css`) +
       linkTag("/theme.css")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN, PAGE_URL);
     expect(result.totalExternal).toBe(0);
   });
 });
@@ -169,7 +169,7 @@ describe("sri_checker - all SRI present", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/lib.js`, hash) +
       linkTag(`${EXTERNAL_ORIGIN}/lib.css`, hash)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(2);
     expect(result.withSRI).toBe(2);
     expect(result.withoutSRI).toBe(0);
@@ -190,7 +190,7 @@ describe("sri_checker - no SRI present", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/analytics.js`) +
       linkTag(`${EXTERNAL_ORIGIN}/theme.css`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(3);
     expect(result.withSRI).toBe(0);
     expect(result.withoutSRI).toBe(3);
@@ -212,7 +212,7 @@ describe("sri_checker - partial SRI coverage", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/b.js`) +
       scriptTag(`${EXTERNAL_ORIGIN}/c.js`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(3);
     expect(result.withSRI).toBe(1);
     expect(result.withoutSRI).toBe(2);
@@ -227,7 +227,7 @@ describe("sri_checker - partial SRI coverage", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/b.js`, hash) +
       scriptTag(`${EXTERNAL_ORIGIN}/c.js`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(3);
     expect(result.withSRI).toBe(2);
     expect(result.withoutSRI).toBe(1);
@@ -241,7 +241,7 @@ describe("sri_checker - partial SRI coverage", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/a.js`, hash) +
       scriptTag(`${EXTERNAL_ORIGIN}/b.js`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(2);
     expect(result.withSRI).toBe(1);
     expect(result.withoutSRI).toBe(1);
@@ -259,7 +259,7 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       "<script>console.log('inline')</script>"
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
   });
 
@@ -267,7 +267,7 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       scriptTag("data:text/javascript,alert(1)")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
   });
 
@@ -275,7 +275,7 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       scriptTag("blob:https://example.com/abc-123")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
   });
 
@@ -283,7 +283,7 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       scriptTag("javascript:void(0)")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
   });
 
@@ -291,7 +291,7 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       scriptTag(`${EXTERNAL_ORIGIN}/lib.js`, "")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(1);
     expect(result.withSRI).toBe(0);
     expect(result.withoutSRI).toBe(1);
@@ -302,14 +302,14 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       scriptTag(`${EXTERNAL_ORIGIN}/lib.js`, "   ")
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.withSRI).toBe(0);
     expect(result.withoutSRI).toBe(1);
   });
 
   it("handles page with password field but no external resources", () => {
     const doc = makeDoc(loginPage(""));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
     expect(result.score).toBe(0);
     expect(result.reasons).toHaveLength(0);
@@ -320,7 +320,7 @@ describe("sri_checker - edge cases", () => {
       `<!doctype html><html><head>${scriptTag(`${EXTERNAL_ORIGIN}/lib.js`)}</head>` +
       `<body><form><input type="password" disabled></form></body></html>`
     );
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
     expect(result.score).toBe(0);
   });
@@ -332,7 +332,7 @@ describe("sri_checker - edge cases", () => {
       scriptTag(`${PAGE_ORIGIN}/local.js`) +
       linkTag(`${PAGE_ORIGIN}/local.css`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     // Only the 2 external resources should be counted
     expect(result.totalExternal).toBe(2);
     expect(result.withoutSRI).toBe(2);
@@ -345,7 +345,7 @@ describe("sri_checker - edge cases", () => {
       scriptTag(`${EXTERNAL_ORIGIN}/a.js`, hash) +
       linkTag(`${EXTERNAL_ORIGIN}/b.css`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(2);
     expect(result.withSRI).toBe(1);
     expect(result.withoutSRI).toBe(1);
@@ -363,7 +363,7 @@ describe("sri_checker - edge cases", () => {
       linkTag(`${EXTERNAL_ORIGIN}/e.css`) +
       linkTag(`${EXTERNAL_ORIGIN}/f.css`) +
       linkTag(`${EXTERNAL_ORIGIN}/g.css`)
-    )), PAGE_URL, PAGE_ORIGIN);
+    )), PAGE_ORIGIN);
 
     const protectedStyle = checkSRI(makeDoc(loginPage(
       scriptTag(`${EXTERNAL_ORIGIN}/a.js`) +
@@ -373,7 +373,7 @@ describe("sri_checker - edge cases", () => {
       linkTag(`${EXTERNAL_ORIGIN}/e.css`, hash) +
       linkTag(`${EXTERNAL_ORIGIN}/f.css`) +
       linkTag(`${EXTERNAL_ORIGIN}/g.css`)
-    )), PAGE_URL, PAGE_ORIGIN);
+    )), PAGE_ORIGIN);
 
     expect(scriptProtected).toEqual(protectedStyle);
     expect(scriptProtected.totalExternal).toBe(7);
@@ -389,7 +389,7 @@ describe("sri_checker - edge cases", () => {
       '<link rel="icon" href="' + EXTERNAL_ORIGIN + '/favicon.ico">' +
       '<link rel="preconnect" href="' + EXTERNAL_ORIGIN + '">'
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(0);
   });
 
@@ -399,7 +399,7 @@ describe("sri_checker - edge cases", () => {
       scriptTag("https://cdn2.example.org/b.js") +
       scriptTag(`${EXTERNAL_ORIGIN}/c.js`)
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(3);
     expect(result.withoutSRI).toBe(3);
     expect(result.score).toBe(8);
@@ -409,7 +409,65 @@ describe("sri_checker - edge cases", () => {
     const doc = makeDoc(loginPage(
       '<link rel="stylesheet alternate" href="' + EXTERNAL_ORIGIN + '/theme.css">'
     ));
-    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    const result = checkSRI(doc, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withoutSRI).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Effective base URL (<base href>) handling (#778)
+// ---------------------------------------------------------------------------
+
+describe("sri_checker - base element resolution", () => {
+  const CDN_BASE = "https://cdn.example/static/";
+
+  function loginPageWithBase(head: string): string {
+    return `<!doctype html><html><head><base href="${CDN_BASE}">${head}</head>` +
+      `<body><form>${passwordField()}</form></body></html>`;
+  }
+
+  it("counts a relative script as external when <base href> points cross-origin", () => {
+    const doc = makeDoc(loginPageWithBase(scriptTag("lib.js")));
+    const result = checkSRI(doc, PAGE_ORIGIN, CDN_BASE);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withoutSRI).toBe(1);
+    expect(result.score).toBe(8);
+  });
+
+  it("counts a relative script with integrity as SRI-covered under a cross-origin base", () => {
+    const doc = makeDoc(loginPageWithBase(scriptTag("lib.js", "sha384-abc")));
+    const result = checkSRI(doc, PAGE_ORIGIN, CDN_BASE);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withSRI).toBe(1);
+    expect(result.score).toBe(-3);
+  });
+
+  it("counts a relative stylesheet as external when <base href> points cross-origin", () => {
+    const doc = makeDoc(loginPageWithBase(linkTag("theme.css")));
+    const result = checkSRI(doc, PAGE_ORIGIN, CDN_BASE);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withoutSRI).toBe(1);
+  });
+
+  it("treats a relative script as same-origin when the base matches the page origin", () => {
+    const doc = makeDoc(loginPage(scriptTag("lib.js")));
+    const result = checkSRI(doc, PAGE_ORIGIN, PAGE_URL);
+    expect(result.totalExternal).toBe(0);
+    expect(result.score).toBe(0);
+  });
+
+  it("leaves absolute URLs unaffected by the base", () => {
+    const doc = makeDoc(loginPageWithBase(scriptTag(`${EXTERNAL_ORIGIN}/lib.js`)));
+    const result = checkSRI(doc, PAGE_ORIGIN, CDN_BASE);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withoutSRI).toBe(1);
+  });
+
+  it("defaults the base to doc.baseURI when no explicit base is given", () => {
+    const doc = makeDoc(loginPageWithBase(scriptTag("lib.js")));
+    Object.defineProperty(doc, "baseURI", { value: CDN_BASE, configurable: true });
+    const result = checkSRI(doc, PAGE_ORIGIN);
     expect(result.totalExternal).toBe(1);
     expect(result.withoutSRI).toBe(1);
   });

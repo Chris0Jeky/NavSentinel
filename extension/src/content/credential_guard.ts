@@ -333,7 +333,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // Skip entirely for trusted domains -- consistent with content analysis above.
     if (!risk.page.isTrusted) {
       try {
-        const sriAnalysis = checkSRI(document, location.href, location.origin);
+        const sriAnalysis = checkSRI(document, location.origin);
         if (sriAnalysis.score !== 0) {
           risk.score = Math.max(0, Math.min(100, risk.score + sriAnalysis.score));
           const sriCode = sriAnalysis.score > 0 ? "SRI_MISSING_ON_CREDENTIAL_PAGE" : "SRI_PRESENT_ON_CREDENTIAL_PAGE";

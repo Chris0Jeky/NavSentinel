@@ -40,9 +40,9 @@ export interface SRIAnalysis {
  * Returns the origin portion of a URL string, or null if parsing fails
  * or the URL uses a non-http(s) scheme (data:, blob:, javascript:, etc.).
  */
-function httpOrigin(url: string, baseUrl: string): string | null {
+function httpOrigin(url: string, base: string): string | null {
   try {
-    const parsed = new URL(url, baseUrl);
+    const parsed = new URL(url, base);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
     return parsed.origin;
   } catch {
@@ -54,8 +54,8 @@ function httpOrigin(url: string, baseUrl: string): string | null {
  * Returns true when the resource URL is cross-origin relative to the
  * current page, meaning SRI would be meaningful for it.
  */
-function isCrossOrigin(resourceUrl: string, pageOrigin: string, pageUrl: string): boolean {
-  const origin = httpOrigin(resourceUrl, pageUrl);
+function isCrossOrigin(resourceUrl: string, pageOrigin: string, base: string): boolean {
+  const origin = httpOrigin(resourceUrl, base);
   if (!origin) return false;
   return origin !== pageOrigin;
 }
@@ -69,14 +69,14 @@ function scanResources(
   selector: string,
   attrName: string,
   pageOrigin: string,
-  pageUrl: string,
+  base: string,
   result: SRIAnalysis,
 ): void {
   const elements = doc.querySelectorAll(selector);
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i] as HTMLElement;
     const url = el.getAttribute(attrName) ?? "";
-    if (!url || !isCrossOrigin(url, pageOrigin, pageUrl)) continue;
+    if (!url || !isCrossOrigin(url, pageOrigin, base)) continue;
 
     result.totalExternal++;
     if (el.hasAttribute("integrity") && (el.getAttribute("integrity") ?? "").trim().length > 0) {
@@ -91,14 +91,20 @@ function scanResources(
  * Scan the page for external scripts and stylesheets and check whether
  * they carry SRI hashes. Only meaningful on credential pages.
  *
+ * Relative `src`/`href` values resolve against the effective document base
+ * URL, matching what the browser actually fetches — resolving against the
+ * page URL instead misbinds whenever a `<base href>` element is present
+ * (same class as the form-action base binding, #650).
+ *
  * @param doc  The Document to scan (defaults to `document` in content script)
- * @param pageUrl  The page URL (defaults to `location.href`)
  * @param pageOrigin  The page origin (defaults to `location.origin`)
+ * @param baseUrl  Effective base URL for relative resources (defaults to
+ *   `doc.baseURI`, which honors `<base href>`)
  */
 export function checkSRI(
   doc: Document = document,
-  pageUrl: string = location.href,
-  pageOrigin: string = location.origin
+  pageOrigin: string = location.origin,
+  baseUrl: string = doc.baseURI
 ): SRIAnalysis {
   const result: SRIAnalysis = {
     totalExternal: 0,
@@ -112,8 +118,8 @@ export function checkSRI(
   // helper — see password_field.ts; #196).
   if (!hasVisiblePasswordField(doc)) return result;
 
-  scanResources(doc, "script[src]", "src", pageOrigin, pageUrl, result);
-  scanResources(doc, 'link[rel~="stylesheet"][href]', "href", pageOrigin, pageUrl, result);
+  scanResources(doc, "script[src]", "src", pageOrigin, baseUrl, result);
+  scanResources(doc, 'link[rel~="stylesheet"][href]', "href", pageOrigin, baseUrl, result);
 
   // Scoring
   if (result.totalExternal === 0) {
