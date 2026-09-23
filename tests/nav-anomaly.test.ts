@@ -414,6 +414,15 @@ describe("computeAnomalyScore", () => {
     expect(computeAnomalyScore(makeProfile({ categoryCounts: { entertainment: NaN }, totalNavigations: 100 }), "entertainment", 3)).toBe(0);
   });
 
+  it("returns 0 for a non-finite recentCategoryCount (no gate bypass) (#799)", () => {
+    // Pre-fix: Math.max propagates NaN, so `NaN >= RARE_CATEGORY_THRESHOLD` is false AND
+    // `NaN < BURST_MIN_COUNT` is false — BOTH gates pass and NaN scores 10 (Infinity: 15).
+    const profile = makeProfile({ categoryCounts: { entertainment: 100 }, totalNavigations: 100 });
+    expect(computeAnomalyScore(profile, "crypto", NaN)).toBe(0);
+    expect(computeAnomalyScore(profile, "crypto", Infinity)).toBe(0);
+    expect(computeAnomalyScore(profile, "crypto", -Infinity)).toBe(0);
+  });
+
   it("returns 0 when total navigations below minimum", () => {
     const profile = makeProfile({
       categoryCounts: { entertainment: MIN_NAVIGATIONS_FOR_ANOMALY - 1 },

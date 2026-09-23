@@ -526,6 +526,14 @@ export function computeAnomalyScore(
     return 0;
   }
 
+  // Same NaN-gate-bypass class, one parameter over: Math.max propagates NaN, so a
+  // non-finite burst count makes `NaN >= RARE_CATEGORY_THRESHOLD` false (rarity pass)
+  // AND `NaN < BURST_MIN_COUNT` false (burst pass) — scoring 10 (NaN) or 15
+  // (Infinity) on an invalid input. No producer emits this; exported-fn hardening. (#799)
+  if (!Number.isFinite(recentCategoryCount)) {
+    return 0;
+  }
+
   // Check if category is rare (< 5% of total navigations).
   // Subtract recent burst navigations from the stored count to avoid
   // the burst itself inflating the frequency and self-defeating detection.
