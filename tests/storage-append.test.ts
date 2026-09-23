@@ -875,6 +875,76 @@ describe("appendEvent", () => {
     expect(entry!.reasons).toEqual([]); // sanitizeCodeList -> undefined -> ?? [] (still valid)
   });
 
+  it("caps oversized live-append strings and drops an oversized extra (#829)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    // Live callers pass raw page-derived values (e.g. url: location.href), so a
+    // megabyte-scale page path must not persist verbatim and exhaust the shared
+    // chrome.storage.local quota. Mirrors the #299 import-path caps.
+    const big = "C".repeat(1024 * 1024);
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: `cap-1-${big}`,
+      kind: "nav_click_block",
+      site: `site-${big}.example`,
+      url: `https://example.com/${big}`,
+      destHost: `host-${big}.example`,
+      extra: { blob: big },
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log).toHaveLength(1); // entry persists — only the bloat is shed
+    const stored = log[0]!;
+    expect((stored.id as string).length).toBeLessThanOrEqual(2048);
+    expect((stored.site as string).length).toBeLessThanOrEqual(2048);
+    expect((stored.url as string).length).toBeLessThanOrEqual(2048);
+    expect((stored.destHost as string).length).toBeLessThanOrEqual(2048);
+    expect(stored.extra).toBeUndefined(); // oversized extra dropped (fail closed)
+    expect(JSON.stringify(stored).length).toBeLessThan(4 * 2048 + 1000);
+  });
+
+  it("preserves a small extra and short fields on live append (#829)", async () => {
+    // Inverted-condition guard: the oversized-extra DROP must be selective — a
+    // small structural extra and short fields must survive verbatim.
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "ok-live-1",
+      kind: "nav_click_block",
+      site: "example.com",
+      url: "https://example.com/page",
+      destHost: "cdn.example",
+      extra: { tabId: 42, flags: ["a", "b"] },
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log).toHaveLength(1);
+    const stored = log[0]!;
+    expect(stored.id).toBe("ok-live-1");
+    expect(stored.site).toBe("example.com");
+    expect(stored.url).toBe("https://example.com/page");
+    expect(stored.destHost).toBe("cdn.example");
+    expect(stored.extra).toEqual({ tabId: 42, flags: ["a", "b"] });
+  });
+
+  it("drops an unserializable live-append extra but keeps the entry (#829)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const cyclic: Record<string, unknown> = { tag: "cyclic" };
+    cyclic.self = cyclic;
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({ id: "cyclic-1", kind: "nav_click_block", extra: cyclic });
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log).toHaveLength(1);
+    expect(log[0]!.id).toBe("cyclic-1");
+    expect(log[0]!.extra).toBeUndefined();
+  });
+
   it("omits optional fields when not provided", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
