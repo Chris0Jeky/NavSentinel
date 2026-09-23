@@ -324,20 +324,38 @@ async function untrustCurrentSite(): Promise<void> {
 }
 
 
+// The seg setters apply their control optimistically before persisting; a
+// failed save must resync from persisted truth so it can't strand the wrong
+// value. Shared helper keeps the popup-JS perf budget in range. (#849)
+function resyncAfterFailedSave(label: string, err: unknown): void {
+  console.warn(`[NavSentinel] ${label} save failed:`, err);
+  void refreshUi();
+}
+
 navSeg.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (!btn || btn.getAttribute("aria-checked") === "true") return;
-  await setNavMode(btn.dataset.value as Mode);
+  try {
+    await setNavMode(btn.dataset.value as Mode);
+  } catch (err) {
+    resyncAfterFailedSave("nav mode", err);
+  }
 });
 
 credSeg.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".seg-btn");
   if (!btn || btn.getAttribute("aria-checked") === "true") return;
-  await setCredMode(btn.dataset.value as CredMode);
+  try {
+    await setCredMode(btn.dataset.value as CredMode);
+  } catch (err) {
+    resyncAfterFailedSave("cred mode", err);
+  }
 });
 
 autoDismiss.addEventListener("change", () => {
-  void updateSuiteSettings({ nav: { autoDismissOverlays: autoDismiss.checked } });
+  void updateSuiteSettings({ nav: { autoDismissOverlays: autoDismiss.checked } }).catch((err) => {
+    resyncAfterFailedSave("auto-dismiss", err);
+  });
 });
 
 initSegKeyboard(navSeg);
