@@ -156,15 +156,14 @@ export async function readToastText(page: Page): Promise<string | null> {
 }
 
 export async function clickToastButton(page: Page, label: string): Promise<void> {
-  await page.evaluate((expected) => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
-    const match = buttons.find((button) => button.textContent?.trim() === expected);
-    if (!(match instanceof HTMLButtonElement)) {
-      throw new Error(`Toast button not found: ${expected}`);
-    }
-    match.click();
-  }, label);
+  // Trusted input only (#826): the toast rejects synthetic clicks, so drive a
+  // real locator click (trusted CDP input) instead of match.click() via
+  // evaluate. Playwright locators pierce the open shadow root, and toast
+  // buttons carry plain-text labels with no accessible-name overrides, so an
+  // exact role-name match preserves the previous textContent-trim semantics.
+  const button = page.locator("#__navsentinel_toast_host").getByRole("button", { name: label, exact: true });
+  await button.waitFor({ state: "visible" });
+  await button.click();
 }
 
 export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {
