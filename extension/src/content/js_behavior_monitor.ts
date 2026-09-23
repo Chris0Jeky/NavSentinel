@@ -109,6 +109,10 @@ export {
   SCORE_CREDENTIAL_READ_OUTSIDE_SUBMIT,
   SCORE_MULTIPLE_SIGNALS_BONUS,
 } from "../shared/js_behavior_state";
+import {
+  hasVisiblePasswordField,
+  isVisiblePasswordField,
+} from "./password_field";
 
 // ============================================================================
 // Internal State (module-scoped, reset per page load)
@@ -277,7 +281,10 @@ let _xhrPatched = false;
 let _beaconPatched = false;
 
 function pageHasCredentialFields(): boolean {
-  return document.querySelector('input[type="password"]:not([disabled])') !== null;
+  // Use the shared visibility gate (#196): an inline-hidden honeypot must not
+  // make the page a "credential page", or every cross-origin analytics beacon
+  // scores +15 exfilBeacon on ordinary pageviews. (#859)
+  return hasVisiblePasswordField(document);
 }
 
 function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | "beacon"): void {
@@ -583,7 +590,13 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  *
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
-  return form.querySelector('input[type="password"]') !== null;
+  // Per-input visibility gate (#196): honeypots and disabled fields (never
+  // submitted by the browser, cf. #227.2) cannot exfiltrate credentials. (#859)
+  const inputs = form.querySelectorAll('input[type="password"]');
+  for (let i = 0; i < inputs.length; i++) {
+    if (isVisiblePasswordField(inputs[i] as HTMLInputElement)) return true;
+  }
+  return false;
 }
 
 /**

