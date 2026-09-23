@@ -1205,6 +1205,83 @@ describe("mutation_monitor shadow DOM observation", () => {
   });
 });
 
+describe("mutation_monitor throwing callbacks (#770)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  function stubForegroundOverlay(): HTMLElement {
+    const overlay = document.createElement("a");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  it("records the alert when onAlert throws on the scan path", () => {
+    const overlay = stubForegroundOverlay();
+    startMutationMonitor(document, () => {
+      throw new Error("alert boom");
+    });
+
+    expect(() => scanExistingForegroundOverlay(document)).not.toThrow();
+    expect(getMutationAlertCount()).toBe(1);
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+
+    overlay.remove();
+    stopMutationMonitor();
+  });
+
+  it("delivers the rest of the batch when one alert delivery throws", async () => {
+    const delivered: MutationAlert[] = [];
+    let calls = 0;
+    startMutationMonitor(document, (alert) => {
+      calls += 1;
+      if (calls === 1) throw new Error("first delivery boom");
+      delivered.push(alert);
+    });
+
+    const first = document.createElement("input");
+    first.type = "password";
+    const second = document.createElement("input");
+    second.type = "password";
+    document.body.append(first, second);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(getMutationAlertCount()).toBe(2);
+    expect(delivered).toHaveLength(1);
+
+    first.remove();
+    second.remove();
+    stopMutationMonitor();
+  });
+
+  it("still records the alert when the overlay-cleanup callback throws", () => {
+    const overlay = stubForegroundOverlay();
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: () => {
+        throw new Error("cleanup boom");
+      },
+    });
+
+    expect(() => scanExistingForegroundOverlay(document)).not.toThrow();
+    expect(getMutationAlertCount()).toBe(1);
+
+    overlay.remove();
+    stopMutationMonitor();
+  });
+});
+
 describe("mutation_monitor alert-cap cleanup (#409)", () => {
   beforeEach(() => {
     _resetMutationState();
