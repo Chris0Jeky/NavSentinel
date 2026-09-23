@@ -329,7 +329,7 @@ async function untrustCurrentSite(): Promise<void> {
 // value. Shared helper keeps the popup-JS perf budget in range. (#849)
 function resyncAfterFailedSave(label: string, err: unknown): void {
   console.warn(`[NavSentinel] ${label} save failed:`, err);
-  void refreshUi();
+  void refreshUi().catch((err) => console.warn("[NavSentinel] popup resync failed:", err));
 }
 
 navSeg.addEventListener("click", async (e) => {
