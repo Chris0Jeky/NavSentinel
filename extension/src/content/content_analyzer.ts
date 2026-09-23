@@ -240,6 +240,24 @@ export const MAX_FORMS = 50;
  */
 export const MAX_FORM_ACTION_LEN = 2048;
 
+/**
+ * Max chars kept from the concatenated inline-script text. Accumulated with
+ * incremental slicing (not concat-then-slice) so multi-MB bundles never
+ * materialize as an intermediate string on the synchronous submit path. The
+ * output is byte-identical to the old concat-then-slice (same prefix of the
+ * same joined sequence) — zero detection change. (#786)
+ */
+export const SCRIPT_TEXT_MAX = 30000;
+
+/**
+ * Max number of `<meta>` elements snapshotted, mirroring the form/image/script
+ * count caps. `querySelectorAll` returns document order, so head generator /
+ * refresh metas (the only ones any fingerprint reads) are retained; a hostile
+ * page padding thousands of metas past the cap only drops unscanned ones.
+ * (#786)
+ */
+export const MAX_METAS = 100;
+
 export interface KitFingerprint {
   name: string;
   /** CSS selectors or attribute patterns to look for */
@@ -484,14 +502,19 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   // entire DOM (the exfil htmlPatterns derive their quantifier bounds from this).
   const htmlSnippet = doc.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
 
-  // Script text
+  // Script text -- each script sliced to the remaining budget BEFORE concat,
+  // so the intermediate string never exceeds SCRIPT_TEXT_MAX (a concat-then-
+  // slice would first materialize the full multi-MB bundle text). Output is
+  // identical to the old ordering: the same SCRIPT_TEXT_MAX-char prefix of the
+  // same space-joined sequence.
   const scripts = doc.querySelectorAll("script");
   let scriptText = "";
   const scriptLimit = Math.min(scripts.length, 30);
   for (let i = 0; i < scriptLimit; i++) {
-    scriptText += ((scripts[i] as HTMLScriptElement).textContent || "") + " ";
+    const remaining = SCRIPT_TEXT_MAX - scriptText.length;
+    if (remaining <= 0) break;
+    scriptText += (((scripts[i] as HTMLScriptElement).textContent || "") + " ").slice(0, remaining);
   }
-  scriptText = scriptText.slice(0, 30000);
 
   // Image signals -- each alt/src is head+tail sampled to ~MAX_IMG_ATTR chars (a
   // multi-MB data:-URI src would otherwise blow the analysis budget). The 50-image
@@ -538,10 +561,12 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     formActions.push({ action, hasPassword: hasPw });
   }
 
-  // Meta tags
+  // Meta tags -- capped like every other channel (document order keeps the
+  // head generator/refresh metas the fingerprints read).
   const metaTags: Array<{ name: string; content: string }> = [];
   const metas = doc.querySelectorAll("meta[name], meta[http-equiv]");
-  for (let i = 0; i < metas.length; i++) {
+  const metaLimit = Math.min(metas.length, MAX_METAS);
+  for (let i = 0; i < metaLimit; i++) {
     const meta = metas[i] as HTMLMetaElement;
     const name = (meta.getAttribute("name") || meta.getAttribute("http-equiv") || "").toLowerCase();
     const content = meta.getAttribute("content") || "";
