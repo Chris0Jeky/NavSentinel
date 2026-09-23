@@ -97,6 +97,7 @@ import {
   type SilentNavThrottleState,
 } from "./silent_decision";
 import { grantsTabNavigationAuthority } from "./nav_authority";
+import { isStaleDelivery } from "./rollback_staleness";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -1204,6 +1205,12 @@ function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
   if (!isTopFrame()) return;
   if (!url) return;
+  // Staleness guard (#774): a rollback queued for a previous page must not
+  // execute after the tab moved on (stale in-flight delivery double-navigates
+  // and strands the tab with its forward offer lost). Fragment-stripped, so a
+  // same-document anchor jump cannot invalidate a legitimate rollback. Placed
+  // here so both the push and the ns-check-rollback poll paths are covered.
+  if (isStaleDelivery(url, location.href)) return;
   const referrerTarget = (() => {
     if (!document.referrer || document.referrer === location.href) return "";
     try {
@@ -1575,6 +1582,15 @@ if (chrome?.runtime?.onMessage) {
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
     if (!url || !/^https?:\/\//i.test(url)) return;
+    // Staleness guards (#774). Unlike ns-rollback, the tab is legitimately
+    // NEVER at message.url when an offer arrives (it is at returnUrl, the page
+    // we rolled back to), so a location==url check would kill every real
+    // offer. Instead: ignore when already at the offered URL (fragment race
+    // the SW's exact check missed), and when returnUrl is known but the tab
+    // has moved on from it.
+    if (!isStaleDelivery(url, location.href)) return;
+    const returnUrl = typeof message.returnUrl === "string" ? message.returnUrl : "";
+    if (returnUrl && isStaleDelivery(returnUrl, location.href)) return;
     showRollbackPrompt(url);
   });
 
