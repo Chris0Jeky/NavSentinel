@@ -145,7 +145,9 @@ describe("release input integrity", () => {
     expect(runGit(root, ["status", "--porcelain"])).toBe("");
 
     expect(() => assertExactCommittedInputs(root)).toThrow(/raw filesystem bytes differ/i);
-  });
+    // 60s cap: repository fixture + seven git spawns + clean-filter node
+    // subprocess exceed the 5s default under parallel load on Windows. (#766)
+  }, 60_000);
 
   it("rejects clean LF blobs materialized as CRLF", () => {
     const root = createRepository("crlf", {
