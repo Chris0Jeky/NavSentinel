@@ -437,6 +437,67 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("classifies a base-redirected relative rewrite as HIGH (#843)", async () => {
+    const alerts: MutationAlert[] = [];
+    const base = document.createElement("base");
+    base.setAttribute("href", "https://cdn.evil.example/app/");
+    document.head.appendChild(base);
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Baseline, then rewrite to a relative URL. The browser resolves it
+    // against document.baseURI (cdn.evil.example), not location.href.
+    form.setAttribute("action", "/login");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("action", "collect");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.severity).toBe("high");
+
+    form.remove();
+    base.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps a same-origin-base relative rewrite at MEDIUM (#843)", async () => {
+    const alerts: MutationAlert[] = [];
+    const base = document.createElement("base");
+    base.setAttribute("href", "http://localhost:3000/app/");
+    document.head.appendChild(base);
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    form.setAttribute("action", "/login");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("action", "collect");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // Inverted-condition guard: baseURI resolution must stay selective.
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.severity).toBe("medium");
+
+    form.remove();
+    base.remove();
+    stopMutationMonitor();
+  });
+
   it("detects suspicious hidden iframe injection", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
