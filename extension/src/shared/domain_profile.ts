@@ -137,6 +137,23 @@ async function loadProfiles(): Promise<Map<string, DomainProfile>> {
       if (!p.factors || typeof p.factors !== "object" || Array.isArray(p.factors)) {
         p.factors = {};
       }
+      // Corrupt-value hardening (#834): writers emit numbers only, but a
+      // corrupt stored profile must heal, not compound. A string totalNRS
+      // would concatenate on `+=` (unbounded growth + inflated avgNRS into a
+      // spurious repeat-offender flag); non-finite history/factors NaN-poison
+      // the assessment. Finite-guard every counter, filter the collections.
+      if (typeof p.domain !== "string") p.domain = key;
+      if (typeof p.visits !== "number" || !Number.isFinite(p.visits)) p.visits = 0;
+      if (typeof p.totalNRS !== "number" || !Number.isFinite(p.totalNRS)) p.totalNRS = 0;
+      if (typeof p.maxNRS !== "number" || !Number.isFinite(p.maxNRS)) p.maxNRS = 0;
+      if (typeof p.triggerCount !== "number" || !Number.isFinite(p.triggerCount)) p.triggerCount = 0;
+      if (typeof p.lastSeen !== "number" || !Number.isFinite(p.lastSeen)) p.lastSeen = Date.now();
+      p.nrsHistory = p.nrsHistory
+        .filter((n): n is number => typeof n === "number" && Number.isFinite(n))
+        .slice(-MAX_NRS_HISTORY);
+      for (const [fk, fv] of Object.entries(p.factors)) {
+        if (typeof fv !== "number" || !Number.isFinite(fv)) delete p.factors[fk];
+      }
       map.set(key, p);
     }
   }

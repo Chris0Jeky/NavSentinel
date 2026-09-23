@@ -629,6 +629,89 @@ describe("loadProfiles forward-compat", () => {
   });
 });
 
+describe("loadProfiles corrupt-value hardening (#834)", () => {
+  it("string counters do not concatenate or inflate the repeat-offender signal", async () => {
+    // `totalNRS += nrs` on a corrupt string concatenates ('100' -> '10030'),
+    // inflating avgNRS into a spurious repeat-offender flag. Must heal to 0.
+    store[DOMAIN_PROFILES_KEY] = {
+      "corrupt-counters.com": {
+        domain: "corrupt-counters.com",
+        visits: "5",
+        totalNRS: "100",
+        maxNRS: "30",
+        triggerCount: "0",
+        lastSeen: Date.now(),
+        factors: {},
+        nrsHistory: [],
+      },
+    };
+    const risk = await recordNavigation("corrupt-counters.com", 30, []);
+    expect(risk.avgNRS).toBe(30); // (0 + 30) / 1, not '10030' / '51'
+    expect(risk.isRepeatOffender).toBe(false);
+    const p = getStoredProfiles()["corrupt-counters.com"]!;
+    expect(p.visits).toBe(1);
+    expect(p.totalNRS).toBe(30);
+    expect(typeof p.totalNRS).toBe("number");
+  });
+
+  it("NaN counters fail safe and heal on next record", async () => {
+    store[DOMAIN_PROFILES_KEY] = {
+      "nan-counters.com": {
+        domain: "nan-counters.com",
+        visits: Number.NaN,
+        totalNRS: Number.NaN,
+        maxNRS: Number.NaN,
+        triggerCount: Number.NaN,
+        lastSeen: Number.NaN,
+        factors: {},
+        nrsHistory: [],
+      },
+    };
+    const risk = await recordNavigation("nan-counters.com", 25, []);
+    expect(Number.isFinite(risk.avgNRS)).toBe(true);
+    expect(risk.isRepeatOffender).toBe(false);
+    const p = getStoredProfiles()["nan-counters.com"]!;
+    expect(p.visits).toBe(1);
+    expect(p.totalNRS).toBe(25);
+    expect(Number.isFinite(p.lastSeen)).toBe(true);
+  });
+
+  it("non-finite factor values and history entries are dropped, valid ones kept", async () => {
+    store[DOMAIN_PROFILES_KEY] = {
+      "mixed-shapes.com": {
+        domain: "mixed-shapes.com",
+        visits: 2,
+        totalNRS: 40,
+        maxNRS: 25,
+        triggerCount: 0,
+        lastSeen: Date.now(),
+        factors: { nrs_cross_site: 2, corrupt: "7", naned: Number.NaN },
+        nrsHistory: [15, "25", Number.NaN, 25],
+      },
+    };
+    const risk = await getDomainRisk("mixed-shapes.com");
+    expect(risk.topFactors).toEqual(["nrs_cross_site"]);
+    expect(Number.isFinite(risk.consistency)).toBe(true);
+  });
+
+  it("non-string domain label defaults to the map key", async () => {
+    store[DOMAIN_PROFILES_KEY] = {
+      "keyed.com": {
+        domain: 42,
+        visits: 1,
+        totalNRS: 10,
+        maxNRS: 10,
+        triggerCount: 0,
+        lastSeen: Date.now(),
+        factors: {},
+        nrsHistory: [10],
+      },
+    };
+    await recordNavigation("keyed.com", 10, []);
+    expect(getStoredProfiles()["keyed.com"]!.domain).toBe("keyed.com");
+  });
+});
+
 describe("NRS integration", () => {
   it("domain_repeat_offender adds +10 to NRS", async () => {
     // This tests the NRS factor in isolation
