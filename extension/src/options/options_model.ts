@@ -280,7 +280,15 @@ export async function runImportFlow(
     const result = await deps.importPayload();
     // A transient post-success refresh failure must not flip a completed import
     // into "Import failed." — report the outcome regardless (#828).
-    await safeRefresh(() => deps.refresh(true));
+    await safeRefresh(async () => {
+      try {
+        await deps.refresh(true);
+      } catch {
+        // Retry only the read/render step, never the committed import. Both
+        // attempts must replace the stale draft with imported settings.
+        await deps.refresh(true);
+      }
+    });
     deps.flash(formatImportSuccess(result?.eventLogDropped));
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
