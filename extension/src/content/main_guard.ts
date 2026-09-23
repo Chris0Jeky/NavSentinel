@@ -145,6 +145,10 @@ let openCount = 0;
 let redirectCount = 0;
 let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
+// URL the one-shot allowance is bound to. Without the binding, the first
+// window.open inside the TTL window consumes the allowance regardless of
+// destination, so a racing open can ride a user's Allow-once click (#851).
+let allowOnceUrl = "";
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
 let restrictRedirectTarget = false;
@@ -215,9 +219,10 @@ function isOff(): boolean {
   return mode === "off";
 }
 
-function setAllowOnce(): void {
+function setAllowOnce(url?: string): void {
   allowOnceRemaining = 1;
   allowOnceUntil = nowMs() + ALLOW_ONCE_TTL_MS;
+  allowOnceUrl = typeof url === "string" ? url : "";
 }
 
 function textLength(el: Element): number {
@@ -294,11 +299,16 @@ function isSafePopupIntentSource(el: Element): boolean {
   return true;
 }
 
-function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
+function consumeOpenAllowance(url?: string | URL): "allow_once" | "allowed" | "none" {
   const now = nowMs();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
-    allowOnceRemaining -= 1;
-    return "allow_once";
+    // Strict match on the authorized URL (same fail-closed shape as the
+    // redirect-target binding). A mismatch neither consumes nor burns the
+    // allowance, so a racing open can't steal or void the user's grant (#851).
+    if (allowOnceUrl !== "" && url !== undefined && String(url) === allowOnceUrl) {
+      allowOnceRemaining -= 1;
+      return "allow_once";
+    }
   }
   if (allowOpenUntil > 0 && now <= allowOpenUntil && openCount < MAX_OPENS_PER_GESTURE) {
     openCount += 1;
@@ -599,7 +609,7 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
-  const allowance = consumeOpenAllowance();
+  const allowance = consumeOpenAllowance(url);
   if (allowance !== "none") {
     postAllowed({
       kind: "window_open",
@@ -792,6 +802,7 @@ function handleBridgeMessage(message: unknown): void {
     allowRedirect?: boolean;
     restrictRedirectTarget?: boolean;
     redirectTarget?: string;
+    url?: string;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
@@ -815,7 +826,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-allow-once") {
-    setAllowOnce();
+    setAllowOnce(typeof data.url === "string" ? data.url : undefined);
     return;
   }
 
