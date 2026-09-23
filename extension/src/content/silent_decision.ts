@@ -23,7 +23,7 @@ export interface SilentNavInputs {
   isDocumentNavigation: boolean;
   /** target="_blank" (new tab/window) navigation. */
   isBlankAnchor: boolean;
-  /** Same-tab navigation (no target / _self). */
+  /** Same-tab navigation (no target / _self / top-frame _top / _parent). */
   isSameTabAnchor: boolean;
 }
 
@@ -37,6 +37,18 @@ export interface SilentNavCommitInputs {
 export interface ImmediateSilentNavInputs extends SilentNavInputs {
   /** Browser modifier/middle-click intent that sends a same-tab anchor to a new tab. */
   explicitNewTab: boolean;
+}
+
+/**
+ * True when an anchor target resolves to a same-tab navigation (#782).
+ * `_top`/`_parent` are same-tab only in the top frame (they escape the frame
+ * otherwise); matching is case-insensitive per HTML enumerated-attribute
+ * rules. Named targets and `_blank` are never same-tab.
+ */
+export function isSameTabTarget(anchorTarget: string, isTopFrame: boolean): boolean {
+  const target = anchorTarget.toLowerCase();
+  return !target || target === "_self" ||
+    ((target === "_top" || target === "_parent") && isTopFrame);
 }
 
 /**
