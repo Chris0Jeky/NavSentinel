@@ -33,6 +33,7 @@ export type MutationAlertType =
   | "overlay_detected"
   | "overlay_injected"
   | "form_action_changed"
+  | "form_method_changed"
   | "password_injected"
   | "suspicious_iframe";
 
@@ -225,6 +226,19 @@ let scarceAlertedElements = new WeakSet<Element>();
  */
 const originalFormActions = new WeakMap<Element, string>();
 
+/**
+ * Tracks original submitter `formaction` overrides and effective `method` /
+ * `formmethod` values for elements observed at startup (#812). A submitter
+ * `formaction` OVERRIDES the form action with no `action` mutation, and a
+ * `formmethod` POST-to-GET flip leaks credentials into URL/query — both are
+ * Magecart-class signals the form-action watch would otherwise miss. Keyed by
+ * element like originalFormActions; never reset (WeakMap keys GC with the
+ * page, so cross-test leakage is impossible).
+ */
+const originalSubmitterActions = new WeakMap<Element, string>();
+const originalMethodAttrs = new WeakMap<Element, string>();
+const originalFormMethodAttrs = new WeakMap<Element, string>();
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -284,8 +298,10 @@ function suspiciousIframeScheme(src: string): string | null {
  *  - `password_injected`  credential capture appearing after load.
  *  - `suspicious_iframe`  hostile frame injected after load.
  *  - `form_action_changed` at HIGH severity only — a cross-domain action rewrite
- *    is the credential-redirect signal; same-origin rewrites are ordinary SPA
- *    churn and stay floodable.
+ *    (form `action` or submitter `formaction`) is the credential-redirect
+ *    signal; same-origin rewrites are ordinary SPA churn and stay floodable.
+ *  - `form_method_changed` is deliberately NOT scarce: POST-to-GET downgrades
+ *    are medium telemetry, floodable like same-origin churn. (#812)
  *
  * Dynamic overlay alerts are deliberately NOT scarce: they require layout-bound
  * checks (`getComputedStyle` per element) the cap exists to bound, and they
@@ -335,7 +351,7 @@ const OBSERVE_CONFIG: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ["action", "type", "src", "srcdoc", "style", "class"],
+  attributeFilter: ["action", "formaction", "method", "formmethod", "type", "src", "srcdoc", "style", "class"],
 };
 
 function tryGetShadowRoot(el: Element): ShadowRoot | null {
@@ -615,7 +631,30 @@ function snapshotFormActions(doc: Document | ShadowRoot): void {
     if (!originalFormActions.has(form)) {
       originalFormActions.set(form, form.getAttribute("action") ?? "");
     }
+    if (!originalMethodAttrs.has(form)) {
+      originalMethodAttrs.set(form, normalizeFormMethod(form.getAttribute("method")));
+    }
   }
+  // Submitter overrides live on buttons/inputs, not the form (#812).
+  const submitters = doc.querySelectorAll("[formaction], [formmethod]");
+  for (let i = 0; i < submitters.length; i++) {
+    const el = submitters[i]!;
+    if (!originalSubmitterActions.has(el)) {
+      originalSubmitterActions.set(el, el.getAttribute("formaction") ?? "");
+    }
+    if (!originalFormMethodAttrs.has(el)) {
+      originalFormMethodAttrs.set(el, normalizeFormMethod(el.getAttribute("formmethod")));
+    }
+  }
+}
+
+/**
+ * Normalize a `method`/`formmethod` attribute to its effective submission
+ * method. Only an ASCII case-insensitive "post" submits as POST (mirroring
+ * the IDL getter); missing, empty, and invalid values all submit as GET.
+ */
+function normalizeFormMethod(value: string | null): "post" | "get" {
+  return value !== null && value.toLowerCase() === "post" ? "post" : "get";
 }
 
 function checkFormActionChange(form: Element): void {
@@ -641,6 +680,69 @@ function checkFormActionChange(form: Element): void {
     severity: crossDomain ? "high" : "medium",
     element: form,
     details: detail,
+    timestamp: Date.now(),
+  });
+}
+
+function checkSubmitterActionChange(el: Element): void {
+  // `formaction` is only meaningful on submit buttons; anywhere else it is
+  // inert markup not worth journaling.
+  if (el.tagName !== "BUTTON" && el.tagName !== "INPUT") return;
+
+  const original = originalSubmitterActions.get(el);
+  if (original === undefined) {
+    // First time seeing this submitter -- record its override, don't alert.
+    originalSubmitterActions.set(el, el.getAttribute("formaction") ?? "");
+    return;
+  }
+
+  const current = el.getAttribute("formaction") ?? "";
+  if (current === original) return;
+
+  // Same policy as checkFormActionChange: cross-domain rewrites are HIGH
+  // (and therefore scarce), same-origin churn is MEDIUM telemetry. (#812)
+  const crossDomain = current ? isCrossDomain(current) : false;
+  const detail = crossDomain
+    ? `Submitter formaction changed to cross-domain URL: "${current}" (was "${original}")`
+    : `Submitter formaction changed: "${current}" (was "${original}")`;
+
+  pushAlert({
+    type: "form_action_changed",
+    severity: crossDomain ? "high" : "medium",
+    element: el,
+    details: detail,
+    timestamp: Date.now(),
+  });
+}
+
+function checkFormMethodChange(el: Element, attributeName: string): void {
+  // `method` is form-only; `formmethod` overrides on forms and submitters.
+  // Anywhere else the attribute is inert markup.
+  if (attributeName === "method") {
+    if (el.tagName !== "FORM") return;
+  } else if (el.tagName !== "FORM" && el.tagName !== "BUTTON" && el.tagName !== "INPUT") {
+    return;
+  }
+  const baselines = attributeName === "method" ? originalMethodAttrs : originalFormMethodAttrs;
+
+  const original = baselines.get(el);
+  const current = normalizeFormMethod(el.getAttribute(attributeName));
+  if (original === undefined) {
+    // First time seeing this element -- record its method, don't alert.
+    baselines.set(el, current);
+    return;
+  }
+  // Only POST-to-GET downgrades alert: credentials that used to travel in the
+  // body now leak into URL/query/history/server logs. Upgrades and lateral
+  // moves are the safe direction (or noise) and stay silent. Compares against
+  // the original baseline, mirroring the action checks (no re-baselining).
+  if (original !== "post" || current !== "get") return;
+
+  pushAlert({
+    type: "form_method_changed",
+    severity: "medium",
+    element: el,
+    details: `Form submission method downgraded from POST to GET after page load (${attributeName})`,
     timestamp: Date.now(),
   });
 }
@@ -902,6 +1004,14 @@ function processAttributeChange(record: MutationRecord, scarceOnly = false): voi
 
   if (record.attributeName === "action") {
     checkFormActionChange(target);
+  }
+
+  if (record.attributeName === "formaction") {
+    checkSubmitterActionChange(target);
+  }
+
+  if (record.attributeName === "method" || record.attributeName === "formmethod") {
+    checkFormMethodChange(target, record.attributeName);
   }
 
   if (record.attributeName === "type" && target.tagName === "INPUT") {
