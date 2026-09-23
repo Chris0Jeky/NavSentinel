@@ -4,9 +4,18 @@ const LEGACY_ALLOWLIST_KEY = "navsentinel:allowlist";
 export const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
 
 export function normalizeAllowlist(value: unknown): Allowlist {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  // Every list this module produces is null-prototype (see below), including
+  // the empty one: a plain `{}` here would let a later `list["__proto__"] = …`
+  // invoke the prototype setter instead of creating an own property. (#807)
+  if (!value || typeof value !== "object" || Array.isArray(value)) return Object.create(null);
   const input = value as Record<string, unknown>;
-  const out: Allowlist = {};
+  // Null prototype: siteKeys are raw hostnames, so "__proto__"/"constructor"/...
+  // are legal keys. On a plain object, `out["__proto__"] = hosts` would invoke
+  // the prototype setter (replacing the result's prototype), and reads like
+  // `list["constructor"]` would resolve to inherited members. A null-prototype
+  // map makes every hostname an ordinary own property; all consumers use only
+  // index/keys/spread/clone shapes, so this is behavior-identical otherwise. (#807)
+  const out: Allowlist = Object.create(null);
   for (const [rawSiteKey, rawHosts] of Object.entries(input)) {
     const siteKey = rawSiteKey.trim().toLowerCase();
     if (!siteKey || !Array.isArray(rawHosts)) continue;
@@ -45,7 +54,8 @@ export async function getAllowlist(): Promise<Allowlist> {
     return legacy;
   }
 
-  return {};
+  // Null-prototype, like every list this module produces (see normalizeAllowlist). (#807)
+  return Object.create(null);
 }
 
 export async function setAllowlist(list: Allowlist): Promise<void> {
@@ -57,11 +67,16 @@ export async function addAllowlistEntry(siteKey: string, destHost: string): Prom
   const list = await getAllowlist();
   const key = siteKey.toLowerCase();
   const host = destHost.toLowerCase();
-  const existing = list[key] ?? [];
-  if (!existing.includes(host)) {
-    existing.push(host);
+  // Array guard: on a plain-object list (only possible for direct callers --
+  // every list in circulation comes from normalizeAllowlist), a
+  // prototype-named key would resolve to an inherited member and throw below.
+  // Null-prototype lists make this a plain miss that starts a new entry. (#807)
+  const existing = list[key];
+  const hosts = Array.isArray(existing) ? existing : [];
+  if (!hosts.includes(host)) {
+    hosts.push(host);
   }
-  list[key] = existing;
+  list[key] = hosts;
   await setAllowlist(list);
   return list;
 }
@@ -71,7 +86,7 @@ export async function removeAllowlistEntry(siteKey: string, destHost: string): P
   const key = siteKey.toLowerCase();
   const host = destHost.toLowerCase();
   const existing = list[key];
-  if (!existing) return list;
+  if (!Array.isArray(existing)) return list;
   const next = existing.filter((entry) => entry !== host);
   if (next.length === 0) {
     delete list[key];
@@ -90,7 +105,8 @@ export async function clearAllowlist(): Promise<void> {
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {
   const key = siteKey.toLowerCase();
   const host = destHost.toLowerCase();
-  return (list[key] ?? []).includes(host);
+  const entries = list[key];
+  return Array.isArray(entries) && entries.includes(host);
 }
 
 export function onAllowlistChange(cb: (list: Allowlist) => void): void {
