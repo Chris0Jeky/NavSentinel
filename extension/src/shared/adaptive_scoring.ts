@@ -163,9 +163,20 @@ export async function updateAdaptiveScores(
   await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, baseThreshold) });
 }
 
+/**
+ * Resolve a stored threshold adjustment to a safe number (#832). A corrupt
+ * truthy non-number (string, object, NaN) would otherwise flow into
+ * `base + adaptiveAdjustment` and NaN-poison the block threshold (fail-open),
+ * since the [30,100] clamp bounds magnitude but not type. No clamp here: the
+ * threshold clamp already bounds corrupt magnitudes fail-safely.
+ */
+export function resolveThresholdAdjustment(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 export async function getEffectiveThresholdAdjustment(domain: string): Promise<number> {
   const scores = await getAdaptiveScores();
-  return scores[domain]?.adjustment ?? 0;
+  return resolveThresholdAdjustment(scores[domain]?.adjustment);
 }
 
 /**
