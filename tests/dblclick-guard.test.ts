@@ -433,4 +433,63 @@ describe("dblclick_guard", () => {
       expect(isDoubleClickHijackActive()).toBe(false);
     });
   });
+
+  describe("producer timestamp authority (#756)", () => {
+    it("expires on the receipt clock, not a future producer ts", () => {
+      const forged = Date.now() + 1_000_000_000;
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: forged });
+      handleDblclickBridgeMessage("ns-dblclick-opener-nav", {
+        ts: forged,
+        url: "https://bank.example.com/transfer",
+      });
+      expect(isDoubleClickHijackActive()).toBe(true);
+      vi.advanceTimersByTime(5_001);
+      expect(isDoubleClickHijackActive()).toBe(false);
+    });
+
+    it("treats stale producer timestamps as a fresh receipt", () => {
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: 1 });
+      handleDblclickBridgeMessage("ns-dblclick-opener-nav", {
+        ts: 1,
+        url: "https://bank.example.com/transfer",
+      });
+      handleDblclickBridgeMessage("ns-dblclick-second-click", { ts: 1 });
+      expect(isDoubleClickHijackActive()).toBe(true);
+    });
+
+    it("forwards the receiver-owned stamp to the SW, not the producer ts", () => {
+      const receipt = Date.now();
+      const result = handleDblclickBridgeMessage("ns-dblclick-opener-nav", {
+        ts: receipt + 1_000_000_000,
+        url: "https://bank.example.com/transfer",
+      });
+      expect(result.forwardToSW!.ts).toBe(receipt);
+    });
+
+    it("stamps the SW-forwarded child path on the receipt clock", () => {
+      const receipt = Date.now();
+      handleDblclickBridgeMessage("ns-dblclick-window-open", { ts: receipt });
+      handleDblclickRuntimeMessage({
+        type: "ns-dblclick-opener-nav-from-child",
+        url: "https://bank.example.com/oauth",
+        ts: receipt + 1_000_000_000,
+      });
+      expect(isDoubleClickHijackActive()).toBe(true);
+      vi.advanceTimersByTime(5_001);
+      expect(isDoubleClickHijackActive()).toBe(false);
+    });
+
+    it("degrades safely on malformed producer timestamps", () => {
+      // NaN is typeof "number", so the old code stored it and poisoned every
+      // freshness comparison; a non-number fell back to Date.now() already.
+      handleDblclickBridgeMessage("ns-dblclick-window-open", {
+        ts: "tomorrow" as unknown as number,
+      });
+      handleDblclickBridgeMessage("ns-dblclick-opener-nav", {
+        ts: Number.NaN,
+        url: "https://bank.example.com/transfer",
+      });
+      expect(isDoubleClickHijackActive()).toBe(true);
+    });
+  });
 });

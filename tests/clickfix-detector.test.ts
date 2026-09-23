@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   looksLikeCommand,
   matchesCaptchaPattern,
   matchesInstructionPattern,
   hasLegitCaptcha,
+  recordBridgeClipboardWrite,
   recordClipboardWrite,
   hasRecentClipboardWrite,
   hasRecentCommandClipboardWrite,
@@ -374,6 +375,28 @@ describe("clipboard event tracking", () => {
     recordClipboardWrite({ ts: now, contentLength: 30, looksLikeCommand: false });
     expect(hasRecentClipboardWrite()).toBe(true);
     expect(hasRecentCommandClipboardWrite()).toBe(true);
+  });
+});
+
+describe("recordBridgeClipboardWrite receipt clock (#756)", () => {
+  beforeEach(() => {
+    _resetClipboardEvents();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stamps the receipt clock and expires on the 30s TTL", () => {
+    // The wrapper takes no producer ts at all: a forged future ts cannot pin
+    // the signal and a stale one cannot make a fresh write prunable.
+    recordBridgeClipboardWrite({ contentLength: 50, looksLikeCommand: true });
+    expect(hasRecentClipboardWrite()).toBe(true);
+    expect(hasRecentCommandClipboardWrite()).toBe(true);
+    vi.advanceTimersByTime(30_001);
+    expect(hasRecentClipboardWrite()).toBe(false);
+    expect(hasRecentCommandClipboardWrite()).toBe(false);
   });
 });
 

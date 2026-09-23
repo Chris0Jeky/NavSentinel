@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
@@ -9,6 +9,11 @@ import {
 describe("pushstate_guard", () => {
   beforeEach(() => {
     _resetPushStateState();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("handlePushStateBridgeMessage", () => {
@@ -48,12 +53,38 @@ describe("pushstate_guard", () => {
     });
 
     it("returns false after stale period (>10s)", () => {
-      const oldTs = Date.now() - 11_000;
       handlePushStateBridgeMessage("ns-pushstate-suspicious", {
-        ts: oldTs,
+        ts: Date.now(),
         url: "/accounts.chase.com/login",
       });
+      expect(isPushStateAbuseActive()).toBe(true);
+      vi.advanceTimersByTime(10_001);
       expect(isPushStateAbuseActive()).toBe(false);
+    });
+
+    it("expires on the receipt clock, not a future producer ts (#756)", () => {
+      handlePushStateBridgeMessage("ns-pushstate-suspicious", {
+        ts: Date.now() + 1_000_000_000,
+        url: "/accounts.chase.com/login",
+      });
+      expect(isPushStateAbuseActive()).toBe(true);
+      vi.advanceTimersByTime(10_001);
+      expect(isPushStateAbuseActive()).toBe(false);
+    });
+
+    it("treats a stale producer ts as a fresh receipt (#756)", () => {
+      handlePushStateBridgeMessage("ns-pushstate-suspicious", {
+        ts: 1,
+        url: "/accounts.chase.com/login",
+      });
+      expect(isPushStateAbuseActive()).toBe(true);
+    });
+
+    it("treats a missing producer ts as a fresh receipt (#756)", () => {
+      handlePushStateBridgeMessage("ns-pushstate-suspicious", {
+        url: "/accounts.chase.com/login",
+      });
+      expect(isPushStateAbuseActive()).toBe(true);
     });
 
     it("returns false after reset", () => {

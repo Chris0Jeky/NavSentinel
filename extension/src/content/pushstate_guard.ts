@@ -41,7 +41,10 @@ export function handlePushStateBridgeMessage(
   data: { ts?: number; url?: string; method?: string; reason?: string },
 ): boolean {
   if (type === "ns-pushstate-suspicious") {
-    pushStateAbuseTs = typeof data.ts === "number" ? data.ts : Date.now();
+    // Local receipt clock is authoritative: the producer timestamp comes from
+    // the MAIN world, where the page can forge it to pin this signal active
+    // (future ts) or make a fresh signal immediately stale (old ts). (#756)
+    pushStateAbuseTs = Date.now();
     pushStateAbuseUrl = typeof data.url === "string" ? data.url : "";
     return true;
   }

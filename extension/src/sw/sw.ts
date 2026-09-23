@@ -1031,7 +1031,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         {
           type: "ns-dblclick-opener-nav-from-child",
           url: typeof message.url === "string" ? message.url : "",
-          ts: typeof message.ts === "number" ? message.ts : Date.now(),
+          // SW-owned stamp: never relay the page-clock ts second-hand. (#756)
+          ts: Date.now(),
         },
         () => {
           if (chrome.runtime.lastError) { /* opener may have navigated away */ }

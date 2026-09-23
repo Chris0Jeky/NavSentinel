@@ -47,7 +47,8 @@ export function handleDblclickBridgeMessage(
   data: Record<string, unknown>,
 ): { handled: boolean; forwardToSW?: { type: string; url: string; ts: number } } {
   if (type === "ns-dblclick-window-open") {
-    dblclickWindowOpenTs = typeof data.ts === "number" ? data.ts : Date.now();
+    // Local receipt clock is authoritative (see ns-dblclick-opener-nav). (#756)
+    dblclickWindowOpenTs = Date.now();
     // Reset stale signals from a previous detection cycle to prevent
     // a stale dblclickChildClosed flag from causing false positives.
     dblclickOpenerNavTs = 0;
@@ -59,7 +60,11 @@ export function handleDblclickBridgeMessage(
   }
 
   if (type === "ns-dblclick-opener-nav") {
-    dblclickOpenerNavTs = typeof data.ts === "number" ? data.ts : Date.now();
+    // Local receipt clock is authoritative: the producer timestamp comes from
+    // the MAIN world, where the page can forge it to pin this signal active
+    // (future ts) or make a fresh signal immediately stale (old ts). The
+    // forwarded SW copy therefore carries the receiver-owned stamp. (#756)
+    dblclickOpenerNavTs = Date.now();
     dblclickOpenerNavUrl = typeof data.url === "string" ? data.url : "";
     // Signal that this needs to be forwarded to the SW so it can notify
     // the opener tab. capture_isolated.ts will handle the actual send.
@@ -74,7 +79,8 @@ export function handleDblclickBridgeMessage(
   }
 
   if (type === "ns-dblclick-second-click") {
-    dblclickSecondClickTs = typeof data.ts === "number" ? data.ts : Date.now();
+    // Local receipt clock is authoritative (see ns-dblclick-opener-nav). (#756)
+    dblclickSecondClickTs = Date.now();
     return { handled: true };
   }
 
@@ -100,7 +106,9 @@ export function handleDblclickRuntimeMessage(message: Record<string, unknown> | 
   }
 
   if (message.type === "ns-dblclick-opener-nav-from-child") {
-    dblclickOpenerNavTs = typeof message.ts === "number" ? message.ts : Date.now();
+    // Local receipt clock stays authoritative even though the SW now forwards
+    // its own stamp; never relay page-clock authority second-hand. (#756)
+    dblclickOpenerNavTs = Date.now();
     dblclickOpenerNavUrl = typeof message.url === "string" ? message.url : "";
     return true;
   }

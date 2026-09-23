@@ -8,6 +8,7 @@ import {
 } from "@navsentinel/js-behavior-monitor";
 import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import { nowMs } from "./main_clock";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -181,10 +182,6 @@ const blockedActions = new Map<
 >();
 
 type NavStatus = "allowed" | "blocked";
-
-function nowMs(): number {
-  return Date.now();
-}
 
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
   if (!debug) return;

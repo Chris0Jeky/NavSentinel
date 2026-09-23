@@ -40,6 +40,23 @@ export function recordClipboardWrite(event: ClipboardWriteEvent): void {
   }
 }
 
+/**
+ * Record a clipboard write reported over the MAIN-world bridge. The producer
+ * timestamp is page-forgeable, so the local receipt clock is authoritative: a
+ * future producer ts must not pin the correlation signal active, and a stale
+ * one must not make a fresh write immediately prunable. (#756)
+ */
+export function recordBridgeClipboardWrite(data: {
+  contentLength: number;
+  looksLikeCommand: boolean;
+}): void {
+  recordClipboardWrite({
+    ts: Date.now(),
+    contentLength: data.contentLength,
+    looksLikeCommand: data.looksLikeCommand,
+  });
+}
+
 function pruneClipboardEvents(): void {
   const cutoff = Date.now() - CLIPBOARD_EVENT_TTL_MS;
   while (recentClipboardWrites.length > 0 && recentClipboardWrites[0]!.ts < cutoff) {

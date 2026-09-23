@@ -53,7 +53,7 @@ import {
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
-import { recordClipboardWrite, scanForClickFix } from "./clickfix_detector";
+import { recordBridgeClipboardWrite, scanForClickFix } from "./clickfix_detector";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -594,10 +594,10 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-clipboard-write") {
-    const ts = typeof data.ts === "number" ? data.ts : Date.now();
     const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
     const cmdLike = typeof data.looksLikeCommand === "boolean" ? data.looksLikeCommand : false;
-    recordClipboardWrite({ ts, contentLength, looksLikeCommand: cmdLike });
+    // Receipt clock is authoritative; the MAIN-world ts is page-forgeable. (#756)
+    recordBridgeClipboardWrite({ contentLength, looksLikeCommand: cmdLike });
     if (settings.defaultMode !== "off") {
       handleClickFixScan();
     }
