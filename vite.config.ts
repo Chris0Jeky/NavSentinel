@@ -76,6 +76,18 @@ export default defineConfig({
               priority: 10
             },
             {
+              // (#820) Pin the toast UI to its own single shared chunk:
+              // password_field is now shared across the same entries, and
+              // without this the splitter fuses both into one chunk, tripping
+              // the ui_toast perf-budget MISS. Deliberately NOT entriesAware
+              // (unlike the groups above): the pre-existing shape is one
+              // entry-independent `ui_toast-<hash>.js`, which the budget globs.
+              name: "ui_toast",
+              test: /[\\/]src[\\/]content[\\/]ui_toast\.ts$/,
+              entriesAware: false,
+              priority: 10
+            },
+            {
               name: "pending-decision-runtime",
               test: /[\\/]src[\\/](?:shared[\\/]pending_decision|sw[\\/]pending_decision_(?:handlers|store))\.ts$/,
               entriesAware: true,

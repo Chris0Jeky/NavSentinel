@@ -18,6 +18,7 @@ import {
 } from "./credential_guard_model";
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
+import { queryPasswordInputs } from "./password_field";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
 
@@ -75,7 +76,7 @@ function isPasswordForm(form: HTMLFormElement): boolean {
         if (el) seen.add(el);
       }
     }
-    form.querySelectorAll('input[type="password"]').forEach((el) => seen.add(el));
+    queryPasswordInputs(form).forEach((el) => seen.add(el));
     return Array.from(seen).some(
       (el) => el instanceof HTMLInputElement && el.type === "password" && !el.disabled
     );

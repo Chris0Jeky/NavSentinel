@@ -41,6 +41,37 @@ export interface TabNavigationAuthorityInputs {
   hasInFrameNavigationIntent: boolean;
 }
 
+/**
+ * Nearest ancestor-or-self control whose DEFAULT action submits its form: a
+ * `<button>` whose type is not button/reset (missing/invalid types default to
+ * submit), or a submit/image input. Returns null for anything else, including
+ * a bare element inside a form. (#820)
+ *
+ * Keyword matching is ASCII case-insensitive per spec (`type="BUTTON"` is a
+ * non-submitting button), done programmatically: the CSS `[type=x i]` flag
+ * throws in the happy-dom test harness and the button `type` IDL is
+ * spec-unfaithful there, while `getAttribute` + lowercase reproduces the
+ * spec exactly in every engine (an exact `[type=button]` selector would
+ * mistake `type="BUTTON"` for a submit control and mint authority for a
+ * click that never submits).
+ *
+ * First-match-wins with no outward continuation past a non-submit
+ * button/input: activation behavior targets the innermost control, so a
+ * click on one never submits via an outer one.
+ */
+export function findSubmitControl(target: Element | null): Element | null {
+  const control = target?.closest("button, input") ?? null;
+  if (!control) return null;
+  const type = (control.getAttribute("type") ?? "").toLowerCase();
+  if (control.tagName.toLowerCase() === "button") {
+    return type === "button" || type === "reset" ? null : control;
+  }
+  if (control.tagName.toLowerCase() === "input") {
+    return type === "submit" || type === "image" ? control : null;
+  }
+  return null;
+}
+
 export function grantsTabNavigationAuthority(
   opts: TabNavigationAuthorityInputs
 ): boolean {
