@@ -141,12 +141,14 @@ async function loadProfiles(): Promise<Map<string, DomainProfile>> {
       // corrupt stored profile must heal, not compound. A string totalNRS
       // would concatenate on `+=` (unbounded growth + inflated avgNRS into a
       // spurious repeat-offender flag); non-finite history/factors NaN-poison
-      // the assessment. Finite-guard every counter, filter the collections.
+      // the assessment. Validate counters together, filter the collections.
       if (typeof p.domain !== "string") p.domain = key;
-      if (typeof p.visits !== "number" || !Number.isFinite(p.visits)) p.visits = 0;
-      if (typeof p.totalNRS !== "number" || !Number.isFinite(p.totalNRS)) p.totalNRS = 0;
-      if (typeof p.maxNRS !== "number" || !Number.isFinite(p.maxNRS)) p.maxNRS = 0;
-      if (typeof p.triggerCount !== "number" || !Number.isFinite(p.triggerCount)) p.triggerCount = 0;
+      // These counters describe one aggregate. Resetting only an invalid visit
+      // count leaves old totals attached to one new visit and can manufacture a
+      // repeat-offender signal. Discard the entire corrupt aggregate. (#834)
+      if (![p.visits, p.totalNRS, p.maxNRS, p.triggerCount].every(
+        (value) => typeof value === "number" && Number.isFinite(value),
+      )) continue;
       // Unknown age is not evidence of a fresh visit. Drop this corrupt entry
       // instead of letting it displace valid history at the LRU cap. (#834)
       if (typeof p.lastSeen !== "number" || !Number.isFinite(p.lastSeen)) continue;
