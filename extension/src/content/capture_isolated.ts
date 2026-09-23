@@ -203,6 +203,11 @@ let bridgeInitStartedAt = 0;
 let bridgeAttemptGen = 0;
 let forwardCheckInFlight = false;
 let forwardCheckTimer = 0;
+// showAllowPrompt() runs once per blocked navigation, but the persistent
+// pageshow/visibilitychange listeners it needs must be armed exactly once per
+// page lifetime; otherwise every prompt leaks another pair and a bfcache
+// restore fans out N duplicate chain-info requests (#847).
+let forwardPollListenersArmed = false;
 let previousMode = "";
 let gestureNavAttempts = 0;
 let gestureDownId: number | null = null;
@@ -1472,6 +1477,26 @@ function checkSmartDefaultSuggestion(sourceDomain: string, destDomain: string): 
   })();
 }
 
+/**
+ * Arm the persistent forward-poll listeners exactly once per page lifetime.
+ * showAllowPrompt() runs once per blocked navigation; registering them inline
+ * would leak another pageshow/visibilitychange pair per prompt and fan out N
+ * duplicate chain-info requests on every bfcache restore (#847).
+ */
+function armForwardPollListenersOnce(onForwardCheck: () => void): void {
+  if (forwardPollListenersArmed) return;
+  forwardPollListenersArmed = true;
+  window.addEventListener("pageshow", (event) => {
+    handleChainInfoPageShow(event);
+    onForwardCheck();
+  });
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      onForwardCheck();
+    }
+  });
+}
+
 function showAllowPrompt(params: AllowPromptParams): void {
   if (params.outcomeFeatures && (params.target ?? "_blank") === "_blank") {
     recentLocalBlankPrompt = { params, shownAt: Date.now() };
@@ -1650,15 +1675,7 @@ if (chrome?.runtime?.sendMessage && isTopFrame()) {
     });
   };
 
-  window.addEventListener("pageshow", (event) => {
-    handleChainInfoPageShow(event);
-    runForward();
-  });
-  window.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      runForward();
-    }
-  });
+  armForwardPollListenersOnce(runForward);
 
   if (document.readyState === "loading") {
     window.addEventListener("DOMContentLoaded", () => runForward(), { once: true });
