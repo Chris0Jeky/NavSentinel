@@ -278,7 +278,9 @@ export async function runImportFlow(
 ): Promise<void> {
   try {
     const result = await deps.importPayload();
-    await deps.refresh(true);
+    // A transient post-success refresh failure must not flip a completed import
+    // into "Import failed." — report the outcome regardless (#828).
+    await safeRefresh(() => deps.refresh(true));
     deps.flash(formatImportSuccess(result?.eventLogDropped));
   } catch (e) {
     console.warn("[NavSentinel] import failed:", e);
