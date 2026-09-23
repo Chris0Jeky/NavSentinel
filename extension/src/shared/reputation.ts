@@ -295,7 +295,8 @@ export function insertDomain(filter: BloomFilterState, domain: string): void {
  * @internal
  *
  * m = -(n * ln(p)) / (ln(2))^2
- * k = (m / n) * ln(2)
+ * k = (m / n) * ln(2), capped at MAX_HASH_FUNCTIONS. At extreme requested
+ * rates this CPU safety cap takes precedence over the target FP rate.
  *
  * @param n Number of items
  * @param p Target false positive rate (e.g. 0.0001 for 0.01%)
@@ -307,7 +308,8 @@ export function optimalParams(n: number, p: number): { m: number; k: number } {
   // Clamp to the MIN_FILTER_BITS floor so optimalParams never suggests a sub-byte
   // filter that loadFilter would then reject (e.g. n=1, p=0.49 -> raw m=2). (#292)
   const m = Math.max(MIN_FILTER_BITS, Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2)));
-  const k = Math.max(1, Math.round((m / n) * Math.LN2));
+  // Keep the helper pipeline usable by insertDomain/checkDomain/loadFilter.
+  const k = Math.min(MAX_HASH_FUNCTIONS, Math.max(1, Math.round((m / n) * Math.LN2)));
   return { m, k };
 }
 
