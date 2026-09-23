@@ -6,16 +6,27 @@ This repo is best worked on as a browser-extension project with deterministic lo
 
 - Node.js `^20.19.0 || ^22.13.0 || >=24` (the `package.json` engine range)
 - Chrome or Chromium for MV3 testing
-- Windows checkouts must materialize LF bytes (`core.autocrlf=false`).
-  The provenance / state-authority / release-integrity tests compare raw
-  working-tree bytes against git blobs by design, and the repo's `eol=lf`
-  attributes are not retroactive on existing working-tree files: a checkout
-  made with `autocrlf=true` carries CRLF bytes that fail those tests with
-  `RAW_BYTES_MISMATCH`. Fix an existing checkout with
-  `git config core.autocrlf false` followed by `git add --renormalize .`
-  (commit the renormalization), or clone fresh with `core.autocrlf=false`.
-  The unit-test runner fails fast with this same guidance when it detects
-  CRLF working-tree files (#763).
+- Tracked text files must materialize LF bytes, including on Windows. The
+  provenance / state-authority tests intentionally compare raw worktree bytes
+  with git blobs. Existing CRLF or mixed-LF/CRLF files can remain after changing
+  `.gitattributes` or `core.autocrlf`; the unit runner diagnoses these early (#763).
+
+### Recovering an old CRLF checkout without losing work
+
+Preserve the existing checkout, including staged, unstaged, and untracked work.
+Clone into a **new directory** with LF materialization:
+
+```bash
+git -c core.autocrlf=false clone <repository-url> <new-directory>
+```
+
+Reapply saved edits deliberately, then check `git ls-files --eol` before running
+`npm test`. LF text files should show `i/lf w/lf`; `w/crlf` and `w/mixed` still
+contain CRLF separators. The committed `eol=lf` attributes govern fresh
+checkouts. `git add --renormalize .` normalizes the **index**, not existing
+working-tree bytes, so it is not a repair for this error. Do not use a hard
+reset, bulk deletion, or forced checkout on unsaved work to silence the check.
+This preflight never rewrites files or relaxes the raw-byte integrity boundary.
 
 ## Install and build
 

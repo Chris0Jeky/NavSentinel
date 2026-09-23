@@ -1,68 +1,52 @@
 // Checkout-end-of-line hygiene gate (#763).
 //
-// The provenance / state-authority / release-integrity tests compare raw
-// working-tree bytes against git blobs BY DESIGN (a CRLF materialization of
-// an LF blob is a real, deliberate RAW_BYTES_MISMATCH rejection — see the
-// `rejects clean LF blobs materialized as CRLF` test). That means Windows
-// checkouts must materialize LF bytes, which requires core.autocrlf=false:
-// `eol=lf` attributes are not retroactive on existing working-tree files.
-//
-// This module is wired as a vitest globalSetup so a CRLF checkout fails fast
-// with actionable text instead of surfacing as two dozen confusing
-// RAW_BYTES_MISMATCH failures deep in the suite.
-
+// Raw worktree bytes are intentionally compared with git blobs by the
+// provenance tests. Attributes/config changes do not rematerialize existing
+// CRLF files, and `git add --renormalize` changes the index, not those bytes.
+// Diagnose the checkout without changing files or weakening integrity checks.
 import { execFileSync } from "node:child_process";
 
-/**
- * Parse `git ls-files --eol` output and return the paths whose working-tree
- * bytes are CRLF. Pure (no git I/O) so it is directly unit-testable.
- */
+/** Return tracked paths with CRLF separators, including mixed LF/CRLF files. */
 export function findCrlfWorktreeFiles(lsFilesOutput) {
   const flagged = [];
   for (const line of lsFilesOutput.split("\n")) {
-    // Format: `<index-eol> <worktree-eol> <attrs> <tab> <path>`, e.g.
-    // `i/lf    w/crlf  attr/text=auto eol=lf \tREADME.md`. The path is
-    // tab-separated and the attrs column itself contains spaces, so split
-    // on the tab first; only the header's second token is consulted, so
-    // C-quoted paths with spaces cannot confuse it.
+    // Attributes contain spaces; the first tab separates metadata from the
+    // (possibly C-quoted) path. Preserve that path for diagnostics only.
     const tab = line.indexOf("\t");
     if (tab < 0) continue;
     const headerTokens = line.slice(0, tab).split(/\s+/).filter(Boolean);
-    if (headerTokens[1] === "w/crlf") {
+    if (headerTokens[1] === "w/crlf" || headerTokens[1] === "w/mixed") {
       flagged.push(line.slice(tab + 1));
     }
   }
   return flagged;
 }
 
-function countCrlfWorktreeFiles() {
-  const output = execFileSync("git", ["ls-files", "--eol"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  return findCrlfWorktreeFiles(output);
-}
-
 export default async function checkoutEolCheck() {
   let flagged;
   try {
-    flagged = countCrlfWorktreeFiles();
+    const output = execFileSync("git", ["ls-files", "--eol"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    flagged = findCrlfWorktreeFiles(output);
   } catch {
-    // Not a git checkout (tarball/CI artifact) or git unavailable: nothing
-    // to enforce, and this gate must never mask the real suite result.
+    // A tarball or unavailable Git is not checkout evidence. Leave the real
+    // integrity tests authoritative rather than fabricating an LF-clean result.
     return;
   }
   if (flagged.length === 0) return;
   const sample = flagged.slice(0, 5).join("\n  ");
   const more = flagged.length > 5 ? `\n  ... and ${flagged.length - 5} more` : "";
   throw new Error(
-    `[NavSentinel] ${flagged.length} tracked file(s) are checked out as CRLF, ` +
-      `but the provenance / state-authority tests compare raw working-tree bytes ` +
-      `against LF git blobs by design and will fail with RAW_BYTES_MISMATCH.\n` +
-      `Windows checkouts must materialize LF bytes:\n` +
-      `  git config core.autocrlf false\n` +
-      `  git add --renormalize .\n` +
-      `(or clone fresh with core.autocrlf=false). See CONTRIBUTING.md (#763).\n` +
+    `[NavSentinel] ${flagged.length} tracked file(s) contain CRLF or mixed line endings.\n` +
+      `Provenance / state-authority tests compare raw working-tree bytes against ` +
+      `LF git blobs by design (RAW_BYTES_MISMATCH).\n` +
+      `Preserve this checkout and any local work. Clone into a new directory:\n` +
+      `  git -c core.autocrlf=false clone <repository-url> <new-directory>\n` +
+      `Reapply saved edits deliberately and verify with git ls-files --eol.\n` +
+      `Changing Git configuration or renormalizing the index does not rewrite ` +
+      `existing working-tree bytes. See CONTRIBUTING.md (#763).\n` +
       `Flagged:\n  ${sample}${more}`,
   );
 }

@@ -26,7 +26,11 @@ function commit(repositoryRoot: string, message: string): string {
 }
 
 function createRepository(): { root: string; head: string; configPath: string } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-build-provenance-"));
+  // Canonicalize an 8.3 short-name TEMP prefix (#764): resolveRepositoryRoot
+  // compares against realpathSync.native, so hand it the canonical root.
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-build-provenance-")),
+  );
   temporaryPaths.push(root);
   git(root, ["init", "--quiet"]);
   git(root, ["config", "user.name", "NavSentinel Tests"]);
@@ -237,7 +241,11 @@ describe("state-authority extension build provenance", { timeout: 15_000 }, () =
   });
 
   it("classifies non-repositories and missing blob authority as invalid evidence", () => {
-    const nonRepository = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-non-repository-"));
+    // Canonicalize an 8.3 short-name TEMP prefix (#764) so the probe reaches
+    // the NOT_A_REPOSITORY assertion instead of tripping ROOT_LINKED.
+    const nonRepository = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-non-repository-")),
+    );
     temporaryPaths.push(nonRepository);
     expectIntegrityCode(() => assertCurrentHeadBuildInputs(nonRepository, "HEAD"), "NOT_A_REPOSITORY");
 
@@ -258,7 +266,11 @@ describe("state-authority extension build provenance", { timeout: 15_000 }, () =
     const repository = createRepository();
     addTrackedInput(repository.root);
     const head = commit(repository.root, "tracked input");
-    const linkedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-linked-worktree-"));
+    // Canonicalize an 8.3 short-name TEMP prefix (#764) before git recreates
+    // the path as a linked worktree.
+    const linkedRoot = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-linked-worktree-")),
+    );
     fs.rmSync(linkedRoot, { recursive: true, force: true });
     temporaryPaths.push(linkedRoot);
     git(repository.root, ["worktree", "add", "--quiet", "--detach", linkedRoot, head]);
