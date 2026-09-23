@@ -29,7 +29,12 @@ const repositoryRoot = path.resolve(__dirname, "..");
 const tempRoots: string[] = [];
 
 function makeTempRoot(label: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `navsentinel-${label}-`));
+  // Canonicalize an 8.3 short-name TEMP prefix (#764): repository-root
+  // assertions compare against realpathSync.native, so hand them the
+  // canonical root.
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), `navsentinel-${label}-`)),
+  );
   tempRoots.push(root);
   return root;
 }
