@@ -370,6 +370,19 @@ describe("detectLookalike (combined)", () => {
     expect(result.levenshtein).toBeNull();
     expect(result.homoglyphLevenshtein).toBeNull();
   });
+
+  it("tolerates a nullish trusted list (no Levenshtein targets, no throw)", () => {
+    // Pre-fix the homoglyph loop threw TypeError on null; findClosestLookalike
+    // already coalesced, so only this loop needed the guard. Brand/stuffing
+    // checks are trust-independent and still run (null here: no brand present).
+    for (const badList of [null, undefined] as unknown as string[][]) {
+      const result = detectLookalike("randomsite.org", badList);
+      expect(result.levenshtein).toBeNull();
+      expect(result.homoglyphLevenshtein).toBeNull();
+      expect(result.brandKeyword).toBeNull();
+      expect(result.subdomainStuffing).toBeNull();
+    }
+  });
 });
 
 describe("computeCredentialRisk enhanced detection", () => {
