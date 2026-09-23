@@ -1526,6 +1526,9 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   const out: ClickContext = { viewport, input: c.input === "keyboard" ? "keyboard" : "pointer", top };
   const underlying = sanitizeElementHint(c.underlying);
   if (underlying) out.underlying = underlying;
+  // computeCDS consumes inTop (benign-container suppression); dropping it
+  // made replayed CDS diverge +35 from the live score (#794).
+  if (typeof c.inTop === "boolean") out.inTop = c.inTop;
   if (typeof c.retargeted === "boolean") out.retargeted = c.retargeted;
   if (typeof c.explicitNewTabIntent === "boolean") out.explicitNewTabIntent = c.explicitNewTabIntent;
   if (typeof c.isLegitModalBackdrop === "boolean") out.isLegitModalBackdrop = c.isLegitModalBackdrop;
