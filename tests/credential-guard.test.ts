@@ -112,6 +112,18 @@ function createPasswordForm(action?: string): HTMLFormElement {
   return form;
 }
 
+function installBase(href: string): HTMLBaseElement {
+  document.querySelectorAll("base").forEach((el) => el.remove());
+  const base = document.createElement("base");
+  base.setAttribute("href", href);
+  document.head.appendChild(base);
+  return base;
+}
+
+function removeBase(): void {
+  document.querySelectorAll("base").forEach((el) => el.remove());
+}
+
 function createPlainForm(): HTMLFormElement {
   const form = document.createElement("form");
   const input = document.createElement("input");
@@ -528,17 +540,77 @@ describe("credential_guard", () => {
       expect(risk.score).toBeGreaterThanOrEqual(0);
     });
 
-    it("resolves form action URL relative to location", async () => {
+    it("resolves form action URL relative to the document base URL", async () => {
       stubLocation("https://example.com/app/login");
-      const form = createPasswordForm("/submit");
+      installBase("https://example.com/app/login");
+      try {
+        const form = createPasswordForm("/submit");
 
-      await dispatchSubmit(form);
+        await dispatchSubmit(form);
 
-      expect(mockComputeRisk).toHaveBeenCalledWith(
-        expect.objectContaining({
-          actionUrl: "https://example.com/submit",
-        }),
-      );
+        expect(mockComputeRisk).toHaveBeenCalledWith(
+          expect.objectContaining({
+            actionUrl: "https://example.com/submit",
+          }),
+        );
+      } finally {
+        removeBase();
+      }
+    });
+
+    it("assesses a relative action against a cross-origin base, not the location (#775)", async () => {
+      stubLocation("https://victim.example/login");
+      installBase("https://evil.example/sub/");
+      try {
+        const form = createPasswordForm("collect");
+
+        await dispatchSubmit(form);
+
+        expect(mockComputeRisk).toHaveBeenCalledWith(
+          expect.objectContaining({
+            actionUrl: "https://evil.example/sub/collect",
+          }),
+        );
+      } finally {
+        removeBase();
+      }
+    });
+
+    it("assesses a whitespace-only action against the base URL (#775)", async () => {
+      stubLocation("https://victim.example/login");
+      installBase("https://evil.example/sub/");
+      try {
+        const form = createPasswordForm("   ");
+
+        await dispatchSubmit(form);
+
+        expect(mockComputeRisk).toHaveBeenCalledWith(
+          expect.objectContaining({
+            actionUrl: "https://evil.example/sub/",
+          }),
+        );
+      } finally {
+        removeBase();
+      }
+    });
+
+    it("still assesses an exactly-empty action as the document with a base present (#775)", async () => {
+      stubLocation("https://victim.example/login");
+      installBase("https://evil.example/sub/");
+      try {
+        const form = createPasswordForm();
+        form.setAttribute("action", "");
+
+        await dispatchSubmit(form);
+
+        expect(mockComputeRisk).toHaveBeenCalledWith(
+          expect.objectContaining({
+            actionUrl: "https://victim.example/login",
+          }),
+        );
+      } finally {
+        removeBase();
+      }
     });
 
     it("uses location.href as action URL when form has no action", async () => {
