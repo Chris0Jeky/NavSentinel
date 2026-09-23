@@ -6,6 +6,9 @@ on:
       - ".github/workflows/windows-trust-boundaries.yml"
       - "package.json"
       - "package-lock.json"
+      - "vitest.config.ts"
+      - "scripts/checkout-eol.mjs"
+      - "tests/checkout-eol.test.ts"
       - "scripts/launch-state-authority-campaign.mjs"
       - "scripts/launch-state-authority-campaign.ps1"
       - "scripts/content-loader-contract.mjs"
@@ -44,6 +47,9 @@ on:
       - ".github/workflows/windows-trust-boundaries.yml"
       - "package.json"
       - "package-lock.json"
+      - "vitest.config.ts"
+      - "scripts/checkout-eol.mjs"
+      - "tests/checkout-eol.test.ts"
       - "scripts/launch-state-authority-campaign.mjs"
       - "scripts/launch-state-authority-campaign.ps1"
       - "scripts/content-loader-contract.mjs"
@@ -110,6 +116,7 @@ jobs:
       - name: Run focused release and launcher contracts
         run: >-
           npx vitest run
+          tests/checkout-eol.test.ts
           tests/deterministic-release-archive.test.ts
           tests/safe-release-path.test.ts
           tests/release-input-integrity.test.ts
