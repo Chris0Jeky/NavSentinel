@@ -86,6 +86,7 @@ import {
   isPushStateAbuseActive,
 } from "./pushstate_guard";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
+import { isOwnExtensionRuntimeSender } from "./runtime_sender";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 import { isRiskReducingReason } from "../shared/reason_codes";
@@ -1560,7 +1561,8 @@ function showAllowPrompt(params: AllowPromptParams): void {
 }
 
 if (chrome?.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (!isOwnExtensionRuntimeSender(sender)) return;
     if (!message || message.type !== "ns-rollback") return;
     if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
@@ -1569,7 +1571,8 @@ if (chrome?.runtime?.onMessage) {
     handleRollback(url, prevUrl);
   });
 
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (!isOwnExtensionRuntimeSender(sender)) return;
     if (!message || message.type !== "ns-forward-offer") return;
     if (!isTopFrame()) return;
     if (settings.defaultMode === "off") return;
@@ -1580,14 +1583,16 @@ if (chrome?.runtime?.onMessage) {
 
   // DoubleClickjacking: delegate to dblclick_guard module for
   // ns-dblclick-child-closed and ns-dblclick-opener-nav-from-child.
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (!isOwnExtensionRuntimeSender(sender)) return;
     if (!isTopFrame()) return;
     handleDblclickRuntimeMessage(message);
   });
 
   // OAuth monitoring: delegate to oauth_monitor module for
   // ns-oauth-flow-update, ns-oauth-redirect-mismatch, ns-oauth-opener-manipulation.
-  chrome.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (!isOwnExtensionRuntimeSender(sender)) return;
     if (!isTopFrame()) return;
     handleOAuthRuntimeMessage(message);
   });
