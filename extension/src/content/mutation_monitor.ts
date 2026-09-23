@@ -354,21 +354,48 @@ function isNavSentinelHost(el: Element): boolean {
   return SELF_HOST_PATTERN.test(id);
 }
 
+/**
+ * Roots queued for observation by `observeShadowRoot`.
+ *
+ * Registration used to recurse (`observeShadowRoot` → `scanForShadowRoots` →
+ * `observeShadowRoot`), so a page with a deeply nested `attachShadow` chain
+ * threw `RangeError` inside `processBatch` and killed the rest of the batch
+ * (#813). The drain below is an explicit worklist, so nesting depth can never
+ * exhaust the call stack. A call that lands while a drain is already in
+ * progress only enqueues; the running loop picks the root up.
+ */
+const pendingShadowRoots: ShadowRoot[] = [];
+let drainingShadowRoots = false;
+
 function observeShadowRoot(sr: ShadowRoot): void {
-  if (observedShadowRoots.has(sr)) return;
+  pendingShadowRoots.push(sr);
+  if (drainingShadowRoots) return;
+  drainingShadowRoots = true;
+  try {
+    let current: ShadowRoot | undefined;
+    while ((current = pendingShadowRoots.pop()) !== undefined) {
+      if (observedShadowRoots.has(current)) continue;
 
-  const host = sr.host;
-  if (isNavSentinelHost(host)) return;
+      const host = current.host;
+      if (isNavSentinelHost(host)) continue;
 
-  observedShadowRoots.add(sr);
+      observedShadowRoots.add(current);
 
-  const shadowObs = new MutationObserver(onMutations);
-  shadowObs.observe(sr, OBSERVE_CONFIG);
-  shadowObserversByHost.set(host, shadowObs);
+      const shadowObs = new MutationObserver(onMutations);
+      shadowObs.observe(current, OBSERVE_CONFIG);
+      shadowObserversByHost.set(host, shadowObs);
 
-  snapshotFormActions(sr);
+      snapshotFormActions(current);
 
-  scanForShadowRoots(sr);
+      const nested = current.querySelectorAll("*");
+      for (let i = 0; i < nested.length; i++) {
+        const child = tryGetShadowRoot(nested[i]!);
+        if (child) pendingShadowRoots.push(child);
+      }
+    }
+  } finally {
+    drainingShadowRoots = false;
+  }
 }
 
 function scanForShadowRoots(root: Element | ShadowRoot | Document): void {
@@ -848,24 +875,33 @@ function disconnectShadowObserver(host: Element): void {
   // for an entire nested shadow subtree (and even pre-recursion it silently killed the
   // host's own observer). Also covers a nested host re-parented into live DOM within the
   // debounce window. (#401 R1)
-  if (host.isConnected) return;
-  const obs = shadowObserversByHost.get(host);
-  if (!obs) return;
-  obs.disconnect();
-  shadowObserversByHost.delete(host);
-  const sr = tryGetShadowRoot(host);
-  if (sr) {
+  // Iterative worklist instead of recursion: a hostile deeply-nested shadow
+  // tree used to blow the call stack here, throwing RangeError out of
+  // processBatch and dropping every later record in the batch (#813). Each
+  // iteration preserves the original early-outs (a connected host, a host
+  // without a registered observer, or a host without a live root contributes
+  // no further work, exactly as the early returns did).
+  const stack: Element[] = [host];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.isConnected) continue;
+    const obs = shadowObserversByHost.get(current);
+    if (!obs) continue;
+    obs.disconnect();
+    shadowObserversByHost.delete(current);
+    const sr = tryGetShadowRoot(current);
+    if (!sr) continue;
     observedShadowRoots.delete(sr);
     // Nested shadow hosts live inside this root, which the light-DOM
     // querySelectorAll walk in processRemovedNode cannot pierce — without this
-    // recursion their observers (and the strong Map references keeping the
+    // descent their observers (and the strong Map references keeping the
     // detached elements alive) leak until the AUTO_DISCONNECT_MS timer (#401).
     // Cost is bounded: only hosts that actually had a registered observer pay
     // the shadow-root walk, and every observed nested host is in the Map, so
-    // the recursion reaches arbitrarily deep observed nesting.
+    // the worklist reaches arbitrarily deep observed nesting.
     const nested = sr.querySelectorAll("*");
     for (let i = 0; i < nested.length; i++) {
-      disconnectShadowObserver(nested[i]!);
+      stack.push(nested[i]!);
     }
   }
 }
@@ -951,37 +987,46 @@ function processBatch(): void {
   //   >= MAX_ALERTS                         no detection, as before
   // pushAlert enforces the same boundary on admission, so a lane can never
   // emit an alert the reservation does not allow.
+  // Each record is additionally guarded, so a throw on one hostile record
+  // (poisoned DOM API, unexpected layout-read failure) cannot skip the rest
+  // of the batch (#813).
   const batch = pendingMutations;
   pendingMutations = [];
   const bypassedOverlayTargets = new Set<Element>();
 
   for (const record of batch) {
-    if (record.type === "childList") {
-      for (let i = 0; i < record.addedNodes.length; i++) {
-        const node = record.addedNodes[i]!;
-        // Re-read alerts.length per node (not once per record): scanning one
-        // node can itself reach a lane boundary, and the pre-#413 code broke out
-        // of this loop at that point. Discovery must not break — it runs for
-        // every added node regardless.
-        if (alerts.length < MAX_ALERTS) {
-          processAddedNode(node, alerts.length >= FLOODABLE_ALERT_CAP);
+    try {
+      if (record.type === "childList") {
+        for (let i = 0; i < record.addedNodes.length; i++) {
+          const node = record.addedNodes[i]!;
+          // Re-read alerts.length per node (not once per record): scanning one
+          // node can itself reach a lane boundary, and the pre-#413 code broke out
+          // of this loop at that point. Discovery must not break — it runs for
+          // every added node regardless.
+          if (alerts.length < MAX_ALERTS) {
+            processAddedNode(node, alerts.length >= FLOODABLE_ALERT_CAP);
+          }
+          discoverShadowRootsInAddedNode(node);
         }
-        discoverShadowRootsInAddedNode(node);
+        for (let i = 0; i < record.removedNodes.length; i++) {
+          processRemovedNode(record.removedNodes[i]!);
+        }
+      } else if (
+        record.type === "attributes" &&
+        (record.attributeName === "style" || record.attributeName === "class") &&
+        record.target instanceof Element &&
+        restoredOverlayAttributeBypass.has(record.target)
+      ) {
+        // Consume after the batch so suppression and restoration records that
+        // coalesce into the same batch are both ignored for this exact element.
+        bypassedOverlayTargets.add(record.target);
+      } else if (record.type === "attributes" && alerts.length < MAX_ALERTS) {
+        processAttributeChange(record, alerts.length >= FLOODABLE_ALERT_CAP);
       }
-      for (let i = 0; i < record.removedNodes.length; i++) {
-        processRemovedNode(record.removedNodes[i]!);
-      }
-    } else if (
-      record.type === "attributes" &&
-      (record.attributeName === "style" || record.attributeName === "class") &&
-      record.target instanceof Element &&
-      restoredOverlayAttributeBypass.has(record.target)
-    ) {
-      // Consume after the batch so suppression and restoration records that
-      // coalesce into the same batch are both ignored for this exact element.
-      bypassedOverlayTargets.add(record.target);
-    } else if (record.type === "attributes" && alerts.length < MAX_ALERTS) {
-      processAttributeChange(record, alerts.length >= FLOODABLE_ALERT_CAP);
+    } catch {
+      // One hostile record must not skip the rest of the batch: a poisoned DOM
+      // API on a custom element (or any unexpected layout-read throw) aborts
+      // only this record, and detection continues with the next one. (#813)
     }
   }
 
