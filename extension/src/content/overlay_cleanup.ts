@@ -114,7 +114,12 @@ function createSuppressionGroup(): OverlaySuppressionGroup {
 
     let restored = false;
     for (let index = group.records.length - 1; index >= 0; index -= 1) {
-      restored = group.records[index]!.undo() || restored;
+      try {
+        restored = group.records[index]!.undo() || restored;
+      } catch {
+        // A hostile element (e.g. `style` turned throwing after suppression)
+        // must not abort restoration of the rest of the group. (#748)
+      }
     }
     group.records.length = 0;
     return restored;
@@ -157,7 +162,14 @@ export function reconcileDetectedOverlay(
       continue;
     }
 
-    const result = reconcileElement(element);
+    let result: ReturnType<typeof reconcileElement>;
+    try {
+      result = reconcileElement(element);
+    } catch {
+      // A hostile element (e.g. a throwing `style` accessor planted by page
+      // script) must not abort suppression of the rest of the batch. (#748)
+      continue;
+    }
     if (!result) continue;
     group ??= createSuppressionGroup();
     if (!group.records.includes(result.record)) group.records.push(result.record);
