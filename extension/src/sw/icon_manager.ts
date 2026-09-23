@@ -190,7 +190,15 @@ export async function setAllTabsGray(): Promise<void> {
   // Order each tab's blank after its in-flight update. Do NOT clear the chains: each
   // blankBadgeOrdered appends to (and self-prunes) its tab's chain, so an in-flight
   // update can no longer land its setBadge* writes after our blank. (#272)
-  const tabs = await chrome.tabs.query({});
+  let tabs: chrome.tabs.Tab[];
+  try {
+    tabs = await chrome.tabs.query({});
+  } catch {
+    // Context invalidated mid-reset (same class as #362): the cache above is
+    // already cleared and callers fire-and-forget, so never reject — the blanks
+    // are best-effort and the next update re-renders. (#797)
+    return;
+  }
   await Promise.all(
     tabs.map((tab) => (tab.id === undefined ? Promise.resolve() : blankBadgeOrdered(tab.id))),
   );
