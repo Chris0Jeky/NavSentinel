@@ -147,7 +147,9 @@ async function loadProfiles(): Promise<Map<string, DomainProfile>> {
       if (typeof p.totalNRS !== "number" || !Number.isFinite(p.totalNRS)) p.totalNRS = 0;
       if (typeof p.maxNRS !== "number" || !Number.isFinite(p.maxNRS)) p.maxNRS = 0;
       if (typeof p.triggerCount !== "number" || !Number.isFinite(p.triggerCount)) p.triggerCount = 0;
-      if (typeof p.lastSeen !== "number" || !Number.isFinite(p.lastSeen)) p.lastSeen = Date.now();
+      // Unknown age is not evidence of a fresh visit. Drop this corrupt entry
+      // instead of letting it displace valid history at the LRU cap. (#834)
+      if (typeof p.lastSeen !== "number" || !Number.isFinite(p.lastSeen)) continue;
       p.nrsHistory = p.nrsHistory
         .filter((n): n is number => typeof n === "number" && Number.isFinite(n))
         .slice(-MAX_NRS_HISTORY);
