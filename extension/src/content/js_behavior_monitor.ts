@@ -130,13 +130,19 @@ interface NetworkRequestRecord {
 
 let _recentFormSubmits: FormSubmitRecord[] = [];
 let _recentNetworkRequests: NetworkRequestRecord[] = [];
-let _lastCredentialReadTs = 0;
 let _isInsideFormSubmit = false;
 let _config: JsBehaviorMonitorConfig | null = null;
 let _formSubmitPatched = false;
 
 /** Tracks original form action values at DOM parse time. */
 let _originalFormActions = new WeakMap<HTMLFormElement, string>();
+
+/**
+ * Tracks original submitter `formaction` override values. Without this, a
+ * dynamically changed submitter override is invisible: the form-space
+ * comparison below only sees the form's own (unchanged) attribute. (#790)
+ */
+let _originalSubmitterActions = new WeakMap<HTMLElement, string>();
 
 let _formObserver: MutationObserver | null = null;
 let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
@@ -153,11 +159,22 @@ function recordOriginalAction(form: HTMLFormElement): void {
   }
 }
 
-/** Scan existing forms on page and record their initial actions. */
+/** Record a submitter's initial `formaction` override for later comparison. */
+function recordOriginalSubmitterAction(submitter: HTMLElement): void {
+  if (!_originalSubmitterActions.has(submitter)) {
+    _originalSubmitterActions.set(submitter, submitter.getAttribute("formaction") ?? "");
+  }
+}
+
+/** Scan existing forms and submitter overrides and record their initials. */
 function snapshotExistingForms(): void {
   const forms = document.querySelectorAll("form");
   for (let i = 0; i < forms.length; i++) {
     recordOriginalAction(forms[i] as HTMLFormElement);
+  }
+  const submitters = document.querySelectorAll("[formaction]");
+  for (let i = 0; i < submitters.length; i++) {
+    recordOriginalSubmitterAction(submitters[i] as HTMLElement);
   }
 }
 
@@ -166,6 +183,11 @@ function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null)
   if (!_config || _config.mode === "off") return;
 
   recordOriginalAction(form);
+  if (submitter) {
+    // Record-on-first-sight mirrors form semantics: a submitter never observed
+    // before this submit is baselined at its current value, not flagged.
+    recordOriginalSubmitterAction(submitter);
+  }
   const hasCredentials = formHasCredentialFields(form);
   const submitterFormAction = submitter?.getAttribute("formaction") ?? "";
   const action = submitterFormAction || form.action || location.href;
@@ -175,8 +197,23 @@ function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null)
     ? extractOrigin(originalAction)
     : location.origin;
   const resolvedCurrent = extractOrigin(action);
-  const actionDynamicallyChanged =
+  const formDynamicallyChanged =
     resolvedOriginal !== resolvedCurrent && originalAction !== (form.getAttribute("action") ?? "");
+  // Submitter-space comparison: a hijacked `formaction` override is invisible
+  // to the form-space check above when the form's own attribute is untouched.
+  // An absent original resolves to the page origin, same as the form side.
+  const submitterOriginal = submitter ? (_originalSubmitterActions.get(submitter) ?? "") : "";
+  const resolvedSubmitterOriginal = submitterOriginal
+    ? extractOrigin(submitterOriginal)
+    : location.origin;
+  const resolvedSubmitterCurrent = submitterFormAction
+    ? extractOrigin(submitterFormAction)
+    : location.origin;
+  const submitterDynamicallyChanged =
+    !!submitter &&
+    submitterOriginal !== submitterFormAction &&
+    resolvedSubmitterOriginal !== resolvedSubmitterCurrent;
+  const actionDynamicallyChanged = formDynamicallyChanged || submitterDynamicallyChanged;
 
   const now = Date.now();
 
@@ -226,6 +263,13 @@ function patchFormSubmitMonitoring(): void {
           const forms = node.querySelectorAll("form");
           for (let fi = 0; fi < forms.length; fi++) {
             recordOriginalAction(forms[fi] as HTMLFormElement);
+          }
+          if (node.hasAttribute("formaction")) {
+            recordOriginalSubmitterAction(node);
+          }
+          const submitters = node.querySelectorAll("[formaction]");
+          for (let si = 0; si < submitters.length; si++) {
+            recordOriginalSubmitterAction(submitters[si] as HTMLElement);
           }
         }
       }
@@ -506,7 +550,6 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
             const lastRead = _credReadDebounceMap.get(this) ?? 0;
             if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
               _credReadDebounceMap.set(this, now);
-              _lastCredentialReadTs = now;
               const signal: JsCredentialReadSignal = {
                 ts: now,
                 isInsideSubmitHandler: false,
@@ -590,7 +633,10 @@ export function formHasCredentialFields(form: HTMLFormElement): boolean {
  * Determine whether a URL is cross-origin relative to the current page.
  *
  * Compares the origin (protocol + host + port) of the given URL against
- * `location.origin`. Relative URLs are resolved against the current page.
+ * `location.origin`. Relative URLs resolve against the effective document
+ * base URL, matching what the browser actually fetches or submits to —
+ * resolving against `location.href` instead misbinds whenever a base element
+ * is present (same class as #650/#778/#785). (#790)
  *
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
@@ -603,7 +649,7 @@ export function isCrossOriginUrl(url: string): boolean {
     return false;
   }
   try {
-    const resolved = new URL(url, location.href);
+    const resolved = new URL(url, document.baseURI);
     if (resolved.origin === "null") return false;
     return resolved.origin !== location.origin;
   } catch {
@@ -616,6 +662,7 @@ export function isCrossOriginUrl(url: string): boolean {
  *
  * Returns only protocol + host + port (e.g., "https://evil.com:443").
  * Returns empty string for invalid or relative URLs that cannot be resolved.
+ * Relative URLs resolve against the effective document base URL (#790).
  *
  * @param url - The URL to extract origin from
  * @returns The origin string, or empty string on failure
@@ -628,7 +675,7 @@ export function extractOrigin(url: string): string {
     return "";
   }
   try {
-    const resolved = new URL(url, location.href);
+    const resolved = new URL(url, document.baseURI);
     if (resolved.origin === "null") return "";
     return resolved.origin;
   } catch {
@@ -661,7 +708,6 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
 export function _resetState(): void {
   _recentFormSubmits = [];
   _recentNetworkRequests = [];
-  _lastCredentialReadTs = 0;
   _isInsideFormSubmit = false;
   _config = null;
 
@@ -678,6 +724,7 @@ export function _resetState(): void {
     _originalSubmitFn = null;
   }
   _originalFormActions = new WeakMap<HTMLFormElement, string>();
+  _originalSubmitterActions = new WeakMap<HTMLElement, string>();
   _formSubmitPatched = false;
 }
 

