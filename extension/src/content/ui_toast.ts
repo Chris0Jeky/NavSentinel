@@ -64,11 +64,17 @@ function isolateInteraction(event: Event): void {
 
 function bindControl(control: HTMLElement, action: () => void): void {
   controlActions.set(control, action);
-  // Direct listener: the fallback for synthetic activation in non-browser unit
-  // DOMs. Trusted browser input never reaches it because the document-start
-  // fence consumes that input at window capture and calls
-  // activateOwnedToastControl instead.
-  control.addEventListener("click", action);
+  // Direct listener: the fallback for non-browser unit DOMs (and for engines
+  // where the document-start fence failed to install). Trusted browser input
+  // normally never reaches it because the fence consumes that input at window
+  // capture and calls activateOwnedToastControl instead — but page script CAN
+  // reach it with synthetic clicks through the open shadow root, so untrusted
+  // input is rejected here. isTrusted is unforgeable in Chrome (verified by
+  // experiment: redefining it throws), so this gate is airtight. (#826)
+  control.addEventListener("click", (event) => {
+    if (!event.isTrusted) return;
+    action();
+  });
 }
 
 /**

@@ -402,6 +402,8 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === "Escape") {
+        // Trusted input only (see the button listener below). (#826)
+        if (!e.isTrusted) return;
         e.preventDefault();
         done(outside);
         return;
@@ -445,6 +447,8 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     window.addEventListener("keydown", onKeyDown, true);
     overlay.addEventListener("mousedown", (e) => {
+      // Trusted input only (see the button listener below). (#826)
+      if (!e.isTrusted) return;
       if (e.target === overlay) done(outside);
     });
 
@@ -454,7 +458,14 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       const kind = action.kind ?? "neutral";
       if (kind === "primary") btn.classList.add("primary");
       if (kind === "danger") btn.classList.add("danger");
-      btn.addEventListener("click", () => done(action.id));
+      // Trusted input only: page script reaches these buttons through the open
+      // shadow root, and a synthetic click must never resolve a security
+      // prompt. isTrusted is unforgeable in Chrome (verified by experiment:
+      // redefining it throws), so this gate is airtight. (#826)
+      btn.addEventListener("click", (event) => {
+        if (!event.isTrusted) return;
+        done(action.id);
+      });
       footer.appendChild(btn);
     }
 

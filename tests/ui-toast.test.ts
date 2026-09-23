@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dispatchUntrusted, stubTrustedInput } from "./helpers/trusted-input";
 
 type ToastModule = typeof import("../extension/src/content/ui_toast");
 
@@ -17,6 +18,8 @@ async function loadModule(): Promise<void> {
 }
 
 describe("ui_toast", () => {
+  stubTrustedInput();
+
   beforeEach(async () => {
     vi.resetModules();
     vi.useFakeTimers();
@@ -585,6 +588,39 @@ describe("ui_toast", () => {
       expect(onDismiss2).toHaveBeenCalledTimes(1);
       expect(onDismiss1).not.toHaveBeenCalled();
       expect(getWraps().length).toBe(0);
+    });
+  });
+
+  describe("trusted input gating (#826)", () => {
+    it("ignores an untrusted action click (page synthetic input)", () => {
+      const onClick = vi.fn();
+      showToast({ message: "Blocked", actions: [{ label: "Allow", onClick }] });
+
+      const allow = getButtons().find((b) => b.textContent === "Allow")!;
+      dispatchUntrusted(allow, new MouseEvent("click", { bubbles: true }));
+
+      expect(onClick).not.toHaveBeenCalled();
+      expect(getWraps().length).toBe(1);
+    });
+
+    it("ignores an untrusted dismiss click", () => {
+      const onDismiss = vi.fn();
+      showToast({ message: "Notice", timeoutMs: 0, onDismiss });
+
+      const dismiss = getButtons().find((b) => b.textContent === "Dismiss")!;
+      dispatchUntrusted(dismiss, new MouseEvent("click", { bubbles: true }));
+
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(getWraps().length).toBe(1);
+    });
+
+    it("ignores an untrusted outside pointerdown on a brief-recovery chip", () => {
+      showBriefRecovery("Overlay hidden", () => {});
+      expect(getWraps().length).toBe(1);
+
+      dispatchUntrusted(document.body, new PointerEvent("pointerdown", { bubbles: true }));
+
+      expect(getWraps().length).toBe(1);
     });
   });
 });

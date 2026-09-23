@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { dispatchUntrusted, stubTrustedInput } from "./helpers/trusted-input";
 
 type ShowToast = typeof import("../extension/src/content/ui_toast").showToast;
 
@@ -17,6 +18,8 @@ async function loadModule(): Promise<void> {
  * collapse and must not affect the burst counter.
  */
 describe("ui_toast burst coalescing", () => {
+  stubTrustedInput();
+
   beforeEach(async () => {
     vi.resetModules();
     vi.useFakeTimers();
@@ -165,5 +168,17 @@ describe("ui_toast burst coalescing", () => {
     block();
     expect(pill()).toBeNull();
     expect(wraps().length).toBe(1);
+  });
+
+  it("ignores an untrusted pill click: no expand, pill stays (#826)", () => {
+    block();
+    block();
+    block();
+    expect(pill()).not.toBeNull();
+
+    dispatchUntrusted(pill()!, new MouseEvent("click", { bubbles: true }));
+
+    expect(pill()).not.toBeNull();
+    expect(wraps().length).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubTrustedInput } from "./helpers/trusted-input";
 import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
 import type { ModalSpec } from "../extension/src/content/credential_modal";
 
@@ -46,6 +47,8 @@ function minimalSpec(overrides: Partial<ModalSpec> = {}): ModalSpec {
 }
 
 describe("credential modal", () => {
+  stubTrustedInput();
+
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.clearAllTimers();
