@@ -1362,13 +1362,12 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   onRemovedHandler(tabId);
 });
 function onRemovedHandler(tabId: number): void {
-  // clearPendingTabState (below) deletes this tab's pending rollback/forward entries; an
+  // swState.deleteTab (below) deletes this tab's pending rollback/forward entries; an
   // in-flight send's callback then finds the slot gone and (error: leaves it; success:
   // identity-mismatch) never re-inserts a zombie for the dead tab. (#323/disc#7)
   void clearTabIcon(tabId); // fire-and-forget: blank is chain-ordered (#272)
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
-    childWindowByTab.delete(tabId);
     const age = Date.now() - childEntry.createdAt;
     // Only notify the opener if the child actually wrote to opener.location.
     // Without this gate, benign popups (OAuth, help windows) that open and
@@ -1386,20 +1385,12 @@ function onRemovedHandler(tabId: number): void {
     }
   }
 
-  allowUntilByTab.delete(tabId);
-  gestureUntilByTab.delete(tabId);
-  allowStartedByTab.delete(tabId);
-  allowTargetByTab.delete(tabId);
-  userNavContextUntilByTab.delete(tabId);
-  suppressUntilByTab.delete(tabId);
-  rollbackReturnByTab.delete(tabId);
-  typedOriginByTab.delete(tabId);
-  redirectChainTracker.deleteTab(tabId);
-  oauthFlowByTab.delete(tabId);
-  clearPendingTabState(tabId);
-  lastUrlByTab.delete(tabId);
-  // Batch persist all cleanup in one storage write
-  swState.persistAll();
+  // All per-tab state — the 16 maps previously deleted inline here are exactly
+  // the set SessionStateManager.deleteTab clears — plus the batch persist. The
+  // child entry is only peeked above for the notify decision; its deletion moves
+  // into deleteTab, which is unobservable (the notify send is fire-and-forget
+  // either way). (#803)
+  swState.deleteTab(tabId);
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
