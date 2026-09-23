@@ -111,6 +111,16 @@ export interface BloomFilterState {
 }
 
 /**
+ * True when k can drive the probe loop: a positive integer. Fractional k
+ * would probe a non-integral number of times, k <= 0 / NaN skips the loop
+ * (checkDomain would then wrongly return true), and k = Infinity hangs it.
+ * loadFilter only produces integers in [1, 30]. (#805)
+ */
+function isUsableK(k: number): boolean {
+  return Number.isInteger(k) && k > 0;
+}
+
+/**
  * Deserialize a bloom filter from its binary representation.
  *
  * Format:
@@ -189,7 +199,12 @@ export function checkDomain(filter: BloomFilterState, domain: string): boolean {
   // probe reads bit 0), which would return true for every domain (100% FP). A
   // filter from loadFilter can never be sub-byte, but checkDomain is exported
   // and could be called with a directly-constructed filter. (#292)
-  if (!filter.bits || filter.m < MIN_FILTER_BITS || filter.k === 0) return false;
+  //
+  // k must be a positive integer: k <= 0 or NaN skips the probe loop and falls
+  // through to `true` (every domain "known-bad"), while k = Infinity never
+  // terminates the loop. loadFilter guarantees k in [1, 30]; anything else is
+  // treated as inert, exactly like a sub-byte m. (#805)
+  if (!filter.bits || filter.m < MIN_FILTER_BITS || !isUsableK(filter.k)) return false;
   if (!domain) return false;
 
   const key = domain.toLowerCase();
@@ -257,9 +272,10 @@ export function createFilter(m: number, k: number): BloomFilterState {
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
   // Mirror checkDomain / loadFilter: never write into a degenerate filter --
-  // a sub-byte m (m < MIN_FILTER_BITS) or k=0. The k=0 case is also covered by
-  // the empty for-loop below; the explicit guard keeps parity with checkDomain. (#292)
-  if (!domain || filter.m < MIN_FILTER_BITS || filter.k === 0) return;
+  // a sub-byte m (m < MIN_FILTER_BITS) or an unusable k. The k=0 case is also
+  // covered by the empty for-loop below; the explicit guard keeps parity with
+  // checkDomain (and k = Infinity would hang the loop without it). (#292, #805)
+  if (!domain || filter.m < MIN_FILTER_BITS || !isUsableK(filter.k)) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
   // Force h2 to be odd -- must match checkDomain's h2 derivation.
