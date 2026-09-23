@@ -521,6 +521,86 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("truncates pathological form-action URLs in alert details (#857)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    form.setAttribute("action", "/login");
+    await vi.advanceTimersByTimeAsync(150);
+
+    // data: URLs (and other pathological attributes) can be megabytes; the
+    // detail string must stay bounded so the event write cannot fail quota.
+    form.setAttribute("action", `data:text/html,${"A".repeat(5000)}`);
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.details.length).toBeLessThan(1000);
+    expect(actionAlerts[0]!.details).toContain("…");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("truncates pathological submitter formaction URLs in alert details (#857)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    button.setAttribute("formaction", "/pay");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formaction", "/pay");
+    await vi.advanceTimersByTimeAsync(150);
+
+    button.setAttribute("formaction", `data:text/html,${"B".repeat(5000)}`);
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.details.length).toBeLessThan(1000);
+    expect(actionAlerts[0]!.details).toContain("…");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("leaves realistic action URLs untruncated (#857)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    form.setAttribute("action", "/login");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("action", "https://evil.example.com/skim");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.details).toContain("https://evil.example.com/skim");
+    expect(actionAlerts[0]!.details).not.toContain("…");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
   it("detects form method POST-to-GET downgrade as MEDIUM form_method_changed (#812)", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
