@@ -657,6 +657,15 @@ function normalizeFormMethod(value: string | null): "post" | "get" {
   return value !== null && value.toLowerCase() === "post" ? "post" : "get";
 }
 
+// Detail strings interpolate page-controlled attribute URLs that can be
+// megabytes (data: URLs). Truncate so one pathological attribute can't bloat
+// the event extra past the storage quota and fail the whole log write,
+// silently losing the tampering record. (#857)
+const MAX_DETAIL_URL_LEN = 200;
+function truncateDetailUrl(url: string): string {
+  return url.length > MAX_DETAIL_URL_LEN ? `${url.slice(0, MAX_DETAIL_URL_LEN)}…` : url;
+}
+
 function checkFormActionChange(form: Element): void {
   if (form.tagName !== "FORM") return;
 
@@ -672,8 +681,8 @@ function checkFormActionChange(form: Element): void {
 
   const crossDomain = current ? isCrossDomain(current) : false;
   const detail = crossDomain
-    ? `Form action changed to cross-domain URL: "${current}" (was "${original}")`
-    : `Form action changed: "${current}" (was "${original}")`;
+    ? `Form action changed to cross-domain URL: "${truncateDetailUrl(current)}" (was "${truncateDetailUrl(original)}")`
+    : `Form action changed: "${truncateDetailUrl(current)}" (was "${truncateDetailUrl(original)}")`;
 
   pushAlert({
     type: "form_action_changed",
@@ -703,8 +712,8 @@ function checkSubmitterActionChange(el: Element): void {
   // (and therefore scarce), same-origin churn is MEDIUM telemetry. (#812)
   const crossDomain = current ? isCrossDomain(current) : false;
   const detail = crossDomain
-    ? `Submitter formaction changed to cross-domain URL: "${current}" (was "${original}")`
-    : `Submitter formaction changed: "${current}" (was "${original}")`;
+    ? `Submitter formaction changed to cross-domain URL: "${truncateDetailUrl(current)}" (was "${truncateDetailUrl(original)}")`
+    : `Submitter formaction changed: "${truncateDetailUrl(current)}" (was "${truncateDetailUrl(original)}")`;
 
   pushAlert({
     type: "form_action_changed",
