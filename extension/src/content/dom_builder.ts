@@ -1,4 +1,4 @@
-import type { ClickContext, ElementHint } from "../shared/scoring";
+import { hasAccessibleName, type ClickContext, type ElementHint } from "../shared/scoring";
 
 export interface DownCapture {
   ts: number;
@@ -105,6 +105,38 @@ function buildElementHint(el: Element, opts: { wantStyle: boolean; wantRect: boo
   return hint;
 }
 
+/**
+ * The named control a pointer click activates when the hit-test leaf is a
+ * non-interactive part of it: link text in a `<span>`, an `<h3>` title, an
+ * icon `<svg>`, a Material state layer (#863). Returns that control when
+ *   - the leaf is not itself interactive,
+ *   - the first interactive element below the leaf in the hit stack contains
+ *     the leaf, so it is the ancestor whose activation the click triggers and
+ *     its own box is hit at the click point,
+ *   - every element painted between the leaf and that control belongs to the
+ *     control, so no unrelated layer sits between the two, and
+ *   - the control has an accessible name. That is exactly the case in which
+ *     the leaf used to score `intent_mismatch_under_interactive` against its
+ *     own ancestor; unnamed controls keep their previous leaf-based score.
+ * Otherwise returns null and the leaf keeps being scored on its own. Overlays
+ * layered above a target as siblings or unrelated elements, and descendants
+ * that escape their link's box to cover other content, never qualify.
+ */
+function activatedAncestor(stack: Element[], leaf: Element): Element | null {
+  if (isInteractiveCheap(leaf)) return null;
+  const between: Element[] = [];
+  for (const el of stack) {
+    if (el === leaf) continue;
+    if (isInteractiveCheap(el)) {
+      if (!el.contains(leaf)) return null;
+      if (!between.every((b) => el.contains(b))) return null;
+      return hasAccessibleName(buildElementHint(el, { wantRect: false, wantStyle: false })) ? el : null;
+    }
+    between.push(el);
+  }
+  return null;
+}
+
 function detectLegitModalBackdrop(
   top: Element | null,
   stack: Element[],
@@ -167,7 +199,11 @@ export function buildClickContextFromEvents(params: {
   const retargeted = !!(downTop && clickTop && downTop !== clickTop);
   const explicitNewTabIntent =
     params.down?.button === 1 || !!(params.down?.ctrl || params.down?.meta);
-  const topEl = clickTop ?? downTop ?? params.click.stack[0] ?? document.documentElement;
+  const leafEl = clickTop ?? downTop ?? params.click.stack[0] ?? document.documentElement;
+  // Score the control the user activated, not the non-interactive child the
+  // pointer happened to land on (#863). The retargeting check above still
+  // compares the raw pointerdown and click leaves.
+  const topEl = activatedAncestor(params.click.stack, leafEl) ?? leafEl;
   const underEl = firstUnderlyingCandidate(params.click.stack, topEl);
   const top = buildElementHint(topEl, { wantRect: true, wantStyle: true });
   const isLegitModalBackdrop = detectLegitModalBackdrop(topEl, params.click.stack, viewport);

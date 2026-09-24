@@ -26,6 +26,11 @@ export interface ElementHint {
 export interface ClickContext {
   viewport: { w: number; h: number };
   input: "pointer" | "keyboard";
+  /**
+   * The element scored as clicked: the hit-test leaf, or the named interactive
+   * control that contains a non-interactive leaf (link text in a span, an icon,
+   * a state layer), because that control is what the click activates (#863).
+   */
   top: ElementHint;
   underlying?: ElementHint;
   /** True when the underlying interactive candidate is a descendant of the top element. */
@@ -53,6 +58,11 @@ function nameLength(h: ElementHint): number {
   const effectiveAria = aria >= 2 ? aria : 0;
   const effectiveTitle = title >= 2 ? title : 0;
   return text + effectiveAria + effectiveTitle;
+}
+
+/** True when the element carries any meaningful accessible name. */
+export function hasAccessibleName(h: ElementHint): boolean {
+  return nameLength(h) > 0;
 }
 
 /**
@@ -127,7 +137,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
 
   const top = ctx.top;
   const topInteractive = isInteractive(top);
-  const topHasName = nameLength(top) > 0;
+  const topHasName = hasAccessibleName(top);
 
   // --- Accessible name checks ---
   if (topInteractive && !topHasName) {
@@ -155,7 +165,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
   const under = ctx.underlying;
   if (under) {
     const underInteractive = isInteractive(under);
-    const underHasName = nameLength(under) > 0;
+    const underHasName = hasAccessibleName(under);
     const topIntentful = topInteractive && topHasName;
     const benignContainer = isBenignContainedNavigationContainer(top, ctx);
     if (underInteractive && underHasName && !topIntentful && !benignContainer) {
