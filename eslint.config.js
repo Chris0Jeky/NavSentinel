@@ -50,7 +50,7 @@ export default tseslint.config(
     files: ["tests/branded/*.cjs"],
     languageOptions: {
       sourceType: "commonjs",
-      globals: { require: "readonly", module: "writable", process: "readonly", __dirname: "readonly", setTimeout: "readonly" },
+      globals: { require: "readonly", module: "writable", process: "readonly", __dirname: "readonly", setTimeout: "readonly", document: "readonly" },
       parserOptions: {
         project: false,
         projectService: false,
