@@ -153,6 +153,8 @@ export function reconcileDetectedOverlay(
   let reasserted = false;
   let suppressed = false;
   let budgetExhausted = false;
+  let reconciledAny = false;
+  let threw = false;
 
   for (const element of elements) {
     const existing = suppressionByElement.get(element);
@@ -168,9 +170,11 @@ export function reconcileDetectedOverlay(
     } catch {
       // A hostile element (e.g. a throwing `style` accessor planted by page
       // script) must not abort suppression of the rest of the batch. (#748)
+      threw = true;
       continue;
     }
     if (!result) continue;
+    reconciledAny = true;
     group ??= createSuppressionGroup();
     if (!group.records.includes(result.record)) group.records.push(result.record);
     if (result.action === "suppressed") suppressed = true;
@@ -178,6 +182,10 @@ export function reconcileDetectedOverlay(
   }
 
   if (!group) return null;
+  // Every candidate in this batch threw: nothing was hidden now, so do not
+  // borrow an earlier overlay's active group and report "already_hidden".
+  // Returning null keeps the caller's high-severity warning visible.
+  if (threw && !reconciledAny && !budgetExhausted) return null;
   const action: OverlayCleanupAction = budgetExhausted
     ? "budget_exhausted"
     : suppressed

@@ -310,6 +310,36 @@ describe("overlay cleanup", () => {
     expect(benign.style.display).toBe("flex");
   });
 
+  it("does not report an all-throwing batch as already hidden by an earlier group (#748)", () => {
+    const earlier = makeOverlay();
+    const first = reconcileDetectedOverlay(mutationAlert(earlier), true);
+    expect(first?.action).toBe("suppressed");
+
+    const hostile = document.createElement("div");
+    Object.defineProperty(hostile, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+    document.body.appendChild(hostile);
+
+    let result: ReturnType<typeof reconcileDetectedOverlay> = undefined as never;
+    expect(() => {
+      result = reconcileDetectedOverlay(mutationAlert(hostile), true, true);
+    }).not.toThrow();
+    // Nothing in this batch was hidden, so the caller must keep its warning.
+    expect(result).toBeNull();
+    expect(first!.undo()).toBe(true);
+  });
+
   it("restores the remaining group when one record turns hostile before Undo (#748)", () => {
     const first = makeOverlay();
     const second = makeOverlay();
