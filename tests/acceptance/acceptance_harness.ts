@@ -162,7 +162,9 @@ export class AcceptanceSession {
 
   static async open(testInfo: TestInfo, guide: string): Promise<AcceptanceSession> {
     test.skip(!fs.existsSync(path.join(extensionPath, "manifest.json")), "Build extension/dist before the acceptance lane.");
-    const uiGuardRevision = readBuiltUiGuardRevision();
+    // Baseline comparisons load an older build whose loader predates the
+    // current content-address contract; its printed guard revision is passed in.
+    const uiGuardRevision = process.env.NAVSENTINEL_EXPECTED_GUARD ?? readBuiltUiGuardRevision();
     const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, "manifest.json"), "utf8")) as { version: string };
     const statusLines = git(["status", "--porcelain", "--", "extension/src", "extension/public", "manifest.json", "vite.config.ts", "package.json", "package-lock.json"])
       .split(/\r?\n/).filter(Boolean);
