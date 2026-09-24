@@ -50,6 +50,8 @@ Avoid bulk-reading `node_modules/`, generated output, `test-results/`,
 | Manifest, worker imports, bundling | `npm run build` |
 | MAIN-world guard, bridge, detections | `npm run build` then `npm run test:e2e` |
 | Service-worker lifecycle/rollback | `npm run build` then `npm run test:e2e:rollback` |
+| Behavior on current branded Chrome | `npm run build` then `npm run test:e2e:branded` (`NAVSENTINEL_REALISTIC_CHROME=1` enables the back/forward cache and Chrome's popup blocker) |
+| Owner browser procedures (automated evidence, never a Gate-3 result) | `npm run build` then `npm run test:acceptance`; see `docs/testing/BRANDED_CHROME_VALIDATION_2026-09-24.md` |
 | Release profiles | `npm run build`, `npm run check:release-profile -- --release`, then `npm run build:research-reputation` |
 | Reputation/corpus research data | `npm run check:topsites`, `npm run build:bloom:test`, `npm run check:bloom-size` |
 | Performance-sensitive code | `npm run build` then `npm run check:perf-budget` |
