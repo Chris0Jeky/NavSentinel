@@ -596,14 +596,16 @@ export interface BrandSignal {
 }
 
 /**
- * Word-boundary substring test for common-word brands in imgSignals (#831).
+ * Token-boundary substring test for common-word brands in imgSignals (#831).
  * Filenames and URLs ("purchase-logo.png", "pineapple.png") otherwise match
- * "chase"/"apple" mid-word and mint a spurious img-only (+15) signal. Mirrors
- * the title channel's `\b` handling; both inputs are already lowercased.
+ * "chase"/"apple" mid-word and mint a spurious img-only (+15) signal. The
+ * boundary is any non-alphanumeric character rather than `\b`, because
+ * JavaScript treats "_" as a word character and "apple_logo.png" must still
+ * match. Both inputs are already lowercased.
  */
 function matchesWordBoundary(haystack: string, needle: string): boolean {
   const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\b${escaped}\\b`).test(haystack);
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(haystack);
 }
 
 function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal | null {

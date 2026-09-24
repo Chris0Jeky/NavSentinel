@@ -858,6 +858,29 @@ describe("content_analyzer - common-word img boundary (#831)", () => {
     expect(result.score).toBe(15);
   });
 
+  it("DOES flag Chase img-only on underscore-delimited 'chase_logo.svg'", () => {
+    // "_" is a JavaScript word character, so a \b boundary would miss the
+    // most common asset-name delimiter.
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "chase_logo.svg",
+    });
+    const result = analyzeSnapshot(snap, "evil-chase.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Chase");
+    expect(result.score).toBe(15);
+  });
+
+  it("DOES flag Apple img-only on underscore-delimited 'apple_logo.png'", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "apple_logo.png",
+    });
+    const result = analyzeSnapshot(snap, "evil-apple.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Apple");
+  });
+
   it("DOES flag Apple img-only on word-boundary 'apple-icon.png'", () => {
     const snap = loginSnapshot({
       title: "Login",
