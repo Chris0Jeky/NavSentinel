@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, test, type BrowserContext, type Page, type TestInfo, type Worker } from "@playwright/test";
+import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, type Worker } from "@playwright/test";
 import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
 import { CdpPageClient, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
@@ -47,7 +47,7 @@ type Receipt = {
   classification: "AUTOMATED_AGENT_EVIDENCE_NOT_OWNER_GATE3";
   startedAt: string;
   finishedAt?: string;
-  git: { head: string; productSourceClean: boolean; statusLines: string[] };
+  git: { head: string; productSourceTree: string; lastProductCommit: string; productSourceClean: boolean; statusLines: string[] };
   build: { distSha256: string; uiGuardRevision: string; manifestVersion: string };
   browser: { product: "branded-chrome" | "bundled-chromium"; version: string; realistic: boolean; executable: string | null };
   extensionId: string;
@@ -76,26 +76,88 @@ export function acceptanceRunDirectory(): string {
   return directory;
 }
 
+type LaunchedProfile = { context: BrowserContext; worker: Worker; devToolsPort: number };
+
+/**
+ * Playwright's Worker handle does not follow a real MV3 worker restart (the
+ * Observatory fault driver reads worker state over raw DevTools for the same
+ * reason), so after a restart the session evaluates through this DevTools
+ * client instead. Only `url()` and `evaluate()` are supported.
+ */
+function workerProxy(client: CdpPageClient, url: string): Worker {
+  return {
+    url: () => url,
+    evaluate: (fn: (arg: never) => unknown, arg?: unknown) => client.evaluate(fn, arg),
+    on: () => undefined,
+  } as unknown as Worker;
+}
+
+const WORKER_SUFFIX = "/service-worker-loader.js";
+
+/** Launch (or relaunch) Chrome on `userDataDir` with the exact build loaded. */
+async function launchProfile(userDataDir: string): Promise<LaunchedProfile> {
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    viewport: null,
+    timeout: 60_000,
+    args: [
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      "--remote-debugging-port=0",
+      "--window-size=1280,900",
+    ],
+  });
+  try {
+    const worker = context.serviceWorkers().find((candidate) => candidate.url().endsWith(WORKER_SUFFIX))
+      ?? await context.waitForEvent("serviceworker", {
+        predicate: (candidate) => candidate.url().endsWith(WORKER_SUFFIX),
+        timeout: 20_000,
+      });
+    return { context, worker, devToolsPort: await readDevToolsPort(userDataDir) };
+  } catch (error) {
+    await context.close().catch(() => undefined);
+    throw error;
+  }
+}
+
 export class AcceptanceSession {
   readonly receipt: Receipt;
   private popupClient: CdpPageClient | null = null;
   private readonly popupConsole: ConsoleRecord[] = [];
   private readonly directory: string;
   private stepCounter = 0;
+  private currentContext: BrowserContext;
+  private currentWorker: Worker;
+  private currentDevToolsPort: number;
+  private workerClient: CdpPageClient | null = null;
 
   private constructor(
-    readonly context: BrowserContext,
-    public worker: Worker,
+    launched: LaunchedProfile,
     readonly extensionId: string,
-    readonly devToolsPort: number,
     readonly gym: { baseUrl: string; localhostUrl: string; close: () => Promise<void> },
     private readonly userDataDir: string,
     private readonly testInfo: TestInfo,
     receipt: Receipt,
   ) {
+    this.currentContext = launched.context;
+    this.currentWorker = launched.worker;
+    this.currentDevToolsPort = launched.devToolsPort;
     this.receipt = receipt;
     this.directory = path.join(acceptanceRunDirectory(), slug(`${receipt.guide}-${receipt.test}`));
     fs.mkdirSync(this.directory, { recursive: true });
+  }
+
+  get context(): BrowserContext {
+    return this.currentContext;
+  }
+
+  /** The live extension service worker; follows MV3 idle termination and restarts. */
+  get worker(): Worker {
+    return this.currentWorker;
+  }
+
+  get devToolsPort(): number {
+    return this.currentDevToolsPort;
   }
 
   static async open(testInfo: TestInfo, guide: string): Promise<AcceptanceSession> {
@@ -106,26 +168,10 @@ export class AcceptanceSession {
       .split(/\r?\n/).filter(Boolean);
     const gymServer = await startAcceptanceServer();
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-acceptance-"));
-    let context: BrowserContext | undefined;
+    let launched: LaunchedProfile | undefined;
     try {
-      context = await chromium.launchPersistentContext(userDataDir, {
-        headless: false,
-        viewport: null,
-        timeout: 60_000,
-        args: [
-          `--disable-extensions-except=${extensionPath}`,
-          `--load-extension=${extensionPath}`,
-          "--remote-debugging-port=0",
-          "--window-size=1280,900",
-        ],
-      });
-      const worker = context.serviceWorkers().find((candidate) => candidate.url().endsWith("/service-worker-loader.js"))
-        ?? await context.waitForEvent("serviceworker", {
-          predicate: (candidate) => candidate.url().endsWith("/service-worker-loader.js"),
-          timeout: 20_000,
-        });
-      const extensionId = new URL(worker.url()).host;
-      const devToolsPort = await readDevToolsPort(userDataDir);
+      launched = await launchProfile(userDataDir);
+      const extensionId = new URL(launched.worker.url()).host;
       const branded = Boolean(process.env.NAVSENTINEL_BRANDED_CHROME && process.env.NAVSENTINEL_BRANDED_CHROME !== "0");
       const receipt: Receipt = {
         schema: "navsentinel-acceptance-receipt/v1",
@@ -133,11 +179,19 @@ export class AcceptanceSession {
         test: testInfo.title,
         classification: "AUTOMATED_AGENT_EVIDENCE_NOT_OWNER_GATE3",
         startedAt: new Date().toISOString(),
-        git: { head: git(["rev-parse", "HEAD"]), productSourceClean: statusLines.length === 0, statusLines },
+        git: {
+          head: git(["rev-parse", "HEAD"]),
+          // The checkout HEAD can move with test-only commits; these pin what the
+          // build was made from: the extension/src tree and the last product commit.
+          productSourceTree: git(["rev-parse", "HEAD:extension/src"]),
+          lastProductCommit: git(["log", "-1", "--format=%H", "--", "extension/src", "extension/public", "vite.config.ts", "package-lock.json", "scripts/build-extension.mjs"]),
+          productSourceClean: statusLines.length === 0,
+          statusLines,
+        },
         build: { distSha256: hashDirectory(extensionPath), uiGuardRevision, manifestVersion: manifest.version },
         browser: {
           product: branded ? "branded-chrome" : "bundled-chromium",
-          version: context.browser()?.version() ?? "unknown",
+          version: launched.context.browser()?.version() ?? "unknown",
           realistic: process.env.NAVSENTINEL_REALISTIC_CHROME === "1",
           executable: branded ? (process.env.NAVSENTINEL_BRANDED_CHROME === "1" ? "default-install" : process.env.NAVSENTINEL_BRANDED_CHROME ?? null) : null,
         },
@@ -151,10 +205,8 @@ export class AcceptanceSession {
         console: [],
       };
       const session = new AcceptanceSession(
-        context,
-        worker,
+        launched,
         extensionId,
-        devToolsPort,
         { ...gymServer, localhostUrl: gymServer.baseUrl.replace("127.0.0.1", "localhost") },
         userDataDir,
         testInfo,
@@ -164,30 +216,41 @@ export class AcceptanceSession {
       await session.closeOnboarding();
       return session;
     } catch (error) {
-      await context?.close().catch(() => undefined);
+      await launched?.context.close().catch(() => undefined);
       await gymServer.close();
       fs.rmSync(userDataDir, { recursive: true, force: true });
       throw error;
     }
   }
 
+  private record(source: string, level: string, text: string): void {
+    this.receipt.console.push({ source, level, text, at: new Date().toISOString() });
+  }
+
+  private wireWorker(worker: Worker): void {
+    worker.on("console", (message) => {
+      if (message.type() === "error" || message.type() === "warning") this.record("service-worker", message.type(), message.text());
+    });
+  }
+
   private wireConsole(): void {
-    const record = (source: string, level: string, text: string) => {
-      this.receipt.console.push({ source, level, text, at: new Date().toISOString() });
-    };
     const wirePage = (page: Page) => {
       const label = () => {
         try { return `page:${new URL(page.url()).origin}${new URL(page.url()).pathname}`; } catch { return "page"; }
       };
       page.on("console", (message) => {
-        if (message.type() === "error" || message.type() === "warning") record(label(), message.type(), message.text());
+        if (message.type() === "error" || message.type() === "warning") this.record(label(), message.type(), message.text());
       });
-      page.on("pageerror", (error) => record(label(), "exception", error.message));
+      page.on("pageerror", (error) => this.record(label(), "exception", error.message));
     };
     this.context.pages().forEach(wirePage);
     this.context.on("page", wirePage);
-    this.worker.on("console", (message) => {
-      if (message.type() === "error" || message.type() === "warning") record("service-worker", message.type(), message.text());
+    this.wireWorker(this.currentWorker);
+    this.context.on("serviceworker", (worker) => {
+      if (!worker.url().endsWith(WORKER_SUFFIX) || worker === this.currentWorker) return;
+      this.currentWorker = worker;
+      this.wireWorker(worker);
+      this.note(`service worker (re)started at ${new Date().toISOString()}`);
     });
   }
 
@@ -205,23 +268,75 @@ export class AcceptanceSession {
   }
 
   /**
-   * Restart the unpacked extension in this disposable profile with
-   * `chrome.runtime.reload()` so startup paths re-read persisted state, then
-   * rebind the new service worker. Never used against an owner profile.
+   * Terminate the extension service worker the way MV3 idle shutdown does
+   * (DevTools `ServiceWorker.stopAllWorkers`), then wake it with an extension
+   * page so its top-level startup re-reads persisted state.
    */
-  async restartExtension(): Promise<void> {
-    const previous = this.worker;
-    const next = this.context.waitForEvent("serviceworker", {
-      predicate: (candidate) => candidate !== previous && candidate.url().endsWith("/service-worker-loader.js"),
-      timeout: 20_000,
+  async stopServiceWorker(): Promise<void> {
+    const worker = this.currentWorker;
+    const workerUrl = worker.url();
+    const epoch = `acceptance-${Date.now()}-${Math.random()}`;
+    await worker.evaluate((value) => { (globalThis as unknown as { __nsAcceptanceEpoch?: string }).__nsAcceptanceEpoch = value; }, epoch);
+    const probe = await this.context.newPage();
+    const session = await this.context.newCDPSession(probe);
+    type Version = { versionId: string; scriptURL: string; runningStatus: string };
+    const versions = new Map<string, Version>();
+    session.on("ServiceWorker.workerVersionUpdated", ({ versions: updates }: { versions: Version[] }) => {
+      for (const version of updates) if (version.scriptURL === workerUrl) versions.set(version.versionId, version);
     });
-    await previous.evaluate(() => { setTimeout(() => chrome.runtime.reload(), 50); }).catch(() => undefined);
-    this.worker = await next;
-    this.worker.on("console", (message) => {
-      if (message.type() === "error" || message.type() === "warning") {
-        this.receipt.console.push({ source: "service-worker", level: message.type(), text: message.text(), at: new Date().toISOString() });
-      }
-    });
+    const waitFor = async (predicate: () => boolean, message: string, timeoutMs = 8000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+      if (!predicate()) throw new Error(message);
+    };
+    try {
+      await session.send("ServiceWorker.enable");
+      await waitFor(() => [...versions.values()].some((version) => version.runningStatus === "running"), "extension service worker version not visible to DevTools");
+      const running = [...versions.values()].find((version) => version.runningStatus === "running")!;
+      await session.send("ServiceWorker.stopWorker", { versionId: running.versionId });
+      await waitFor(() => versions.get(running.versionId)?.runningStatus === "stopped", "extension service worker did not stop");
+      this.note(`service worker stopped at ${new Date().toISOString()}`);
+      // Wake it through an ordinary extension surface, as a user would.
+      await probe.goto(this.extensionUrl("src/options/options.html"), { waitUntil: "load" });
+      await waitFor(() => [...versions.values()].some((version) => version.runningStatus === "running"), "extension service worker did not restart", 20_000);
+    } finally {
+      await session.detach().catch(() => undefined);
+    }
+    // Bind to the restarted worker target and prove it is a new realm: the
+    // in-memory epoch marker set above must be gone.
+    await this.workerClient?.close().catch(() => undefined);
+    const client = await CdpPageClient.attach(this.devToolsPort, (target) => target.url === workerUrl, "service-worker", 10_000, "service_worker");
+    const marker = await client.evaluate<string | null>("globalThis.__nsAcceptanceEpoch ?? null");
+    if (marker !== null) {
+      await client.close();
+      throw new Error("service worker realm did not change after restart");
+    }
+    this.workerClient = client;
+    this.currentWorker = workerProxy(client, workerUrl);
+    this.note(`service worker restarted in a new realm at ${new Date().toISOString()}`);
+    await probe.close();
+  }
+
+  /** Quit Chrome and relaunch it on the same profile (persisted state survives). */
+  async restartBrowser(): Promise<void> {
+    await this.closePopup();
+    if (this.workerClient) {
+      this.receipt.console.push(...this.workerClient.console.filter((entry) => entry.level === "error" || entry.level === "exception" || entry.level === "warning"));
+      await this.workerClient.close().catch(() => undefined);
+      this.workerClient = null;
+    }
+    await this.currentContext.close();
+    const launched = await launchProfile(this.userDataDir);
+    const relaunchedId = new URL(launched.worker.url()).host;
+    if (relaunchedId !== this.extensionId) {
+      await launched.context.close().catch(() => undefined);
+      throw new Error(`extension id changed across restart: ${this.extensionId} -> ${relaunchedId}`);
+    }
+    this.currentContext = launched.context;
+    this.currentWorker = launched.worker;
+    this.currentDevToolsPort = launched.devToolsPort;
+    this.wireConsole();
+    this.note(`browser relaunched on the same profile at ${new Date().toISOString()}`);
     await this.closeOnboarding(3000);
   }
 
@@ -397,8 +512,16 @@ export class AcceptanceSession {
   async close(): Promise<void> {
     await this.closePopup();
     this.receipt.console.push(...this.popupConsole);
+    if (this.workerClient) {
+      this.receipt.console.push(...this.workerClient.console.filter((entry) => entry.level === "error" || entry.level === "exception" || entry.level === "warning"));
+      await this.workerClient.close().catch(() => undefined);
+      this.workerClient = null;
+    }
     this.receipt.finishedAt = new Date().toISOString();
-    const failed = this.receipt.steps.some((step) => step.status === "failed") || this.testInfo.status === "failed" || this.testInfo.status === "timedOut";
+    const failedSteps = this.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
+    // Soft steps record and continue; the test must still end red.
+    expect.soft(failedSteps, "procedure steps that failed (see receipt.json)").toEqual([]);
+    const failed = failedSteps.length > 0 || this.testInfo.status === "failed" || this.testInfo.status === "timedOut";
     this.receipt.result = failed ? "FAIL" : "PASS";
     const file = path.join(this.directory, "receipt.json");
     fs.writeFileSync(file, `${JSON.stringify(this.receipt, null, 2)}\n`);

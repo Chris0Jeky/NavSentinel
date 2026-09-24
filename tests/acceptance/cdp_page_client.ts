@@ -67,11 +67,11 @@ export class CdpPageClient {
     });
   }
 
-  static async attach(port: number, match: (target: TargetInfo) => boolean, label: string, timeoutMs = 8000): Promise<CdpPageClient> {
+  static async attach(port: number, match: (target: TargetInfo) => boolean, label: string, timeoutMs = 8000, targetType = "page"): Promise<CdpPageClient> {
     const deadline = Date.now() + timeoutMs;
     let target: TargetInfo | undefined;
     while (!target && Date.now() < deadline) {
-      target = (await listTargets(port)).find((candidate) => candidate.type === "page" && match(candidate));
+      target = (await listTargets(port)).find((candidate) => candidate.type === targetType && match(candidate));
       if (!target) await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (!target?.webSocketDebuggerUrl) throw new Error(`${label} target did not appear`);
@@ -82,8 +82,10 @@ export class CdpPageClient {
     });
     const client = new CdpPageClient(socket, target, label);
     await client.send("Runtime.enable");
-    await client.send("Log.enable");
-    await client.send("Page.enable");
+    if (targetType === "page") {
+      await client.send("Log.enable");
+      await client.send("Page.enable");
+    }
     return client;
   }
 
