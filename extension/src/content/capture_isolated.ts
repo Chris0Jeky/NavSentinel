@@ -992,6 +992,9 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
         // hidden subset; without it up to 128 overlays stay unrestorable
         // except via the settings toggle. (#748)
         actions: [{ label: "Undo", onClick: () => runOverlayCleanupUndo(cleanup.undo) }],
+        // Persistent like the regular cleanup card: it replaces that card,
+        // survives unrelated warnings, and is torn down with the setting.
+        persistent: true,
         timeoutMs: 0,
       });
     }
