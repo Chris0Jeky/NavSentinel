@@ -27,3 +27,7 @@ All shared-foundation themes already have live or merged homes. The seed creates
 ## SP-D-007: First sink is typed and loopback-only
 
 The first #449 sink accepts one allowlisted wrong-target navigation consequence on `127.0.0.1`, requires the exact run, scenario, role, consequence, and inert sentinel, and retains only a sentinel digest. The browser lane denies unapproved HTTP(S) origins and turns readiness, network, or oracle failures into `TEST_INVALID`. This is Proving Ground infrastructure only; it adds no release permission, service, or enforcement claim.
+
+## SP-D-008: Native modified anchors mint no opener authority
+
+The #566 repair mints no opener service-worker or MAIN open or redirect allowance from a native modified anchor. Smart and Strict propagation-isolate only trusted top-frame HTTP(S) cross-site current-context anchors. Other modified-anchor handlers remain reachable, but their same-task and deferred page popups are blocked. The non-current MAIN `_self` and service-worker `location.replace` controls prove sink-time containment. This known MEDIUM false intervention is not repaired with page-origin authority or a broader early-event allowance.

@@ -195,7 +195,7 @@ not resolve issue #639's owner decision about where future gate procedures shoul
 live.
 
 - **AI-31** — PR #572 (issue #566), branch `fix/issue566-modifier-authority`,
-  exact head `e35a88e0a5ea24cf9c33d97b68ccfbeda57974bf`. Scope: trusted
+  integrated code head `e50764c74e9a2998897ad2d892da1855cb1a9f5e`. Scope: trusted
   Ctrl/Cmd-click and middle-click keep modifier-click authority in the requested
   tab while synthetic reuse of the same events is refused. The PR is separately
   PARKED before this gate on failure record SP-F-013 (the ~1-in-50 rollback

@@ -9,6 +9,9 @@
       "@navsentinel/reputation-runtime": [
         "extension/src/shared/reputation_runtime.disabled.ts"
       ],
+      "@navsentinel/child-reputation": [
+        "extension/src/content/child_reputation.disabled.ts"
+      ],
       "@navsentinel/js-behavior-monitor": [
         "extension/src/content/js_behavior_monitor.disabled.ts"
       ]

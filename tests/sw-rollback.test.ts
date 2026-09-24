@@ -613,6 +613,52 @@ describe("service worker rollback gating", () => {
     expect(response.entry?.allowedAtCommit).toBe(false);
   });
 
+  it("arms the rollback return before the content-side poll responds", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 26,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 26,
+      frameId: 0,
+      url: "https://evil.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    const rollback = mock.dispatchRuntimeMessage(
+      { type: "ns-check-rollback" },
+      { tab: { id: 26 } }
+    ) as { shouldRollback: boolean };
+
+    expect(rollback.shouldRollback).toBe(true);
+
+    // Model the immediate location.replace() that follows the poll response.
+    // The worker must already know this is the rollback return before the
+    // navigation-start event clears the destination's pending state.
+    mock.emitBeforeNavigate({
+      tabId: 26,
+      frameId: 0,
+      url: "https://example.test/origin"
+    });
+
+    const forward = mock.dispatchRuntimeMessage(
+      { type: "ns-check-forward", currentUrl: "https://example.test/origin" },
+      { tab: { id: 26 } }
+    ) as { status?: string; url?: string };
+
+    expect(forward).toEqual({ status: "offer", url: "https://evil.test/redirected" });
+  });
+
   it("does not roll back a cross-site browser Back or Forward traversal (#567)", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
@@ -1474,6 +1520,46 @@ describe("service worker rollback gating", () => {
     const response = mock.dispatchRuntimeMessage({ type: "ns-check-rollback" }, { tab: { id: 43 } }) as {
       shouldRollback: boolean;
     };
+
+    expect(response.shouldRollback).toBe(true);
+  });
+
+  it("clears typed origin for a modifier anchor from any frame without minting navigation allowance", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 55,
+      frameId: 0,
+      url: "https://example.test/typed",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    mock.dispatchRuntimeMessage(
+      { type: "ns-modified-anchor-context" },
+      { tab: { id: 55 }, frameId: 2 }
+    );
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:00.200Z"));
+    mock.emitBeforeNavigate({
+      tabId: 55,
+      frameId: 0,
+      url: "https://evil.test/redirected"
+    });
+    mock.emitCommitted({
+      tabId: 55,
+      frameId: 0,
+      url: "https://evil.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+
+    const response = mock.dispatchRuntimeMessage(
+      { type: "ns-check-rollback" },
+      { tab: { id: 55 } }
+    ) as { shouldRollback: boolean };
 
     expect(response.shouldRollback).toBe(true);
   });
