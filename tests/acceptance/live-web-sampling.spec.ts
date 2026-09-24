@@ -47,7 +47,7 @@ async function loudEventsSince(session: AcceptanceSession, before: number): Prom
 }
 
 async function trustedClickLocator(page: Page, selector: string): Promise<boolean> {
-  const locator = page.locator(selector).first();
+  const locator = page.locator(selector).filter({ visible: true }).first();
   if (!(await locator.isVisible().catch(() => false))) return false;
   await locator.scrollIntoViewIfNeeded().catch(() => undefined);
   const box = await locator.boundingBox();
@@ -66,6 +66,19 @@ async function cleanupHiddenElements(page: Page): Promise<string[]> {
       const classes = typeof element.className === "string" && element.className ? `.${element.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
       return `${element.tagName.toLowerCase()}${id}${classes}`;
     })).catch(() => []);
+}
+
+/** What the toolbar popup's Current page card tells the user about this tab. */
+async function popupAudit(session: AcceptanceSession, page: Page, label: string): Promise<void> {
+  const popup = await session.openPopup(page);
+  const card = await popup.evaluate<{ site: string; note: string; signals: string }>(() => ({
+    site: document.getElementById("site")?.textContent ?? "",
+    note: document.getElementById("gaugeNote")?.textContent ?? "",
+    signals: document.getElementById("signals")?.textContent ?? "",
+  }));
+  session.note(`${label} popup: site=${card.site} note=${JSON.stringify(card.note)} signals=${JSON.stringify(card.signals)}`);
+  await session.screenshotPopup(`${label}-popup`);
+  await session.closePopup();
 }
 
 async function scenario(
@@ -111,8 +124,13 @@ test("live web: user-requested navigation on real sites is never blocked or roll
       const afterSearch = page.url();
       session.note(`wikipedia search landed on ${new URL(afterSearch).pathname}`);
       await page.waitForTimeout(6000);
-      const clicked = await trustedClickLocator(page, '#mw-content-text p a[href^="/wiki/"]:not([href*=":"])');
-      expect(clicked, "an article link was clickable").toBe(true);
+      const linkIndex = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLAnchorElement>('#mw-content-text a[href^="/wiki/"]'))
+        .findIndex((link) => !link.getAttribute("href")!.includes(":") && link.getBoundingClientRect().width > 0 && link.getBoundingClientRect().top > 0 && link.getBoundingClientRect().bottom < window.innerHeight));
+      expect(linkIndex, "an in-viewport article link exists").toBeGreaterThanOrEqual(0);
+      const articleLink = page.locator('#mw-content-text a[href^="/wiki/"]').nth(linkIndex);
+      const articleBox = await articleLink.boundingBox();
+      if (!articleBox) throw new Error("article link not rendered");
+      await page.mouse.click(articleBox.x + Math.min(20, articleBox.width / 2), articleBox.y + articleBox.height / 2);
       await page.waitForURL((url) => url.href !== afterSearch, { timeout: 15_000 });
       await page.waitForTimeout(3000);
       await page.goBack();
@@ -124,6 +142,7 @@ test("live web: user-requested navigation on real sites is never blocked or roll
       await session.gotoReady(page, "https://www.bing.com/search?q=chromium+project+source");
       await trustedClickLocator(page, "#bnp_btn_reject");
       await page.waitForTimeout(6000);
+      await popupAudit(session, page, "bing");
       const newTab = session.context.waitForEvent("page", { timeout: 20_000 }).catch(() => null);
       const clicked = await trustedClickLocator(page, "#b_results li.b_algo h2 a");
       expect(clicked, "an organic result was clickable").toBe(true);
@@ -134,12 +153,33 @@ test("live web: user-requested navigation on real sites is never blocked or roll
       ]);
       if (!target) throw new Error("the result opened neither in this tab nor a new one");
       await target.waitForLoadState("domcontentloaded").catch(() => undefined);
-      await target.waitForURL((url) => !url.hostname.endsWith("bing.com"), { timeout: 20_000 });
-      const landed = target.url();
+      await target.waitForURL((url) => /^https?:$/.test(url.protocol) && !url.hostname.endsWith("bing.com"), { timeout: 20_000 });
       await target.waitForTimeout(5000);
-      session.note(`bing result landed on ${new URL(landed).hostname} (${target === page ? "same tab" : "new tab"})`);
-      expect(new URL(target.url()).hostname, "no rollback to the search page").toBe(new URL(landed).hostname);
+      const settled = new URL(target.url()).hostname;
+      session.note(`bing result settled on ${settled} (${target === page ? "same tab" : "new tab"})`);
+      expect(settled.endsWith("bing.com"), "the result stays open (no rollback to the search page)").toBe(false);
       if (target !== page) await target.close();
+    });
+
+    await scenario(session, "DuckDuckGo: click the first result title (text inside a <span> in the link)", async () => {
+      await session.gotoReady(page, "https://duckduckgo.com/?q=chromium+browser+project&ia=web");
+      await page.waitForTimeout(6000);
+      const title = page.locator('a[data-testid="result-title-a"]').first();
+      await title.waitFor({ state: "visible", timeout: 15_000 });
+      const destination = new URL((await title.getAttribute("href")) ?? "", page.url()).hostname;
+      const box = await title.boundingBox();
+      if (!box) throw new Error("result title not rendered");
+      const x = box.x + Math.min(40, box.width / 2);
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x - 60, y + 30);
+      await page.mouse.move(x, y, { steps: 10 });
+      await page.waitForTimeout(450);
+      await page.mouse.down();
+      await page.waitForTimeout(90);
+      await page.mouse.up();
+      const reached = await page.waitForURL((url) => url.hostname === destination, { timeout: 10_000 }).then(() => true, () => false);
+      session.note(`duckduckgo first result ${destination}: reached=${reached}`);
+      expect(reached, "the user's click on a search result must open it").toBe(true);
     });
 
     await scenario(session, "GitHub SPA tab navigation (history.pushState) and Back", async () => {
@@ -223,6 +263,7 @@ test("live web: user-requested navigation on real sites is never blocked or roll
       const hidden = await cleanupHiddenElements(page);
       session.note(`reddit: elements hidden with inline display:none !important: ${JSON.stringify(hidden)}`);
       await session.screenshot(page, "live-reddit-cleanup-on");
+      await popupAudit(session, page, "reddit");
       await session.patchNavigation({ autoDismissOverlays: false });
     }, { allowToasts: true });
 
