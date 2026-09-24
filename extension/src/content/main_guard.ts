@@ -587,7 +587,7 @@ function recordWindowOpen(): void {
 
 function patchedOpen(
   this: Window | null | undefined,
-  url?: string | URL,
+  rawUrl?: string | URL,
   target?: string,
   features?: string
 ): Window | null {
@@ -597,6 +597,11 @@ function patchedOpen(
   // (which fail this realm's instanceof Window), and let the native throw its
   // normal Illegal invocation TypeError for genuinely invalid receivers.
   const receiver = this === null || this === undefined ? window : this;
+  // Coerce the URL exactly once. A page-supplied object could otherwise
+  // stringify to the authorized URL for the allow-once check and to another
+  // destination for the native call. Native open performs the same single
+  // ToString, so passing the resulting string preserves page semantics.
+  const url = rawUrl === undefined ? undefined : String(rawUrl);
 
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({

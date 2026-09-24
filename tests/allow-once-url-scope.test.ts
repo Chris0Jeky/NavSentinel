@@ -53,6 +53,23 @@ describe("allow-once open allowance is URL-bound (#851)", () => {
     expect(guard).toContain("const allowance = consumeOpenAllowance(url);");
   });
 
+  it("coerces the attempted URL once, before authorizing and opening", () => {
+    // An object URL whose toString() returns the authorized URL first and a
+    // different destination afterwards must not pass the check and then open
+    // elsewhere: every later use must see the single coerced string.
+    const start = guard.indexOf("function patchedOpen(");
+    const end = guard.indexOf("function resolveFormAction(");
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const region = guard.slice(start, end);
+    const coerceAt = region.indexOf(
+      "const url = rawUrl === undefined ? undefined : String(rawUrl);",
+    );
+    expect(coerceAt).toBeGreaterThanOrEqual(0);
+    expect(coerceAt).toBeLessThan(region.indexOf("consumeOpenAllowance(url)"));
+    expect(region.slice(coerceAt + 70)).not.toMatch(/\brawUrl\b/);
+  });
+
   it("passes the authorized URL from the bridge handler", () => {
     const handlerAt = guard.indexOf('if (data.type === "ns-allow-once")');
     expect(handlerAt).toBeGreaterThanOrEqual(0);
