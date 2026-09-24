@@ -108,6 +108,40 @@ function patchPopupLoadState(context) {
     return original.call(this, state, options);
   };
   pageProto.__navsentinelPopupSettle = true;
+
+  // With the back/forward cache enabled (realistic mode) a restored document
+  // fires no new load or DOMContentLoaded, so history traversal that waits for
+  // them times out although Chrome restored the page. Wait for the commit and
+  // then for a non-loading document, which covers both restore and reload.
+  if (process.env.NAVSENTINEL_REALISTIC_CHROME === "1") {
+    for (const method of ["goBack", "goForward"]) {
+      const originalTraversal = pageProto[method];
+      pageProto[method] = async function bfcacheAwareTraversal(options = {}) {
+        const waitUntil = options.waitUntil ?? "load";
+        if (waitUntil === "commit" || waitUntil === "networkidle") return originalTraversal.call(this, options);
+        const response = await originalTraversal.call(this, { ...options, waitUntil: "commit" });
+        await this.waitForFunction(
+          (state) => document.readyState === "complete" || (state === "domcontentloaded" && document.readyState === "interactive"),
+          waitUntil,
+          { timeout: options.timeout ?? 30_000 },
+        );
+        return response;
+      };
+    }
+    // waitForURL defaults to waiting for `load`, which a restored document
+    // never fires; resolve on the URL commit plus a settled document instead.
+    const originalWaitForURL = pageProto.waitForURL;
+    pageProto.waitForURL = async function bfcacheAwareWaitForURL(url, options = {}) {
+      const waitUntil = options.waitUntil ?? "load";
+      if (waitUntil === "commit" || waitUntil === "networkidle") return originalWaitForURL.call(this, url, options);
+      await originalWaitForURL.call(this, url, { ...options, waitUntil: "commit" });
+      await this.waitForFunction(
+        (state) => document.readyState === "complete" || (state === "domcontentloaded" && document.readyState === "interactive"),
+        waitUntil,
+        { timeout: options.timeout ?? 30_000 },
+      );
+    };
+  }
 }
 
 if (selector) {
