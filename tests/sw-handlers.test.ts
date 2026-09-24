@@ -2619,6 +2619,54 @@ describe("service worker handlers", () => {
       );
     });
 
+    it("caches the enforced smart mode for a non-string stored mode instead of a stale off (#866)", async () => {
+      const mock = createChromeMock();
+      mock.chrome.storage.local.get = (async () => ({
+        [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } },
+      })) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A corrupt write replaces "off" with a non-string mode. Content scripts read it
+      // as "smart" and protect; pre-fix the worker ignored it and kept painting gray.
+      mock.emitStorageChanged(
+        {
+          [SUITE_SETTINGS_KEY]: {
+            oldValue: { nav: { defaultMode: "off" } },
+            newValue: { nav: { defaultMode: 7 } },
+          },
+        },
+        "local",
+      );
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+    });
+
+    it("an unknown stored mode string does not gray the tabs (#866)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.chrome.tabs.query.mockClear();
+
+      mock.emitStorageChanged(
+        { [SUITE_SETTINGS_KEY]: { oldValue: {}, newValue: { nav: { defaultMode: "bogus" } } } },
+        "local",
+      );
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.tabs.query).not.toHaveBeenCalled();
+    });
+
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {
       const mock = createChromeMock();
       // Gate BOTH reads so the worker is un-hydrated AND the mode is unread when the
