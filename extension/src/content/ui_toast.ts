@@ -64,11 +64,15 @@ function isolateInteraction(event: Event): void {
 
 function bindControl(control: HTMLElement, action: () => void): void {
   controlActions.set(control, action);
-  // Direct listener: the fallback for synthetic activation in non-browser unit
-  // DOMs. Trusted browser input never reaches it because the document-start
-  // fence consumes that input at window capture and calls
-  // activateOwnedToastControl instead.
-  control.addEventListener("click", action);
+  // Direct listener: in a real browser the document-start fence consumes
+  // trusted input at window capture and calls activateOwnedToastControl
+  // instead, so this listener only ever sees page-synthesized clicks — which
+  // must never activate a control (#783). Unit tests drive activation through
+  // activateOwnedToastControl directly.
+  control.addEventListener("click", (e) => {
+    if (!e.isTrusted) return;
+    action();
+  });
 }
 
 /**
@@ -368,7 +372,7 @@ function showOrUpdatePill(): void {
     };
     bindControl(pill, expand);
     pill.addEventListener("keydown", (e) => {
-      if (e instanceof KeyboardEvent && (e.key === "Enter" || e.key === " ")) {
+      if (e instanceof KeyboardEvent && e.isTrusted && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         expand();
       }
