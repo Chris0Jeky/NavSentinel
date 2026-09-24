@@ -758,7 +758,7 @@ test.describe("DOM Mutation Monitor", () => {
     }
   });
 
-  test("mutation-05 brief notice expiry keeps later cleanup active without reopening it @phase2", async () => {
+  test("mutation-05 retained recovery keeps later cleanup active after docking @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
     const { page, context, cleanup } = await setupFixtureTest(
       "mutation-05-sequential-overlays.html?gymLayerGapMs=650",
@@ -773,8 +773,15 @@ test.describe("DOM Mutation Monitor", () => {
       await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
       await waitForToastMatch(page, /overlay hidden/i, 8000);
 
-      await expect(page.locator("#__navsentinel_toast_host .brief-recovery"))
-        .toHaveCount(0, { timeout: 3000 });
+      const recovery = page.locator(
+        "#__navsentinel_toast_host .brief-recovery[data-persistent='true']",
+      );
+      await expect(recovery).toHaveCount(1);
+      await expect(recovery).toHaveAttribute(
+        "data-recovery-docked",
+        "true",
+        { timeout: 3000 },
+      );
       await page.evaluate(() => {
         const api = (window as typeof window & {
           __navsentinelMutation05?: { injectNext: (source?: string) => string | null };
@@ -785,10 +792,14 @@ test.describe("DOM Mutation Monitor", () => {
       for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
         await expect(page.locator(selector)).toBeHidden();
       }
-      await assertNoToastFor(page, 600);
+      await expect(page.locator(
+        "#__navsentinel_toast_host .wrap:not([data-persistent='true'])",
+      )).toHaveCount(0);
+      await expect(recovery).toHaveCount(1);
       expect(context.pages()).toHaveLength(originalPageCount);
 
       await updateNavigationSettings(context, { autoDismissOverlays: false });
+      await expect(recovery).toHaveCount(0);
       for (const selector of ["#trap-a", "#trap-b", "#trap-c"]) {
         await expect(page.locator(selector)).toBeVisible();
       }
