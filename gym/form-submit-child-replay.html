@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Named-child form replay boundary (#865)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    iframe { width: 420px; height: 90px; border: 1px solid #999; }
+  </style>
+</head>
+<body>
+  <h1>Named-child form replay boundary (#865)</h1>
+  <p>A legacy <code>form.submit()</code> starts with a target owned by this page.
+     The mode may keep that target or retarget during <code>formdata</code>.</p>
+
+  <iframe id="sink" name="sink" title="named child sink"></iframe>
+  <form id="legacy" method="GET" action="form-submit-landing.html" target="sink">
+    <input type="hidden" name="case" value="" />
+    <input type="hidden" name="original" value="kept" />
+  </form>
+  <form id="request" method="GET" action="form-submit-landing.html" target="sink">
+    <input type="hidden" name="case" value="request-submit-safe" />
+    <button id="request-button" type="submit">Submit</button>
+  </form>
+
+  <script>
+    (() => {
+      const mode = new URLSearchParams(location.search).get("mode") || "safe-submit";
+      const legacy = document.getElementById("legacy");
+      const request = document.getElementById("request");
+      const sink = document.getElementById("sink");
+      legacy.elements.case.value = mode;
+      document.documentElement.dataset.formdataCount = "0";
+      document.documentElement.dataset.runCount = "0";
+
+      legacy.addEventListener("formdata", (event) => {
+        const next = Number(document.documentElement.dataset.formdataCount || "0") + 1;
+        document.documentElement.dataset.formdataCount = String(next);
+
+        if (mode === "safe-formdata") {
+          event.formData.set("case", mode);
+          event.formData.set("mutated", "yes");
+          event.formData.append("", "empty-name-preserved");
+        } else if (mode === "retarget-top") {
+          legacy.target = "_top";
+        } else if (mode === "retarget-blank") {
+          legacy.target = "_blank";
+        } else if (mode === "retarget-unknown") {
+          legacy.target = "new-window-name";
+        } else if (mode === "steal-name") {
+          window.name = "sink";
+        }
+      });
+
+      window.__nsRunFormCase = () => {
+        document.documentElement.dataset.runCount = String(
+          Number(document.documentElement.dataset.runCount || "0") + 1,
+        );
+        if (mode === "request-submit-safe") {
+          request.requestSubmit(document.getElementById("request-button"));
+          return;
+        }
+        if (mode === "renamed-child") {
+          sink.contentWindow.name = "renamed-sink";
+        }
+        legacy.submit();
+      };
+    })();
+  </script>
+</body>
+</html>
