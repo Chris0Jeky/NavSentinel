@@ -31,7 +31,8 @@ beforeEach(() => {
   testBeacon.mockClear();
   _resetState();
   document.body.innerHTML = "";
-  for (const base of document.head.querySelectorAll("base")) base.remove();
+  const bases = document.head.querySelectorAll("base");
+  for (let i = 0; i < bases.length; i++) bases[i]!.remove();
 });
 
 describe("credential-field visibility", () => {
