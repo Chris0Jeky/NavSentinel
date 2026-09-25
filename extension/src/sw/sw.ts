@@ -19,6 +19,7 @@ import {
   isSuiteImportMessage,
   migrateStoredEventLogUrls,
   migrateStoredPromptOutcomes,
+  normalizeStoredSuiteSettings,
   SUITE_SETTINGS_KEY,
 } from "../shared/storage";
 // RI-06 (#474): the clear-all lives in its own module so the domain-profile
@@ -569,18 +570,15 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
   if (!changes[SUITE_SETTINGS_KEY]) return;
 
-  const newVal = changes[SUITE_SETTINGS_KEY]!.newValue as
-    | { nav?: { defaultMode?: string } }
-    | undefined;
-  // Accept any string mode (not just truthy) so a future empty-string mode is not
-  // silently dropped, leaving cachedDefaultMode stale. No valid mode is "" today. (#362)
-  if (typeof newVal?.nav?.defaultMode === "string") {
-    cachedDefaultMode = newVal.nav.defaultMode;
-    // This is authoritative and fresher than the startup read; block a late startup
-    // read from overwriting it with the value it captured before this change. (#362)
-    modeUpdatedByOnChanged = true;
-  }
-  if (newVal?.nav?.defaultMode === "off") {
+  // Derive the mode exactly as every settings reader does, so an unknown or
+  // non-string stored mode caches the same "smart" that content scripts enforce
+  // rather than a raw or stale value. (#866)
+  const mode = normalizeStoredSuiteSettings(changes[SUITE_SETTINGS_KEY]!.newValue).nav.defaultMode;
+  cachedDefaultMode = mode;
+  // This is authoritative and fresher than the startup read; block a late startup
+  // read from overwriting it with the value it captured before this change. (#362)
+  modeUpdatedByOnChanged = true;
+  if (mode === "off") {
     void setAllTabsGray();
   }
 });

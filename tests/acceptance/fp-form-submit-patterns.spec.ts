@@ -63,6 +63,9 @@ test("false-positive matrix: script-driven same-origin form submissions after tr
       }, { soft: true });
     }
     session.note(`matrix: ${JSON.stringify(matrix)}`);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

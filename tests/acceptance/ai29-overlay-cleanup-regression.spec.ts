@@ -235,6 +235,9 @@ test("AI-29 regression: setting surfaces, mutation-01 fallback, load-time trap c
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
@@ -374,6 +377,9 @@ test("AI-29 regression: child-frame nesting lab — exact Undo, hostile persiste
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
@@ -453,6 +459,9 @@ test("AI-29 regression: cleanup off and Navigation Off stay inert; legitimate mo
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

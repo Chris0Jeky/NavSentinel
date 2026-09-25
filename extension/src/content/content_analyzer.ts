@@ -13,7 +13,7 @@
  */
 
 import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
-import { hasVisiblePasswordField } from "./password_field";
+import { hasVisiblePasswordField, queryPasswordInputs } from "./password_field";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -52,6 +52,14 @@ export interface PageSnapshot {
   metaTags: Array<{ name: string; content: string }>;
   /** CSS selectors that exist in the document (for kit fingerprint matching) */
   matchedSelectors: string[];
+  /**
+   * Effective document base URL the browser resolves relative URLs against
+   * (`document.baseURI`, honoring `<base href>`). Set by buildPageSnapshot;
+   * manual snapshots may omit it, in which case relative form actions fall
+   * back to resolving against the page domain (legacy behavior — misbinds
+   * whenever a base element is present, same class as #650/#778). (#785)
+   */
+  baseUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -534,7 +542,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
       ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
       : rawAttr;
     const action = bounded.trim();
-    const hasPw = !!form.querySelector('input[type="password"]');
+    const hasPw = queryPasswordInputs(form).length > 0;
     formActions.push({ action, hasPassword: hasPw });
   }
 
@@ -577,6 +585,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     formActions,
     metaTags,
     matchedSelectors,
+    baseUrl: doc.baseURI,
   };
 }
 
@@ -593,6 +602,19 @@ export interface BrandSignal {
   /** Tiered score contribution:
    *  title+img = 45, title only = 30, bodyText only = 10, img only = 15 */
   score: number;
+}
+
+/**
+ * Token-boundary substring test for common-word brands in imgSignals (#831).
+ * Filenames and URLs ("purchase-logo.png", "pineapple.png") otherwise match
+ * "chase"/"apple" mid-word and mint a spurious img-only (+15) signal. The
+ * boundary is any non-alphanumeric character rather than `\b`, because
+ * JavaScript treats "_" as a word character and "apple_logo.png" must still
+ * match. Both inputs are already lowercased.
+ */
+function matchesWordBoundary(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(haystack);
 }
 
 function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal | null {
@@ -617,7 +639,7 @@ function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal
 
     // Check image signals (favicon / logo src / alt text)
     const brandLower = brand.name.toLowerCase();
-    if (snapshot.imgSignals.includes(brandLower)) {
+    if (brand.commonWord ? matchesWordBoundary(snapshot.imgSignals, brandLower) : snapshot.imgSignals.includes(brandLower)) {
       imgMatch = true;
     }
 
@@ -748,11 +770,15 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
       continue;
     }
 
-    // Cross-domain form action
+    // Cross-domain form action. Relative actions resolve against the observed
+    // effective base URL, matching what the browser actually submits to — the
+    // page-derived base is only the fallback for snapshots that predate it
+    // and misbinds whenever a base element is present (#785).
+    const base = snapshot.baseUrl || "https://" + hostForUrl(currentDomain);
     try {
       // Re-bracket an IPv6-literal host so the base URL is valid: currentDomain is
       // an unbracketed registrable domain and "https://::1" would throw (#208 R1).
-      const actionUrl = new URL(rawAction, "https://" + hostForUrl(currentDomain));
+      const actionUrl = new URL(rawAction, base);
       const actionHost = normalizeHost(actionUrl.hostname);
       const actionReg = getRegistrableDomain(actionHost);
       if (actionReg && currentReg && actionReg !== currentReg) {

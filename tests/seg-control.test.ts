@@ -25,19 +25,47 @@ describe("seg_control", () => {
       expect(btns[0]!.getAttribute("tabindex")).toBe("-1");
     });
 
-    it("is case-insensitive", () => {
+    it("matches exactly: a differently-cased value is not a mode and selects the safe default (#866)", () => {
+      // Enforcement compares the lowercase literals, so "STRICT" is not Strict there;
+      // the control must not claim otherwise.
       const seg = createSeg("STRICT");
       const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
-      expect(btns[2]!.getAttribute("aria-checked")).toBe("true");
+      expect(btns[2]!.getAttribute("aria-checked")).toBe("false");
+      expect(getSegValue(seg)).toBe("smart");
     });
 
-    it("falls back to first button when value is unrecognized", () => {
+    it("selects the smart fallback, not the first (Off) segment, for an unrecognized value (#866)", () => {
       const seg = createSeg("nonexistent");
       const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
-      expect(btns[0]!.getAttribute("aria-checked")).toBe("true");
-      expect(btns[0]!.getAttribute("tabindex")).toBe("0");
-      expect(btns[1]!.getAttribute("aria-checked")).toBe("false");
+      expect(btns[0]!.getAttribute("aria-checked")).toBe("false");
+      expect(btns[1]!.getAttribute("aria-checked")).toBe("true");
+      expect(btns[1]!.getAttribute("tabindex")).toBe("0");
       expect(btns[2]!.getAttribute("aria-checked")).toBe("false");
+      expect(getSegValue(seg)).toBe("smart");
+    });
+
+    it.each([7, null, undefined, {}, ["off"], true])(
+      "does not throw on a non-string stored value (%j) and selects the fallback (#866)",
+      (value) => {
+        const seg = createSeg("strict");
+        expect(() => setSegValue(seg, value)).not.toThrow();
+        expect(getSegValue(seg)).toBe("smart");
+        expect(seg.querySelectorAll("[aria-checked='true']")).toHaveLength(1);
+      },
+    );
+
+    it("honours an explicit fallback value", () => {
+      const seg = createSeg("smart");
+      setSegValue(seg, "bogus", "strict");
+      expect(getSegValue(seg)).toBe("strict");
+    });
+
+    it("keeps exactly one focusable segment when the fallback is not a segment either", () => {
+      const seg = createSeg("smart");
+      setSegValue(seg, "bogus", "also-bogus");
+      const checked = Array.from(seg.querySelectorAll<HTMLButtonElement>("[aria-checked='true']"));
+      expect(checked.map((btn) => btn.dataset.value)).toEqual(["off"]);
+      expect(seg.querySelectorAll("[tabindex='0']")).toHaveLength(1);
     });
   });
 

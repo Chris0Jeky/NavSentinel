@@ -221,6 +221,9 @@ test("AI-47.2 / former AI-39: Proceed once lives only in the popup, opens exactl
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

@@ -14,6 +14,43 @@ When a decision changes, edit it in place and date the change.
 
 ---
 
+## 2026-09-25 — v0.5.0 release integration
+
+### D-2026-09-25-Q — Browser-facing PRs merge on automated gates for the v0.5.0 release; rollback Proceed stays
+
+**Decision:** Chris asked the agent to advance development as far as possible
+and cut the next release so he can use the newest build. In answer to three
+explicit questions on 2026-09-25 he chose:
+
+1. **Merge rule.** Browser-facing PRs (D-2026-07-03-D's browser-surface
+   class) may merge once exact-head CI is green, one review is complete, review
+   comments are triaged, and the branded-Chrome realistic E2E and acceptance
+   lanes (`npm run test:e2e:branded`, `npm run test:acceptance` with
+   `NAVSENTINEL_REALISTIC_CHROME=1`) pass on the integrated tree. Chris's manual
+   Chrome checks become one consolidated pass on the release build (AI-47).
+   A red check, a confirmed CRITICAL/HIGH defect, or an open owner decision
+   still parks a PR: #599 (AI-37) and #572 (SP-F-013) stay parked.
+2. **Release.** Tag `v0.5.0` on `main` and publish it as a GitHub
+   **pre-release**. The Chrome Web Store unlisted beta keeps every gate it has
+   (AI-19 name clearance, #455 consent, external review) and ships later as a
+   `v0.5.x` version.
+3. **#872.** AI-47 row 4 holds: the same-tab rollback notice keeps its
+   page-injected **Proceed**, which accepts only trusted input (#784/#827). It
+   is post-commit containment, not a pre-commit allow. Rows 2 and 5 are
+   reworded to exempt that notice; every other page-injected surface stays
+   warn/dismiss only.
+
+Like D-2026-09-12-P, this applies to the v0.5.0 integration, not as a standing
+relaxation of D-2026-07-03-D/H. Automated branded-Chrome runs are evidence, never
+a Gate-3 result: every AI-47 Human result stays **OPEN — not run** until Chris
+records it.
+
+**Why:** the reviewed fix queue had grown to about 45 open PRs behind the
+manual gate, while the branded-Chrome lanes merged in #871 now reproduce the
+owner procedures in real Chrome. Waiting for per-PR manual passes would keep
+the fixes, including the #783/#826 synthetic-control fix, out of the build
+Chris uses.
+
 ## 2026-09-12 — One-time September browser-queue consolidation
 
 ### D-2026-09-12-P — Named human-gated candidates may merge before the consolidated Chrome check

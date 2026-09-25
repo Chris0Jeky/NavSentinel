@@ -2,7 +2,9 @@
 import { describe, expect, it } from "vitest";
 import {
   hasVisiblePasswordField,
+  isPasswordTypeInput,
   isVisiblePasswordField,
+  queryPasswordInputs,
 } from "../extension/src/content/password_field";
 
 function pwInput(attrs: string): HTMLInputElement {
@@ -123,5 +125,39 @@ describe("hasVisiblePasswordField", () => {
         docWithBody("<input type=\"password\" style=\"content:'display:none'\">"),
       ),
     ).toBe(true);
+  });
+
+  it("is true for a case-variant type the browser still masks (#820)", () => {
+    expect(hasVisiblePasswordField(docWithBody('<input type="PASSWORD">'))).toBe(true);
+    expect(hasVisiblePasswordField(docWithBody('<input type="PassWord">'))).toBe(true);
+  });
+});
+
+describe("isPasswordTypeInput / queryPasswordInputs (#820)", () => {
+  function el(html: string): Element {
+    document.body.innerHTML = html;
+    return document.body.firstElementChild!;
+  }
+
+  it("matches password case-insensitively, like the browser keyword", () => {
+    expect(isPasswordTypeInput(el('<input type="password">'))).toBe(true);
+    expect(isPasswordTypeInput(el('<input type="PASSWORD">'))).toBe(true);
+    expect(isPasswordTypeInput(el('<input type="PassWord">'))).toBe(true);
+  });
+
+  it("rejects non-password types, missing type, and whitespace-padded keywords", () => {
+    expect(isPasswordTypeInput(el('<input type="text">'))).toBe(false);
+    expect(isPasswordTypeInput(el("<input>"))).toBe(false);
+    // Like the browser (invalid enumerated value), trailing space does not match.
+    expect(isPasswordTypeInput(el('<input type="password ">'))).toBe(false);
+    expect(isPasswordTypeInput(el('<button type="password">x</button>'))).toBe(false);
+  });
+
+  it("queryPasswordInputs finds case variants under a root", () => {
+    document.body.innerHTML =
+      '<form><input type="text"><input type="PASSWORD" id="a"></form>' +
+      '<input type="PassWord" id="b">';
+    const found = queryPasswordInputs(document).map((e) => e.id).sort();
+    expect(found).toEqual(["a", "b"]);
   });
 });

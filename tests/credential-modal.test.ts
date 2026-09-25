@@ -2,14 +2,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
 import type { ModalSpec } from "../extension/src/content/credential_modal";
+import type { activateOwnedModalControl as ActivateOwnedModalControlType } from "../extension/src/content/credential_modal";
 
 const HOST_ID = "__sentinelsuite_cred_modal_host__";
 
 let showCredentialModal: typeof ShowCredentialModalType;
+let activateOwnedModalControl: typeof ActivateOwnedModalControlType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/credential_modal");
   showCredentialModal = mod.showCredentialModal;
+  activateOwnedModalControl = mod.activateOwnedModalControl;
 }
 
 function getHost(): HTMLElement | null {
@@ -32,6 +35,12 @@ function getButtons(): HTMLElement[] {
   const footer = getShadow()?.querySelector(".footer");
   if (!footer) return [];
   return Array.from(footer.querySelectorAll("button"));
+}
+
+// Unit DOMs cannot forge trusted input, so trusted-equivalent activation goes
+// through the identity relay — the same pattern as the toast tests (#783).
+function activateButton(btn: HTMLElement): boolean {
+  return activateOwnedModalControl(getHost(), [btn]);
 }
 
 function minimalSpec(overrides: Partial<ModalSpec> = {}): ModalSpec {
@@ -68,7 +77,7 @@ describe("credential modal", () => {
       expect(getShadow()).not.toBeNull();
       expect(getOverlay()).not.toBeNull();
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -79,7 +88,7 @@ describe("credential modal", () => {
       const title = getShadow()?.querySelector(".title");
       expect(title?.textContent).toBe("Phishing Alert");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -92,7 +101,7 @@ describe("credential modal", () => {
       const subtitle = getShadow()?.querySelector(".subtitle");
       expect(subtitle?.textContent).toBe("This site may be dangerous");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -103,7 +112,7 @@ describe("credential modal", () => {
       const subtitle = getShadow()?.querySelector(".subtitle");
       expect(subtitle).toBeNull();
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -125,7 +134,7 @@ describe("credential modal", () => {
       expect(keys).toEqual(["Domain", "Action"]);
       expect(vals).toEqual(["evil.com", "password submit"]);
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -135,7 +144,7 @@ describe("credential modal", () => {
 
       expect(getShadow()?.querySelector(".kv")).toBeNull();
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -153,7 +162,7 @@ describe("credential modal", () => {
       );
       expect(items).toEqual(["Domain mismatch", "No HTTPS"]);
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -163,7 +172,7 @@ describe("credential modal", () => {
 
       expect(getShadow()?.querySelector(".reasons")).toBeNull();
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -199,7 +208,7 @@ describe("credential modal", () => {
       expect(li?.textContent).toBe(xss);
       expect(li?.innerHTML).not.toContain("<img");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
   });
@@ -227,7 +236,7 @@ describe("credential modal", () => {
       expect(buttons[2]!.classList.contains("primary")).toBe(false);
       expect(buttons[2]!.classList.contains("danger")).toBe(false);
 
-      buttons[0]!.click();
+      activateButton(buttons[0]!);
       await promise;
     });
 
@@ -235,7 +244,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
-      getButtons()[1]!.click();
+      activateButton(getButtons()[1]!);
 
       expect(await promise).toBe("block");
     });
@@ -244,7 +253,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
 
       expect(await promise).toBe("allow");
     });
@@ -334,7 +343,7 @@ describe("credential modal", () => {
       await vi.advanceTimersByTimeAsync(100);
       expect(resolved).toBe(false);
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
   });
@@ -343,7 +352,7 @@ describe("credential modal", () => {
     it("does not create duplicate hosts on repeated calls", async () => {
       const p1 = showCredentialModal(minimalSpec());
       vi.runAllTimers();
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await p1;
 
       const p2 = showCredentialModal(minimalSpec());
@@ -355,7 +364,7 @@ describe("credential modal", () => {
       const overlays = getShadow()?.querySelectorAll(".overlay");
       expect(overlays?.length).toBe(1);
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await p2;
     });
   });
@@ -379,7 +388,7 @@ describe("credential modal", () => {
       // p1 should resolve with its outsideAction since it was displaced
       expect(await p1).toBe("replaced");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await p2;
     });
 
@@ -392,7 +401,7 @@ describe("credential modal", () => {
 
       expect(await p1).toBe("cancel");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await p2;
     });
 
@@ -434,7 +443,7 @@ describe("credential modal", () => {
       // The focus target should still be in the DOM but not necessarily active
       expect(document.body.contains(focusTarget)).toBe(true);
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await p2;
       document.body.removeChild(focusTarget);
     });
@@ -446,7 +455,7 @@ describe("credential modal", () => {
       vi.runAllTimers();
 
       const removeSpy = vi.spyOn(window, "removeEventListener");
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
 
       expect(removeSpy).toHaveBeenCalledWith(
@@ -496,7 +505,7 @@ describe("credential modal", () => {
       expect(card.getAttribute("role")).toBe("dialog");
       expect(card.getAttribute("aria-modal")).toBe("true");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -511,7 +520,7 @@ describe("credential modal", () => {
       const titleEl = getShadow()?.querySelector(`#${titleId}`);
       expect(titleEl?.textContent).toBe("Test Warning");
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -527,7 +536,7 @@ describe("credential modal", () => {
       expect(bodyEl).not.toBeNull();
       expect(bodyEl?.classList.contains("body")).toBe(true);
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
   });
@@ -545,7 +554,7 @@ describe("credential modal", () => {
         expect(shadow.activeElement).toBe(buttons[0]);
       }
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -572,7 +581,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
 
       expect(document.body.contains(focusTarget)).toBe(true);
@@ -613,7 +622,7 @@ describe("credential modal", () => {
         expect(shadow.activeElement).toBe(buttons[0]);
       }
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -647,7 +656,7 @@ describe("credential modal", () => {
         expect(shadow.activeElement).toBe(buttons[1]);
       }
 
-      getButtons()[0]!.click();
+      activateButton(getButtons()[0]!);
       await promise;
     });
 
@@ -693,7 +702,7 @@ describe("credential modal", () => {
 
         expect(getShadow()!.activeElement).toBe(buttons[0]);
 
-        getButtons()[0]!.click();
+        activateButton(getButtons()[0]!);
         await promise;
       } finally {
         if (getOverlay()) {
@@ -737,7 +746,7 @@ describe("credential modal", () => {
         expect(preventSpy).toHaveBeenCalled();
         expect(getShadow()!.activeElement).toBe(buttons[1]);
 
-        getButtons()[0]!.click();
+        activateButton(getButtons()[0]!);
         await promise;
       } finally {
         if (getOverlay()) {
@@ -786,7 +795,7 @@ describe("credential modal", () => {
 
         expect(outsideKeydown).not.toHaveBeenCalled();
 
-        getButtons()[0]!.click();
+        activateButton(getButtons()[0]!);
         await promise;
       } finally {
         if (getOverlay()) {
@@ -823,7 +832,7 @@ describe("credential modal", () => {
         expect(stopFocusIn).toHaveBeenCalled();
         expect(getShadow()!.activeElement).toBe(buttons[0]);
 
-        getButtons()[0]!.click();
+        activateButton(getButtons()[0]!);
         await promise;
       } finally {
         window.removeEventListener("focusin", stopFocusIn, true);
@@ -833,6 +842,69 @@ describe("credential modal", () => {
         }
         outside.remove();
       }
+    });
+  });
+
+  describe("synthetic activation rejection (#783)", () => {
+    it("ignores a page-synthesized click on an action button", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      getButtons()[0]!.click();
+
+      let resolved = false;
+      promise.then(() => { resolved = true; });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(resolved).toBe(false);
+      expect(getOverlay()).not.toBeNull();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(await promise).toBe("cancel");
+    });
+
+    it("ignores a page-dispatched click event on an action button", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      getButtons()[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      let resolved = false;
+      promise.then(() => { resolved = true; });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(resolved).toBe(false);
+      expect(getOverlay()).not.toBeNull();
+
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(await promise).toBe("cancel");
+    });
+
+    it("relay ignores a forged host, a page element, and a stale control", async () => {
+      const p1 = showCredentialModal(minimalSpec({ title: "First" }));
+      vi.runAllTimers();
+      const stale = getButtons()[0]!;
+      const p2 = showCredentialModal(minimalSpec({ title: "Second" }));
+      vi.runAllTimers();
+      await p1;
+
+      const fakeHost = document.createElement("div");
+      fakeHost.id = HOST_ID;
+      const bait = document.createElement("button");
+      expect(activateOwnedModalControl(fakeHost, [bait, fakeHost])).toBe(false);
+
+      const host = getHost()!;
+      const pageButton = document.createElement("button");
+      expect(activateOwnedModalControl(host, [pageButton, host])).toBe(false);
+      expect(activateOwnedModalControl(host, [stale, host])).toBe(false);
+      expect(activateOwnedModalControl(host, [host])).toBe(false);
+
+      expect(getOverlay()).not.toBeNull();
+      activateButton(getButtons()[0]!);
+      await p2;
+    });
+
+    it("relay returns false when no modal host exists", () => {
+      expect(getHost()).toBeNull();
+      expect(activateOwnedModalControl(null, [])).toBe(false);
     });
   });
 });

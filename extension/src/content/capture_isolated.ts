@@ -53,7 +53,8 @@ import {
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
-import { recordClipboardWrite, scanForClickFix } from "./clickfix_detector";
+import { scanForClickFix } from "./clickfix_detector";
+import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -85,18 +86,20 @@ import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
 } from "./pushstate_guard";
+import { correlatesShadowGuardPrompt } from "./shadow_guard_correlation";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 import { isRiskReducingReason } from "../shared/reason_codes";
 import {
   isDocumentNavigationHref,
+  isSameTabTarget,
   shouldLogImmediateSilentNav,
   shouldQueueSameTabSilentCommit,
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
-import { grantsTabNavigationAuthority } from "./nav_authority";
+import { findSubmitControl, grantsTabNavigationAuthority } from "./nav_authority";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -109,7 +112,6 @@ const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
 const MAX_BRIDGE_RETRY_MS = 1000;
 const MAX_BRIDGE_INIT_MS = 10000;
-const SHADOW_GUARD_CORRELATION_MS = 500;
 const SHADOW_GUARD_ARRIVAL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
@@ -464,6 +466,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.session !== bridgeSession) return;
+  const receivedAtMs = Date.now();
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();
@@ -514,13 +517,17 @@ function handleBridgeMessage(message: unknown): void {
 
     const localPrompt = recentLocalBlankPrompt;
     if (
-      data.kind === "shadow_anchor" &&
       localPrompt &&
-      typeof data.ts === "number" &&
-      Date.now() - localPrompt.shownAt <= SHADOW_GUARD_ARRIVAL_MS &&
-      Math.abs(data.ts - localPrompt.shownAt) <= SHADOW_GUARD_CORRELATION_MS &&
-      localPrompt.params.url === url &&
-      (localPrompt.params.target ?? "_blank") === (data.target || "_blank")
+      correlatesShadowGuardPrompt({
+        kind: data.kind,
+        receivedAtMs,
+        promptShownAtMs: localPrompt.shownAt,
+        maxArrivalMs: SHADOW_GUARD_ARRIVAL_MS,
+        messageUrl: url,
+        promptUrl: localPrompt.params.url,
+        messageTarget: data.target,
+        promptTarget: localPrompt.params.target,
+      })
     ) {
       if (data.id !== undefined) localPrompt.params.actionId = data.id;
       recentLocalBlankPrompt = null;
@@ -600,10 +607,11 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-clipboard-write") {
-    const ts = typeof data.ts === "number" ? data.ts : Date.now();
-    const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
-    const cmdLike = typeof data.looksLikeCommand === "boolean" ? data.looksLikeCommand : false;
-    recordClipboardWrite({ ts, contentLength, looksLikeCommand: cmdLike });
+    recordClipboardBridgeWrite({
+      ts: data.ts,
+      contentLength: data.contentLength,
+      looksLikeCommand: data.looksLikeCommand,
+    }, receivedAtMs);
     if (settings.defaultMode !== "off") {
       handleClickFixScan();
     }
@@ -612,7 +620,7 @@ function handleBridgeMessage(message: unknown): void {
 
   // --- DoubleClickjacking bridge messages from main_guard ---
   {
-    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data);
+    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data, receivedAtMs);
     if (dblResult.handled) {
       // Forward to the SW so it can notify the opener tab.
       // This capture_isolated is running in the CHILD window; the opener tab
@@ -629,7 +637,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   // --- PushState abuse bridge messages from main_guard ---
-  if (handlePushStateBridgeMessage(data.type ?? "", data)) {
+  if (handlePushStateBridgeMessage(data.type ?? "", data, receivedAtMs)) {
     if (settings.defaultMode !== "off") {
       appendEventSafely({
         kind: "pushstate_abuse",
@@ -990,9 +998,17 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   if (cleanup.action === "budget_exhausted") {
     if (!overlayCleanupBudgetWarned) {
       overlayCleanupBudgetWarned = true;
+      lastOverlayCleanupToastUndo = cleanup.undo;
       sendIconUpdate("yellow");
       showToast({
         message: "Overlay cleanup reached its safety limit.",
+        // The budget result carries the same group undo that restores the
+        // hidden subset; without it up to 128 overlays stay unrestorable
+        // except via the settings toggle. (#748)
+        actions: [{ label: "Undo", onClick: () => runOverlayCleanupUndo(cleanup.undo) }],
+        // Persistent like the regular cleanup card: it replaces that card,
+        // survives unrelated warnings, and is torn down with the setting.
+        persistent: true,
         timeoutMs: 0,
       });
     }
@@ -1002,23 +1018,24 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   if (cleanup.undo !== lastOverlayCleanupToastUndo) {
     lastOverlayCleanupToastUndo = cleanup.undo;
     sendIconUpdate("yellow");
-    const undo = () => {
-      const restored = cleanup.undo();
-      if (lastOverlayCleanupToastUndo === cleanup.undo) {
-        lastOverlayCleanupToastUndo = null;
-      }
-      appendEventSafely({
-        kind: "mutation_alert",
-        site: siteKeyFromLocation(),
-        url: location.href,
-        reasons: ["overlay_cleanup_undo"],
-        extra: { overlayCleanupOutcome: "restored", restored },
-      });
-      return restored;
-    };
-    showOverlayCleanupToast(undo);
+    showOverlayCleanupToast(() => runOverlayCleanupUndo(cleanup.undo));
   }
   return true;
+}
+
+function runOverlayCleanupUndo(undo: OverlaySuppression): boolean {
+  const restored = undo();
+  if (lastOverlayCleanupToastUndo === undo) {
+    lastOverlayCleanupToastUndo = null;
+  }
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: ["overlay_cleanup_undo"],
+    extra: { overlayCleanupOutcome: "restored", restored },
+  });
+  return restored;
 }
 
 function handleMutationAlert(alert: MutationAlert): void {
@@ -1332,13 +1349,6 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
 }
 
 /**
- * Selector for a control whose default action submits a form: a `<button>`
- * whose type defaults to submit, or a submit/image input.
- */
-const SUBMIT_INTENT_SELECTOR =
-  "button:not([type=button]):not([type=reset]),input[type=submit],input[type=image]";
-
-/**
  * True when a click resolves to a navigation the clicking frame itself declared
  * through a form submit control. Paired with a cross-document anchor href, this
  * is the "in-frame navigation intent" that lets a child frame mint tab-wide
@@ -1354,7 +1364,7 @@ const SUBMIT_INTENT_SELECTOR =
  */
 function formSubmitIntentUrl(e: MouseEvent): string | null {
   const target = e.target instanceof Element ? e.target : null;
-  const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
+  const control = findSubmitControl(target);
   const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
   if (!form) return null;
   const submitterAction = control?.getAttribute("formaction");
@@ -1390,7 +1400,7 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
 
 function allowOnce(url: string, target?: string, features?: string): void {
   notifyNavAllow();
-  postToMain("ns-allow-once");
+  postToMain("ns-allow-once", { url });
   window.setTimeout(() => {
     try {
       window.open(url, target ?? "_blank", features);
@@ -1541,6 +1551,9 @@ function showAllowPrompt(params: AllowPromptParams): void {
     site: sourceDomain,
     url: params.url,
     ...(params.host ? { destHost: params.host } : {}),
+    // Local decisions carry their CDS/NRS codes (#867); MAIN-world interceptions
+    // have no scorer decision behind them and stay reasonless.
+    ...(outcomeFeatures.reasons ? { reasons: outcomeFeatures.reasons } : {}),
     ...(params.overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
   });
 
@@ -1762,7 +1775,9 @@ window.addEventListener(
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
-    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    // _top/_parent count as same-tab in the top frame so those navigations
+    // join the silent-nav journal; child-frame semantics unchanged (#782).
+    const isSameTabAnchor = !!(anchor && isSameTabTarget(anchorTarget, isTopFrame()));
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
@@ -1864,6 +1879,8 @@ window.addEventListener(
         site: siteKeyFromLocation(),
         url: openerNavUrl || location.href,
         destHost: (() => { try { return new URL(openerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
+        // The same signal computeNRS scores as doubleClickHijackActive (#867).
+        reasons: ["nrs_double_click_hijack"],
       });
     }
 

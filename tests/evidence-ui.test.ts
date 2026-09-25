@@ -98,6 +98,28 @@ describe("Protection Center wired UI", () => {
     expect(document.querySelectorAll("details.event")).toHaveLength(1);
     expect(get("events").textContent).toContain("40");
   });
+  it("explains stored credential and blank-tab reasons as text, never raw or unknown codes (#867)", async () => {
+    mocks.getEventLog.mockResolvedValue([
+      { id: "private-cred", ts: 1_700_000_000_000, kind: "cred_submit_prompt", site: "127.0.0.1", destHost: "localhost", score: 100, reasons: ["NON_HTTPS_PAGE", "IP_HOST", "UNTRUSTED_DOMAIN", "<img src=x onerror=alert(1)>"] },
+      { id: "private-blank", ts: 1_700_000_000_001, kind: "nav_blank_prompt", site: "source.test", destHost: "target.test", reasons: ["near_invisible_opacity", "nrs_new_tab_window"] },
+      { id: "private-legacy", ts: 1_700_000_000_002, kind: "nav_blank_prompt", site: "source.test", destHost: "target.test", reasons: ["retired_legacy_code"] },
+    ]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("total").textContent).toBe("3"));
+    const [legacy, blank, credential] = Array.from(document.querySelectorAll("details.event"));
+    expect(Array.from(credential!.querySelectorAll(".details li"), li => li.textContent)).toEqual([
+      "The sign-in page was not using HTTPS, so a password could be intercepted",
+      "The page address is a raw IP number, unusual for a real sign-in page",
+      "This site is not on your trusted list",
+    ]);
+    expect(credential!.querySelector("img")).toBeNull();
+    expect(Array.from(blank!.querySelectorAll(".details li"), li => li.textContent)).toEqual([
+      "A nearly invisible element is intercepting clicks", "Navigation opens a new tab or window",
+    ]);
+    expect(legacy!.querySelector(".details li")).toBeNull();
+    expect(legacy!.textContent).toContain("No recognized signal explanation is available for this entry.");
+    expect(get("events").textContent).not.toMatch(/NON_HTTPS_PAGE|retired_legacy_code|onerror/);
+  });
   it("accepts an 8 MiB export and refuses one extra byte", async () => {
     const OriginalBlob = Blob;
     const sizes = [8 * 1024 * 1024, 8 * 1024 * 1024 + 1];

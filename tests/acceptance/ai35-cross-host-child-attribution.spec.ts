@@ -162,6 +162,9 @@ test("AI-35: a cross-host child-frame event keeps site=localhost, gains pageSite
 
     session.note(`AI-35 soft-step failures: ${JSON.stringify(failures)}; row=${JSON.stringify(eventRow ?? null)}`);
     expect(failures, "every AI-35 step passes").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     // 6. Close all tabs and the disposable profile; close() removes the profile directory.
     await session.close();
