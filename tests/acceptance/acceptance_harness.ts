@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, type Worker } from "@playwright/test";
 import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
-import { CdpPageClient, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
+import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const extensionPath = process.env.EXTENSION_PATH
@@ -494,9 +494,14 @@ export class AcceptanceSession {
 
   async closePopup(): Promise<void> {
     if (this.popupClient) {
+      const targetId = this.popupClient.targetId;
       this.popupConsole.push(...this.popupClient.console);
       await this.popupClient.close().catch(() => undefined);
       this.popupClient = null;
+      // Page.close acknowledges the command before Chrome finishes removing
+      // the toolbar target. Reopening while it still exists can make
+      // chrome.action.openPopup reject with "Failed to open popup".
+      await expect.poll(async () => (await listTargets(this.devToolsPort)).some((target) => target.id === targetId), { timeout: 3000 }).toBe(false);
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
