@@ -13,7 +13,12 @@ import {
   isFloodableAlertType,
 } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import {
+  createBlockedActionIdAllocator,
+  enforceMapSizeCap,
+  pruneTimestampWindow,
+  shouldEmitRapidPushState,
+} from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -180,6 +185,8 @@ let pushStateTimestamps: number[] = [];
 // Cooldown anchor so a sustained rapid-pushState burst emits at most one alert per window,
 // not one per call (which would flood the priority bridge queue and drop ns-nav-blocked) (#302).
 let lastRapidPushStateEmitAt = 0;
+
+const allocateBlockedActionId = createBlockedActionIdAllocator();
 
 const blockedActions = new Map<
   string,
@@ -396,10 +403,6 @@ function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "n
   return "none";
 }
 
-function makeId(): string {
-  return `${Math.floor(nowMs())}-${Math.random().toString(16).slice(2)}`;
-}
-
 function pruneBlockedActions(): void {
   const now = nowMs();
   for (const [id, entry] of blockedActions) {
@@ -471,7 +474,7 @@ function registerBlockedAction(params: {
   action: () => void;
 }): void {
   pruneBlockedActions();
-  const id = makeId();
+  const id = allocateBlockedActionId();
   blockedActions.set(id, {
     action: params.action,
     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,

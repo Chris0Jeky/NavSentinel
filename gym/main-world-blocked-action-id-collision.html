@@ -5,6 +5,7 @@
     <title>Blocked-action identifier collision probe</title>
     <script>
       window.blockedActionIdProbe = [];
+      window.blockedActionIdDropSecond = false;
       Date.now = () => 7;
       Math.random = () => 0;
       const nativePostMessage = MessagePort.prototype.postMessage;
@@ -19,6 +20,9 @@
             url: message.url,
             kind: message.kind,
           });
+          if (window.blockedActionIdDropSecond && window.blockedActionIdProbe.length === 2) {
+            return;
+          }
         }
         return nativePostMessage.call(this, message, ...rest);
       };
