@@ -70,3 +70,32 @@ describe("Observatory recorded campaign integration trigger", () => {
     expect(source).not.toContain("feat/observatory-campaign-20260913");
   });
 });
+
+describe("Branded Chrome browser-gate trigger", () => {
+  it("runs only for explicitly labelled same-repository pull requests", () => {
+    const source = fs.readFileSync(
+      path.join(workflowDirectory, "branded-chrome-advisory.yml"),
+      "utf8",
+    );
+
+    const pullRequestBlock =
+      source.match(/\n {2}pull_request:\n([\s\S]*?)\n\npermissions:/u)?.[1] ?? "";
+
+    expect(pullRequestBlock).toContain("types: [labeled, synchronize, reopened, ready_for_review]");
+    expect(source).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(source).toContain(
+      "contains(github.event.pull_request.labels.*.name, 'gate:browser')",
+    );
+    expect(source).not.toContain("pull_request_target:");
+    expect(source).toContain("permissions:\n  contents: read");
+    expect(source).toContain(
+      "group: branded-chrome-${{ github.event.pull_request.number || github.ref }}",
+    );
+    expect(source).toContain("cancel-in-progress: true");
+    expect(source).toContain(
+      "PULL_REQUEST_HEAD: ${{ github.event.pull_request.head.sha || '' }}",
+    );
+    expect(source).toContain("checkout_head=%s");
+    expect(source).toContain('"$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
+  });
+});
