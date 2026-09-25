@@ -1034,13 +1034,27 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
  * same bounded sanitizer the import path uses (#869). Doing this on every
  * append instead would repeat the work for rows that are already bounded.
  */
+/** JSON with object keys sorted at every level, for order-independent equality. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, entry: unknown) =>
+    entry && typeof entry === "object" && !Array.isArray(entry)
+      ? Object.fromEntries(
+          Object.keys(entry).sort().map((key) => [key, (entry as Record<string, unknown>)[key]]),
+        )
+      : entry,
+  );
+}
+
 export function migrateStoredEventLogUrls(): Promise<void> {
   return queueEventLogWrite(async () => {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
     const stored: unknown = res[EVENT_LOG_KEY];
     if (stored === undefined) return;
     const bounded = normalizeEventLog(stored).map(sanitizeImportedEventLogEntry);
-    if (JSON.stringify(bounded) !== JSON.stringify(stored)) {
+    // chrome.storage returns object keys sorted, while the sanitizer builds rows
+    // in field order, so compare key-order-independently; otherwise every
+    // worker start would rewrite an already-bounded journal.
+    if (canonicalJson(bounded) !== canonicalJson(stored)) {
       await chrome.storage.local.set({ [EVENT_LOG_KEY]: bounded });
     }
   });

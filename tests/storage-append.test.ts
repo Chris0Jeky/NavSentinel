@@ -352,6 +352,36 @@ describe("appendEvent", () => {
     expect(JSON.stringify(store[EVENT_LOG_KEY])).toBe(before);
   });
 
+  it("does not rewrite a bounded journal whose rows come back with sorted keys (#869)", async () => {
+    // Real chrome.storage round-trips objects with their keys sorted; the
+    // sanitizer rebuilds rows in field order. That difference alone must not
+    // trigger a rewrite on every worker start.
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+    const { appendEvent, migrateStoredEventLogUrls } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "live-1",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "example.com",
+      url: "https://example.com/page",
+      reasons: ["a"],
+      extra: { tabId: 42, frameId: 0 },
+    });
+    const sortKeys = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(sortKeys)
+        : value && typeof value === "object"
+          ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]))
+          : value;
+    store[EVENT_LOG_KEY] = sortKeys(store[EVENT_LOG_KEY]);
+    setSpy.mockClear();
+
+    await migrateStoredEventLogUrls();
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
   it("delegates a clear to the service-worker event-log queue from an extension page", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "legacy-1", ts: 1, kind: "nav_click_block" }],
