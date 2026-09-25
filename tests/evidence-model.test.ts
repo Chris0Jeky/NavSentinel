@@ -54,4 +54,22 @@ describe("minimized extension evidence", () => {
     expect(summarizeEvidence(rows)).toEqual({ recorded: 3, scored: 2, sites: 2 });
     expect(rows.every(row => row.outcome === "recorded")).toBe(true);
   });
+  it("strips journal-only codes on export while preserving the portable code", () => {
+    const local = projectEvidence([event({ reasons: ["NON_HTTPS_PAGE", "IP_HOST", "no_accessible_name", "unrecognized-free-text-xyz"] })]);
+    expect(local[0]?.reasons).toEqual(["NON_HTTPS_PAGE", "IP_HOST", "no_accessible_name"]);
+    const result = createEvidenceExport(local, new Date(0));
+    expect(result.events[0]?.reasons).toEqual(["no_accessible_name"]);
+    expect(JSON.stringify(result)).not.toContain("NON_HTTPS_PAGE");
+    expect(JSON.stringify(result)).not.toContain("IP_HOST");
+    expect(JSON.stringify(result)).not.toContain("unrecognized-free-text-xyz");
+  });
+  it("exports empty reasons when only journal-only and unrecognized codes are present", () => {
+    const local = projectEvidence([event({ reasons: ["NON_HTTPS_PAGE", "IP_HOST", "unrecognized-free-text-xyz"] })]);
+    expect(local[0]?.reasons).toEqual(["NON_HTTPS_PAGE", "IP_HOST"]);
+    const result = createEvidenceExport(local, new Date(0));
+    expect(result.events[0]?.reasons).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain("NON_HTTPS_PAGE");
+    expect(JSON.stringify(result)).not.toContain("IP_HOST");
+    expect(JSON.stringify(result)).not.toContain("unrecognized-free-text-xyz");
+  });
 });
