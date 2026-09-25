@@ -928,22 +928,19 @@ function handleClickFixScan(): void {
     reasons: result.reasons,
   });
 
+  // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
+  // fires for that explicit click only, never when a later notice replaces it.
   showToast({
     message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
-    actions: [
-      {
-        label: "Dismiss",
-        onClick: () => {
-          appendOutcomeSafely({
-            domain: siteKeyFromLocation(),
-            type: "nav",
-            score: result.score,
-            outcome: "dismiss",
-            ...(result.reasons?.length ? { reasons: result.reasons } : {}),
-          });
-        },
-      },
-    ],
+    onDismiss: () => {
+      appendOutcomeSafely({
+        domain: siteKeyFromLocation(),
+        type: "nav",
+        score: result.score,
+        outcome: "dismiss",
+        ...(result.reasons?.length ? { reasons: result.reasons } : {}),
+      });
+    },
     timeoutMs: 0,
   });
 }
@@ -1194,13 +1191,8 @@ function showRollbackPrompt(url: string): void {
             // ignore
           }
         }
-      },
-      {
-        label: "Dismiss",
-        onClick: () => {
-          // no-op
-        }
       }
+      // No caller Dismiss: the card always renders its own (#869).
     ],
     timeoutMs: 0
   });
