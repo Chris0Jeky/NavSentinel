@@ -27,12 +27,15 @@ const PR_644_MERGE_SUBJECT = /Merge pull request #644\b/;
 const PR_657_MERGE_SUBJECT = /Merge pull request #657\b/;
 const URL_RESIDUE = ["https://other.test", "other.test/account", "/account", "token=", "secret", "#fragment", "fragment"];
 
-// The guide's rows, verbatim (docs/agentic/ISSUE_585_GATE3.md step 2).
-const GUIDE_ROWS: ImportRow[] = [
-  { id: "ai44-valid-page", ts: 1, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.0.0.1", score: 80 },
-  { id: "ai44-empty-page", ts: 2, kind: "nav_click_block", site: "127.0.0.1", pageSite: "", score: 70 },
-  { id: "ai44-url-page", ts: 3, kind: "nav_click_block", site: "127.0.0.1", pageSite: "https://other.test/account?token=secret#fragment", score: 60 },
-];
+// Keep the guide's ordering while rebasing its example timestamps into the
+// popup's ten-minute Current page window.
+function guideRows(baseTs: number): ImportRow[] {
+  return [
+    { id: "ai44-valid-page", ts: baseTs + 1, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.0.0.1", score: 80 },
+    { id: "ai44-empty-page", ts: baseTs + 2, kind: "nav_click_block", site: "127.0.0.1", pageSite: "", score: 70 },
+    { id: "ai44-url-page", ts: baseTs + 3, kind: "nav_click_block", site: "127.0.0.1", pageSite: "https://other.test/account?token=secret#fragment", score: 60 },
+  ];
+}
 
 test.setTimeout(240_000);
 
@@ -43,6 +46,8 @@ function byId(log: Array<Record<string, unknown>>): Map<string, StoredRow> {
 }
 
 test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP literals are canonical, and the popup gauge follows the newest applicable association", async ({}, testInfo) => {
+  const baseTs = Date.now() - 60_000;
+  const GUIDE_ROWS = guideRows(baseTs);
   const session = await AcceptanceSession.open(testInfo, "AI-47.7-former-AI-44-PR644-PR657");
   const failures: string[] = [];
   const soft = async (title: string, body: () => Promise<void>): Promise<boolean> => {
@@ -54,9 +59,9 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
   const ipv6 = await startIpv6LoopbackServer();
   let options: Page | undefined;
 
-  const popupOn = async (page: Page, shot: string): Promise<PopupGauge> => {
+  const popupOn = async (page: Page, shot: string, expectedScore: number): Promise<PopupGauge> => {
     const popup = await session.openPopup(page);
-    const gauge = await waitForPopupGauge(popup);
+    const gauge = await waitForPopupGauge(popup, expectedScore);
     session.note(`popup on ${new URL(page.url()).host}: ${JSON.stringify(gauge)}`);
     await session.screenshotPopup(shot);
     await session.closePopup();
@@ -119,17 +124,17 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
       });
 
       await soft("3a. popup Current page on the loopback page shows the imported loopback risk 60 (malformed pageSite fell back to site)", async () => {
-        const gauge = await popupOn(page, "ai47-7-popup-guide-order-60");
+        const gauge = await popupOn(page, "ai47-7-popup-guide-order-60", 60);
         expect(gauge.site).toBe("127.0.0.1");
         expect(gauge.ariaLabel).toBe("Tab risk score: 60");
         expect(gauge.noteHidden).toBe(true);
       });
 
       await soft("3b. repeat with the valid cross-host row last: popup shows 80 via its pageSite association", async () => {
-        const reordered = [GUIDE_ROWS[1]!, GUIDE_ROWS[2]!, GUIDE_ROWS[0]!];
+        const reordered = [GUIDE_ROWS[1]!, GUIDE_ROWS[2]!, { ...GUIDE_ROWS[0]!, ts: baseTs + 4 }];
         const log = await importRows("import-b-valid-row-last", reordered);
         expect(log.map((entry) => entry.id)).toEqual(["ai44-empty-page", "ai44-url-page", "ai44-valid-page"]);
-        const gauge = await popupOn(page, "ai47-7-popup-valid-row-last-80");
+        const gauge = await popupOn(page, "ai47-7-popup-valid-row-last-80", 80);
         expect(gauge.site).toBe("127.0.0.1");
         expect(gauge.ariaLabel).toBe("Tab risk score: 80");
       });
@@ -137,13 +142,13 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
 
     await soft("4. ordinary, IPv4 and IPv6 pageSite values import canonically; invalid ones are dropped; the popup follows the newest IPv4 association", async () => {
       const rows: ImportRow[] = [
-        { id: "s4-ordinary", ts: 11, kind: "nav_click_block", site: "frame.other.test", pageSite: "Example.COM.", score: 21 },
-        { id: "s4-ipv6", ts: 12, kind: "nav_click_block", site: "frame.other.test", pageSite: "2001:db8::1", score: 22 },
-        { id: "s4-ipv6-bracketed", ts: 13, kind: "nav_click_block", site: "frame.other.test", pageSite: "[::1]", score: 23 },
-        { id: "s4-host-port", ts: 14, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.0.0.1:8080", score: 24 },
-        { id: "s4-bad-ipv4", ts: 15, kind: "nav_click_block", site: "frame.other.test", pageSite: "256.1.1.1", score: 25 },
-        { id: "s4-path", ts: 16, kind: "nav_click_block", site: "frame.other.test", pageSite: "example.com/path?q=secret", score: 26 },
-        { id: "s4-ipv4", ts: 17, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.0.0.1", score: 33 },
+        { id: "s4-ordinary", ts: baseTs + 11, kind: "nav_click_block", site: "frame.other.test", pageSite: "Example.COM.", score: 21 },
+        { id: "s4-ipv6", ts: baseTs + 12, kind: "nav_click_block", site: "frame.other.test", pageSite: "2001:db8::1", score: 22 },
+        { id: "s4-ipv6-bracketed", ts: baseTs + 13, kind: "nav_click_block", site: "frame.other.test", pageSite: "[::1]", score: 23 },
+        { id: "s4-host-port", ts: baseTs + 14, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.0.0.1:8080", score: 24 },
+        { id: "s4-bad-ipv4", ts: baseTs + 15, kind: "nav_click_block", site: "frame.other.test", pageSite: "256.1.1.1", score: 25 },
+        { id: "s4-path", ts: baseTs + 16, kind: "nav_click_block", site: "frame.other.test", pageSite: "example.com/path?q=secret", score: 26 },
+        { id: "s4-ipv4", ts: baseTs + 17, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.0.0.1", score: 33 },
       ];
       const log = await importRows("import-c-ordinary-ipv4-ipv6", rows);
       const stored = byId(log);
@@ -159,15 +164,15 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
         "s4-ipv4": "127.0.0.1",
       });
       expect(forbiddenHits(JSON.stringify(log), ["secret", "/path"])).toEqual([]);
-      const gauge = await popupOn(page, "ai47-7-popup-step4-ipv4-33");
+      const gauge = await popupOn(page, "ai47-7-popup-step4-ipv4-33", 33);
       expect(gauge.ariaLabel).toBe("Tab risk score: 33");
     });
 
     await soft("5a. noncanonical 127.000.000.001 and [2001:0DB8:0:0:0:0:0:1] (and [0:0:0:0:0:0:0:1]) are stored as 127.0.0.1, 2001:db8::1 and ::1", async () => {
       const rows: ImportRow[] = [
-        { id: "s5-ipv6-doc", ts: 21, kind: "nav_click_block", site: "frame.other.test", pageSite: "[2001:0DB8:0:0:0:0:0:1]", score: 42 },
-        { id: "s5-ipv6-loopback", ts: 22, kind: "nav_click_block", site: "frame.other.test", pageSite: "[0:0:0:0:0:0:0:1]", score: 43 },
-        { id: "s5-ipv4", ts: 23, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.000.000.001", score: 41 },
+        { id: "s5-ipv6-doc", ts: baseTs + 21, kind: "nav_click_block", site: "frame.other.test", pageSite: "[2001:0DB8:0:0:0:0:0:1]", score: 42 },
+        { id: "s5-ipv6-loopback", ts: baseTs + 22, kind: "nav_click_block", site: "frame.other.test", pageSite: "[0:0:0:0:0:0:0:1]", score: 43 },
+        { id: "s5-ipv4", ts: baseTs + 23, kind: "nav_click_block", site: "frame.other.test", pageSite: "127.000.000.001", score: 41 },
       ];
       const log = await importRows("import-d-noncanonical-ip", rows);
       const stored = byId(log);
@@ -189,7 +194,7 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
       const hostname = await page.evaluate(() => location.hostname);
       session.note(`noncanonical navigation committed as ${new URL(page.url()).host}; location.hostname=${hostname}`);
       expect(hostname).toBe("127.0.0.1");
-      const gauge = await popupOn(page, "ai47-7-popup-noncanonical-ipv4-41");
+      const gauge = await popupOn(page, "ai47-7-popup-noncanonical-ipv4-41", 41);
       expect(gauge.site).toBe("127.0.0.1");
       expect(gauge.ariaLabel).toBe("Tab risk score: 41");
     });
@@ -203,7 +208,7 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
       const hostname = await v6.evaluate(() => location.hostname);
       session.note(`IPv6 page location.hostname=${hostname}`);
       expect(hostname).toBe("[::1]");
-      const gauge = await popupOn(v6, "ai47-7-popup-ipv6-loopback-43");
+      const gauge = await popupOn(v6, "ai47-7-popup-ipv6-loopback-43", 43);
       expect(gauge.site).toBe("::1");
       expect(gauge.ariaLabel).toBe("Tab risk score: 43");
       await v6.close();
