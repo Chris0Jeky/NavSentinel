@@ -111,6 +111,9 @@ const arms: readonly Arm[] = [
   // MAIN world a redirect allowance, then form.submit(target=_top) converts
   // that frame-local allowance into a tab-wide exact-target allowance.
   { id: "top-form-submit-100", primitive: "top-form-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
+  // #864: the same submit inside the click's own task, where the MAIN world's
+  // same-task allowance is live. A bare-element click still declares nothing.
+  { id: "top-form-submit-sync", primitive: "top-form-submit", delayMs: 0, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
   { id: "empty-formaction-submit-100", primitive: "empty-formaction-submit", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "blocked-pre-harm" },
   { id: "child-assign-100", primitive: "child-assign", delayMs: 100, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
   { id: "child-assign-1600", primitive: "child-assign", delayMs: 1_600, input: "physical-click", layer: "hidden", role: "attack", expectation: "out-of-model" },
@@ -119,6 +122,7 @@ const arms: readonly Arm[] = [
   { id: "benign-anchor-top-keyboard", primitive: "anchor-top", delayMs: 0, input: "keyboard", layer: "visible", role: "benign", expectation: "benign-allowed" },
   { id: "benign-top-script-100", primitive: "top-script", delayMs: 100, input: "top-physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
   { id: "benign-declared-form-submit-100", primitive: "declared-form-submit", delayMs: 100, input: "physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
+  { id: "benign-declared-form-submit-sync", primitive: "declared-form-submit", delayMs: 0, input: "physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
   { id: "benign-declared-request-submit-100", primitive: "declared-request-submit", delayMs: 100, input: "physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
   { id: "benign-top-form-submit-100", primitive: "top-form-submit-control", delayMs: 100, input: "top-physical-click", layer: "visible", role: "benign", expectation: "benign-allowed" },
 ];
