@@ -1,5 +1,5 @@
 import type { Mode } from "./types";
-import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
+import { ALLOWLIST_KEY, applyAllowlistMutationDirect, getAllowlist, normalizeAllowlist, type Allowlist, type AllowlistMutationMessage } from "./allowlist";
 import { getRegistrableDomain, hostForUrl, isIPAddress, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
@@ -2243,6 +2243,41 @@ export async function exportAll(): Promise<{
 export const queueBulkDataOperation = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] bulk data serialization error:", err);
 });
+
+/** The worker owns one queue for allowlist edits, imports, and resets. */
+export async function handleAllowlistMutationMessage(
+  value: unknown,
+  sender?: chrome.runtime.MessageSender
+): Promise<{ ok: true; list: Allowlist } | { ok: false; error: string }> {
+  if (!isRecord(value) || value.type !== "ns-allowlist-mutate") return { ok: false, error: "Invalid allowlist update" };
+  const op = value.op;
+  if (op !== "add" && op !== "remove" && op !== "clear" && op !== "replace" && op !== "migrate") {
+    return { ok: false, error: "Invalid allowlist operation" };
+  }
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  const base = runtime?.getURL?.("");
+  const ownPage = !!base && !!sender?.url?.startsWith(base) && isTrustedExtensionPageSender(sender);
+  const ownContent = sender?.id === runtime?.id && typeof sender?.tab?.id === "number" &&
+    Number.isSafeInteger(sender.frameId) && typeof sender.documentId === "string" && !!sender.documentId;
+  if (!sender || sender.id !== runtime?.id || (op === "add" || op === "migrate" ? !ownPage && !ownContent : !ownPage)) {
+    return { ok: false, error: "Unauthorized allowlist update" };
+  }
+  if ((op === "add" || op === "remove") &&
+      (typeof value.siteKey !== "string" || !value.siteKey || value.siteKey.length > 253 ||
+       typeof value.destHost !== "string" || !value.destHost || value.destHost.length > 253)) {
+    return { ok: false, error: "Invalid allowlist entry" };
+  }
+  if (op === "replace" && (!isRecord(value.list) || Array.isArray(value.list))) {
+    return { ok: false, error: "Invalid allowlist replacement" };
+  }
+  const message = value as AllowlistMutationMessage;
+  try {
+    const list = await queueBulkDataOperation(() => applyAllowlistMutationDirect(message));
+    return { ok: true, list };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 export function importAll(payload: unknown): Promise<ImportAllResult> {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;

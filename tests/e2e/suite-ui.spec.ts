@@ -743,3 +743,36 @@ test("options import and export preserve normalized trusted-domain and allowlist
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("allowlist writes from two extension pages meet in one worker queue @regression", async () => {
+  test.skip(!fs.existsSync(path.join(extensionPath, "manifest.json")), "Build the extension before the allowlist broker test.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-allowlist-broker-"));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const url = `chrome-extension://${extensionId}/src/options/options.html`;
+    const first = await context.newPage();
+    const second = await context.newPage();
+    await Promise.all([first.goto(url), second.goto(url)]);
+    const add = (page: typeof first, destHost: string) => page.evaluate(async host =>
+      chrome.runtime.sendMessage({ type: "ns-allowlist-mutate", op: "add", siteKey: "site.example", destHost: host }), destHost);
+    const [one, two] = await Promise.all([add(first, "first.example"), add(second, "second.example")]);
+    expect(one).toMatchObject({ ok: true });
+    expect(two).toMatchObject({ ok: true });
+    const worker = await getServiceWorker(context);
+    await expect.poll(() => worker.evaluate(async () =>
+      (await chrome.storage.local.get("sentinelsuite:nav_allowlist_v1"))["sentinelsuite:nav_allowlist_v1"])).toEqual({
+      "site.example": ["first.example", "second.example"],
+    });
+    expect(await second.evaluate(() => chrome.runtime.sendMessage({ type: "ns-allowlist-mutate", op: "clear" })))
+      .toMatchObject({ ok: true });
+    await expect.poll(() => worker.evaluate(async () =>
+      (await chrome.storage.local.get("sentinelsuite:nav_allowlist_v1"))["sentinelsuite:nav_allowlist_v1"])).toEqual({});
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
