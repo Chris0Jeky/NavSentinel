@@ -45,6 +45,22 @@ export default tseslint.config(
     },
   },
   {
+    // CommonJS preload loaded with `node --require`; also JavaScript outside
+    // tsconfig, so lint it without a TypeScript project.
+    files: ["tests/branded/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { require: "readonly", module: "writable", process: "readonly", __dirname: "readonly", setTimeout: "readonly", document: "readonly" },
+      parserOptions: {
+        project: false,
+        projectService: false,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
     ignores: [
       "extension/dist/**",
       "dist/**",

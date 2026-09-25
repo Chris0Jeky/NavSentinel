@@ -562,6 +562,23 @@ describe("computeNRS", () => {
       expect(result.nrs).toBe(15);
     });
 
+    it.each([
+      ["NaN", NaN],
+      ["Infinity", Infinity],
+      ["zero", 0],
+      ["negative", -2],
+      ["non-numeric", "2" as unknown as number],
+      ["null", null as unknown as number],
+    ])("falls back to 1 hop for corrupt knownRedirectorHops (%s)", (_label, hops) => {
+      const result = computeNRS(baseCds(0), baseNav({
+        redirectViaKnownRedirector: true,
+        knownRedirectorHops: hops,
+      }));
+      expect(result.nrs).toBe(15);
+      expect(Number.isFinite(result.nrs)).toBe(true);
+      expect(result.nrsFactors).toContain("nrs_redirect_via_known_redirector");
+    });
+
     it("does not add when redirectViaKnownRedirector is false", () => {
       const result = computeNRS(baseCds(0), baseNav({ redirectViaKnownRedirector: false }));
       expect(result.nrsFactors).not.toContain("nrs_redirect_via_known_redirector");

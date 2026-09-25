@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Acceptance - common script-driven form submissions</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    .case { margin: 12px 0; padding: 8px; border: 1px solid #ccc; }
+    button, select, a { font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Script-driven form submissions found on ordinary sites</h1>
+  <p>Only the case named by <code>?case=</code> is armed. Every destination is
+     same-origin, visible and declared by an ordinary form.</p>
+
+  <form id="login-form" method="POST"><input type="hidden" name="oauth_server" id="oauth_server" value="" /></form>
+  <div class="case" id="openid-buttons"><button data-provider="google" type="button">Log in with Google</button></div>
+
+  <div class="case">
+    <form id="validated-form" method="GET"><input name="q" value="query" /><button id="validated-submit" type="submit">Search</button></form>
+  </div>
+
+  <div class="case"><a id="link-submit" href="#">Submit via link</a></div>
+
+  <div class="case">
+    <form id="select-form" method="GET"><select id="auto-select" name="sort"><option value="a">A</option><option value="b">B</option></select></form>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const which = params.get("case") || "";
+    const dest = (name) => `/acceptance/dest/submit-${name}/landing.html`;
+    const ran = (label) => { document.documentElement.dataset.acceptanceHandler = label; };
+    const loginForm = document.getElementById("login-form");
+    const validated = document.getElementById("validated-form");
+    const selectForm = document.getElementById("select-form");
+    loginForm.action = dest(which);
+    validated.action = dest(which);
+    selectForm.action = dest(which);
+
+    // Stack Overflow / jQuery `.trigger("submit")`: a button outside the form
+    // fills hidden fields, dispatches a submit event, then calls native submit.
+    document.getElementById("openid-buttons").addEventListener("click", (event) => {
+      if (!event.target.closest("[data-provider]")) return;
+      document.getElementById("oauth_server").value = "https://accounts.google.com/o/oauth2/auth";
+      ran(`outside:${which}`);
+      if (which === "outside-sync") {
+        if (loginForm.dispatchEvent(new Event("submit", { cancelable: true }))) loginForm.submit();
+      } else if (which === "outside-request-submit") {
+        loginForm.requestSubmit();
+      } else if (which === "outside-microtask") {
+        Promise.resolve().then(() => loginForm.submit());
+      } else if (which === "outside-timeout-50") {
+        setTimeout(() => loginForm.submit(), 50);
+      }
+    });
+
+    // Validation libraries: prevent the native submit, validate, submit.
+    validated.addEventListener("submit", (event) => {
+      ran(`submit-event:${which}`);
+      if (which === "native-submit") return;
+      event.preventDefault();
+      if (which === "validate-sync") validated.submit();
+      else if (which === "validate-timeout-0") setTimeout(() => validated.submit(), 0);
+    });
+
+    // Legacy `<a href="#" onclick="form.submit(); return false">`.
+    document.getElementById("link-submit").addEventListener("click", (event) => {
+      event.preventDefault();
+      ran(`link:${which}`);
+      if (which === "link-onclick-sync") validated.submit();
+    });
+
+    // Auto-submit on change (sort/filter pickers).
+    document.getElementById("auto-select").addEventListener("change", () => {
+      ran(`select:${which}`);
+      if (which === "select-onchange-sync") selectForm.submit();
+    });
+  </script>
+</body>
+</html>

@@ -536,6 +536,78 @@ describe("adaptive scoring", () => {
       expect(await getEffectiveThresholdAdjustment("unknown.com")).toBe(0);
     });
 
+    it.each([
+      ["string", "5"],
+      ["NaN", Number.NaN],
+      ["Infinity", Number.POSITIVE_INFINITY],
+      ["boolean", true],
+      ["object", { adjustment: 5 }],
+      ["null", null],
+    ])("getEffectiveThresholdAdjustment returns 0 for a corrupt stored adjustment (%s) (#832)", async (_label, adjustment) => {
+      // A corrupt truthy non-number would flow into `base + adaptiveAdjustment`
+      // and NaN-poison the block threshold (fail-open). Must degrade to 0.
+      const key = "sentinelsuite:adaptive_scores_v1";
+      const { chrome } = createChromeMock({
+        [key]: { "evil.example": { domain: "evil.example", adjustment } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { getEffectiveThresholdAdjustment } = await import(
+        "../extension/src/shared/adaptive_scoring"
+      );
+
+      expect(await getEffectiveThresholdAdjustment("evil.example")).toBe(0);
+    });
+
+    it("getEffectiveThresholdAdjustment returns 0 for a non-record stored entry (#832)", async () => {
+      const key = "sentinelsuite:adaptive_scores_v1";
+      const { chrome } = createChromeMock({
+        [key]: { "evil.example": 5 },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { getEffectiveThresholdAdjustment } = await import(
+        "../extension/src/shared/adaptive_scoring"
+      );
+
+      expect(await getEffectiveThresholdAdjustment("evil.example")).toBe(0);
+    });
+
+    it("getEffectiveThresholdAdjustment preserves valid adjustments (#832)", async () => {
+      // Inverted-condition guard: the corrupt-value fallback must be selective.
+      const key = "sentinelsuite:adaptive_scores_v1";
+      const { chrome } = createChromeMock({
+        [key]: {
+          "up.example": { domain: "up.example", adjustment: 5 },
+          "down.example": { domain: "down.example", adjustment: -5 },
+          "flat.example": { domain: "flat.example", adjustment: 0 },
+        },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { getEffectiveThresholdAdjustment } = await import(
+        "../extension/src/shared/adaptive_scoring"
+      );
+
+      expect(await getEffectiveThresholdAdjustment("up.example")).toBe(5);
+      expect(await getEffectiveThresholdAdjustment("down.example")).toBe(-5);
+      expect(await getEffectiveThresholdAdjustment("flat.example")).toBe(0);
+    });
+
+    it.each([
+      ["string", "5", 0],
+      ["NaN", Number.NaN, 0],
+      ["Infinity", Number.POSITIVE_INFINITY, 0],
+      ["undefined", undefined, 0],
+      ["null", null, 0],
+      ["valid positive", 12, 12],
+      ["valid negative", -15, -15],
+      ["zero", 0, 0],
+    ])("resolveThresholdAdjustment maps %s to %s (#832)", async (_label, value, expected) => {
+      const { resolveThresholdAdjustment } = await import(
+        "../extension/src/shared/adaptive_scoring"
+      );
+
+      expect(resolveThresholdAdjustment(value)).toBe(expected);
+    });
+
     it("clearAdaptiveScores empties storage", async () => {
       const key = "sentinelsuite:adaptive_scores_v1";
       const { chrome } = createChromeMock({

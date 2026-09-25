@@ -206,8 +206,8 @@ const cachedModeReady = loadCachedDefaultMode();
 // Prune stale / over-cap OAuth flows. `activeTabId`, when given, is NEVER pruned:
 // the flow currently being created or updated must survive even if it is itself
 // past max-age (the user lingered on a consent page) or the oldest under the size
-// cap — pruning it would drop initiatorUrl (#207) and expectedCallbackDomain (#324),
-// weakening redirect-mismatch detection. Does NOT persist; the caller owns the
+// cap — pruning it would drop expectedCallbackDomain (#324), weakening
+// redirect-mismatch detection. Does NOT persist; the caller owns the
 // single persistMap so an authorize commit writes session storage once. (#366)
 function pruneStaleOAuthFlows(activeTabId?: number): void {
   const now = Date.now();
@@ -230,7 +230,6 @@ function pruneStaleOAuthFlows(activeTabId?: number): void {
 function processOAuthNavigation(
   tabId: number,
   url: string,
-  initiatorUrl: string,
   isUserTyped: boolean,
 ): void {
   const existingFlow = oauthFlowByTab.get(tabId);
@@ -308,7 +307,7 @@ function processOAuthNavigation(
   // benefit. A provider chaining multiple /authorize hops updates a flow in place
   // and would otherwise never trigger cleanup. `tabId` is passed so THIS tab's flow
   // is never pruned, even if it is itself past max-age (lingering consent) — so the
-  // in-place update below keeps its initiatorUrl/expectedCallbackDomain. (#366)
+  // in-place update below keeps its expectedCallbackDomain. (#366)
   pruneStaleOAuthFlows(tabId);
 
   const redirectUri = extractRedirectUri(url);
@@ -329,22 +328,14 @@ function processOAuthNavigation(
     // WIPE the domain the first URL established. Without this, an injected second
     // OAuth URL would reset expectedCallbackDomain to "" and isUnexpectedCallback
     // would then pass any callback unconditionally. (#324 / disc#4)
-    existingFlow.consentUrl = url;
     existingFlow.phase = "consent";
     if (expectedCallbackDomain) {
       existingFlow.expectedCallbackDomain = expectedCallbackDomain;
     }
-    // initiatorUrl and startedAt are intentionally kept from the original flow: a
-    // second authorization URL is treated as a continuation of the same flow, and
-    // initiatorUrl is display-only (not consulted by isUnexpectedCallback).
+    // startedAt is intentionally kept from the original flow: a second
+    // authorization URL is treated as a continuation of the same flow.
   } else {
     const flow: OAuthFlowState = {
-      // The page that initiated the flow — the URL committed BEFORE this consent
-      // navigation. Passed in from onCommittedHandler, which captures it before
-      // overwriting lastUrlByTab; re-reading the map here would yield the consent
-      // URL itself. (#207)
-      initiatorUrl,
-      consentUrl: url,
       expectedCallbackDomain,
       startedAt: Date.now(),
       phase: "redirect",
@@ -1147,14 +1138,13 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   }
 
   // --- OAuth flow tracking ---
-  // Pass prevUrl (captured above, before the lastUrlByTab overwrite) so a new flow's
-  // initiatorUrl is the initiating page, not the consent URL; and whether this commit
-  // was user-initiated address entry (typed / bookmark / address-bar). A real OAuth
-  // callback arrives via a redirect, a link click, or a form submit — never a typed
-  // URL — so excluding ONLY the user-typed transitions stops a benign typed/bookmarked
-  // ?code= page from tripping a false redirect-mismatch, while still accepting
-  // link-click and gesture-driven JS callbacks (which carry no redirect qualifier). (#207)
-  processOAuthNavigation(details.tabId, details.url, prevUrl ?? "", isUserTyped);
+  // Pass whether this commit was user-initiated address entry (typed / bookmark /
+  // address-bar). A real OAuth callback arrives via a redirect, a link click, or a
+  // form submit — never a typed URL — so excluding ONLY the user-typed transitions
+  // stops a benign typed/bookmarked ?code= page from tripping a false
+  // redirect-mismatch, while still accepting link-click and gesture-driven JS
+  // callbacks (which carry no redirect qualifier). (#207)
+  processOAuthNavigation(details.tabId, details.url, isUserTyped);
 
   // Record a redirect commit after any explicit-boundary clear and before the
   // history-traversal early return. A forward_back redirect begins a fresh
@@ -1163,8 +1153,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     redirectChainTracker.recordHop(
       details.tabId,
       details.url,
-      now,
-      details.transitionType
+      now
     );
   }
 
@@ -1217,7 +1206,6 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
   const entry = {
     url: details.url,
     ...(prevUrl !== undefined ? { prevUrl } : {}),
-    transitionType: details.transitionType,
     qualifiers,
     ts: now,
     allowedAtCommit
@@ -1362,12 +1350,14 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   onRemovedHandler(tabId);
 });
 function onRemovedHandler(tabId: number): void {
-  // clearPendingTabState (below) deletes this tab's pending rollback/forward entries; an
+  // swState.deleteTab (below) deletes this tab's pending rollback/forward entries; an
   // in-flight send's callback then finds the slot gone and (error: leaves it; success:
   // identity-mismatch) never re-inserts a zombie for the dead tab. (#323/disc#7)
   void clearTabIcon(tabId); // fire-and-forget: blank is chain-ordered (#272)
   const childEntry = childWindowByTab.get(tabId);
   if (childEntry) {
+    // Retire the child before notifying its opener, even if sendMessage throws.
+    // The centralized cleanup below may safely repeat this Map.delete. (#803)
     childWindowByTab.delete(tabId);
     const age = Date.now() - childEntry.createdAt;
     // Only notify the opener if the child actually wrote to opener.location.
@@ -1386,20 +1376,9 @@ function onRemovedHandler(tabId: number): void {
     }
   }
 
-  allowUntilByTab.delete(tabId);
-  gestureUntilByTab.delete(tabId);
-  allowStartedByTab.delete(tabId);
-  allowTargetByTab.delete(tabId);
-  userNavContextUntilByTab.delete(tabId);
-  suppressUntilByTab.delete(tabId);
-  rollbackReturnByTab.delete(tabId);
-  typedOriginByTab.delete(tabId);
-  redirectChainTracker.deleteTab(tabId);
-  oauthFlowByTab.delete(tabId);
-  clearPendingTabState(tabId);
-  lastUrlByTab.delete(tabId);
-  // Batch persist all cleanup in one storage write
-  swState.persistAll();
+  // Centralize the remaining per-tab cleanup and its batch persist. The early
+  // child deletion above preserves the original failure-path ordering. (#803)
+  swState.deleteTab(tabId);
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {

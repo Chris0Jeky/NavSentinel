@@ -7,6 +7,7 @@ import {
   jsBehaviorInstrumentationEnabled,
 } from "@navsentinel/js-behavior-monitor";
 import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
+import { looksLikeCommand } from "./command_keywords";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
@@ -976,33 +977,9 @@ window.addEventListener(
   true
 );
 
-// --- Clipboard API command keyword detection ---
-
-// NOTE: Keep this list in sync with COMMAND_KEYWORDS in clickfix_detector.ts
-const COMMAND_KEYWORDS = [
-  // Windows shells and scripting
-  "powershell", "cmd /", "cmd.exe", "mshta", "msiexec", "certutil", "bitsadmin",
-  "rundll32", "regsvr32", "wscript", "cscript",
-  // Windows LOLBins
-  "forfiles", "pcalua", "schtasks", "installutil",
-  // Unix/macOS shells
-  "curl ", "wget ", "bash", "sh ", "/bin/", "osascript",
-  // PowerShell cmdlets and patterns
-  "invoke-", "iex ", "iex(", "iwr ", "start-process",
-  "downloadstring", "downloadfile", "new-object", "system.net",
-  "frombase64", "base64", "-encodedcommand", "-enc ",
-];
-
-function textLooksLikeCommand(text: string): boolean {
-  if (!text || text.length < 5) return false;
-  const lower = text.toLowerCase();
-  for (const kw of COMMAND_KEYWORDS) {
-    if (lower.includes(kw)) return true;
-  }
-  return false;
-}
-
 // --- Clipboard API patching ---
+// (Command keyword matching lives in ./command_keywords, shared with the
+// isolated-world detector and tests so the three copies cannot drift. #810)
 
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
@@ -1014,7 +991,7 @@ function patchClipboard(): void {
         // only send the bridge message after the write succeeds so that
         // failed writes (permission denied, no user gesture) do not cause
         // false ClickFix detections.
-        const cmdLike = textLooksLikeCommand(data);
+        const cmdLike = looksLikeCommand(data);
         const len = data.length;
         return nativeClipboardWriteText!(data).then((result) => {
           postToIsolated("ns-clipboard-write", {
@@ -1052,7 +1029,7 @@ function patchClipboard(): void {
                     postToIsolated("ns-clipboard-write", {
                       ts: nowMs(),
                       contentLength: text.length,
-                      looksLikeCommand: textLooksLikeCommand(text),
+                      looksLikeCommand: looksLikeCommand(text),
                     });
                   }).catch(() => {});
                 }).catch(() => {});
@@ -1379,12 +1356,12 @@ try {
       postToIsolated("ns-clipboard-write", {
         ts: nowMs(),
         contentLength: selText.length || -1,
-        looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+        looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
       });
       if (debug) {
         console.debug("[NavSentinel] document.execCommand('copy') intercepted", {
           length: selText.length,
-          looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+          looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
         });
       }
     }

