@@ -120,6 +120,26 @@ describe("credential modal trusted input gating (#826)", () => {
     await promise;
   });
 
+  it("ignores an untrusted Tab keydown: a synthetic Tab cannot move focus between actions", async () => {
+    const promise = showCredentialModal(minimalSpec());
+    vi.runAllTimers();
+
+    // Focus sits on the last action. A synthetic Tab from page script would
+    // otherwise wrap focus onto the first action ("Allow"), so the user's next
+    // real Enter or Space would activate a button they did not choose. Direct
+    // .focus() through the open shadow root is a separate route (#894).
+    const buttons = getButtons();
+    buttons[1]!.focus();
+    const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    dispatchUntrusted(window, tab);
+
+    expect(tab.defaultPrevented).toBe(false);
+    expect(getShadow()!.activeElement).toBe(buttons[1]);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await promise;
+  });
+
   it("still resolves on trusted input (shim sanity)", async () => {
     const promise = showCredentialModal(minimalSpec());
     vi.runAllTimers();

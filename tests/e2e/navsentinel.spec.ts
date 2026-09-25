@@ -541,7 +541,7 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
 
       await waitForNavSentinelBridge(page);
 
-      const benignPopupPromise = context.waitForEvent("page", { timeout: 5000 }).catch(() => null);
+      const benignPopupPromise = page.waitForEvent("popup", { timeout: 5000 }).catch(() => null);
       await page.focus(".result-link");
       await page.keyboard.press("Enter");
       const benignPopup = await benignPopupPromise;
@@ -561,7 +561,7 @@ test("RW-01 search result overlay swap blocks deceptive new tab @regression", as
       const box = await card.boundingBox();
       expect(box, "Expected the sponsored result card to be visible").toBeTruthy();
 
-      const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
+      const popupPromise = page.waitForEvent("popup", { timeout: 1500 }).catch(() => null);
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
       const popup = await popupPromise;

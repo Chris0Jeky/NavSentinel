@@ -1,4 +1,5 @@
 import type { EventKind, EventLogEntry } from "../shared/storage";
+import { normalizeEventPageSite } from "../shared/storage";
 import { isKnownReasonCode } from "../shared/explanations";
 import { isJournalReasonCode } from "./evidence_reasons";
 
@@ -13,6 +14,8 @@ export const EVIDENCE_KINDS = [
 ] as const satisfies readonly EventKind[];
 const kinds = new Set<string>(EVIDENCE_KINDS);
 export const MAX_EVIDENCE_EVENTS = 5000;
+/** Scores above this are corrupt, not diminished NRS; same bound as the popup gauge. */
+const MAX_PLAUSIBLE_EVENT_SCORE = 1000;
 
 export interface EvidenceEvent {
   id: string;
@@ -35,11 +38,10 @@ export interface EvidenceExport {
 
 /** Accept hostname metadata only: never turn an arbitrary URL into exportable text. */
 export function evidenceHostname(value: unknown): string | null {
-  if (typeof value !== "string" || value.length > 253 || !value.length) return null;
-  const host = value.toLowerCase();
-  if (!/^[a-z0-9.-]+$/.test(host)) return null;
-  if (host.split(".").some(label => !label.length || label.length > 63 || label.startsWith("-") || label.endsWith("-"))) return null;
-  return host;
+  // The portable format remains stricter than backup import about whitespace.
+  // Reuse the hostname/IP validator rather than adding a second URL parser.
+  if (typeof value !== "string" || value !== value.trim()) return null;
+  return normalizeEventPageSite(value) ?? null;
 }
 
 /**
@@ -64,10 +66,17 @@ export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (co
         ? [...new Set(entry.reasons.filter(code => typeof code === "string" && isReasonCode(code)))].slice(0, 16)
         : [],
     };
-    if (typeof entry.score === "number" && Number.isFinite(entry.score) && entry.score >= 0 && entry.score <= 100) event.score = entry.score;
+    // computeNRS applies diminishing returns above 100 instead of clamping, so real
+    // blocks journal scores such as 104. Show them as 100, as the popup gauge does
+    // (#715), and keep the export inside the Lab importer's 0-100 range. (#883)
+    if (typeof entry.score === "number" && Number.isFinite(entry.score) && entry.score >= 0 && entry.score <= MAX_PLAUSIBLE_EVENT_SCORE) {
+      event.score = Math.min(100, entry.score);
+    }
     events.push(event);
   }
-  return events;
+  // Retention remains insertion-bounded above. Within that retained snapshot,
+  // imported timestamps determine chronology; stable ties keep insertion order.
+  return events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {

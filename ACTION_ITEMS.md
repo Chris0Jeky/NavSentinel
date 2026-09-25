@@ -220,10 +220,11 @@ live.
 - **AI-37** — PR #599 (issue #523), branch
   `fix/issue523-unverified-clipboard-cap`. **Policy accepted 2026-09-25**
   (D-2026-09-25-R): Chris accepted unverified-only latest-value coalescing, and
-  the PR merges on D-2026-09-25-Q's automated gates. What remains open is the
-  bridge queue-pressure Chrome check (a benign clipboard write must not suppress
-  the trusted fake-verification warning). It joins the AI-47 pass on the release
-  build, with the procedure in `docs/agentic/GATE3_GUIDES.md` once #599 lands.
+  #599 merged on D-2026-09-25-Q's automated gates as
+  `d4b1acf5843605f519ffe1732050a2c1bb501ee1`. What remains open is the bridge
+  queue-pressure Chrome check (a benign clipboard write must not suppress the
+  trusted fake-verification warning). It joins the AI-47 pass on the release
+  build, with the procedure in `docs/agentic/GATE3_GUIDES.md` on `main`.
   Human result: **OPEN — not run**.
 ### Integration closeout receipt
 

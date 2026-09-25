@@ -17,11 +17,20 @@ describe("minimized extension evidence", () => {
   it("uses browser-associated page hostname and preserves unknown endpoints as null", () => {
     expect(projectEvidence([event({ pageSite: "TOP.EXAMPLE", destHost: "https://target.example/secret" })])[0]).toMatchObject({ sourceSite: "top.example", destinationSite: null });
   });
-  it("rejects malformed records and omits non-finite/out-of-range scores", () => {
-    const rows = projectEvidence([event({ ts: NaN }), event({ ts: 1e30 }), event({ kind: "invented" as EventLogEntry["kind"] }), ...[NaN, Infinity, -1, 101].map(score => event({ score })), event({ score: 0 })]);
-    expect(rows).toHaveLength(5);
-    expect(rows.slice(0, 4).every(row => row.score === undefined)).toBe(true);
-    expect(rows[4]?.score).toBe(0);
+  it("rejects malformed records and omits non-finite, negative and implausible scores", () => {
+    const rows = projectEvidence([event({ ts: NaN }), event({ ts: 1e30 }), event({ kind: "invented" as EventLogEntry["kind"] }), ...[NaN, Infinity, -1, 1000.01, 5000].map(score => event({ score })), event({ score: 0 })]);
+    expect(rows).toHaveLength(6);
+    expect(rows.slice(0, 5).every(row => row.score === undefined)).toBe(true);
+    expect(rows[5]?.score).toBe(0);
+  });
+  it("shows real scores above 100 as 100 instead of dropping them (#883)", () => {
+    // computeNRS applies diminishing returns above 100 rather than clamping, so
+    // the riskiest blocks journal scores such as 104. The popup gauge (#715)
+    // clamps the same way, and the Lab importer accepts only 0-100.
+    const rows = projectEvidence([100.01, 104, 150, 1000].map(score => event({ score })));
+    expect(rows.map(row => row.score)).toEqual([100, 100, 100, 100]);
+    expect(summarizeEvidence(rows).scored).toBe(4);
+    expect(createEvidenceExport(rows, new Date(0)).events.map(row => row.score)).toEqual([100, 100, 100, 100]);
   });
   it("bounds history and does not mutate stored entries", () => {
     const rows = Array.from({ length: MAX_EVIDENCE_EVENTS + 2 }, (_, i) => event({ ts: i }));
