@@ -1,6 +1,6 @@
 import { computeCDS } from "../shared/scoring";
 import { appendEvent, appendPromptOutcome, getPromptOutcomes, getNavSettings, onNavSettingsChange, buildNavOutcomeFeatures, type EventLogEntry, type NavSettings, type NavOutcomeFeatures } from "../shared/storage";
-import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment } from "../shared/adaptive_scoring";
+import { ADAPTIVE_SCORES_KEY, getEffectiveThresholdAdjustment, resolveThresholdAdjustment } from "../shared/adaptive_scoring";
 import {
   analyzeOutcomesForPair,
   isPairOnCooldown,
@@ -175,7 +175,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes[ADAPTIVE_SCORES_KEY]) {
     const newScores = changes[ADAPTIVE_SCORES_KEY].newValue;
     const domain = siteKeyFromLocation();
-    adaptiveAdjustment = (newScores && typeof newScores === "object" && newScores[domain]?.adjustment) ?? 0;
+    // Finite-guard (#832): a corrupt truthy non-number would NaN-poison the
+    // block threshold (fail-open). resolveThresholdAdjustment degrades to 0.
+    const entry =
+      newScores && typeof newScores === "object"
+        ? (newScores as Record<string, { adjustment?: unknown }>)[domain]
+        : undefined;
+    adaptiveAdjustment = resolveThresholdAdjustment(entry?.adjustment);
   }
 });
 

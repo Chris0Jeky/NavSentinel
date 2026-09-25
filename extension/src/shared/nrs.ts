@@ -208,7 +208,12 @@ export function computeNRS(cdsResult: ScoreResult, navCtx: NavigationContext): N
   }
 
   if (navCtx.redirectViaKnownRedirector) {
-    const redirectorHops = navCtx.knownRedirectorHops ?? 1;
+    // Hops arrive over the SW message boundary; fall back to the documented
+    // 1-hop default for any non-positive/non-integer value so a corrupt count
+    // can neither NaN-poison the NRS nor subtract from it (#792 follow-up).
+    const rawHops = navCtx.knownRedirectorHops;
+    const redirectorHops =
+      typeof rawHops === "number" && Number.isInteger(rawHops) && rawHops > 0 ? rawHops : 1;
     const redirectorScore = Math.min(redirectorHops * NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR, NRS_WEIGHT_REDIRECT_KNOWN_REDIRECTOR_CAP);
     nrs += redirectorScore;
     nrsFactors.push("nrs_redirect_via_known_redirector");

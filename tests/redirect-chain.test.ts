@@ -145,14 +145,14 @@ describe("isKnownRedirector", () => {
 describe("RedirectChainTracker", () => {
   it("returns null for a single hop (no chain)", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://example.com/", 1000, "typed");
+    tracker.recordHop(1, "https://example.com/", 1000);
     expect(tracker.getChainInfo(1, 1000)).toBeNull();
   });
 
   it("records a 2-hop chain", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
-    tracker.recordHop(1, "https://b.com/", 2000, "link");
+    tracker.recordHop(1, "https://a.com/", 1000);
+    tracker.recordHop(1, "https://b.com/", 2000);
     const info = tracker.getChainInfo(1, 2000);
     expect(info).not.toBeNull();
     expect(info!.depth).toBe(2);
@@ -161,11 +161,11 @@ describe("RedirectChainTracker", () => {
 
   it("records a 5-hop chain through known redirectors", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://start.com/", 1000, "link");
-    tracker.recordHop(1, "https://bit.ly/abc", 2000, "link");
-    tracker.recordHop(1, "https://track.ads.com/go", 3000, "link");
-    tracker.recordHop(1, "https://middle.com/page", 4000, "link");
-    tracker.recordHop(1, "https://final.com/landing", 5000, "link");
+    tracker.recordHop(1, "https://start.com/", 1000);
+    tracker.recordHop(1, "https://bit.ly/abc", 2000);
+    tracker.recordHop(1, "https://track.ads.com/go", 3000);
+    tracker.recordHop(1, "https://middle.com/page", 4000);
+    tracker.recordHop(1, "https://final.com/landing", 5000);
     const info = tracker.getChainInfo(1, 5000);
     expect(info).not.toBeNull();
     expect(info!.depth).toBe(5);
@@ -175,8 +175,8 @@ describe("RedirectChainTracker", () => {
 
   it("starts a new chain when hops are outside the 10s window", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
-    tracker.recordHop(1, "https://b.com/", 12000, "link"); // 11s later
+    tracker.recordHop(1, "https://a.com/", 1000);
+    tracker.recordHop(1, "https://b.com/", 12000); // 11s later
     const info = tracker.getChainInfo(1, 12000);
     // Should be a new chain with just one hop
     expect(info).toBeNull();
@@ -185,7 +185,7 @@ describe("RedirectChainTracker", () => {
   it("caps chain at 10 hops but preserves the chain signal", () => {
     const tracker = new RedirectChainTracker();
     for (let i = 0; i < 12; i++) {
-      tracker.recordHop(1, `https://hop${i}.com/`, 1000 + i * 500, "link");
+      tracker.recordHop(1, `https://hop${i}.com/`, 1000 + i * 500);
     }
     const info = tracker.getChainInfo(1, 20000);
     expect(info).not.toBeNull();
@@ -195,10 +195,10 @@ describe("RedirectChainTracker", () => {
 
   it("prunes chains older than 15 seconds", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
-    tracker.recordHop(1, "https://b.com/", 2000, "link");
+    tracker.recordHop(1, "https://a.com/", 1000);
+    tracker.recordHop(1, "https://b.com/", 2000);
     // Record on a different tab at t=20000 to trigger pruning
-    tracker.recordHop(2, "https://c.com/", 20000, "link");
+    tracker.recordHop(2, "https://c.com/", 20000);
     // Chain for tab 1 should be pruned (last hop at 2000, now 20000 = 18s > 15s)
     expect(tracker.getChainInfo(1, 20000)).toBeNull();
   });
@@ -206,8 +206,8 @@ describe("RedirectChainTracker", () => {
   it("prunes a stale chain on read and exposes the latest-hop expiry", () => {
     const backing = new Map<number, RedirectChain>();
     const tracker = new RedirectChainTracker(backing);
-    tracker.recordHop(1, "https://a.com/", 1_000, "link");
-    tracker.recordHop(1, "https://b.com/", 2_000, "link");
+    tracker.recordHop(1, "https://a.com/", 1_000);
+    tracker.recordHop(1, "https://b.com/", 2_000);
 
     expect(tracker.getChainInfo(1, 16_999)?.expiresAt).toBe(17_000);
     expect(tracker.getChainInfo(1, 17_000)).toBeNull();
@@ -223,7 +223,7 @@ describe("RedirectChainTracker", () => {
     const tracker = new RedirectChainTracker(backing);
 
     // recordHop on a different tab at t=21000 triggers pruneStale (21000 - 1000 = 20s > 15s).
-    tracker.recordHop(1, "https://example.com/", 21000, "link");
+    tracker.recordHop(1, "https://example.com/", 21000);
 
     expect(backing.has(99)).toBe(false); // empty chain pruned by startedAt
     expect(backing.has(1)).toBe(true);   // active chain kept
@@ -231,17 +231,17 @@ describe("RedirectChainTracker", () => {
 
   it("cleans up on deleteTab", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
-    tracker.recordHop(1, "https://b.com/", 2000, "link");
+    tracker.recordHop(1, "https://a.com/", 1000);
+    tracker.recordHop(1, "https://b.com/", 2000);
     tracker.deleteTab(1);
     expect(tracker.getChainInfo(1, 21000)).toBeNull();
   });
 
   it("tracks chains independently per tab", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
-    tracker.recordHop(1, "https://b.com/", 2000, "link");
-    tracker.recordHop(2, "https://x.com/", 1500, "link");
+    tracker.recordHop(1, "https://a.com/", 1000);
+    tracker.recordHop(1, "https://b.com/", 2000);
+    tracker.recordHop(2, "https://x.com/", 1500);
     expect(tracker.getChainInfo(1, 2000)!.depth).toBe(2);
     expect(tracker.getChainInfo(2, 1500)).toBeNull(); // only 1 hop
   });
@@ -250,20 +250,20 @@ describe("RedirectChainTracker", () => {
     const tracker = new RedirectChainTracker();
     // Add 105 tabs
     for (let i = 0; i < 105; i++) {
-      tracker.recordHop(i, `https://tab${i}.com/`, 1000 + i, "link");
+      tracker.recordHop(i, `https://tab${i}.com/`, 1000 + i);
     }
     expect(tracker.size).toBeLessThanOrEqual(100);
   });
 
   it("hasActiveChain returns true within chain window", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
+    tracker.recordHop(1, "https://a.com/", 1000);
     expect(tracker.hasActiveChain(1, 5000)).toBe(true); // 4s < 10s window
   });
 
   it("hasActiveChain returns false outside chain window", () => {
     const tracker = new RedirectChainTracker();
-    tracker.recordHop(1, "https://a.com/", 1000, "link");
+    tracker.recordHop(1, "https://a.com/", 1000);
     expect(tracker.hasActiveChain(1, 12000)).toBe(false); // 11s > 10s window
   });
 

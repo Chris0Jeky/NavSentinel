@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Acceptance - held new-tab navigation</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    #play { padding: 16px 20px; font-size: 18px; }
+    #trap { position: fixed; inset: 0; opacity: 0.01; z-index: 999999; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Held new-tab navigation (acceptance fixture)</h1>
+  <p>A nearly transparent new-tab anchor covers the page. Its cross-site
+     destination carries a unique marker in its path, query and fragment.</p>
+  <button id="play">Play</button>
+  <a id="trap" target="_blank"></a>
+  <script>
+    // The destination is the other loopback hostname, so the hop is cross-site.
+    // The unique marker is injected by the procedure, never carried in this
+    // page's own URL, so only the destination path/query/fragment holds it.
+    window.setAcceptanceMarker = (marker) => {
+      const otherHost = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+      document.getElementById("trap").href =
+        `http://${otherHost}:${location.port}/acceptance/dest/${marker}/landing.html?probe=${marker}#frag-${marker}`;
+    };
+  </script>
+</body>
+</html>
