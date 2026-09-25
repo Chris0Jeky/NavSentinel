@@ -480,7 +480,11 @@ export class AcceptanceSession {
     // pending-decision controller marks #pendingDecisions only after its first
     // refresh settles, so a hidden host is then a rendered empty state rather
     // than a not-yet-rendered one (#884).
-    await client.waitFor("document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim()) && document.getElementById('pendingDecisions')?.dataset.pendingDecisionsReady === 'true'", 8000);
+    // Baseline attribution deliberately loads older dist builds whose popup
+    // predates this marker. Preserve their original site-render wait.
+    const olderBuildBaseline = Boolean(process.env.EXTENSION_PATH && process.env.NAVSENTINEL_EXPECTED_GUARD);
+    const siteReady = "document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim())";
+    await client.waitFor(olderBuildBaseline ? siteReady : `${siteReady} && document.getElementById('pendingDecisions')?.dataset.pendingDecisionsReady === 'true'`, 8000);
     // Chrome may need time to accept closing and reopening a toolbar popup in
     // the next procedure step, independently of this page's DOM readiness.
     await new Promise((resolve) => setTimeout(resolve, 400));
