@@ -11,8 +11,28 @@ afterEach(() => {
 });
 
 describe("suite-settings worker error propagation (#891)", () => {
-  it("surfaces a structured worker rejection to the extension-page caller", async () => {
-    const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: "invalid" });
+  it.each(["invalid", "unauthorized"])(
+    "surfaces a structured %s rejection to the extension-page caller",
+    async (reason) => {
+      const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: reason });
+      vi.stubGlobal("chrome", {
+        runtime: { sendMessage },
+      } as unknown as typeof globalThis.chrome);
+
+      const { updateSuiteSettings } = await import("../extension/src/shared/storage");
+
+      await expect(
+        updateSuiteSettings({ nav: { debug: true } })
+      ).rejects.toThrow(reason);
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: "ns-suite-settings-update",
+        patch: { nav: { debug: true } },
+      });
+    }
+  );
+
+  it("uses the generic delivery error when a structured rejection has no reason", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: "" });
     vi.stubGlobal("chrome", {
       runtime: { sendMessage },
     } as unknown as typeof globalThis.chrome);
@@ -21,11 +41,7 @@ describe("suite-settings worker error propagation (#891)", () => {
 
     await expect(
       updateSuiteSettings({ nav: { debug: true } })
-    ).rejects.toThrow("invalid");
-    expect(sendMessage).toHaveBeenCalledWith({
-      type: "ns-suite-settings-update",
-      patch: { nav: { debug: true } },
-    });
+    ).rejects.toThrow("suite-settings update failed");
   });
 
   it("keeps the rejection reason at the service-worker message boundary", () => {
