@@ -1214,6 +1214,23 @@ function showRollbackPrompt(url: string): void {
   });
 }
 
+/**
+ * Commit-time URL of the current document from NavigationTiming. Same-document
+ * `pushState` rewrites `location.href` without touching this entry, so it is
+ * the correct staleness basis where the live href can be quietly rewritten
+ * out from under a delivery (#855). Empty when unavailable (caller falls back
+ * to the live href).
+ */
+function currentCommittedHref(): string {
+  try {
+    const entries = performance.getEntriesByType("navigation");
+    const name = entries.length > 0 ? (entries[0] as PerformanceNavigationTiming).name : "";
+    return typeof name === "string" ? name : "";
+  } catch {
+    return "";
+  }
+}
+
 function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
   if (!isTopFrame()) return;
@@ -1223,7 +1240,9 @@ function handleRollback(url: string, prevUrl?: string): void {
   // and strands the tab with its forward offer lost). Fragment-stripped, so a
   // same-document anchor jump cannot invalidate a legitimate rollback. Placed
   // here so both the push and the ns-check-rollback poll paths are covered.
-  if (isStaleDelivery(url, location.href)) return;
+  // Compared against the commit-time URL (#855): a quiet same-document query
+  // push must not void a legitimate rollback the way a real navigation does.
+  if (isStaleDelivery(url, location.href, currentCommittedHref() || undefined)) return;
   const referrerTarget = (() => {
     if (!document.referrer || document.referrer === location.href) return "";
     try {

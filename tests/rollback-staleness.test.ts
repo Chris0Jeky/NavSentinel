@@ -55,7 +55,9 @@ describe("rollback/forward staleness wiring (#774)", () => {
     const source = fs.readFileSync(path.join(contentRoot, "capture_isolated.ts"), "utf8");
 
     expect(source).toContain('from "./rollback_staleness"');
-    expect(source).toContain("if (isStaleDelivery(url, location.href)) return;");
+    expect(source).toContain(
+      "if (isStaleDelivery(url, location.href, currentCommittedHref() || undefined)) return;",
+    );
   });
 
   it("guards the forward-offer listener against moved-on and already-there races", () => {
@@ -72,5 +74,42 @@ describe("rollback/forward staleness wiring (#774)", () => {
 
     expect(source).toContain("type: \"ns-forward-offer\"");
     expect(source).toContain("forward.returnUrl !== undefined ? { returnUrl: forward.returnUrl } : {}");
+  });
+});
+
+describe("isStaleDelivery commit basis (#855)", () => {
+  it("stays fresh when only the live href drifted (quiet same-document pushState)", () => {
+    // The document never navigated: the commit entry still matches the
+    // rollback target even though location.href picked up a pushed query.
+    expect(
+      isStaleDelivery("https://a.test/x", "https://a.test/x?pushed=1", "https://a.test/x"),
+    ).toBe(false);
+  });
+
+  it("tolerates a fragment on the commit entry", () => {
+    expect(
+      isStaleDelivery("https://a.test/x", "https://a.test/x?pushed=1", "https://a.test/x#s"),
+    ).toBe(false);
+  });
+
+  it("goes stale when the commit entry moved on (real navigation)", () => {
+    expect(
+      isStaleDelivery("https://a.test/x", "https://b.test/y", "https://b.test/y"),
+    ).toBe(true);
+  });
+
+  it("falls back to the live href when no commit entry is available", () => {
+    expect(isStaleDelivery("https://a.test/x", "https://a.test/x?pushed=1", "")).toBe(true);
+    expect(isStaleDelivery("https://a.test/x", "https://a.test/x", "")).toBe(false);
+    expect(isStaleDelivery("https://a.test/x", "https://a.test/x?pushed=1")).toBe(true);
+  });
+});
+
+describe("rollback commit-basis wiring (#855)", () => {
+  it("reads the commit-time URL from NavigationTiming", () => {
+    const source = fs.readFileSync(path.join(contentRoot, "capture_isolated.ts"), "utf8");
+
+    expect(source).toContain("function currentCommittedHref()");
+    expect(source).toContain('getEntriesByType("navigation")');
   });
 });
