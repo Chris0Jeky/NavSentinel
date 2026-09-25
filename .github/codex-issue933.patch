@@ -1,0 +1,256 @@
+diff --git a/extension/src/content/main_guard.ts b/extension/src/content/main_guard.ts
+index d302927..3e32247 100644
+--- a/extension/src/content/main_guard.ts
++++ b/extension/src/content/main_guard.ts
+@@ -13,7 +13,12 @@ import {
+   isFloodableAlertType,
+ } from "./bridge_outbound";
+ import { looksLikeCommand } from "./command_keywords";
+-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
++import {
++  createBlockedActionIdAllocator,
++  enforceMapSizeCap,
++  pruneTimestampWindow,
++  shouldEmitRapidPushState,
++} from "./main_guard_helpers";
+ import {
+   PUSHSTATE_GESTURE_WINDOW_MS,
+   PUSHSTATE_RAPID_THRESHOLD,
+@@ -181,6 +186,8 @@ let pushStateTimestamps: number[] = [];
+ // not one per call (which would flood the priority bridge queue and drop ns-nav-blocked) (#302).
+ let lastRapidPushStateEmitAt = 0;
+ 
++const allocateBlockedActionId = createBlockedActionIdAllocator();
++
+ const blockedActions = new Map<
+   string,
+   {
+@@ -396,10 +403,6 @@ function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "n
+   return "none";
+ }
+ 
+-function makeId(): string {
+-  return `${Math.floor(nowMs())}-${Math.random().toString(16).slice(2)}`;
+-}
+-
+ function pruneBlockedActions(): void {
+   const now = nowMs();
+   for (const [id, entry] of blockedActions) {
+@@ -471,7 +474,7 @@ function registerBlockedAction(params: {
+   action: () => void;
+ }): void {
+   pruneBlockedActions();
+-  const id = makeId();
++  const id = allocateBlockedActionId();
+   blockedActions.set(id, {
+     action: params.action,
+     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
+diff --git a/extension/src/content/main_guard_helpers.ts b/extension/src/content/main_guard_helpers.ts
+index 337422d..7a1b4af 100644
+--- a/extension/src/content/main_guard_helpers.ts
++++ b/extension/src/content/main_guard_helpers.ts
+@@ -5,6 +5,22 @@
+  * covered by the Gym/E2E pushstate fixtures. (#301, #302)
+  */
+ 
++/**
++ * Create a guard-local blocked-action ID allocator (#933). The returned closure
++ * owns an unbounded BigInt sequence, so every ID in one document/guard lifetime
++ * is unique without consulting page-overridable clocks or entropy. IDs are
++ * intentionally predictable: the authenticated bridge and one-use Map entry are
++ * the authority boundary; uniqueness prevents one prompt from naming a closure
++ * that a later blocked action silently replaced.
++ */
++export function createBlockedActionIdAllocator(initialSequence = 0n): () => string {
++  let sequence = initialSequence;
++  return () => {
++    sequence += 1n;
++    return `blocked-action-${sequence}`;
++  };
++}
++
+ /**
+  * Evict the oldest entries from `map` until its size is at most `maxSize`.
+  * Map iteration is insertion-ordered, so the first key is the oldest. Returns
+diff --git a/gym/main-world-blocked-action-id-collision.html b/gym/main-world-blocked-action-id-collision.html
+index 04a7609..71546f6 100644
+--- a/gym/main-world-blocked-action-id-collision.html
++++ b/gym/main-world-blocked-action-id-collision.html
+@@ -5,6 +5,7 @@
+     <title>Blocked-action identifier collision probe</title>
+     <script>
+       window.blockedActionIdProbe = [];
++      window.blockedActionIdDropSecond = false;
+       Date.now = () => 7;
+       Math.random = () => 0;
+       const nativePostMessage = MessagePort.prototype.postMessage;
+@@ -19,6 +20,9 @@
+             url: message.url,
+             kind: message.kind,
+           });
++          if (window.blockedActionIdDropSecond && window.blockedActionIdProbe.length === 2) {
++            return;
++          }
+         }
+         return nativePostMessage.call(this, message, ...rest);
+       };
+diff --git a/tests/e2e/blocked-action-id-authority.spec.ts b/tests/e2e/blocked-action-id-authority.spec.ts
+index b5fbe09..0a2b504 100644
+--- a/tests/e2e/blocked-action-id-authority.spec.ts
++++ b/tests/e2e/blocked-action-id-authority.spec.ts
+@@ -3,7 +3,12 @@ import fs from "node:fs";
+ import os from "node:os";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
+-import { getGymBaseUrl, waitForNavSentinelBridge } from "./extension_test_utils";
++import {
++  clickToastButton,
++  getGymBaseUrl,
++  waitForNavSentinelBridge,
++  waitForToastText,
++} from "./extension_test_utils";
+ 
+ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+ const extensionPath = process.env.EXTENSION_PATH
+@@ -60,3 +65,61 @@ test("blocked actions receive distinct authority IDs under a page-controlled clo
+     fs.rmSync(userDataDir, { recursive: true, force: true });
+   }
+ });
++
++test("approving the first prompt can execute only its original blocked closure (#933) @regression", async () => {
++  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
++  const { baseUrl, gym } = await getGymBaseUrl(path.join(root, "gym"));
++  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-action-binding-"));
++  let context: BrowserContext | null = null;
++
++  try {
++    context = await chromium.launchPersistentContext(userDataDir, {
++      headless: false,
++      timeout: 60_000,
++      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
++    });
++    const page = await context.newPage();
++    await page.goto(`${baseUrl}/main-world-blocked-action-id-collision.html`, {
++      waitUntil: "domcontentloaded",
++    });
++    await waitForNavSentinelBridge(page);
++
++    const firstUrl = `${baseUrl}/index.html?authority=first`;
++    const secondUrl = `${baseUrl}/index.html?authority=second`;
++    await page.evaluate(({ first, second }) => {
++      const probeWindow = window as Window & { blockedActionIdDropSecond?: boolean };
++      // Keep the first trusted prompt visible while still registering a second
++      // closure. Before the fix, the colliding second Map.set replaced the first.
++      probeWindow.blockedActionIdDropSecond = true;
++      window.open(first, "_blank");
++      window.open(second, "_blank");
++    }, { first: firstUrl, second: secondUrl });
++
++    await expect.poll(
++      () => page.evaluate(() => (window as Window & {
++        blockedActionIdProbe?: Array<{ id: string; url?: string }>;
++      }).blockedActionIdProbe?.length ?? 0),
++      { timeout: 10_000 },
++    ).toBe(2);
++    await waitForToastText(page, "Blocked popup", 10_000);
++
++    const popupPromise = context.waitForEvent("page", { timeout: 10_000 });
++    await clickToastButton(page, "Allow once");
++    const popup = await popupPromise;
++    await popup.waitForLoadState("domcontentloaded", { timeout: 10_000 });
++
++    expect(new URL(popup.url()).searchParams.get("authority")).toBe("first");
++    await expect.poll(() => context?.pages().filter((candidate) => !candidate.isClosed()).length ?? 0)
++      .toBe(2);
++
++    const messages = await page.evaluate(() => (window as Window & {
++      blockedActionIdProbe?: Array<{ id: string; url?: string }>;
++    }).blockedActionIdProbe?.slice(0, 2) ?? []);
++    expect(messages.map((message) => message.url)).toEqual([firstUrl, secondUrl]);
++    expect(new Set(messages.map((message) => message.id)).size).toBe(2);
++  } finally {
++    await context?.close();
++    if (gym) await gym.close();
++    fs.rmSync(userDataDir, { recursive: true, force: true });
++  }
++});
+diff --git a/tests/main-guard-helpers.test.ts b/tests/main-guard-helpers.test.ts
+index 0078551..3dbf104 100644
+--- a/tests/main-guard-helpers.test.ts
++++ b/tests/main-guard-helpers.test.ts
+@@ -1,9 +1,12 @@
++import { readFileSync } from "node:fs";
++import { resolve } from "node:path";
+ import { describe, expect, it } from "vitest";
+ import {
+   enforceMapSizeCap,
+   pruneTimestampWindow,
+   shouldEmitRapidPushState,
+   gestureBranchEmissionBound,
++  createBlockedActionIdAllocator,
+ } from "../extension/src/content/main_guard_helpers";
+ // The REAL production constants (not a mirror), so the #377/F1 invariant below fails CI if a
+ // future change to any of them would let the gesture branch flood the priority buffer.
+@@ -22,6 +25,62 @@ import {
+   isFloodableAlertType,
+ } from "../extension/src/content/bridge_outbound";
+ 
++describe("createBlockedActionIdAllocator (#933)", () => {
++  it("allocates distinct monotonic IDs without consulting ambient clock or randomness", () => {
++    const originalNow = Date.now;
++    const originalRandom = Math.random;
++    Date.now = () => {
++      throw new Error("allocator must not read Date.now");
++    };
++    Math.random = () => {
++      throw new Error("allocator must not read Math.random");
++    };
++
++    try {
++      const allocate = createBlockedActionIdAllocator();
++      expect([allocate(), allocate(), allocate()]).toEqual([
++        "blocked-action-1",
++        "blocked-action-2",
++        "blocked-action-3",
++      ]);
++    } finally {
++      Date.now = originalNow;
++      Math.random = originalRandom;
++    }
++  });
++
++  it("wires blockedActions through the monotonic allocator, not a page clock or random key", () => {
++    const source = readFileSync(resolve("extension/src/content/main_guard.ts"), "utf8");
++    const start = source.indexOf("function registerBlockedAction(");
++    const end = source.indexOf("const nativeProtoOpen", start);
++    expect(start).toBeGreaterThanOrEqual(0);
++    expect(end).toBeGreaterThan(start);
++
++    const region = source.slice(start, end);
++    expect(source).toContain(
++      "const allocateBlockedActionId = createBlockedActionIdAllocator();",
++    );
++    expect(region).toContain("const id = allocateBlockedActionId();");
++    expect(region).not.toContain("Math.random");
++    expect(source).not.toContain("function makeId()");
++    expect(region.indexOf("const id = allocateBlockedActionId();")).toBeLessThan(
++      region.indexOf("blockedActions.set(id"),
++    );
++  });
++
++  it("remains collision-free beyond Number.MAX_SAFE_INTEGER", () => {
++    const allocate = createBlockedActionIdAllocator(9_007_199_254_740_991n);
++    expect(allocate()).toBe("blocked-action-9007199254740992");
++    expect(allocate()).toBe("blocked-action-9007199254740993");
++  });
++
++  it("keeps a large synchronous burst unique", () => {
++    const allocate = createBlockedActionIdAllocator();
++    const ids = Array.from({ length: 10_000 }, () => allocate());
++    expect(new Set(ids).size).toBe(ids.length);
++  });
++});
++
+ describe("enforceMapSizeCap (#301)", () => {
+   const mapOf = (n: number) => {
+     const m = new Map<number, string>();
