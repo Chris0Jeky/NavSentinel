@@ -15,8 +15,8 @@ provenance only. Detailed retired procedures moved to
 **2026-09-25, v0.5.0 integration ([`D-2026-09-25-Q`](docs/agentic/DECISIONS.md)):**
 Chris authorized browser-facing PRs to merge after automated gates (exact-head
 CI, one review, and the branded-Chrome realistic E2E and acceptance lanes). His
-manual checks become one AI-47 pass on the v0.5.0 release build, which is
-published as a GitHub pre-release. He also resolved #872: the same-tab rollback
+manual checks become one AI-47 pass on the v0.5.0 release build, planned for
+publication as a GitHub pre-release. He also resolved #872: the same-tab rollback
 notice keeps its trusted-input Proceed. #572 (SP-F-013) stays parked, and every
 AI-47 Human result stays **OPEN — not run**.
 

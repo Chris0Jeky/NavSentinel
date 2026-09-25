@@ -27,7 +27,7 @@ When a decision changes, edit it in place and date the change.
    signal. The accepted cost is that earlier receipts from that unverified
    window are dropped. #599 may merge on D-2026-09-25-Q's automated gates, and
    its owner Chrome check joins the AI-47 pass on the release build.
-2. **AI-19 (product name): decide later.** The GitHub pre-release keeps the
+2. **AI-19 (product name): decide later.** The planned GitHub pre-release will keep the
    working name. AI-19 stays open and still gates the Chrome Web Store
    submission.
 3. **AI-23 (housekeeping): approved.** The `nav-floor-sync` worktree (branch
@@ -55,7 +55,9 @@ explicit questions on 2026-09-25 he chose:
    `NAVSENTINEL_REALISTIC_CHROME=1`) pass on the integrated tree. Chris's manual
    Chrome checks become one consolidated pass on the release build (AI-47).
    A red check, a confirmed CRITICAL/HIGH defect, or an open owner decision
-   still parks a PR: #599 (AI-37) and #572 (SP-F-013) stay parked.
+   still parks a PR. At this decision's time, #599 (AI-37) remained parked
+   pending Chris's choice; D-2026-09-25-R later accepted it and #599 merged.
+   #572 (SP-F-013) remains parked.
 2. **Release.** Tag `v0.5.0` on `main` and publish it as a GitHub
    **pre-release**. The Chrome Web Store unlisted beta keeps every gate it has
    (AI-19 name clearance, #455 consent, external review) and ships later as a
