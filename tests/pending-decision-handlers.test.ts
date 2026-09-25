@@ -15,6 +15,8 @@ import {
 const SOURCE_URL = "https://source.test/private/page?session=source-secret#source-fragment";
 const DESTINATION_URL =
   "https://destination.test/private/continue?token=destination-secret#dest-fragment";
+const LATEST_DESTINATION_URL =
+  "https://latest.test/private/continue?token=latest-secret#latest-fragment";
 const TOP_DOCUMENT_ID = "document-top-7";
 const CHILD_SOURCE_URL = "https://child.test/private/frame?session=child-secret";
 const CHILD_DOCUMENT_ID = "document-child-7";
@@ -107,6 +109,7 @@ function createHarness() {
     windowId: number;
     active: true;
   }) => ({ id: 99 }));
+  const removeTab = vi.fn(async (_tabId: number) => undefined);
   const fingerprintUrl = vi.fn(
     async (url: string) => createHash("sha256").update(url).digest("hex"),
   );
@@ -127,6 +130,7 @@ function createHarness() {
     getLifecycleGeneration: () => lifecycleGeneration.value,
     deliverDecision,
     createTab,
+    removeTab,
   });
   return {
     activeTab,
@@ -141,6 +145,7 @@ function createHarness() {
     lifecycleGeneration,
     now,
     queryActiveTabs,
+    removeTab,
     storage,
   };
 }
@@ -195,14 +200,14 @@ function installChildFrame(harness: ReturnType<typeof createHarness>, url = CHIL
   });
 }
 
-function createMessage(): PendingDecisionRuntimeMessage {
+function createMessage(destinationUrl = DESTINATION_URL): PendingDecisionRuntimeMessage {
   return {
     type: "ns-pending-decision-create",
     semantics: {
       kind: "navigation",
       reason: "blank-target-blocked",
       actions: ["proceed-once"],
-      destinationUrl: DESTINATION_URL,
+      destinationUrl,
       score: 81,
       signals: ["cross_site"],
     },
@@ -568,6 +573,186 @@ describe("PendingDecisionRuntimeBroker", () => {
     expect(harness.storage.data[PENDING_DECISION_STORAGE_KEY]).toBeUndefined();
   });
 
+it("keeps only the latest same-scope admission across delayed context resolution", async () => {
+  const harness = createHarness();
+  let releaseFirstResolution!: () => void;
+  const firstResolutionGate = new Promise<void>((resolve) => {
+    releaseFirstResolution = resolve;
+  });
+  harness.getAllFrames.mockImplementationOnce(async (tabId) => {
+    await firstResolutionGate;
+    return frameSnapshots(harness.frames, tabId);
+  });
+
+  const firstCreate = harness.broker.handle(createMessage(), contentSender());
+  await vi.waitFor(() => expect(harness.getAllFrames).toHaveBeenCalledTimes(1));
+  const latestCreate = harness.broker.handle(
+    createMessage(LATEST_DESTINATION_URL),
+    contentSender(),
+  );
+
+  try {
+    expect(harness.getAllFrames).toHaveBeenCalledTimes(1);
+  } finally {
+    releaseFirstResolution();
+  }
+  const [firstResult, latestResult] = await Promise.all([firstCreate, latestCreate]);
+  expect(firstResult).toEqual({
+    ok: false,
+    operation: "create",
+    status: "context-changed",
+  });
+  expect(latestResult).toMatchObject({
+    ok: true,
+    operation: "create",
+    status: "created",
+  });
+  expect(latestResult).not.toHaveProperty("replacedDecisionId");
+
+  const listed = await harness.broker.handle(
+    { type: "ns-pending-decision-list" },
+    extensionSender(),
+  );
+  expect(listed).toMatchObject({ ok: true, operation: "list", status: "pending" });
+  if (
+    !latestResult ||
+    !latestResult.ok ||
+    latestResult.operation !== "create" ||
+    !listed ||
+    !listed.ok ||
+    listed.operation !== "list" ||
+    listed.decisions.length !== 1
+  ) {
+    throw new Error("Expected the latest same-scope decision to remain live");
+  }
+  const decision = listed.decisions[0]!;
+  expect(decision.id).toBe(latestResult.id);
+  expect(decision.destinationOrigin).toBe("https://latest.test");
+
+  harness.deliverDecision.mockResolvedValueOnce({
+    ok: true,
+    status: "released",
+    destinationUrl: LATEST_DESTINATION_URL,
+  });
+  expect(
+    await harness.broker.handle(consumeMessage(decision), extensionSender()),
+  ).toMatchObject({ ok: true, operation: "consume", status: "consumed" });
+  expect(harness.createTab).toHaveBeenCalledWith({
+    url: LATEST_DESTINATION_URL,
+    windowId: 2,
+    active: true,
+  });
+  expect(
+    await harness.broker.handle(consumeMessage(decision), extensionSender()),
+  ).toEqual({ ok: false, operation: "consume", status: "missing" });
+});
+
+it("retires an older live decision while a newer same-scope admission is unresolved", async () => {
+  const harness = createHarness();
+  const previous = await createAndList(harness);
+  const baselineFrameCalls = harness.getAllFrames.mock.calls.length;
+  let releaseLatestResolution!: () => void;
+  const latestResolutionGate = new Promise<void>((resolve) => {
+    releaseLatestResolution = resolve;
+  });
+  harness.getAllFrames.mockImplementationOnce(async (tabId) => {
+    await latestResolutionGate;
+    return frameSnapshots(harness.frames, tabId);
+  });
+
+  const latestCreate = harness.broker.handle(
+    createMessage(LATEST_DESTINATION_URL),
+    contentSender(),
+  );
+  await vi.waitFor(() =>
+    expect(harness.getAllFrames).toHaveBeenCalledTimes(baselineFrameCalls + 1),
+  );
+
+  expect(
+    await harness.broker.handle(
+      { type: "ns-pending-decision-list" },
+      extensionSender(),
+    ),
+  ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+  expect(
+    await harness.broker.handle(consumeMessage(previous), extensionSender()),
+  ).toEqual({ ok: false, operation: "consume", status: "missing" });
+  expect(harness.deliverDecision).not.toHaveBeenCalled();
+  expect(harness.createTab).not.toHaveBeenCalled();
+
+  harness.frames.set(frameKey(7, 0), {
+    frameId: 0,
+    url: SOURCE_URL,
+    documentId: "replacement-document",
+    documentLifecycle: "active",
+    errorOccurred: false,
+  });
+  releaseLatestResolution();
+  expect(await latestCreate).toEqual({
+    ok: false,
+    operation: "create",
+    status: "context-changed",
+  });
+
+  harness.frames.set(frameKey(7, 0), {
+    frameId: 0,
+    url: SOURCE_URL,
+    documentId: TOP_DOCUMENT_ID,
+    documentLifecycle: "active",
+    errorOccurred: false,
+  });
+  expect(
+    await harness.broker.handle(
+      { type: "ns-pending-decision-list" },
+      extensionSender(),
+    ),
+  ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+});
+
+it("keeps a failed scope retirement tombstoned until a clean retry succeeds", async () => {
+  const harness = createHarness();
+  const previous = await createAndList(harness);
+  harness.storage.failNextSet = true;
+
+  expect(
+    await harness.broker.handle(
+      createMessage(LATEST_DESTINATION_URL),
+      contentSender(),
+    ),
+  ).toEqual({ ok: false, operation: "create", status: "unavailable" });
+  expect(
+    await harness.broker.handle(
+      { type: "ns-pending-decision-list" },
+      extensionSender(),
+    ),
+  ).toMatchObject({ ok: true, operation: "list", status: "missing", decisions: [] });
+  expect(
+    await harness.broker.handle(consumeMessage(previous), extensionSender()),
+  ).toEqual({ ok: false, operation: "consume", status: "context-changed" });
+  expect(harness.deliverDecision).not.toHaveBeenCalled();
+
+  const retried = await harness.broker.handle(
+    createMessage(LATEST_DESTINATION_URL),
+    contentSender(),
+  );
+  expect(retried).toMatchObject({
+    ok: true,
+    operation: "create",
+    status: "created",
+    replacedDecisionId: previous.id,
+  });
+  const listed = await harness.broker.handle(
+    { type: "ns-pending-decision-list" },
+    extensionSender(),
+  );
+  expect(listed).toMatchObject({ ok: true, operation: "list", status: "pending" });
+  if (!listed || !listed.ok || listed.operation !== "list") {
+    throw new Error("Expected a listed decision after clean retry");
+  }
+  expect(listed.decisions).toHaveLength(1);
+  expect(listed.decisions[0]?.destinationOrigin).toBe("https://latest.test");
+});
+
   it("binds token and action while rejecting a caller-supplied raw destination", async () => {
     const harness = createHarness();
     const decision = await createAndList(harness);
@@ -614,6 +799,48 @@ describe("PendingDecisionRuntimeBroker", () => {
     expect(
       await harness.broker.handle(consumeMessage(decision), extensionSender()),
     ).toEqual({ ok: false, operation: "consume", status: "missing" });
+  });
+
+  it("closes a tab if a newer same-scope admission arrives during creation", async () => {
+    const harness = createHarness();
+    const previous = await createAndList(harness);
+    let releaseCreateTab!: () => void;
+    const createTabGate = new Promise<void>((resolve) => {
+      releaseCreateTab = resolve;
+    });
+    harness.createTab.mockImplementationOnce(async () => {
+      await createTabGate;
+      return { id: 99 };
+    });
+    harness.deliverDecision.mockResolvedValueOnce({
+      ok: true,
+      status: "released",
+      destinationUrl: DESTINATION_URL,
+    });
+
+    const consume = harness.broker.handle(
+      consumeMessage(previous),
+      extensionSender(),
+    );
+    await vi.waitFor(() => expect(harness.createTab).toHaveBeenCalledTimes(1));
+
+    const latest = await harness.broker.handle(
+      createMessage(LATEST_DESTINATION_URL),
+      contentSender(),
+    );
+    expect(latest).toMatchObject({
+      ok: true,
+      operation: "create",
+      status: "created",
+    });
+
+    releaseCreateTab();
+    await expect(consume).resolves.toEqual({
+      ok: false,
+      operation: "consume",
+      status: "context-changed",
+    });
+    expect(harness.removeTab).toHaveBeenCalledWith(99);
   });
 
   it("burns the token when active context changes after consume", async () => {
