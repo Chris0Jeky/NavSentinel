@@ -55,10 +55,12 @@ written directly by content scripts (see issue #181), so a profile write already
 in flight when the reset runs can survive it; re-running the control clears it.
 
 The event and prompt-outcome records can include timestamps, source/destination
-domains, outcomes, risk scores, reason codes, bounded structural click context,
-and other decision inputs. Routine navigation records are host-oriented, but
-some credential/event paths can include the submitting page's full URL. Paths,
-queries, and fragments can contain sensitive identifiers.
+hostnames, outcomes, risk scores, reason codes, bounded structural click
+context, and other decision inputs. Prompt outcomes keep hostnames only, with no
+URL (#518). Where an event row keeps a URL, it is reduced to origin and path:
+the query and fragment are dropped (#468) and likely-secret path segments are
+redacted (#517). This applies to new records, imports and exports, and existing
+data is migrated. A remaining path can still show which page you were on.
 
 Detection also transiently processes bounded page text/HTML, title/form/image
 signals, structural click/element properties, and clipboard text/selection in
