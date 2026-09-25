@@ -23,6 +23,7 @@
 
 import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
 import { findClickFixOverlay } from "./clickfix_detector";
+import { queryPasswordInputs } from "./password_field";
 import { isExtensionOwnedOverlayElement } from "./extension_owned_overlay";
 
 // ---------------------------------------------------------------------------
@@ -824,7 +825,7 @@ function processAddedNode(node: Node, scarceOnly = false): void {
   checkSuspiciousIframe(node, !scarceOnly);
 
   // Check descendants (e.g., a wrapper div containing a password field)
-  const passwords = node.querySelectorAll('input[type="password"]');
+  const passwords = queryPasswordInputs(node);
   for (let i = 0; i < passwords.length; i++) {
     checkPasswordInjection(passwords[i]!);
   }

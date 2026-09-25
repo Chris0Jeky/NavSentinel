@@ -13,7 +13,7 @@
  */
 
 import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
-import { hasVisiblePasswordField } from "./password_field";
+import { hasVisiblePasswordField, queryPasswordInputs } from "./password_field";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -542,7 +542,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
       ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
       : rawAttr;
     const action = bounded.trim();
-    const hasPw = !!form.querySelector('input[type="password"]');
+    const hasPw = queryPasswordInputs(form).length > 0;
     formActions.push({ action, hasPassword: hasPw });
   }
 

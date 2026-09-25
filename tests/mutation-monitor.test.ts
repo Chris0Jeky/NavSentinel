@@ -304,6 +304,27 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("detects a case-variant password input injected inside a wrapper (#820)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // The wrapper itself is not an input, so detection runs through the
+    // descendant scan — the path that used an exact `type="password"` selector.
+    const wrapper = document.createElement("div");
+    const input = document.createElement("input");
+    input.setAttribute("type", "PASSWORD");
+    wrapper.appendChild(input);
+    document.body.appendChild(wrapper);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    wrapper.remove();
+    stopMutationMonitor();
+  });
+
   it("detects input type changed to password", async () => {
     const alerts: MutationAlert[] = [];
     const input = document.createElement("input");
