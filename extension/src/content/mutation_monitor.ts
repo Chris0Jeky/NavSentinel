@@ -324,7 +324,11 @@ function pushAlert(alert: MutationAlert): boolean {
   // pre-boundary alert; it only protects future reserved capacity from reuse.
   if (scarce) alertElements.forEach((element) => scarceAlertedElements.add(element));
   alerts.push(alert);
-  alertCallback?.(alert);
+  try {
+    alertCallback?.(alert);
+  } catch {
+    // A throwing alert handler must not abort the rest of the batch. (#770)
+  }
   return true;
 }
 
@@ -520,14 +524,18 @@ function emitOverlayCleanupCandidate(
   const eligible = (elements ?? [element])
     .filter((candidate) => !restoredOverlayCleanupExclusions.has(candidate));
   if (eligible.length === 0) return;
-  overlayCleanupCallback?.({
-    type,
-    severity: "high",
-    element: eligible[0]!,
-    ...(elements ? { elements: eligible } : {}),
-    details: classification.details,
-    timestamp: Date.now(),
-  });
+  try {
+    overlayCleanupCallback?.({
+      type,
+      severity: "high",
+      element: eligible[0]!,
+      ...(elements ? { elements: eligible } : {}),
+      details: classification.details,
+      timestamp: Date.now(),
+    });
+  } catch {
+    // A throwing cleanup handler must not abort detection or rescan scheduling. (#770)
+  }
 }
 
 function collectForegroundOverlays(
