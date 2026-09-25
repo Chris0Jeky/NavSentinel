@@ -476,9 +476,11 @@ export class AcceptanceSession {
     const client = await CdpPageClient.attach(this.devToolsPort, (target) => target.url.startsWith(prefix), "popup");
     // popup.html ships "#site" as the placeholder "-"; refreshUi() replaces it
     // with a host label, so waiting for any other text means the popup has
-    // rendered its state and absence checks are meaningful (#873).
-    await client.waitFor("document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim())", 8000);
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    // rendered its state and absence checks are meaningful (#873). The
+    // pending-decision controller marks #pendingDecisions only after its first
+    // refresh settles, so a hidden host is then a rendered empty state rather
+    // than a not-yet-rendered one (#884).
+    await client.waitFor("document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim()) && document.getElementById('pendingDecisions')?.dataset.pendingDecisionsReady === 'true'", 8000);
     this.popupClient = client;
     return client;
   }
