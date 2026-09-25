@@ -6,7 +6,12 @@ import {
   initJsBehaviorMonitor,
   jsBehaviorInstrumentationEnabled,
 } from "@navsentinel/js-behavior-monitor";
-import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
+import {
+  OutboundQueue,
+  coalesceKeyForMainGuardMessage,
+  isMainGuardAlertType,
+  isFloodableAlertType,
+} from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
 import { formSubmitIntentUrl } from "./nav_authority";
 import {
@@ -83,10 +88,12 @@ const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
+    const message = { type, ...(payload !== undefined ? { payload } : {}) };
     pendingOutbound.enqueue(
-      { type, ...(payload !== undefined ? { payload } : {}) },
+      message,
       isMainGuardAlertType(type),
-      isFloodableAlertType(type)
+      isFloodableAlertType(type),
+      coalesceKeyForMainGuardMessage(message),
     );
     return;
   }
@@ -757,7 +764,13 @@ function patchForms(): void {
     registerBlockedAction({
       kind: "form_submit",
       ...(actionUrl !== undefined ? { url: actionUrl } : {}),
-      action: () => nativeFormSubmit.call(this)
+      // The approval covers `actionUrl` only. Page script can change `action`
+      // while the action waits (an allowlisted destination is approved with no
+      // click), so the live form must still resolve to it. (#890)
+      action: () => {
+        if (resolveFormAction(this) !== actionUrl) return;
+        nativeFormSubmit.call(this);
+      }
     });
   };
   // Writable+configurable (#349): a frozen submit threw when js_behavior_monitor
@@ -793,7 +806,11 @@ function patchForms(): void {
       registerBlockedAction({
         kind: "form_request_submit",
         ...(actionUrl !== undefined ? { url: actionUrl } : {}),
-        action: () => nativeFormRequestSubmit.call(this, submitter)
+        // As for submit(): the submitter's `formaction` is live too. (#890)
+        action: () => {
+          if (resolveFormAction(this, submitter) !== actionUrl) return;
+          nativeFormRequestSubmit.call(this, submitter);
+        }
       });
     };
     softPatchProto(HTMLFormElement.prototype, "requestSubmit", patchedFormRequestSubmit, "HTMLFormElement.prototype.requestSubmit");

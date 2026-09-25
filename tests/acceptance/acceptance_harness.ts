@@ -650,9 +650,11 @@ export function redactUrl(raw: string): string {
   }
 }
 
-/** Page-world clicks are synthetic; this clicks an element's centre with trusted input. */
+/** Scroll an element into view, then click its centre with trusted input. */
 export async function trustedClick(page: Page, selector: string): Promise<void> {
-  const box = await page.locator(selector).first().boundingBox();
+  const target = page.locator(selector).first();
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
   if (!box) throw new Error(`${selector} is not rendered`);
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }

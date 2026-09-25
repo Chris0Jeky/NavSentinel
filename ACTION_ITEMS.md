@@ -211,8 +211,8 @@ live.
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
 - **AI-37** — PR #599 (issue #523), branch
-  `fix/issue523-unverified-clipboard-cap`, exact head
-  `d6f6b7efa2dd83e6845d474eb059a81afce863d7`. Scope: an owner accept/reject of
+  `fix/issue523-unverified-clipboard-cap`, integrated code head
+  `0c64e2e979b29a8f92ac25b939cd8eaaea5f88d2`. Scope: an owner accept/reject of
   the #523 unverified-queue design, plus a bridge queue-pressure Chrome check
   that a benign clipboard write cannot suppress the trusted fake-verification
   warning. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
