@@ -56,6 +56,7 @@ async function clickSeg(page: Page, segId: string, value: string): Promise<void>
 
 async function replaceNumber(page: Page, id: string, text: string): Promise<void> {
   await trustedClick(page, `#${id}`);
+  await expect(page.locator(`#${id}`)).toBeFocused();
   await page.keyboard.press("Control+A");
   await page.keyboard.press("Backspace");
   if (text) await page.keyboard.type(text);
