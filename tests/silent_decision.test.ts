@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isSameTabTarget,
   isSilentNavCandidate,
   isDocumentNavigationHref,
   shouldLogImmediateSilentNav,
@@ -183,5 +184,26 @@ describe("silentNavThrottleAllows (#236)", () => {
     const state: SilentNavThrottleState = { key: "x", at: 1000 };
     // now - at === windowMs → not < windowMs → allowed.
     expect(silentNavThrottleAllows(state, "x", 11000, 10000)).toBe(true);
+  });
+});
+
+describe("isSameTabTarget (#782)", () => {
+  it.each([[""], ["_self"], ["_SELF"]])("treats %p as same-tab in any frame", (target) => {
+    expect(isSameTabTarget(target, true)).toBe(true);
+    expect(isSameTabTarget(target, false)).toBe(true);
+  });
+
+  it.each([["_top"], ["_parent"], ["_TOP"]])("treats %p as same-tab in the top frame", (target) => {
+    expect(isSameTabTarget(target, true)).toBe(true);
+  });
+
+  it.each([["_top"], ["_parent"]])("does NOT treat %p as same-tab in a child frame", (target) => {
+    // Child-frame semantics unchanged: _top/_parent escape the frame there.
+    expect(isSameTabTarget(target, false)).toBe(false);
+  });
+
+  it.each([["_blank"], ["named-frame"], ["foo"]])("does NOT treat %p as same-tab", (target) => {
+    expect(isSameTabTarget(target, true)).toBe(false);
+    expect(isSameTabTarget(target, false)).toBe(false);
   });
 });

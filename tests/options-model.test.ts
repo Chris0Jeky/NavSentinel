@@ -598,4 +598,17 @@ describe("runImportFlow (#188)", () => {
     ).resolves.toBeUndefined();
     expect(flash).toHaveBeenCalledWith("Import failed.", "error");
   });
+
+  it("does not let a failed post-success refresh mask the success status", async () => {
+    const flash = vi.fn();
+    await expect(
+      runImportFlow({
+        importPayload: vi.fn(async () => ({ eventLogDropped: 0 })),
+        refresh: vi.fn(async () => { throw new Error("refresh boom"); }),
+        flash,
+        isDeliveryFailure: isDelivery,
+      }),
+    ).resolves.toBeUndefined();
+    expect(flash).toHaveBeenCalledWith("Imported.");
+  });
 });
