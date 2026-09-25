@@ -238,6 +238,20 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(computeCDS(ctx).reasonCodes).toContain("intent_mismatch_under_interactive");
   });
 
+  it.each([
+    ["transparent color", "color:transparent"],
+    ["near-transparent color", "color:rgba(0,0,0,0.01)"],
+    ["hidden visibility", "visibility:hidden"],
+  ])("on-point %s text cannot hide a concealed child (#886)", (_label, style) => {
+    const link = el("a", { href: "https://evil.example/", style });
+    link.appendChild(document.createTextNode("Hidden"));
+    const leaf = el("span", { style: "opacity:0.01;visibility:visible" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
   it("keeps effective ancestor opacity when re-rooting a clicked child (#886)", () => {
     const wrapper = el("div", { style: "opacity:0.01" });
     const link = el("a", { href: "https://evil.example/" }, wrapper);

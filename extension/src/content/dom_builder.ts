@@ -149,8 +149,28 @@ function backgroundAlpha(el: Element): number {
   return bg.startsWith("rgb(") ? 1 : 0;
 }
 
+/** Alpha of a computed text colour, including CSS Color 4 slash syntax. */
+function textColorAlpha(value: string): number {
+  const color = value.trim().toLowerCase();
+  if (color === "transparent") return 0;
+  const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(color);
+  if (slash) return Number.parseFloat(slash[1]!) / (slash[2] ? 100 : 1);
+  const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(color);
+  if (rgba) return Number.parseFloat(rgba[1]!);
+  // Attached Chromium elements expose an opaque computed rgb() here. A blank
+  // value is possible in synthetic DOM tests; retain their previous default.
+  return 1;
+}
+
 /** Test glyph runs rather than a whole text node, whose rect can include blank padding. */
 function directTextPaints(el: Element, x: number, y: number): boolean {
+  const style = window.getComputedStyle(el);
+  const fillColor = style.getPropertyValue("-webkit-text-fill-color");
+  if (style.visibility === "hidden" || style.visibility === "collapse" ||
+      textColorAlpha(style.color) < CONCEALED_OPACITY_CEILING ||
+      (fillColor && fillColor !== "currentcolor" && textColorAlpha(fillColor) < CONCEALED_OPACITY_CEILING)) {
+    return false;
+  }
   let remainingRuns = 32;
   for (let i = 0; i < Math.min(el.childNodes.length, 32); i++) {
     const node = el.childNodes[i]!;

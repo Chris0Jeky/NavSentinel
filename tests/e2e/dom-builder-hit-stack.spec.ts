@@ -1,5 +1,30 @@
 import { expect, test } from "@playwright/test";
 
+test("transparent text fill keeps a glyph rect beneath a concealed child (#886) @regression", async ({ page }) => {
+  await page.setContent(`
+    <a id="control" href="#" style="position:relative;display:block;width:120px;height:30px;color:black;-webkit-text-fill-color:transparent">
+      Hidden<span id="concealed" style="position:absolute;inset:0;opacity:0.01"></span>
+    </a>
+  `);
+  const measured = await page.evaluate(() => {
+    const link = document.getElementById("control")!;
+    const text = Array.from(link.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes("Hidden"))!;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const rect = range.getClientRects()[0]!;
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    return {
+      fill: getComputedStyle(link).getPropertyValue("-webkit-text-fill-color"),
+      glyphWidth: rect.width,
+      hits: document.elementsFromPoint(x, y).slice(0, 2).map((element) => element.id),
+    };
+  });
+  expect(measured.fill).toMatch(/transparent|rgba\([^)]*,\s*0\)|rgb\([^)]*\/\s*0\)/);
+  expect(measured.glyphWidth).toBeGreaterThan(0);
+  expect(measured.hits).toEqual(["concealed", "control"]);
+});
+
 test("zero-width direct text has no painted width over a concealed link child (#886) @regression", async ({ page }) => {
   await page.setContent(`
     <a id="control" href="#" style="display:block;width:40vw;height:40vh">
