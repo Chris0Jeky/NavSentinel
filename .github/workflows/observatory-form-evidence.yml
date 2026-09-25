@@ -52,12 +52,15 @@ jobs:
           NAVSENTINEL_FORM_OBSERVATORY: '1'
         run: npx playwright test tests/e2e/issue688-form-intent.spec.ts --project=regression --workers=2 --fully-parallel --retries=0 --output=test-results/form-full
       - name: Refuse incomplete observation even when product assertions pass
+        shell: bash
         run: node experiments/form-observatory/check-capture.mjs test-results/form-full | tee form-evidence/capture-check.json
       - name: Same assertions without the detailed observer
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browser.outcome == 'success' }}
         run: npx playwright test tests/e2e/issue688-form-intent.spec.ts --project=regression --workers=2 --fully-parallel --retries=0 --output=test-results/form-control
-      - name: Require all forty-five arm outcomes and complete observer traces
+      - name: Require every declared arm outcome and complete observer traces
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browser.outcome == 'success' }}
+        # Explicit bash enables pipefail; tee must not turn rejected evidence green.
+        shell: bash
         run: node experiments/form-observatory/compare.mjs test-results/form-full test-results/form-control | tee form-evidence/observer-parity.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

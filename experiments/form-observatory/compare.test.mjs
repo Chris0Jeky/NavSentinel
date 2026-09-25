@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { compareFormOutcomes, expectedKeys, validateFormTraces } from "./compare.mjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { compareFormEvidence, compareFormOutcomes, expectedKeys, validateFormTraces } from "./compare.mjs";
 import { requiredFormReports } from "./trace-contract.mjs";
 
 const identity = {
@@ -246,4 +251,293 @@ test("document-bound intents must reference a live document lifetime", () => {
   const report = unknown[0].events.find((entry) => entry.kind === "form.intent");
   report.binding = { ...report.binding, documentId: "document-99" };
   assert.equal(validateFormTraces(unknown).matched, false);
+});
+
+
+// Exercise the actual combined CLI: independently valid files can still disagree.
+const setTraceReceivers = (trace, attempts) => {
+  trace.events = trace.events.filter((entry) => entry.kind !== "receiver.attempt");
+  trace.events.splice(trace.events.length - 2, 0, ...attempts.map((receipt) => ({
+    id: "pending", sequence: 0, elapsedMs: 0,
+    source: "sink", kind: "receiver.attempt", data: { ...receipt },
+  })));
+  renumber(trace.events);
+};
+const writeCampaign = (t, full, control, traceRows) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ns-form-receivers-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const fullRoot = path.join(root, "test-results/form-full");
+  const controlRoot = path.join(root, "test-results/form-control");
+  fs.mkdirSync(fullRoot, { recursive: true });
+  fs.mkdirSync(controlRoot, { recursive: true });
+  for (const [directory, rows, suffix] of [
+    [fullRoot, full, ".result.json"],
+    [controlRoot, control, ".result.json"],
+    [fullRoot, traceRows, ".form-trace.json"],
+  ]) {
+    rows.forEach((row, index) => fs.writeFileSync(
+      path.join(directory, `${String(index).padStart(3, "0")}${suffix}`), JSON.stringify(row),
+    ));
+  }
+  return { root, fullRoot, controlRoot };
+};
+const runCampaign = (t, full, control, traceRows) => {
+  const { fullRoot, controlRoot } = writeCampaign(t, full, control, traceRows);
+  const child = spawnSync(process.execPath, [
+    fileURLToPath(new URL("./compare.mjs", import.meta.url)), fullRoot, controlRoot,
+  ], { encoding: "utf8", timeout: 10_000 });
+  assert.ifError(child.error);
+  assert.equal(child.stderr, "");
+  return { status: child.status, result: JSON.parse(child.stdout) };
+};
+
+test("CLI refuses missing receiver trace events even when result parity and trace structure pass (#762)", (t) => {
+  const full = records();
+  full[0].attempts = [{ role: "harm", method: "POST", accepted: true, ordinal: 1 }];
+  const traceRows = traces();
+  // All event IDs, health bounds and report sequences are valid; only the sink
+  // callback is missing. The unchanged result files still agree with each other.
+  assert.equal(validateFormTraces(traceRows).matched, true);
+  assert.equal(compareFormOutcomes(full, full).matched, true);
+  const { status, result } = runCampaign(t, full, full, traceRows);
+  assert.equal(status, 1);
+  assert.equal(result.matched, false);
+  assert.equal(result.parityEvidence.matched, true);
+  assert.equal(result.traceEvidence.matched, true);
+  assert.equal(result.receiverEvidence.matched, false);
+  assert.deepEqual(result.receiverEvidence.differences, [`FORM_TRACE_RECEIVER_MISMATCH:${expectedKeys[0]}`]);
+});
+
+const receiptCampaign = () => {
+  const full = records();
+  const traceRows = traces();
+  full.forEach((row, index) => {
+    row.attempts = index % 3 === 0 ? [] : [
+      { role: index % 2 ? "harm" : "benign", method: index % 2 ? "POST" : "GET", accepted: true, ordinal: 1 },
+      ...(index % 3 === 2 ? [{ role: "harm", method: "POST", accepted: false, ordinal: 2 }] : []),
+    ];
+    setTraceReceivers(traceRows[index], row.attempts);
+  });
+  return { full, traceRows };
+};
+
+test("reconciles every arm including zero attempts, accepted harm and rejected duplicates", () => {
+  const { full, traceRows } = receiptCampaign();
+  const result = compareFormEvidence(full, full, traceRows);
+  assert.equal(result.matched, true);
+  assert.equal(result.receiverEvidence.cases, expectedKeys.length);
+  assert.equal(result.parityEvidence.evidencePolicy, "CONSEQUENCE_PARITY_NOT_ZERO_OBSERVER_EFFECT");
+  assert.equal(result.receiverEvidence.evidencePolicy, "EXACT_PER_ARM_RECEIVER_PARITY_NOT_PREVENTION");
+});
+
+test("CLI certifies consistent receiver files without depending on collection or JSON key order", (t) => {
+  const { full, traceRows } = receiptCampaign();
+  for (const row of traceRows) {
+    for (const entry of row.events.filter((entry) => entry.kind === "receiver.attempt")) {
+      const { ordinal, accepted, method, role } = entry.data;
+      entry.data = { ordinal, accepted, method, role };
+    }
+  }
+  const { status, result } = runCampaign(t, full, [...full].reverse(), [...traceRows].reverse());
+  assert.equal(status, 0);
+  assert.equal(result.matched, true);
+  assert.equal(result.receiverEvidence.matched, true);
+});
+
+test("an unexpected receiver event cannot certify an explicit zero-attempt arm", () => {
+  const full = records();
+  const traceRows = traces();
+  setTraceReceivers(traceRows[0], [{ role: "harm", method: "POST", accepted: false, ordinal: 1 }]);
+  const result = compareFormEvidence(full, full, traceRows);
+  assert.equal(result.parityEvidence.matched, true);
+  assert.equal(result.traceEvidence.matched, true);
+  assert.equal(result.receiverEvidence.matched, false);
+  assert.equal(result.matched, false);
+});
+
+for (const [field, value] of [["role", "benign"], ["method", "GET"], ["accepted", false], ["ordinal", 2]]) {
+  test(`receiver ${field} mismatch cannot hide behind matching consequence files`, () => {
+    const full = records();
+    const traceRows = traces();
+    const receipt = { role: "harm", method: "POST", accepted: true, ordinal: 1 };
+    full[0].attempts = [receipt];
+    setTraceReceivers(traceRows[0], [{ ...receipt, [field]: value }]);
+    const result = compareFormEvidence(full, full, traceRows);
+    assert.equal(result.parityEvidence.matched, true);
+    assert.equal(result.traceEvidence.matched, true);
+    assert.equal(result.receiverEvidence.matched, false);
+    assert.equal(result.matched, false);
+  });
+}
+
+test("receiver order and duplicate delivery are preserved, not set-normalized", () => {
+  const { full, traceRows } = receiptCampaign();
+  const index = full.findIndex((row) => row.attempts.length === 2);
+  for (const attempts of [
+    [...full[index].attempts].reverse(),
+    [full[index].attempts[0], full[index].attempts[0], full[index].attempts[1]],
+    full[index].attempts.slice(0, 1),
+  ]) {
+    setTraceReceivers(traceRows[index], attempts);
+    const result = compareFormEvidence(full, full, traceRows);
+    assert.equal(result.parityEvidence.matched, true);
+    assert.equal(result.traceEvidence.matched, true);
+    assert.equal(result.receiverEvidence.matched, false);
+  }
+});
+
+test("receiver attempts attributed to another arm cannot match aggregate campaign totals", () => {
+  const { full, traceRows } = receiptCampaign();
+  setTraceReceivers(traceRows[0], full[1].attempts);
+  setTraceReceivers(traceRows[1], full[0].attempts);
+  const result = compareFormEvidence(full, full, traceRows);
+  assert.equal(result.traceEvidence.matched, true);
+  assert.deepEqual(result.receiverEvidence.differences, expectedKeys.slice(0, 2)
+    .map((key) => `FORM_TRACE_RECEIVER_MISMATCH:${key}`));
+  assert.equal(result.matched, false);
+});
+
+test("receiver reconciliation uses the observed run rather than its observer-off control", () => {
+  const { full, traceRows } = receiptCampaign();
+  const result = compareFormEvidence(full, records(), traceRows);
+  assert.equal(result.parityEvidence.matched, false);
+  assert.equal(result.traceEvidence.matched, true);
+  assert.equal(result.receiverEvidence.matched, true);
+  assert.equal(result.matched, false);
+});
+
+test("malformed or missing result records fail closed without a receiver agreement claim", () => {
+  for (const mutate of [
+    (rows) => rows.pop(),
+    (rows) => { rows[0] = rows[1]; },
+    (rows) => { rows[0].attempts = [{ role: "harm", method: "POST", accepted: "true", ordinal: 1 }]; },
+  ]) {
+    const full = records();
+    mutate(full);
+    const result = compareFormEvidence(full, full, traces());
+    assert.equal(result.receiverEvidence.matched, false);
+    assert.equal(result.matched, false);
+    assert.equal(result.receiverEvidence.cases, 0);
+  }
+});
+
+test("receiver payload equality cannot certify malformed, incomplete or page-attributed traces", () => {
+  for (const mutate of [
+    (rows) => rows.pop(),
+    (rows) => { rows[0] = rows[1]; },
+    (rows) => { rows[0].gaps = ["RECEIVER_CALLBACK_LOSS"]; },
+    (rows) => { rows[0].dropped = 1; },
+    (rows) => { rows[0].completed = false; },
+    (rows) => { rows[1].events.find((entry) => entry.kind === "receiver.attempt").source = "page"; },
+  ]) {
+    const { full, traceRows } = receiptCampaign();
+    mutate(traceRows);
+    const result = compareFormEvidence(full, full, traceRows);
+    assert.equal(result.parityEvidence.matched, true);
+    assert.equal(result.traceEvidence.matched, false);
+    assert.equal(result.receiverEvidence.matched, false);
+    assert.equal(result.receiverEvidence.error, "FORM_TRACE_INVALID");
+    assert.equal(result.matched, false);
+  }
+});
+
+
+// Execute the checked-in pipeline using GitHub's actual shell flags. Running
+// the comparator alone cannot prove that the workflow propagates its exit code.
+const runWorkflowCampaign = (t, full, control, traceRows, setup = () => {}) => {
+  const { root, fullRoot } = writeCampaign(t, full, control, traceRows);
+  const scriptRoot = path.join(root, "experiments/form-observatory");
+  fs.mkdirSync(scriptRoot, { recursive: true });
+  for (const file of ["compare.mjs", "trace-contract.mjs"]) {
+    fs.copyFileSync(fileURLToPath(new URL(`./${file}`, import.meta.url)), path.join(scriptRoot, file));
+  }
+  const evidenceRoot = path.join(root, "form-evidence");
+  fs.mkdirSync(evidenceRoot);
+  setup({ root, fullRoot, evidenceRoot });
+  const workflow = fs.readFileSync(new URL("../../.github/workflows/observatory-form-evidence.yml", import.meta.url), "utf8");
+  // This deliberately supports only the current single-line comparison step;
+  // a structural workflow change must update this executable contract too.
+  const blocks = workflow.split(/(?=^      - )/m).filter((block) =>
+    /^        run: node experiments\/form-observatory\/compare\.mjs /m.test(block));
+  assert.equal(blocks.length, 1, "one authoritative comparison step is required");
+  const block = blocks[0];
+  const command = block.match(/^        run: (.+)$/m)[1];
+  const shell = block.match(/^        shell: (.+)$/m)?.[1];
+  assert.ok(shell === undefined || shell === "bash", "unsupported workflow shell");
+  assert.doesNotMatch(block, /continue-on-error:/, "comparison failures must remain blocking");
+  const script = path.join(root, "comparison-step.sh");
+  fs.writeFileSync(script, `${command}\n`);
+  const args = shell === "bash" ? ["--noprofile", "--norc", "-eo", "pipefail", script] : ["-e", script];
+  const child = spawnSync("bash", args, { cwd: root, encoding: "utf8", timeout: 10_000,
+    env: { ...process.env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ""}` },
+  });
+  assert.ifError(child.error);
+  assert.equal(child.signal, null);
+  return { ...child, report: path.join(evidenceRoot, "observer-parity.json") };
+};
+
+test("workflow pipeline preserves a receiver mismatch exit and its diagnostic JSON", (t) => {
+  const full = records();
+  full[0].attempts = [{ role: "harm", method: "POST", accepted: true, ordinal: 1 }];
+  const child = runWorkflowCampaign(t, full, full, traces());
+  assert.equal(child.status, 1);
+  assert.equal(child.stderr, "");
+  assert.equal(JSON.parse(child.stdout).receiverEvidence.matched, false);
+  assert.equal(fs.readFileSync(child.report, "utf8"), child.stdout);
+});
+
+test("workflow pipeline preserves input-error exit instead of tee success", (t) => {
+  const child = runWorkflowCampaign(t, records(), records(), traces(), ({ fullRoot }) =>
+    fs.writeFileSync(path.join(fullRoot, "000.result.json"), "{invalid JSON"));
+  assert.equal(child.status, 2);
+  assert.equal(JSON.parse(child.stderr).error, "FORM_COMPARISON_INPUT_ERROR");
+});
+
+test("workflow pipeline accepts consistent evidence and preserves the report", (t) => {
+  const { full, traceRows } = receiptCampaign();
+  const child = runWorkflowCampaign(t, full, full, traceRows);
+  assert.equal(child.status, 0);
+  assert.equal(child.stderr, "");
+  assert.equal(JSON.parse(child.stdout).matched, true);
+  assert.equal(fs.readFileSync(child.report, "utf8"), child.stdout);
+});
+
+test("workflow pipeline refuses a report-write failure even when evidence agrees", (t) => {
+  const { full, traceRows } = receiptCampaign();
+  const child = runWorkflowCampaign(t, full, full, traceRows, ({ evidenceRoot }) => {
+    fs.rmSync(evidenceRoot, { recursive: true });
+    fs.writeFileSync(evidenceRoot, "not a directory");
+  });
+  assert.equal(child.status, 1);
+  assert.equal(JSON.parse(child.stdout).matched, true);
+  assert.notEqual(child.stderr, "");
+});
+
+
+test("document-bound v2 traces reconcile receivers without substituting lifecycle evidence", () => {
+  const rows = documentRows();
+  const full = records();
+  full[0].attempts = [{ role: "harm", method: "POST", accepted: true, ordinal: 1 }];
+  setTraceReceivers(rows[0], full[0].attempts);
+  assert.equal(compareFormEvidence(full, full, rows).matched, true);
+  setTraceReceivers(rows[0], []);
+  const result = compareFormEvidence(full, full, rows);
+  assert.equal(result.parityEvidence.matched, true);
+  assert.equal(result.traceEvidence.matched, true);
+  assert.equal(result.receiverEvidence.matched, false);
+  assert.equal(result.matched, false);
+});
+
+test("matching receiver receipts never excuse invalid document attribution", () => {
+  const rows = documentRows();
+  const full = records();
+  full[0].attempts = [{ role: "harm", method: "POST", accepted: false, ordinal: 1 }];
+  setTraceReceivers(rows[0], full[0].attempts);
+  const report = rows[0].events.find((entry) => entry.kind === "form.intent");
+  report.binding = { ...report.binding, documentId: "document-999" };
+  const result = compareFormEvidence(full, full, rows);
+  assert.equal(result.parityEvidence.matched, true);
+  assert.equal(result.traceEvidence.matched, false);
+  assert.equal(result.receiverEvidence.error, "FORM_TRACE_INVALID");
+  assert.equal(result.matched, false);
 });
