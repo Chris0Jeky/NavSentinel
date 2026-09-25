@@ -23,12 +23,12 @@ import {
 } from "../shared/storage";
 import {
   derivePopupSiteState,
-  derivePopupTabRisk,
   describeUnscoredThreat,
   eventIconName,
   getRecentPopupEvents,
   signalChipClass
 } from "./popup_model";
+import { derivePopupCurrentPageRisk } from "./popup_current_page_risk";
 
 const logoSlot = document.getElementById("logoSlot") as HTMLDivElement;
 const versionEl = document.getElementById("version") as HTMLSpanElement;
@@ -228,9 +228,10 @@ async function refreshUi(): Promise<void> {
   const log = await getEventLog();
   renderEvents(log);
 
-  // Scope the "Current page" gauge/signals to the ACTIVE site's most recent scored
-  // event (not log[last], which is global). See derivePopupTabRisk. (#205)
-  const { tabRisk, reasons, state, threatKind } = derivePopupTabRisk(log, siteState.registrableDomain);
+  // Bind the "Current page" gauge/signals to recent evidence for the exact active
+  // HTTP(S) hostname. The longer-lived registrable-domain history stays available
+  // in the audit log, but cannot drive this live surface. (#215)
+  const { tabRisk, reasons, state, threatKind } = derivePopupCurrentPageRisk(log, url);
   shieldArcEl.style.position = "relative";
   if (state === "unscored-threat" && threatKind) {
     // No score exists for this site, so the gauge must not read as a measured 0
