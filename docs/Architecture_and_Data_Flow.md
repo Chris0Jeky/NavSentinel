@@ -73,6 +73,31 @@ This is the main user-facing navigation decision surface.
 
 It captures blocked or replayable navigation attempts, clipboard write metadata, and opener-location-write signals, handing control back to the isolated-world logic.
 
+#### Form-submit gate
+
+`form.submit()` and `form.requestSubmit()` pass without a prompt in three cases:
+
+- **Off mode, or a subframe submitting to itself.**
+- **A post into a named child frame of this document (#865).** The effective
+  target (submitter `formtarget`, else the form's `target`, else `<base target>`)
+  must resolve to a direct child navigable the way Chromium resolves it: the
+  browser's named-property lookup must return one of the indexed child windows,
+  and the current window's own name wins. Keyword targets, unknown names and
+  renamed children keep the gate. The exemption does not pre-authorise a
+  top-level navigation to the action URL.
+- **A redirect allowance.** The isolated world grants it after it allows a
+  trusted click (`ns-allow`, 1.5 s, two submissions per click; a child frame may
+  only spend it on the action its clicked submit control declares). That grant
+  crosses the MessagePort a task late, so the MAIN world also arms the same
+  allowance for the click's own task (#864). It does so from a `document`
+  capture listener, which runs after the isolated world's `window` capture
+  decision, so a click that world blocks never arms it. The in-task arm ends
+  with the task, has the grant's scope, and shares the grant's per-click
+  budget. The grant carries the click's `event.timeStamp` so the MAIN world can
+  recognise its own follow-up. `change` and `submit` events arm nothing because
+  page script can make them trusted. A keyboard-only selection that
+  auto-submits therefore stays gated, as it was even one task later.
+
 #### `location.assign` / `location.replace` are deliberately NOT patched (#458)
 
 Chromium implements `Location.assign` and `Location.replace` as

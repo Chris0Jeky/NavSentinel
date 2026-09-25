@@ -76,6 +76,7 @@
     document.getElementById("auto-select").addEventListener("change", () => {
       ran(`select:${which}`);
       if (which === "select-onchange-sync") selectForm.submit();
+      else if (which === "select-onchange-timeout-0") setTimeout(() => selectForm.submit(), 0);
     });
   </script>
 </body>

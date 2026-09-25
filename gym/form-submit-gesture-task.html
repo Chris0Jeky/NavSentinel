@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Form submits: gesture task (#864) and named child frames (#865)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button, label { font-size: 16px; margin: 6px; }
+    iframe { width: 320px; height: 60px; border: 1px solid #999; }
+  </style>
+</head>
+<body>
+  <h1>Form submits: gesture task (#864) and named child frames (#865)</h1>
+  <p>Only the behaviour named by <code>?mode=</code> is armed. Every destination
+     is this Gym's own <code>form-submit-landing.html</code>.</p>
+
+  <!-- #864: a page-owned control outside any form whose handler submits. -->
+  <button id="trigger" type="button">Continue</button>
+  <form id="dest" method="GET" action="form-submit-landing.html"><input type="hidden" name="case" value="" /></form>
+
+  <!-- #864: validation-library shape, prevent the native submit then submit. -->
+  <form id="validated" method="GET" action="form-submit-landing.html">
+    <input type="hidden" name="case" value="" />
+    <button id="validated-submit" type="submit">Search</button>
+  </form>
+
+  <!-- #864 negative controls: page script can make these events trusted. -->
+  <label><input type="checkbox" id="toggle" /> Toggle</label>
+  <form id="decoy" method="GET" action="form-submit-landing.html">
+    <input type="hidden" name="case" value="decoy" />
+    <button id="decoy-submit" type="submit">Decoy</button>
+  </form>
+
+  <!-- #864 budget: three new-tab forms for one gesture. -->
+  <form id="blank-a" method="GET" action="form-submit-landing.html" target="_blank"><input type="hidden" name="n" value="a" /></form>
+  <form id="blank-b" method="GET" action="form-submit-landing.html" target="_blank"><input type="hidden" name="n" value="b" /></form>
+  <form id="blank-c" method="GET" action="form-submit-landing.html" target="_blank"><input type="hidden" name="n" value="c" /></form>
+
+  <!-- #865: the page's own named child frame and the forms aimed at it. -->
+  <iframe name="sink" id="sink" title="sink"></iframe>
+  <form id="to-sink" method="GET" action="form-submit-landing.html" target="sink"><input type="hidden" name="case" value="" /></form>
+  <form id="to-top" method="GET" action="form-submit-landing.html" target="_top">
+    <input type="hidden" name="case" value="" />
+    <button id="to-sink-submitter" type="submit" formtarget="sink">Into the frame</button>
+  </form>
+  <form id="to-sink-top-submitter" method="GET" action="form-submit-landing.html" target="sink">
+    <input type="hidden" name="case" value="" />
+    <button id="top-submitter" type="submit" formtarget="_top">Whole tab</button>
+  </form>
+  <form id="to-unknown" method="GET" action="form-submit-landing.html" target="no-such-frame"><input type="hidden" name="case" value="" /></form>
+  <form id="no-target" method="GET" action="form-submit-landing.html"><input type="hidden" name="case" value="" /></form>
+
+  <script>
+    (() => {
+      const mode = new URLSearchParams(location.search).get("mode") || "";
+      for (const input of document.querySelectorAll('input[name="case"]')) {
+        if (!input.value) input.value = mode;
+      }
+      const byId = (id) => document.getElementById(id);
+      const ran = (label) => { document.documentElement.dataset.fixtureHandler = label; };
+
+      byId("trigger").addEventListener("click", (event) => {
+        ran(`trigger:${mode}:${event.isTrusted}`);
+        if (mode === "sync") byId("dest").submit();
+        else if (mode === "microtask") Promise.resolve().then(() => byId("dest").submit());
+        else if (mode === "request-submit") byId("dest").requestSubmit();
+        else if (mode === "budget-sync") {
+          byId("blank-a").submit();
+          byId("blank-b").submit();
+          setTimeout(() => byId("blank-c").submit(), 0);
+        } else if (mode === "budget-deferred") {
+          setTimeout(() => {
+            byId("blank-a").submit();
+            byId("blank-b").submit();
+            byId("blank-c").submit();
+          }, 0);
+        }
+      });
+
+      byId("validated").addEventListener("submit", (event) => {
+        ran(`validated:${mode}:${event.isTrusted}`);
+        if (mode !== "validate-sync") return;
+        event.preventDefault();
+        byId("validated").submit();
+      });
+
+      // `checkbox.click()` from script fires a TRUSTED change event, so a
+      // change listener must never be what arms a submit allowance.
+      byId("toggle").addEventListener("change", (event) => {
+        ran(`change:${mode}:${event.isTrusted}`);
+        if (mode === "change") byId("dest").submit();
+      });
+
+      // A script `button.click()` on a submit button fires a TRUSTED submit
+      // event; so must a submit listener never arm anything.
+      byId("decoy").addEventListener("submit", (event) => {
+        ran(`decoy:${mode}:${event.isTrusted}`);
+        event.preventDefault();
+        if (mode === "submit-event") byId("dest").submit();
+      });
+
+      // #865 cases run without any user input, from the harness.
+      window.__nsRunNamedFrameCase = () => {
+        ran(`frame:${mode}`);
+        if (mode === "frame-post") byId("to-sink").submit();
+        else if (mode === "frame-request-submit") byId("to-top").requestSubmit(byId("to-sink-submitter"));
+        else if (mode === "frame-formtarget-top") byId("to-sink-top-submitter").requestSubmit(byId("top-submitter"));
+        else if (mode === "unknown-name") byId("to-unknown").submit();
+        else if (mode === "renamed-child") {
+          byId("sink").contentWindow.name = "renamed-sink";
+          byId("to-sink").submit();
+        } else if (mode === "self-name") {
+          window.name = "sink";
+          byId("to-sink").submit();
+        } else if (mode === "base-target") {
+          const base = document.createElement("base");
+          base.target = "sink";
+          document.head.append(base);
+          byId("no-target").submit();
+        }
+      };
+    })();
+  </script>
+</body>
+</html>
