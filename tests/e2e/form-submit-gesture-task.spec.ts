@@ -136,16 +136,25 @@ test("same-task form submits after a trusted click pass; forged triggers do not 
         context.on("page", onPage);
         try {
           await page.click("#trigger");
+          // NavSentinel refused one of the three submissions...
           await waitForToastText(page, BLOCKED, 3_000);
-          await expect.poll(() => opened.length, { timeout: 5_000 }).toBe(2);
-          // Give a wrongly-allowed third submission time to open its tab.
+          const realisticChrome = process.env.NAVSENTINEL_REALISTIC_CHROME === "1";
+          await expect.poll(() => opened.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(realisticChrome ? 1 : 2);
+          // ...and a wrongly-allowed third submission gets time to open its tab.
           await page.waitForTimeout(1_500);
-          expect(opened, "exactly two of the three new-tab submissions ran").toHaveLength(2);
           const names = await Promise.all(opened.map(async (tab) => {
             await tab.waitForURL(/form-submit-landing\.html\?n=/, { timeout: 5_000 });
             return new URL(tab.url()).searchParams.get("n");
           }));
-          expect(names.sort()).toEqual(["a", "b"]);
+          if (realisticChrome) {
+            // Chrome's own popup blocker is on in this lane and lets one new
+            // window per activation through, so only NavSentinel's refusal of
+            // the third submission is observable here.
+            expect(names.length, "Chrome opened one or two of the allowed submissions").toBeGreaterThanOrEqual(1);
+            expect(names).not.toContain("c");
+          } else {
+            expect(names.sort(), "exactly the first two new-tab submissions ran").toEqual(["a", "b"]);
+          }
         } finally {
           context.off("page", onPage);
           for (const tab of opened) await tab.close().catch(() => undefined);
