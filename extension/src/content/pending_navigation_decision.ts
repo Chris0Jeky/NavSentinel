@@ -412,14 +412,29 @@ export default function showPendingBlankNavigationPrompt(
     signals,
     onProceed: () => recordOutcome("allow_once"),
   });
-  void pending.then((created) => {
-    showToast({
-      message: created
-        ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open NavSentinel to review.`
-        : `${request.title}: ${destinationHost}. Navigation remains blocked.`,
-      coalesce: !request.overlayHidden,
-      onDismiss: () => recordOutcome("dismiss"),
-    });
-  });
-  return pending;
+  // Settle locally: a messaging failure (e.g. sendMessage throwing
+  // synchronously when the extension context is gone) must fail closed with
+  // the remains-blocked toast — never an unhandled rejection plus silence.
+  // The returned promise therefore always resolves, honoring the boolean
+  // contract for callers. (#849)
+  return pending.then(
+    (created) => {
+      showToast({
+        message: created
+          ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open NavSentinel to review.`
+          : `${request.title}: ${destinationHost}. Navigation remains blocked.`,
+        coalesce: !request.overlayHidden,
+        onDismiss: () => recordOutcome("dismiss"),
+      });
+      return created;
+    },
+    () => {
+      showToast({
+        message: `${request.title}: ${destinationHost}. Navigation remains blocked.`,
+        coalesce: !request.overlayHidden,
+        onDismiss: () => recordOutcome("dismiss"),
+      });
+      return false;
+    },
+  );
 }

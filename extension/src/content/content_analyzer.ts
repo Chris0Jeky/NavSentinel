@@ -13,7 +13,7 @@
  */
 
 import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
-import { hasVisiblePasswordField } from "./password_field";
+import { hasVisiblePasswordField, queryPasswordInputs } from "./password_field";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -565,7 +565,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
       ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
       : rawAttr;
     const action = bounded.trim();
-    const hasPw = !!form.querySelector('input[type="password"]');
+    const hasPw = queryPasswordInputs(form).length > 0;
     formActions.push({ action, hasPassword: hasPw });
   }
 
@@ -629,6 +629,19 @@ export interface BrandSignal {
   score: number;
 }
 
+/**
+ * Token-boundary substring test for common-word brands in imgSignals (#831).
+ * Filenames and URLs ("purchase-logo.png", "pineapple.png") otherwise match
+ * "chase"/"apple" mid-word and mint a spurious img-only (+15) signal. The
+ * boundary is any non-alphanumeric character rather than `\b`, because
+ * JavaScript treats "_" as a word character and "apple_logo.png" must still
+ * match. Both inputs are already lowercased.
+ */
+function matchesWordBoundary(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(haystack);
+}
+
 function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal | null {
   let best: BrandSignal | null = null;
 
@@ -651,7 +664,7 @@ function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal
 
     // Check image signals (favicon / logo src / alt text)
     const brandLower = brand.name.toLowerCase();
-    if (snapshot.imgSignals.includes(brandLower)) {
+    if (brand.commonWord ? matchesWordBoundary(snapshot.imgSignals, brandLower) : snapshot.imgSignals.includes(brandLower)) {
       imgMatch = true;
     }
 
