@@ -319,8 +319,10 @@ requires the same-tab rollback notice's Proceed. **Resolved 2026-09-25 by Chris
 (#872, D-2026-09-25-Q):** row 4 holds, and rows 2 and 5 now exempt that notice.
 
 **Release-build scope, 2026-09-25 (D-2026-09-25-Q):** Chris chose to run AI-47
-once, on the v0.5.0 release build, instead of per PR. The PRs merged under that
-decision for v0.5.0 are listed in the v0.5.0 section of `CHANGELOG.md`. The
+once, on the v0.5.0 release build, instead of per PR. Until the release commit
+moves them under `[0.5.0]`, the PRs merged under that decision are listed in
+the `[Unreleased]` section of `CHANGELOG.md`; run the pass only on the tagged
+`v0.5.0` build, whose changelog section is the authoritative scope. The
 pass also covers the everyday flows this release targets: cross-site links whose
 text sits in a span or icon (DuckDuckGo results, GitHub tabs, YouTube "Watch
 on YouTube"), script-submitted sign-in forms (Stack Overflow "Log in with
