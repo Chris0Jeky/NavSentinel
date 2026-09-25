@@ -13,7 +13,9 @@ import {
   runClearBehaviouralData,
   runClearStats,
   runImportFlow,
+  runProtectionReset,
   withReentrancyGuard,
+  type ProtectionResetScope,
 } from "./options_model";
 // RI-07: the bundler resolves this to the no-op monitor whenever the active
 // release profile leaves `capabilities.jsBehaviorInstrumentation` false, so the
@@ -22,6 +24,7 @@ import { jsBehaviorInstrumentationEnabled } from "@navsentinel/js-behavior-monit
 import {
   addTrustedDomainWithResult,
   deriveOptionsSettingsPatch,
+  normalizeStoredSuiteSettings,
   parseOptionsInt as parseIntSafe,
   rebaseOptionsSettingsDraft,
   appendEvent,
@@ -125,6 +128,9 @@ const domainProfilesEl = document.getElementById("domainProfiles") as HTMLDivEle
 const refreshProfilesBtn = document.getElementById("refreshProfiles") as HTMLButtonElement;
 const clearProfilesBtn = document.getElementById("clearProfiles") as HTMLButtonElement;
 const clearBehaviouralBtn = document.getElementById("clearBehavioural") as HTMLButtonElement;
+const resetNavBtn = document.getElementById("resetNav") as HTMLButtonElement;
+const resetCredBtn = document.getElementById("resetCred") as HTMLButtonElement;
+const protectSaveBtn = document.getElementById("protectSave") as HTMLButtonElement;
 const sidebarNav = document.getElementById("sidebarNav") as HTMLElement;
 
 // The last canonical settings object rendered into the form. Save compares the
@@ -669,6 +675,41 @@ function saveSettings(): Promise<void> {
 }
 
 saveBtn.addEventListener("click", () => { void saveSettings(); });
+protectSaveBtn.addEventListener("click", () => { void saveSettings(); });
+
+function applyNavDefaults(): void {
+  const defaults = normalizeStoredSuiteSettings({});
+  setSegValue(navModeSeg, defaults.nav.defaultMode);
+  setToggle(navDebugEl, defaults.nav.debug);
+  setToggle(autoDismissOverlaysEl, defaults.nav.autoDismissOverlays);
+}
+
+function applyCredentialDefaults(): void {
+  const defaults = normalizeStoredSuiteSettings({});
+  setSegValue(credModeSeg, defaults.credential.mode);
+  setToggle(blockHttpEl, defaults.credential.blockHttpPasswordSubmit);
+  setToggle(warnPasteEl, defaults.credential.warnOnPaste);
+  setToggle(promptUntrustedEl, defaults.credential.promptOnUntrustedDomain);
+  setToggle(promptMediumEl, defaults.credential.promptOnMediumRisk);
+  mediumThresholdEl.value = String(defaults.credential.mediumRiskThreshold);
+  setToggle(similarityEnabledEl, defaults.credential.similarity.enabled);
+  similarityMaxDistEl.value = String(defaults.credential.similarity.maxDistance);
+}
+
+function resetProtectionSection(scope: ProtectionResetScope): void {
+  runProtectionReset({
+    scope,
+    confirm: (message) => window.confirm(message),
+    apply: () => {
+      if (scope === "nav") applyNavDefaults();
+      else applyCredentialDefaults();
+      draftChanged();
+    },
+  });
+}
+
+resetNavBtn.addEventListener("click", () => resetProtectionSection("nav"));
+resetCredBtn.addEventListener("click", () => resetProtectionSection("credential"));
 for (const el of [navModeSeg, credModeSeg, navDebugEl, autoDismissOverlaysEl, blockHttpEl, warnPasteEl, promptUntrustedEl, promptMediumEl, similarityEnabledEl]) {
   el.addEventListener("click", draftChanged);
 }

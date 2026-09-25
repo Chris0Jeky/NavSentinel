@@ -3,6 +3,7 @@ import type {
   ImportAllResult,
   PromptOutcome,
   SuiteSettings,
+  SuiteSettingsPatch,
 } from "../shared/storage";
 
 /** Only divergent edits to the same leaf require a user's choice. */
@@ -38,6 +39,102 @@ export function acceptExternalSettings(draft: SuiteSettings, incoming: SuiteSett
     target[leaf] = source[leaf];
   }
   return result;
+}
+
+export type ProtectionResetScope = "nav" | "credential";
+
+export const NAV_RESET_SCOPE_LABEL = "Navigation firewall";
+export const CRED_RESET_SCOPE_LABEL = "Credential guard";
+
+const NAV_RESET_SETTINGS_LIST =
+  "mode, debug overlay, and auto-dismiss overlays";
+const CRED_RESET_SETTINGS_LIST =
+  "mode, HTTP-submit blocking, paste warnings, untrusted-domain and medium-risk prompts, medium-risk threshold, and lookalike similarity";
+
+const PROTECTION_RESET_KEPT_COPY =
+  "Auto-save mode, log limit, event logs, analytics, allowlists, trusted domains, and other settings are kept.";
+
+export interface ProtectionResetCopy {
+  scopeLabel: string;
+  settingsList: string;
+  confirmMessage: string;
+}
+
+/** Accessible confirmation copy naming the scope and settings changing. */
+export function describeProtectionReset(scope: ProtectionResetScope): ProtectionResetCopy {
+  const scopeLabel = scope === "nav" ? NAV_RESET_SCOPE_LABEL : CRED_RESET_SCOPE_LABEL;
+  const settingsList = scope === "nav" ? NAV_RESET_SETTINGS_LIST : CRED_RESET_SETTINGS_LIST;
+  return {
+    scopeLabel,
+    settingsList,
+    confirmMessage:
+      `Reset ${scopeLabel} to defaults?\n\n` +
+      `This restores ${settingsList} to their default values.\n\n` +
+      PROTECTION_RESET_KEPT_COPY,
+  };
+}
+
+/**
+ * Patch holding only one Protection section's fields from canonical defaults.
+ * Never includes autoSave, logLimit, or any behavioural-data lane.
+ */
+export function buildProtectionResetPatch(
+  scope: ProtectionResetScope,
+  defaults: SuiteSettings,
+): SuiteSettingsPatch {
+  if (scope === "nav") {
+    return {
+      nav: {
+        defaultMode: defaults.nav.defaultMode,
+        debug: defaults.nav.debug,
+        autoDismissOverlays: defaults.nav.autoDismissOverlays,
+      },
+    };
+  }
+  return {
+    credential: {
+      mode: defaults.credential.mode,
+      promptOnUntrustedDomain: defaults.credential.promptOnUntrustedDomain,
+      promptOnMediumRisk: defaults.credential.promptOnMediumRisk,
+      mediumRiskThreshold: defaults.credential.mediumRiskThreshold,
+      blockHttpPasswordSubmit: defaults.credential.blockHttpPasswordSubmit,
+      warnOnPaste: defaults.credential.warnOnPaste,
+      similarity: {
+        enabled: defaults.credential.similarity.enabled,
+        maxDistance: defaults.credential.similarity.maxDistance,
+      },
+    },
+  };
+}
+
+/** Draft with only one Protection section replaced by canonical defaults. */
+export function applyProtectionResetToDraft(
+  draft: SuiteSettings,
+  defaults: SuiteSettings,
+  scope: ProtectionResetScope,
+): SuiteSettings {
+  const next = structuredClone(draft);
+  if (scope === "nav") {
+    next.nav = structuredClone(defaults.nav);
+  } else {
+    next.credential = structuredClone(defaults.credential);
+  }
+  return next;
+}
+
+/**
+ * Confirm-gated reset entry point. Cancel never touches the form: `apply`
+ * runs only when `confirm` accepts the scope-naming message.
+ */
+export function runProtectionReset(deps: {
+  scope: ProtectionResetScope;
+  confirm: (message: string) => boolean;
+  apply: () => void;
+}): boolean {
+  const copy = describeProtectionReset(deps.scope);
+  if (!deps.confirm(copy.confirmMessage)) return false;
+  deps.apply();
+  return true;
 }
 
 export function pct(n: number, total: number): string {

@@ -3,7 +3,14 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, TRUSTED_DOMAINS_KEY } from "../../extension/src/shared/storage";
+import { ALLOWLIST_KEY } from "../../extension/src/shared/allowlist";
+import { ADAPTIVE_SCORES_KEY } from "../../extension/src/shared/adaptive_scoring";
+import {
+  EVENT_LOG_KEY,
+  PROMPT_OUTCOMES_KEY,
+  SUITE_SETTINGS_KEY,
+  TRUSTED_DOMAINS_KEY,
+} from "../../extension/src/shared/storage";
 import { getGymBaseUrl, getExtensionId, getServiceWorker } from "./extension_test_utils";
 import {
   clickPopupTarget,
@@ -740,6 +747,137 @@ test("options import and export preserve normalized trusted-domain and allowlist
       await context.close();
     }
   } finally {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Protection scoped resets confirm, cancel, preserve, and save via draft flow @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-protect-reset-"));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const worker = await getServiceWorker(context);
+    const preservedDataKeys = [
+      EVENT_LOG_KEY,
+      PROMPT_OUTCOMES_KEY,
+      ADAPTIVE_SCORES_KEY,
+      ALLOWLIST_KEY,
+      TRUSTED_DOMAINS_KEY,
+    ];
+    await worker.evaluate(async ({ sKey, eKey, promptKey, adaptiveKey, allowlistKey, trustedKey }) => {
+      await chrome.storage.local.set({
+        [eKey]: [{ id: "keep-me", ts: 1710000000000, kind: "nav_click_block", site: "example.com" }],
+        [promptKey]: [{ id: "history-keep-me", ts: 1710000000001, domain: "example.com", type: "cred", score: 55, outcome: "allow" }],
+        [adaptiveKey]: { "example.com": { adjustment: 5, allowCount: 4, blockCount: 1, lastUpdated: 1710000000000 } },
+        [allowlistKey]: { "example.com": ["login.example.com"] },
+        [trustedKey]: ["trusted.example.com"],
+      });
+      const cur = (await chrome.storage.local.get(sKey))[sKey];
+      await chrome.storage.local.set({ [sKey]: { ...cur, autoSave: false, logLimit: 500 } });
+    }, {
+      sKey: SUITE_SETTINGS_KEY,
+      eKey: EVENT_LOG_KEY,
+      promptKey: PROMPT_OUTCOMES_KEY,
+      adaptiveKey: ADAPTIVE_SCORES_KEY,
+      allowlistKey: ALLOWLIST_KEY,
+      trustedKey: TRUSTED_DOMAINS_KEY,
+    });
+    const beforeProtectedData = await worker.evaluate(async (keys) => chrome.storage.local.get(keys), preservedDataKeys);
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect(options.locator("#dirtyStatus")).toHaveText("All changes saved");
+    await expect(options.locator("#exportBtn")).toContainText(/all local data/i);
+    await expect(options.locator("#protectSave")).toBeVisible();
+    await expect(options.locator("#resetNav")).toBeVisible();
+    await expect(options.locator("#resetCred")).toBeVisible();
+    const settingsBeforeCancel = await worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k], SUITE_SETTINGS_KEY);
+    await options.locator('#navModeSeg [data-value="strict"]').click();
+    await options.locator('#credModeSeg [data-value="strict"]').click();
+    await options.locator("#mediumRiskThreshold").fill("77");
+    await expect(options.locator("#dirtyStatus")).toHaveText("Unsaved changes");
+    await options.evaluate(() => { (window as unknown as { __m: string }).__m = ""; window.confirm = (m?: string) => { (window as unknown as { __m: string }).__m = m ?? ""; return false; }; });
+    await options.locator("#resetNav").focus();
+    await expect(options.locator("#resetNav")).toBeFocused();
+    await options.keyboard.press("Enter");
+    await expect(options.locator('#navModeSeg [data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+    const cancelMsg = await options.evaluate(() => (window as unknown as { __m: string }).__m);
+    expect(cancelMsg).toContain("Navigation firewall");
+    const afterCancel = await worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k], SUITE_SETTINGS_KEY);
+    expect(afterCancel).toEqual(settingsBeforeCancel);
+    await options.evaluate(() => { window.confirm = (m?: string) => { (window as unknown as { __m: string }).__m = m ?? ""; return true; }; });
+    await options.locator("#resetNav").click();
+    const navMsg = await options.evaluate(() => (window as unknown as { __m: string }).__m);
+    expect(navMsg).toContain("Navigation firewall");
+    expect(navMsg).toMatch(/kept/i);
+    await expect(options.locator('#navModeSeg [data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator('#credModeSeg [data-value="strict"]')).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("77");
+    await expect(options.locator("#logLimit")).toHaveValue("500");
+    await expect(options.locator("#dirtyStatus")).toHaveText("Unsaved changes");
+    await options.locator("#protectSave").click();
+    await expect(options.locator("#saveStatus")).toHaveText("Saved.");
+    const afterNav = await worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k], SUITE_SETTINGS_KEY);
+    expect(afterNav.nav.defaultMode).toBe("smart");
+    expect(afterNav.credential.mode).toBe("strict");
+    expect(afterNav.credential.mediumRiskThreshold).toBe(77);
+    expect(afterNav.logLimit).toBe(500);
+    expect(afterNav.autoSave).toBe(false);
+    await options.locator("#resetCred").focus();
+    await expect(options.locator("#resetCred")).toBeFocused();
+    await options.locator("#resetCred").click();
+    const credMsg = await options.evaluate(() => (window as unknown as { __m: string }).__m);
+    expect(credMsg).toContain("Credential guard");
+    await expect(options.locator('#credModeSeg [data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+    await expect(options.locator("#mediumRiskThreshold")).toHaveValue("40");
+    await expect(options.locator('#navModeSeg [data-value="smart"]')).toHaveAttribute("aria-checked", "true");
+    await options.locator("#protectSave").click();
+    await expect(options.locator("#saveStatus")).toHaveText("Saved.");
+    const afterCred = await worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k], SUITE_SETTINGS_KEY);
+    expect(afterCred.credential.mode).toBe("smart");
+    expect(afterCred.nav.defaultMode).toBe("smart");
+    expect(afterCred.logLimit).toBe(500);
+    const afterProtectedData = await worker.evaluate(async (keys) => chrome.storage.local.get(keys), preservedDataKeys);
+    expect(afterProtectedData[EVENT_LOG_KEY]).toContainEqual({
+      id: "keep-me",
+      ts: 1710000000000,
+      kind: "nav_click_block",
+      site: "example.com",
+    });
+    for (const key of [PROMPT_OUTCOMES_KEY, ADAPTIVE_SCORES_KEY, ALLOWLIST_KEY, TRUSTED_DOMAINS_KEY]) {
+      expect(afterProtectedData[key]).toEqual(beforeProtectedData[key]);
+    }
+    await expect(options.locator("#importFile")).toBeAttached();
+  } finally {
+    await context.close();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test("Protection reset autosaves when auto-save is on @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-protect-autosave-"));
+  const context = await chromium.launchPersistentContext(userDataDir, {
+    headless: false,
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+  });
+  try {
+    const extensionId = await getExtensionId(context);
+    const worker = await getServiceWorker(context);
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await expect(options.locator("#autoSave")).toBeChecked();
+    await options.locator('#navModeSeg [data-value="off"]').click();
+    await expect.poll(() => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k]?.nav?.defaultMode, SUITE_SETTINGS_KEY)).toBe("off");
+    await options.evaluate(() => { window.confirm = () => true; });
+    await options.locator("#resetNav").click();
+    await expect.poll(() => worker.evaluate(async (k) => (await chrome.storage.local.get(k))[k]?.nav?.defaultMode, SUITE_SETTINGS_KEY)).toBe("smart");
+    await expect(options.locator("#dirtyStatus")).toHaveText("All changes saved");
+  } finally {
+    await context.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });

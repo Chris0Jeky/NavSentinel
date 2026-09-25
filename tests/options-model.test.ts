@@ -5,15 +5,20 @@ import {
   acceptExternalSettings,
   avg,
   fmtTime,
+  applyProtectionResetToDraft,
+  buildProtectionResetPatch,
   computePromptOutcomeStats,
+  describeProtectionReset,
   withReentrancyGuard,
   classifyImportError,
   describeBehaviouralReset,
   runClearBehaviouralData,
   runClearStats,
   runImportFlow,
+  runProtectionReset,
 } from "../extension/src/options/options_model";
 import type { SuiteSettings } from "../extension/src/shared/storage";
+import { normalizeStoredSuiteSettings } from "../extension/src/shared/storage";
 import { deriveOptionsSettingsPatch, parseOptionsInt as parseIntSafe, rebaseOptionsSettingsDraft } from "../extension/src/shared/storage";
 
 describe("pct", () => {
@@ -610,5 +615,84 @@ describe("runImportFlow (#188)", () => {
       }),
     ).resolves.toBeUndefined();
     expect(flash).toHaveBeenCalledWith("Imported.");
+  });
+});
+
+describe("scoped Protection resets (#563)", () => {
+  const defaults = () => normalizeStoredSuiteSettings({});
+
+  it("nav patch holds only nav fields from canonical defaults", () => {
+    const patch = buildProtectionResetPatch("nav", defaults());
+    expect(Object.keys(patch).sort()).toEqual(["nav"]);
+    expect(patch).toEqual({ nav: { ...defaults().nav } });
+    expect(patch).not.toHaveProperty("autoSave");
+    expect(patch).not.toHaveProperty("logLimit");
+    expect(patch).not.toHaveProperty("credential");
+  });
+
+  it("credential patch holds only credential fields from canonical defaults", () => {
+    const patch = buildProtectionResetPatch("credential", defaults());
+    expect(Object.keys(patch).sort()).toEqual(["credential"]);
+    expect(patch.credential).toEqual(defaults().credential);
+    expect(patch).not.toHaveProperty("autoSave");
+    expect(patch).not.toHaveProperty("logLimit");
+    expect(patch).not.toHaveProperty("nav");
+  });
+
+  it("nav draft reset preserves credential, autoSave, and logLimit", () => {
+    const draft = defaults();
+    draft.nav.defaultMode = "off";
+    draft.credential.mode = "strict";
+    draft.autoSave = false;
+    draft.logLimit = 500;
+    const next = applyProtectionResetToDraft(draft, defaults(), "nav");
+    expect(next.nav).toEqual(defaults().nav);
+    expect(next.credential.mode).toBe("strict");
+    expect(next.autoSave).toBe(false);
+    expect(next.logLimit).toBe(500);
+  });
+
+  it("credential draft reset preserves nav, autoSave, and logLimit", () => {
+    const draft = defaults();
+    draft.nav.defaultMode = "off";
+    draft.credential.mode = "off";
+    draft.autoSave = false;
+    draft.logLimit = 700;
+    const next = applyProtectionResetToDraft(draft, defaults(), "credential");
+    expect(next.credential).toEqual(defaults().credential);
+    expect(next.nav.defaultMode).toBe("off");
+    expect(next.autoSave).toBe(false);
+    expect(next.logLimit).toBe(700);
+  });
+
+  it("confirmations name the scope and kept settings", () => {
+    const nav = describeProtectionReset("nav");
+    const cred = describeProtectionReset("credential");
+    expect(nav.confirmMessage).toContain("Navigation firewall");
+    expect(nav.confirmMessage).toContain("mode, debug overlay, and auto-dismiss overlays");
+    expect(cred.confirmMessage).toContain("Credential guard");
+    expect(cred.confirmMessage).toContain("medium-risk threshold");
+    for (const copy of [nav, cred]) {
+      expect(copy.confirmMessage).toMatch(/kept/i);
+      expect(copy.confirmMessage).toMatch(/log limit/i);
+      expect(copy.confirmMessage).not.toMatch(/behavioural data cleared/i);
+    }
+    expect(nav.confirmMessage).not.toBe(cred.confirmMessage);
+  });
+
+  it("cancel never applies the reset", () => {
+    const apply = vi.fn();
+    let seen = "";
+    const ok = runProtectionReset({ scope: "nav", confirm: (m) => { seen = m; return false; }, apply });
+    expect(ok).toBe(false);
+    expect(apply).not.toHaveBeenCalled();
+    expect(seen).toContain("Navigation firewall");
+  });
+
+  it("confirm applies the reset once", () => {
+    const apply = vi.fn();
+    const ok = runProtectionReset({ scope: "credential", confirm: () => true, apply });
+    expect(ok).toBe(true);
+    expect(apply).toHaveBeenCalledTimes(1);
   });
 });

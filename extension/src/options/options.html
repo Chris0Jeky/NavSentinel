@@ -28,7 +28,7 @@
             <div class="topbar-pill"><span class="topbar-pill-label">log</span><span id="logUsage" class="topbar-pill-value topbar-pill-value--amber">--</span></div>
           </div>
           <div class="topbar-actions">
-            <button id="exportBtn" class="btn btn--ghost"><span id="downloadIcon"></span> Export</button>
+            <button id="exportBtn" class="btn btn--ghost"><span id="downloadIcon"></span> Export all local data</button>
             <label class="btn btn--ghost file-label">
               Import
               <input id="importFile" type="file" accept="application/json" hidden />
@@ -78,9 +78,12 @@
                 <p class="pane-sub">Configure navigation and credential defenses</p>
                 <p>Overlay cleanup: <span id="cleanupStatus" class="cleanup-status" role="status"></span></p>
               </div>
+              <div class="pane-actions">
+                <button id="protectSave" class="btn btn--primary">Save configuration</button>
+              </div>
             </div>
 
-            <div class="card-grid"><div class="card"><div class="card-head"><span class="card-accent card-accent--amber"></span><div class="card-title">Navigation firewall</div><div class="card-sub">Blocks deceptive interactions</div></div><div class="card-body"><div class="field"><label class="field-label ns-uc">Mode</label><div class="seg" id="navModeSeg" role="radiogroup" aria-label="Navigation guard mode"><button class="seg-btn" role="radio" data-value="off" tabindex="-1" aria-checked="false">Off</button><button class="seg-btn" role="radio" data-value="smart" tabindex="0" aria-checked="true">Smart</button><button class="seg-btn" role="radio" data-value="strict" tabindex="-1" aria-checked="false">Strict</button></div></div><div class="toggle-row"><div class="toggle-info"><div class="toggle-label" id="lbl-navDebug">Debug overlay</div><div class="toggle-sub" id="desc-navDebug">Show CDS/NRS on page</div></div><button class="toggle" id="navDebug" role="switch" aria-checked="false" aria-labelledby="lbl-navDebug" aria-describedby="desc-navDebug"><span class="toggle-thumb"></span></button></div><div class="toggle-row"><div class="toggle-info"><div class="toggle-label" id="lbl-od">Auto-dismiss overlays</div><div class="toggle-sub" id="desc-od">Hide high-risk overlays already covering the page or detected later; Undo is available</div></div><button class="toggle" id="dismiss" role="switch" aria-checked="false" aria-labelledby="lbl-od" aria-describedby="desc-od"><span class="toggle-thumb"></span></button></div></div></div><div class="card">
+            <div class="card-grid"><div class="card"><div class="card-head"><span class="card-accent card-accent--amber"></span><div class="card-title">Navigation firewall</div><div class="card-sub">Blocks deceptive interactions</div></div><div class="card-body"><div class="field"><label class="field-label ns-uc">Mode</label><div class="seg" id="navModeSeg" role="radiogroup" aria-label="Navigation guard mode"><button class="seg-btn" role="radio" data-value="off" tabindex="-1" aria-checked="false">Off</button><button class="seg-btn" role="radio" data-value="smart" tabindex="0" aria-checked="true">Smart</button><button class="seg-btn" role="radio" data-value="strict" tabindex="-1" aria-checked="false">Strict</button></div></div><div class="toggle-row"><div class="toggle-info"><div class="toggle-label" id="lbl-navDebug">Debug overlay</div><div class="toggle-sub" id="desc-navDebug">Show CDS/NRS on page</div></div><button class="toggle" id="navDebug" role="switch" aria-checked="false" aria-labelledby="lbl-navDebug" aria-describedby="desc-navDebug"><span class="toggle-thumb"></span></button></div><div class="toggle-row"><div class="toggle-info"><div class="toggle-label" id="lbl-od">Auto-dismiss overlays</div><div class="toggle-sub" id="desc-od">Hide high-risk overlays already covering the page or detected later; Undo is available</div></div><button class="toggle" id="dismiss" role="switch" aria-checked="false" aria-labelledby="lbl-od" aria-describedby="desc-od"><span class="toggle-thumb"></span></button></div><div class="card-actions"><p class="input-hint" id="desc-resetNav">Resets Navigation firewall mode, debug overlay, and auto-dismiss overlays to defaults. Other settings are kept.</p><button id="resetNav" class="btn btn--ghost" aria-describedby="desc-resetNav">Reset to defaults</button></div></div></div><div class="card">
                 <div class="card-head">
                   <span class="card-accent card-accent--green"></span>
                   <div class="card-title">Credential guard</div>
@@ -122,6 +125,10 @@
                       <div class="toggle-sub" id="desc-promptMedium">Prompt on medium risk scores</div>
                     </div>
                     <button class="toggle" id="promptOnMediumRisk" role="switch" aria-checked="false" aria-labelledby="lbl-promptMedium" aria-describedby="desc-promptMedium"><span class="toggle-thumb"></span></button>
+                  </div>
+                  <div class="card-actions">
+                    <p class="input-hint" id="desc-resetCred">Resets Credential guard mode, prompts, thresholds, and similarity to defaults. Other settings are kept.</p>
+                    <button id="resetCred" class="btn btn--ghost" aria-describedby="desc-resetCred">Reset to defaults</button>
                   </div>
                 </div>
               </div>

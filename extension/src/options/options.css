@@ -299,6 +299,21 @@ body {
   gap: 18px;
 }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ns-border-soft);
+}
+
+.card-actions .input-hint {
+  flex: 1;
+  margin: 0;
+}
+
 /* Fields */
 .field {
   margin-bottom: 14px;
