@@ -53,21 +53,26 @@ describe("allow-once open allowance is URL-bound (#851)", () => {
     expect(guard).toContain("const allowance = consumeOpenAllowance(url);");
   });
 
-  it("coerces the attempted URL once, before authorizing and opening", () => {
-    // An object URL whose toString() returns the authorized URL first and a
-    // different destination afterwards must not pass the check and then open
-    // elsewhere: every later use must see the single coerced string.
+  it("coerces url, target and features once, before any check or the native open", () => {
+    // An object argument whose toString() (or toLowerCase()) answers one way
+    // for the checks and another way for the native call must not pass the
+    // allow-once or subframe self-target checks and then open elsewhere: every
+    // later use must see the single coerced string.
     const start = guard.indexOf("function patchedOpen(");
     const end = guard.indexOf("function resolveFormAction(");
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const region = guard.slice(start, end);
-    const coerceAt = region.indexOf(
-      "const url = rawUrl === undefined ? undefined : String(rawUrl);",
-    );
-    expect(coerceAt).toBeGreaterThanOrEqual(0);
-    expect(coerceAt).toBeLessThan(region.indexOf("consumeOpenAllowance(url)"));
-    expect(region.slice(coerceAt + 70)).not.toMatch(/\brawUrl\b/);
+    const urlAt = region.indexOf("const url = rawUrl === undefined ? undefined : `${rawUrl}`;");
+    const targetAt = region.indexOf("const target = rawTarget === undefined ? undefined : `${rawTarget}`;");
+    const featuresAt = region.indexOf("const features = rawFeatures === undefined ? undefined : `${rawFeatures}`;");
+    expect(urlAt).toBeGreaterThanOrEqual(0);
+    expect(targetAt).toBeGreaterThan(urlAt);
+    expect(featuresAt).toBeGreaterThan(targetAt);
+    expect(featuresAt).toBeLessThan(region.indexOf("isSubframeSelfTarget(target)"));
+    expect(featuresAt).toBeLessThan(region.indexOf("consumeOpenAllowance(url)"));
+    const afterCoercion = region.slice(region.indexOf("\n", featuresAt));
+    expect(afterCoercion).not.toMatch(/\braw(Url|Target|Features)\b/);
   });
 
   it("passes the authorized URL from the bridge handler", () => {

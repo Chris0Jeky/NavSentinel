@@ -588,8 +588,8 @@ function recordWindowOpen(): void {
 function patchedOpen(
   this: Window | null | undefined,
   rawUrl?: string | URL,
-  target?: string,
-  features?: string
+  rawTarget?: string,
+  rawFeatures?: string
 ): Window | null {
   // Pages commonly capture `window.open` and call the saved function from an
   // arrow/strict wrapper, which supplies no receiver. Default only that nullish
@@ -597,11 +597,14 @@ function patchedOpen(
   // (which fail this realm's instanceof Window), and let the native throw its
   // normal Illegal invocation TypeError for genuinely invalid receivers.
   const receiver = this === null || this === undefined ? window : this;
-  // Coerce the URL exactly once. A page-supplied object could otherwise
-  // stringify to the authorized URL for the allow-once check and to another
-  // destination for the native call. Native open performs the same single
-  // ToString, so passing the resulting string preserves page semantics.
-  const url = rawUrl === undefined ? undefined : String(rawUrl);
+  // Coerce every argument exactly once. A page-supplied object could otherwise
+  // stringify to the authorized URL (or read as "_self") for the checks and to
+  // another destination (or "_blank") for the native call. A template literal
+  // performs the same ToString as the native binding, including throwing on a
+  // Symbol, and undefined keeps the native defaults.
+  const url = rawUrl === undefined ? undefined : `${rawUrl}`;
+  const target = rawTarget === undefined ? undefined : `${rawTarget}`;
+  const features = rawFeatures === undefined ? undefined : `${rawFeatures}`;
 
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({
