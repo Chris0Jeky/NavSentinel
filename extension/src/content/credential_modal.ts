@@ -437,6 +437,8 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key === "Escape") {
+        // Trusted input only (see the button listener below). (#826)
+        if (!e.isTrusted) return;
         e.preventDefault();
         done(outside);
         return;
@@ -480,6 +482,8 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     window.addEventListener("keydown", onKeyDown, true);
     overlay.addEventListener("mousedown", (e) => {
+      // Trusted input only (see the button listener below). (#826)
+      if (!e.isTrusted) return;
       if (e.target === overlay) done(outside);
     });
 
