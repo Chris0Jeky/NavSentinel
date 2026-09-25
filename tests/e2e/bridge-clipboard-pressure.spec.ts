@@ -188,6 +188,24 @@ async function completeControlledRetry(page: Page): Promise<BridgeMessage[]> {
     message: "TEST_INVALID: the controlled bridge never became ready",
   }).toBe(true);
 
+  // flushPendingOutbound() posts ns-bridge-ready BEFORE the buffered receipts,
+  // so readiness alone does not mean they have arrived. They are all posted in
+  // that same MAIN-world task; wait until the received list stops growing.
+  let previousCount = -1;
+  await expect.poll(async () => {
+    const count = await page.evaluate(() =>
+      (window as typeof window & {
+        __nsBridgePressure?: { messages: BridgeMessage[] };
+      }).__nsBridgePressure?.messages.length ?? 0,
+    );
+    const settled = count === previousCount;
+    previousCount = count;
+    return settled;
+  }, {
+    message: "TEST_INVALID: the flushed bridge receipts never settled",
+    intervals: [150, 150, 250, 500],
+  }).toBe(true);
+
   return page.evaluate(() =>
     (window as typeof window & {
       __nsBridgePressure?: { messages: BridgeMessage[] };

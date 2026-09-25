@@ -228,7 +228,7 @@ describe("OutboundQueue floodable reservation (#377/F2)", () => {
 });
 
 describe("#523 clipboard-pressure malicious baseline", () => {
-  it("records HARM_REACHED when clipboard alerts starve a later critical receipt", () => {
+  it("records CRITICAL_RECEIPT_DROPPED when clipboard alerts starve a later critical receipt", () => {
     const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
 
     for (let index = 0; index < 64; index++) {
@@ -247,8 +247,8 @@ describe("#523 clipboard-pressure malicious baseline", () => {
     const { items, dropped } = queue.drain();
     const receipt = {
       outcome: items.some((item) => item.payload?.id === "critical-after-flood")
-        ? "BLOCKED_PRE_HARM"
-        : "HARM_REACHED",
+        ? "CRITICAL_RECEIPT_DELIVERED"
+        : "CRITICAL_RECEIPT_DROPPED",
       syntheticClipboardAlerts: 64,
       deliveredClipboardAlerts: items.filter((item) => item.type === "ns-clipboard-write").length,
       criticalReceiptDelivered: items.some(
@@ -258,7 +258,7 @@ describe("#523 clipboard-pressure malicious baseline", () => {
     } as const;
 
     expect(receipt).toEqual({
-      outcome: "HARM_REACHED",
+      outcome: "CRITICAL_RECEIPT_DROPPED",
       syntheticClipboardAlerts: 64,
       deliveredClipboardAlerts: MAX_PENDING_OUTBOUND,
       criticalReceiptDelivered: false,
@@ -301,7 +301,7 @@ describe("#523 clipboard-pressure protected, benign, and mixed contracts", () =>
     expect(coalesced).toBe(2);
   });
 
-  it("records BLOCKED_PRE_HARM when a protected clipboard flood preserves the critical receipt", () => {
+  it("records CRITICAL_RECEIPT_DELIVERED when a protected clipboard flood preserves the critical receipt", () => {
     const queue = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
     for (let index = 0; index < 64; index++) {
       enqueueMainGuard(queue, msg("ns-clipboard-write", {
@@ -315,8 +315,8 @@ describe("#523 clipboard-pressure protected, benign, and mixed contracts", () =>
     const { items, dropped, coalesced } = queue.drain();
     const receipt = {
       outcome: items.some((item) => item.payload?.id === "critical-after-flood")
-        ? "BLOCKED_PRE_HARM"
-        : "HARM_REACHED",
+        ? "CRITICAL_RECEIPT_DELIVERED"
+        : "CRITICAL_RECEIPT_DROPPED",
       syntheticClipboardAlerts: 64,
       deliveredClipboardAlerts: items.filter((item) => item.type === "ns-clipboard-write").length,
       criticalReceiptDelivered: items.some(
@@ -327,7 +327,7 @@ describe("#523 clipboard-pressure protected, benign, and mixed contracts", () =>
     } as const;
 
     expect(receipt).toEqual({
-      outcome: "BLOCKED_PRE_HARM",
+      outcome: "CRITICAL_RECEIPT_DELIVERED",
       syntheticClipboardAlerts: 64,
       deliveredClipboardAlerts: 2,
       criticalReceiptDelivered: true,
@@ -527,7 +527,7 @@ describe("#523 clipboard-pressure protected, benign, and mixed contracts", () =>
   it("classifies a missing readiness receipt as TEST_INVALID", () => {
     const classify = (ready: boolean, criticalReceiptDelivered: boolean) => {
       if (!ready) return "TEST_INVALID";
-      return criticalReceiptDelivered ? "BLOCKED_PRE_HARM" : "HARM_REACHED";
+      return criticalReceiptDelivered ? "CRITICAL_RECEIPT_DELIVERED" : "CRITICAL_RECEIPT_DROPPED";
     };
 
     expect(classify(false, true)).toBe("TEST_INVALID");
