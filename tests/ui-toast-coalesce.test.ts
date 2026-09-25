@@ -2,12 +2,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type ShowToast = typeof import("../extension/src/content/ui_toast").showToast;
+type ActivateOwnedToastControl =
+  typeof import("../extension/src/content/ui_toast").activateOwnedToastControl;
 
 let showToast: ShowToast;
+let activateOwnedToastControl: ActivateOwnedToastControl;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
+  activateOwnedToastControl = mod.activateOwnedToastControl;
+}
+
+function getHost(): HTMLElement | null {
+  return document.documentElement.querySelector("#__navsentinel_toast_host");
+}
+
+// Unit DOMs cannot forge trusted input, so trusted-equivalent activation goes
+// through the identity relay (#783).
+function activate(control: HTMLElement): boolean {
+  return activateOwnedToastControl(getHost(), [control]);
 }
 
 /**
@@ -126,7 +140,7 @@ describe("ui_toast burst coalescing", () => {
     block();
     block();
     block();
-    pill()!.click();
+    activate(pill()!);
     expect(wraps().length).toBe(1);
     expect(getRoot()!.querySelector(".wrap .body")!.textContent).toContain("more blocked");
     expect(pill()).toBeNull(); // the pill is swapped for the full card
@@ -143,14 +157,14 @@ describe("ui_toast burst coalescing", () => {
     });
     // The 3rd blocked-popup prompt collapses the burst into the pill.
     expect(pill()).not.toBeNull();
-    pill()!.click();
+    activate(pill()!);
     const labels = Array.from(getRoot()!.querySelectorAll(".wrap button")).map((b) => b.textContent);
     expect(labels).toContain("Allow once");
     // Acting on the preserved action allows that popup AND clears the burst.
     const allowBtn = Array.from(
       getRoot()!.querySelectorAll<HTMLButtonElement>(".wrap button")
     ).find((b) => b.textContent === "Allow once")!;
-    allowBtn.click();
+    activate(allowBtn);
     expect(allow).toHaveBeenCalledTimes(1);
     expect(pill()).toBeNull();
   });
