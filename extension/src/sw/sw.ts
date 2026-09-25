@@ -465,7 +465,14 @@ function trySendForwardOffer(
 ): void {
   const inFlightKey = sendInFlightKey(tabId, forward.url);
   forwardSendInFlight.add(inFlightKey); // callers skip a re-send of this tab+URL while set (#323/disc#3, #360)
-  chrome.tabs.sendMessage(tabId, { type: "ns-forward-offer", url: forward.url }, () => {
+  // Carry returnUrl when known so the tab can drop offers it has moved on
+  // from (staleness guard, #774). Additive and optional: entries created by
+  // onCommitted without enrichment omit it, as before.
+  chrome.tabs.sendMessage(tabId, {
+    type: "ns-forward-offer",
+    url: forward.url,
+    ...(forward.returnUrl !== undefined ? { returnUrl: forward.returnUrl } : {}),
+  }, () => {
     forwardSendInFlight.delete(inFlightKey);
     if (chrome.runtime.lastError) {
       // Same rule as trySendRollback: the entry is already in pendingForwardByTab (its
