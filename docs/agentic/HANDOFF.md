@@ -1,33 +1,43 @@
 # NavSentinel handoff
 
-Updated 2026-09-25 08:37 UTC. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-09-25 08:51 UTC. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
 required reading.
 
-## 2026-09-25 Muse improvement swarm checkpoint (08:37 UTC)
+## 2026-09-25 Muse improvement swarm checkpoint (08:51 UTC)
 
 Chris asked to save the current wave and begin wrapping up. The active goal and
 its six daily heartbeat slots continue; this section is a restart point, not a
-release or browser acceptance claim. The exact remote `main` head at this
-checkpoint is `8f0680346155e6976d8a25fbb1c1b44d1fa3ffe5`.
+release or browser acceptance claim. The last verified remote `main` head at
+this checkpoint was `8f0680346155e6976d8a25fbb1c1b44d1fa3ffe5`;
+re-read it before acting.
 
 - #901 merged release-document corrections as `fe9b190a2e69c8a22224d7f136ca274caad3050e`.
   Package and manifest remain 0.4.0; no v0.5.0 tag or release was published.
 - #911 merged the daily/manual advisory branded-Chrome workflow as
   `061cdc44217e53cd1752b66f4660b502b3fd26ca`; #870 closed. Its first
   manual run [36111942896](https://github.com/Chris0Jeky/NavSentinel/actions/runs/36111942896)
-  used that exact head. Build, browser identification, and realistic branded
-  Chrome E2E finished successfully. Non-live acceptance was still running at
-  this checkpoint. Inspect its final step outcomes and uploaded receipts before
-  calling the run green or attributing a failure; the known #864/#865 form
-  acceptance baseline may make it red.
+  used that exact head and failed. Build and browser identification succeeded
+  with Google Chrome 153.0.8010.52; realistic branded Chrome E2E passed 178
+  with two skips. Non-live acceptance failed 18, passed seven, and skipped one;
+  its failure artifact is `branded-chrome-advisory-36111942896-1` (ID
+  `10854715373`). Several ancestry prechecks failed because the checkout had
+  only one commit, and CDP-backed checks hit `WebSocket is not defined` on
+  Node 20. Other failures, including the known form acceptance baseline, need
+  separate classification after a corrected hosted run. This run is not a
+  full-acceptance or release gate pass.
 - #912 merged the focused Proving Ground sink-health contract test as
   `8f0680346155e6976d8a25fbb1c1b44d1fa3ffe5`. Its exact head
   `f4d097d4ad1d8488788ede76e75d4c04783fe9e1` passed focused Vitest 6/6,
   typecheck, scoped lint, independent review, and hosted Build / Unit plus E2E.
   There were no open review threads or issue closers. #449 remains open for
   representative M0 proof work.
+- Ready #913 (`2e61391d84c7ca2912b9c5f039186001e88c6324`) changes only
+  the advisory workflow to fetch full Git history and use Node 24, plus a
+  failure-ledger receipt. Local prerequisite checks and independent review
+  passed; exact-head CI and a corrected manual hosted workflow run remain
+  pending. Its PR body was corrected so GitHub lists no closing issues.
 - #895 (`cd01c8d3`), #899 (`36430d81`), and #910 (`2a2af092`) remain open.
   Their hosted CI was green, but the applicable branded-Chrome/full-acceptance
   gates were not complete; #865's named-iframe false block is a known acceptance
@@ -38,15 +48,21 @@ checkpoint is `8f0680346155e6976d8a25fbb1c1b44d1fa3ffe5`.
   ping/missing-pong recovery. A future fix needs a bounded live-port-death
   oracle and must preserve challenge/session, queued-alert, and mode/debug
   authority. #186 SW-vouched authentication remains a separate dependency.
+- Two integrity-clean Muse lenses on the Proving Ground fake sink found no
+  confirmed incorrect receipt acceptance. They identified possible unbounded
+  in-memory receipt/invalid-attempt retention and uncovered request paths;
+  those need a direct failing oracle before another #449 implementation slice.
 
 The primary local `main` checkout is behind remote `main` and holds four
 unrelated #650 edits in `capture_isolated.ts`, `form_action.ts`, `main_guard.ts`,
 and `tests/form-action.test.ts`. Preserve them; do not stash, reset, or clean the
 checkout for this wave. `ACTION_ITEMS.md` is the human queue: AI-47 rows 1-8
 remain **OPEN — not run**, and AI-19 name clearance is deferred to store
-submission. Next restart: inspect run 36111942896's terminal receipt, check
-#912 for late review feedback, and choose the next active M0/M1 slice from live
-GitHub state. The local ignored `artifacts/muse-swarm-20260925/` checkpoint has
+submission. Next restart: reconcile #913's exact-head CI, review threads,
+mergeability, and three-minute aging floor. Merge only if its declared gate
+passes; then dispatch one corrected hosted advisory run and classify its
+acceptance failures from the actual receipt. Check #912 for late review
+feedback. The local ignored `artifacts/muse-swarm-20260925/` checkpoint has
 the detailed commands, heads, and review dispositions.
 
 ## 2026-09-08 issue wave (22:42 UTC snapshot)
