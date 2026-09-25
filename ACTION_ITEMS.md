@@ -84,8 +84,8 @@ redirect guard may remain visibly present but inert; this is a fail-closed UX an
 accessibility regression, not an established navigation bypass, and is tracked
 with the complete evidence boundary and repair oracle in #560. The historical
 attempt records below are retained as at-the-time evidence and do not reopen the
-completed gate. This PR-specific completion does not move the general guided-
-resolution cursor from AI-19.
+completed gate. This PR-specific completion does not change today's AI-47
+guided cursor.
 
 **Earlier human result (2026-08-27, PR #557 at
 `14e397b154f50b5ea8e1e30ca211404e8cf34bca`): FAILED at step 5.** In a fresh
@@ -217,15 +217,6 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
-- **AI-37** — PR #599 (issue #523), branch
-  `fix/issue523-unverified-clipboard-cap`. **Policy accepted 2026-09-25**
-  (D-2026-09-25-R): Chris accepted unverified-only latest-value coalescing, and
-  #599 merged on D-2026-09-25-Q's automated gates as
-  `d4b1acf5843605f519ffe1732050a2c1bb501ee1`. What remains open is the bridge
-  queue-pressure Chrome check (a benign clipboard write must not suppress the
-  trusted fake-verification warning). It joins the AI-47 pass on the release
-  build, with the procedure in `docs/agentic/GATE3_GUIDES.md` on `main`.
-  Human result: **OPEN — not run**.
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
@@ -250,6 +241,7 @@ preserve Chris's explicit observation.
 | 5 | Protection Center #640 — `a49cbc3e37f8ade547a97266588d894db1c3c33f`; evidence preview #641 — `7548954701f99377fed149c3be20135e39fe0b44` | [#640 acceptance procedure](docs/vision-overhaul/BROWSER_ACCEPTANCE.md); [#641 export procedure](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45) | OPEN — not run |
 | 6 | Settings #643 — `9524a8a7c38f972e66ef49b0f4cc991fb751e67f`; imported log limit #655 — `9b7ce93652b08c0e7f124f3ef132e46c6ab39909`; conditional writes #658 — `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` | [#643/#655/#658 current-main procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) | OPEN — not run |
 | 7 | Event association #644 — `7184e9d0a3bca699cae5e05426137258c836850e`; canonical IP sites #657 — `c760bb086023c4b83c8ef65693b5adf475414fda` | [#644/#657 association procedure](docs/agentic/ISSUE_585_GATE3.md) | OPEN — not run |
+| 8 | Bridge queue pressure #599 — `d4b1acf5843605f519ffe1732050a2c1bb501ee1`; AI-37 policy accepted (D-2026-09-25-R) | [#599 current-main subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-row-8--599-current-main-clipboard-pressure) | OPEN — not run |
 
 **OPEN: AI-47 — September browser-queue consolidated post-merge Chrome check.**
 On 2026-09-12 Chris explicitly directed the agent to merge the open PRs gated
@@ -306,6 +298,7 @@ revision printed by the build, then run this consolidated sequence:
    full-URL sanitization, legacy popup fallback, and canonical IP-site
    association remain correct without leaking an event to an unrelated
    top-level page.
+8. **Bridge queue pressure ([#599 / former AI-37](docs/agentic/GATE3_GUIDES.md#ai-47-row-8--599-current-main-clipboard-pressure)):** complete the current-`main` subprocedure. A benign clipboard write must not suppress the trusted fake-verification warning; the benign CAPTCHA page must remain usable without a warning. Record the two event-log outcomes and console observations. The queue policy was accepted, but this browser result remains **OPEN — not run**.
 
 Inspect page, popup, Options, Protection Center, and service-worker consoles for
 new errors during the relevant steps. Only after Chris has explicitly recorded
@@ -314,7 +307,7 @@ main at <40-character SHA>; Chrome <version>`. #658 keeps row 6 and AI-47 open
 until Chris records its observation. On a mismatch, Chris records
 `AI-47 failed on main at <SHA>: <numbered step and observed result>`. A failure
 reopens the smallest affected issue/PR slice; it does not invalidate unrelated
-checks. The general guided cursor remains AI-19.
+checks. The general guided cursor is AI-47; AI-19 remains deferred until store submission.
 
 **Agent pre-check, 2026-09-24 (automated evidence only; every Human result above
 stays OPEN — not run):** each AI-47 row and AI-24/30/33/35/36 now has an
@@ -357,7 +350,7 @@ warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
 The AI-36 guide carries a matching post-merge banner. Reply `AI-36 done; Gate-3
 passed on main at <40-character SHA>; Chrome <version>` or `AI-36 failed on main
 at <SHA>: <step and observed>`.
-The general guided resolution cursor remains AI-19; AI-36 is an additional
+The general guided resolution cursor is AI-47; AI-36 is an additional
 branch-specific gate.
 
 **OPEN: AI-35 — #539 cross-host child-event attribution post-merge Gate-3.**
@@ -375,7 +368,7 @@ consoles. Only Chris can complete this human Gate-3. The AI-35 guide carries a
 matching post-merge banner. Reply `AI-35 done; Gate-3 passed on main at
 <40-character SHA>; Chrome <version>` or `AI-35 failed on main at <SHA>: <step
 and observed>`. The general guided
-resolution cursor remains AI-19; AI-35 is an additional branch-specific gate.
+resolution cursor is AI-47; AI-35 is an additional branch-specific gate.
 
 **OPEN: AI-33 — Issue #530 popup trust-pill contrast post-merge Gate-3.** This
 is no longer a pre-merge gate. PR #582 merged on 2026-08-27 (head
@@ -390,7 +383,7 @@ chips, unclipped, keyboard-operable, and free of new popup-console errors. Only
 Chris can record this complete. Reply `AI-33 done; Gate-3 passed on main at
 <40-character SHA>; Chrome <version>` or `AI-33 failed on main at <SHA>:
 <step and observed>`. This PR-specific gate does not move the general guided-
-resolution cursor from AI-19.
+resolution cursor from AI-47.
 
 **OPEN: AI-30 - #567 Back/Forward history-integrity post-merge Gate-3.** This is
 no longer a pre-merge gate. PR #570 merged on 2026-08-27 (head
@@ -407,7 +400,7 @@ prompt. Also confirm the existing delayed page-initiated redirect still rolls
 back. Only Chris can record this complete. Reply `AI-30 done; Gate-3 passed on
 main at <40-character SHA>; Chrome <version>` or `AI-30 failed on main at
 <SHA>: <step and observed>`. This PR-specific gate does not move the general
-guided-resolution cursor from AI-19.
+guided-resolution cursor from AI-47.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
