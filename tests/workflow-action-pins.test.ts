@@ -87,6 +87,11 @@ describe("Branded Chrome browser-gate trigger", () => {
       "contains(github.event.pull_request.labels.*.name, 'gate:browser')",
     );
     expect(source).not.toContain("pull_request_target:");
+    expect(source).toContain("permissions:\n  contents: read");
+    expect(source).toContain(
+      "group: branded-chrome-${{ github.event.pull_request.number || github.ref }}",
+    );
+    expect(source).toContain("cancel-in-progress: true");
     expect(source).toContain(
       "PULL_REQUEST_HEAD: ${{ github.event.pull_request.head.sha || '' }}",
     );
