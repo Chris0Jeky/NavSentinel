@@ -114,6 +114,9 @@ export class CdpPageClient {
   }
 
   send<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    // A closed WHATWG WebSocket may discard send() without throwing. The close
+    // event may already have fired, leaving a newly registered request pending.
+    if (this.closed) return Promise.reject(new Error(`${this.label} DevTools socket closed before ${method}`));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
@@ -139,7 +142,23 @@ export class CdpPageClient {
   async waitFor(predicateSource: string, timeoutMs = 5000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      if (await this.evaluate<boolean>(`Boolean(${predicateSource})`).catch(() => false)) return;
+      let satisfied: boolean;
+      try {
+        satisfied = await this.evaluate<boolean>(`Boolean(${predicateSource})`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (this.closed || /DevTools socket closed/i.test(message)) {
+          throw new Error(`${this.label}: DevTools socket closed while waiting for ${predicateSource}: ${message}`, { cause: error });
+        }
+        if (message.includes(`${this.label} evaluate failed:`)) {
+          // The predicate threw in the page before render (for example a
+          // missing element without optional chaining); poll again as not-yet-true.
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          continue;
+        }
+        throw error;
+      }
+      if (satisfied) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error(`${this.label}: timed out waiting for ${predicateSource}`);
