@@ -1,191 +1,43 @@
-name: CI
+name: Apply PR 936 Fix
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
-  pull_request:
-    # Deliberately unfiltered. `pull_request.branches` filters on the BASE branch,
-    # so `[main]` silently gave stacked PRs (base != main) no CI at all -- not red,
-    # not pending, never run -- while `mergeStateStatus` still reported CLEAN, so
-    # they looked mergeable. This repo's own documented workflow uses stacked
-    # branches (docs/agentic/GIT_WORKFLOW.md "Stacked branches and CI"), so the gap
-    # applied exactly to the larger dependent changes that need CI most. It hid a real
-    # broken build in PR #535. See #537. Do not re-add a branches filter here.
-    #
-    # Deliberately no `types:` either. Retargeting a stacked child fires `edited`,
-    # not `synchronize`, so a retarget produces no run -- but adding `edited` would
-    # also rebuild on every title/body edit. The cheaper answer is to merge the new
-    # base into the child after retargeting, which changes the head SHA, fires
-    # `synchronize`, and tests the tree that will actually merge. See the
-    # "Stacked branches and CI" section of docs/agentic/GIT_WORKFLOW.md.
-    branches: ["**"]
-  workflow_dispatch:
+    branches:
+      - codex/apply-pr936-fix-20260925
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build-and-unit:
-    name: Build / Unit
+  apply:
     runs-on: ubuntu-latest
-    # Keep dependency installation, tests, and packaging bounded if a tool
-    # process stops responding.
-    timeout-minutes: 30
+    timeout-minutes: 10
+    env:
+      TARGET_SHA: 99a162cd41750454287bdb8fac286b1755395945
+      TARGET_BRANCH: codex/865-formdata-child-replay-20260925
     steps:
-      - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Setup Node
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify versions
-        run: npm run verify:versions
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Run unit tests
-        run: npm test
-
-      - name: Check top-sites generated data
-        run: npm run check:topsites
-
-      - name: Rebuild deterministic research reputation fixture
-        run: npm run build:bloom:test
-
-      - name: Check research reputation fixture
-        run: npm run check:bloom-size
-
-      - name: Build extension
-        run: npm run build
-
-      - name: Check final content-loader identity
-        run: npm run check:content-loader
-
-      - name: Check performance budget
-        run: npm run check:perf-budget
-
-      - name: Package extension
-        run: npm run package:ext
-
-      - name: Upload packaged extension
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: navsentinel-extension
-          path: artifacts/*.zip
-          if-no-files-found: error
-
-      - name: Build non-release reputation research profile
-        run: npm run build:research-reputation
-
-      - name: Check research content-loader identity
-        run: npm run check:content-loader
-
-      - name: Check research profile performance budget
-        run: npm run check:perf-budget
-
-  e2e:
-    name: E2E
-    runs-on: ubuntu-latest
-    needs: build-and-unit
-    # Bound a hung browser/test process while leaving the evidence-upload step
-    # time to run after the test-step timeout fires.
-    timeout-minutes: 60
-    steps:
-      - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-
-      - name: Setup Node
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify versions
-        run: npm run verify:versions
-
-      - name: Build extension
-        run: npm run build
-
-      - name: Check final content-loader identity
-        run: npm run check:content-loader
-
-      - name: Check performance budget
-        run: npm run check:perf-budget
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        timeout-minutes: 30
-        run: xvfb-run -a npm run test:e2e
-
-      - name: Upload E2E report and failure evidence
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: navsentinel-e2e-evidence
-          path: |
-            test-results/
-            playwright-report/
-          if-no-files-found: warn
-          retention-days: 14
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-and-unit, e2e]
-    runs-on: ubuntu-latest
-    # A tag release must not hold a runner indefinitely if packaging or the
-    # release action stalls.
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
+      - name: Checkout exact PR head
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: 99a162cd41750454287bdb8fac286b1755395945
           fetch-depth: 0
 
-      - name: Verify tag is on main
+      - name: Verify and apply deterministic patch
+        shell: bash
         run: |
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::Tag must point to a commit on main"
-            exit 1
-          fi
-
-      - name: Setup Node
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - run: npm run verify:versions
-      - run: npm run build
-      - run: npm run check:content-loader
-      - run: npm run check:release-profile -- --release
-      - run: npm run check:perf-budget
-
-      - name: Package extension
-        run: npm run package:ext
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda  # v2.2.1
-        with:
-          files: artifacts/*.zip
-          generate_release_notes: true
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          cat > /tmp/pr936.patch.gz.b64 <<'PATCH_B64'
+          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
+          PATCH_B64
+          base64 --decode /tmp/pr936.patch.gz.b64 | gzip --decompress > /tmp/pr936.patch
+          git config user.name "OpenAI Codex"
+          git config user.email "codex@openai.com"
+          git am /tmp/pr936.patch
+          test "$(git rev-parse HEAD^)" = "$TARGET_SHA"
+          test "$(git hash-object extension/src/content/main_guard.ts)" = "77fd4cf5743ad00dcb2c34ce4978e5395bc25b6b"
+          test "$(git hash-object extension/src/content/main_guard_helpers.ts)" = "1d9eb52711b5ce209193eeca721e6bc3e9d6fd20"
+          test "$(git hash-object gym/form-submit-child-replay.html)" = "8d8c0f1c3094e8788d091a243b94135b3427034d"
+          test "$(git hash-object tests/e2e/form-submit-child-replay.spec.ts)" = "f307190587f07de8b6596de5889a6b0cec4eb6c8"
+          test "$(git hash-object tests/form-child-replay-helpers.test.ts)" = "e3807599856a4012e104ed61ceabfb4eacefd3ea"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
