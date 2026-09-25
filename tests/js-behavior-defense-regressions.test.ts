@@ -86,6 +86,26 @@ describe("effective base URL resolution", () => {
     expect(extractOrigin("api/submit")).toBe("https://cdn.example");
   });
 
+  it("keeps relative URLs same-origin when the effective base is same-origin", () => {
+    const base = document.createElement("base");
+    base.href = `${location.origin}/application/`;
+    document.head.appendChild(base);
+
+    expect(isCrossOriginUrl("api/submit")).toBe(false);
+    expect(extractOrigin("api/submit")).toBe(location.origin);
+  });
+
+  it("does not let a base element alter absolute URL classification", () => {
+    const base = document.createElement("base");
+    base.href = "https://cdn.example/static/";
+    document.head.appendChild(base);
+
+    expect(isCrossOriginUrl(`${location.origin}/login`)).toBe(false);
+    expect(extractOrigin(`${location.origin}/login`)).toBe(location.origin);
+    expect(isCrossOriginUrl("https://other.example/path")).toBe(true);
+    expect(extractOrigin("https://other.example/path")).toBe("https://other.example");
+  });
+
   it("resolves a relative formaction against document.baseURI", () => {
     const postSignal = vi.fn<PostSignalFn>();
     const base = document.createElement("base");
@@ -148,6 +168,25 @@ describe("submitter action authority", () => {
     document.body.appendChild(form);
 
     initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).not.toHaveBeenCalled();
+  });
+
+  it("uses first sight as the baseline for a newly inserted static override", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/safe-endpoint");
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.setAttribute("formaction", "https://payments.example/checkout");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
     form.dispatchEvent(
       new SubmitEvent("submit", { bubbles: true, submitter: button })
     );
