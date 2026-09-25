@@ -226,6 +226,18 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
   });
 
+  it("a benign empty state layer over named link padding still activates the link (#886)", () => {
+    vi.mocked(Range.prototype.getClientRects).mockReturnValue(
+      [new DOMRect(80, 0, 40, 24)] as unknown as DOMRectList,
+    );
+    const link = el("a", { href: "https://other.example/" });
+    link.appendChild(document.createTextNode("Watch"));
+    const layer = el("span", { style: "position:absolute;inset:0;opacity:0.08" }, link);
+    const ctx = click([layer, link, document.body]);
+    expect(ctx.top.tag).toBe("A");
+    expect(computeCDS(ctx).cds).toBe(0);
+  });
+
   it("keeps effective ancestor opacity when re-rooting a clicked child (#886)", () => {
     const wrapper = el("div", { style: "opacity:0.01" });
     const link = el("a", { href: "https://evil.example/" }, wrapper);

@@ -149,18 +149,37 @@ function backgroundAlpha(el: Element): number {
   return bg.startsWith("rgb(") ? 1 : 0;
 }
 
-/** Direct text must paint a visible glyph at the click point to count. */
-function paintsOwnContent(el: Element, x: number, y: number): boolean {
-  for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType !== Node.TEXT_NODE || !/[^\s\u200b-\u200d\ufeff]/u.test(node.textContent ?? "")) continue;
+/** Test glyph runs rather than a whole text node, whose rect can include blank padding. */
+function directTextPaints(el: Element, x: number, y: number, allowElsewhere = false): boolean {
+  const box = allowElsewhere ? el.getBoundingClientRect() : null;
+  let remainingRuns = 32;
+  for (let i = 0; i < Math.min(el.childNodes.length, 32); i++) {
+    const node = el.childNodes[i]!;
+    if (node.nodeType !== Node.TEXT_NODE) continue;
+    // Bound page-controlled text work on the synchronous click path. Reaching
+    // the cap keeps the leaf score, which is the conservative direction.
+    const content = (node.textContent ?? "").slice(0, 2048);
     const range = el.ownerDocument.createRange();
-    range.selectNodeContents(node);
-    for (const rect of Array.from(range.getClientRects())) {
-      if (rect.width > 0 && rect.height > 0 && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        return true;
+    for (const run of content.matchAll(/[^\s\u200b-\u200d\ufeff]+/gu)) {
+      if (remainingRuns-- <= 0) return false;
+      const start = run.index;
+      range.setStart(node, start);
+      range.setEnd(node, start + run[0].length);
+      for (const rect of Array.from(range.getClientRects())) {
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+        if (box && rect.right > box.left && rect.left < box.right && rect.bottom > box.top && rect.top < box.bottom) {
+          return true;
+        }
       }
     }
   }
+  return false;
+}
+
+/** The control paints a direct glyph at the point, or a visible background. */
+function paintsOwnContent(el: Element, x: number, y: number): boolean {
+  if (directTextPaints(el, x, y)) return true;
   return backgroundAlpha(el) >= CONCEALED_OPACITY_CEILING;
 }
 
@@ -199,7 +218,13 @@ function activatedAncestor(stack: Element[], leaf: Element, x: number, y: number
       if (opacityWithin(leaf, el) >= CONCEALED_OPACITY_CEILING) return el;
       const visibleOwnPaint = paintsOwnContent(el, x, y) || between.some((b) =>
         opacityWithin(b, el) >= CONCEALED_OPACITY_CEILING && paintsOwnContent(b, x, y));
-      return visibleOwnPaint ? el : null;
+      if (visibleOwnPaint) return el;
+      // An empty Material state layer can cover a link's padding while its
+      // visible label sits elsewhere inside the same box. Preserve that benign
+      // re-root without letting a concealed text-bearing child borrow it.
+      const emptyStateLayer = between.length === 0 && leaf.childNodes.length === 0 &&
+        opacityWithin(leaf, el) >= 0.08 && !paintsOwnContent(leaf, x, y);
+      return emptyStateLayer && directTextPaints(el, x, y, true) ? el : null;
     }
     between.push(el);
   }
