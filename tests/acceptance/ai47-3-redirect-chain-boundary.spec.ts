@@ -221,6 +221,9 @@ test("AI-47 step 3 / former AI-40: BFCache Back/Forward never reuses a stale red
     await observer.detach();
     session.note(`AI-47.3 soft-step failures: ${JSON.stringify(failures)}`);
     expect(failures, "every AI-47 step-3 step passes").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

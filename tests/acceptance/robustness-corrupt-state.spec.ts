@@ -205,6 +205,9 @@ test("hardening wave: hostile persisted state restarts cleanly, keeps protecting
       session.note(`console errors: ${JSON.stringify(errors).slice(0, 2000)}`);
       expect(errors.filter((entry) => entry.level === "exception")).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

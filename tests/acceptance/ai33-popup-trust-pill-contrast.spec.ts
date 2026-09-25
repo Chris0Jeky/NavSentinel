@@ -133,6 +133,9 @@ test("AI-33: popup trust pill is readable, unclipped, labelled and keyboard-reve
 
     const failedSteps = session.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
     expect(failedSteps, "every procedure step passed").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

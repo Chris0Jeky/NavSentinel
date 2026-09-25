@@ -162,6 +162,9 @@ test("AI-47.1 / former AI-38: regular block card Dismiss (mouse, Tab+Enter, Tab+
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
@@ -233,6 +236,9 @@ test("AI-47.1 / former AI-38: cleanup Undo by mouse and keyboard; cleanup prompt
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
@@ -392,6 +398,9 @@ test("AI-47.1 adversarial: page scripts and a forged host cannot activate NavSen
       const failed = session.receipt.steps.filter((step) => step.status === "failed").map((step) => step.title);
       expect(failed).toEqual([]);
     });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

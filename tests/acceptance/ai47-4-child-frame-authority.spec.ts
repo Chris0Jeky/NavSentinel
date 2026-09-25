@@ -232,6 +232,9 @@ test("AI-47.4a / former AI-41: deceptive child frame is rolled back with a worki
     await session.step("summary: every step above passed", async () => {
       expect(session.receipt.steps.filter((step) => step.status === "failed").map((step) => step.title)).toEqual([]);
     });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
@@ -326,6 +329,9 @@ test("AI-47.4b / former AI-46: ordinary and declared child forms navigate with n
     await session.step("summary: every step above passed", async () => {
       expect(session.receipt.steps.filter((step) => step.status === "failed").map((step) => step.title)).toEqual([]);
     });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

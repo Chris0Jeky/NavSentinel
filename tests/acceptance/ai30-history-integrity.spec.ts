@@ -168,6 +168,9 @@ test("AI-30: cross-site Back/Forward keeps every history entry; a later page red
     await observer.detach();
     session.note(`AI-30 soft-step failures: ${JSON.stringify(failures)}`);
     expect(failures, "every AI-30 step passes").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
