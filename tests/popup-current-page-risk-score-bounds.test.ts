@@ -13,7 +13,7 @@ function row(score: number): EventLogEntry {
 describe("Current page numerical evidence boundary", () => {
   // Finite out-of-range scores survive the existing storage/import validator.
   // Non-finite inputs are also refused by the pure selector's numeric bounds.
-  it.each([-1, 100.01, 101, Number.MAX_VALUE, NaN, Infinity, -Infinity])(
+  it.each([-1, 1000.01, 5000, Number.MAX_VALUE, NaN, Infinity, -Infinity])(
     "does not let invalid score %s replace valid evidence or hide a scoreless threat",
     (score) => {
       const invalid = Object.freeze(row(score));
@@ -33,6 +33,15 @@ describe("Current page numerical evidence boundary", () => {
       expect(invalid.score).toBe(score);
     },
   );
+
+  it.each([100.01, 104, 150, 1000])("keeps a real NRS above 100 (%s) and draws it at the gauge maximum", (score) => {
+    // computeNRS applies diminishing returns above 100 instead of clamping, so
+    // the riskiest blocks journal scores above 100; they must not be dropped.
+    const previous: EventLogEntry = { ...row(30), id: "previous", ts: NOW - 1 };
+    expect(derivePopupCurrentPageRisk([previous, row(score)], URL, NOW)).toMatchObject({
+      state: "scored", tabRisk: 100,
+    });
+  });
 
   it.each([0, 0.5, 100])("preserves valid score %s without clamping or rounding", (score) => {
     expect(derivePopupCurrentPageRisk([row(score)], URL, NOW)).toMatchObject({

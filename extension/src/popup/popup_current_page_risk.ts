@@ -23,11 +23,20 @@ function activePageHost(activeTabUrl: string): string {
   }
 }
 
+/**
+ * Real navigation scores can exceed 100: computeNRS applies diminishing
+ * returns above 100 rather than a clamp, so a block can journal 104 or 150.
+ * Those are the riskiest events and must drive the gauge (drawn clamped to
+ * 100). Only values no scorer can produce are treated as corrupt input.
+ */
+const MAX_PLAUSIBLE_EVENT_SCORE = 1000;
+
 function isGaugeScoredEvent(event: EventLogEntry): event is EventLogEntry {
   return (
     !!event.kind &&
     typeof event.score === "number" &&
-    event.score >= 0 && event.score <= 100 &&
+    Number.isFinite(event.score) &&
+    event.score >= 0 && event.score <= MAX_PLAUSIBLE_EVENT_SCORE &&
     !SILENT_DECISION_KINDS.has(event.kind)
   );
 }
@@ -89,7 +98,7 @@ export function derivePopupCurrentPageRisk(
   const scored = pickCurrentPageEvent(log, activeTabUrl, now, isGaugeScoredEvent);
   if (scored) {
     return {
-      tabRisk: typeof scored.score === "number" ? scored.score : 0,
+      tabRisk: typeof scored.score === "number" ? Math.min(100, scored.score) : 0,
       reasons: scored.reasons,
       state: "scored",
       threatKind: undefined,
