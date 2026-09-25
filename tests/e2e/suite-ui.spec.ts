@@ -790,7 +790,8 @@ test("Protection scoped resets confirm, cancel, preserve, and save via draft flo
     const options = await context.newPage();
     await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await expect(options.locator("#dirtyStatus")).toHaveText("All changes saved");
-    await expect(options.locator("#exportBtn")).toContainText(/all local data/i);
+    await expect(options.locator("#exportBtn")).toHaveText(/Export settings \+ history/i);
+    await expect(options.locator("#exportBtn")).toHaveAttribute("aria-label", /profiles and temporary navigation signals are not included/i);
     await expect(options.locator("#protectSave")).toBeVisible();
     await expect(options.locator("#resetNav")).toBeVisible();
     await expect(options.locator("#resetCred")).toBeVisible();
