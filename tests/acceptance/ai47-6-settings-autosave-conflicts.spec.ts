@@ -389,6 +389,9 @@ test("AI-47.6: settings autosave and conflict choices (#643, #655, #658) in bran
     // Soft steps keep the procedure running past a finding; the test still fails on any.
     const failedSteps = session.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
     expect(failedSteps, "every procedure step passed").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

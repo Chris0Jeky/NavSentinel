@@ -972,6 +972,57 @@ describe("service worker rollback gating", () => {
     });
   });
 
+  it("carries returnUrl on the pushed forward offer after ns-store-forward enrichment (#774)", async () => {
+    const mock = createChromeMock();
+    vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);
+    await import("../extension/src/sw/sw");
+
+    mock.emitCommitted({
+      tabId: 31,
+      frameId: 0,
+      url: "https://example.test/origin",
+      transitionType: "typed",
+      transitionQualifiers: []
+    });
+
+    vi.setSystemTime(new Date("2026-03-17T12:00:11.000Z"));
+    mock.emitCommitted({
+      tabId: 31,
+      frameId: 0,
+      url: "https://evil.test/redirected",
+      transitionType: "link",
+      transitionQualifiers: ["client_redirect"]
+    });
+    mock.dispatchRuntimeMessage(
+      { type: "ns-begin-rollback", returnUrl: "https://example.test/origin" },
+      { tab: { id: 31 } }
+    );
+    // handleRollback enriches the onCommitted offer with the page it is
+    // rolling back to; the push must carry it so the tab can drop offers it
+    // has moved on from.
+    mock.dispatchRuntimeMessage(
+      { type: "ns-store-forward", url: "https://evil.test/redirected", returnUrl: "https://example.test/origin" },
+      { tab: { id: 31 } }
+    );
+
+    mock.emitBeforeNavigate({
+      tabId: 31,
+      frameId: 0,
+      url: "https://example.test/origin"
+    });
+    mock.dispatchRuntimeMessage({ type: "ns-ready" }, { tab: { id: 31 } });
+    mock.emitTabUpdated(31, { status: "complete" }, { url: "https://example.test/origin" });
+
+    expect(mock.sentMessages).toContainEqual({
+      tabId: 31,
+      message: {
+        type: "ns-forward-offer",
+        url: "https://evil.test/redirected",
+        returnUrl: "https://example.test/origin"
+      }
+    });
+  });
+
   it("preserves the forward offer when the blocked destination aborts during rollback", async () => {
     const mock = createChromeMock();
     vi.stubGlobal("chrome", mock.chrome as unknown as typeof globalThis.chrome);

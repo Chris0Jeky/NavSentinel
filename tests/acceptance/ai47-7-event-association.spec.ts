@@ -218,6 +218,9 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
 
     session.note(`final event log key ${EVENT_LOG_KEY}; AI-47.7 soft-step failures: ${JSON.stringify(failures)}`);
     expect(failures, "every AI-47.7 step passes").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
     await ipv6?.close();

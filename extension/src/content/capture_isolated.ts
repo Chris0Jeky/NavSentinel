@@ -53,7 +53,8 @@ import {
   type DownCapture
 } from "./dom_builder";
 import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
-import { recordClipboardWrite, scanForClickFix } from "./clickfix_detector";
+import { scanForClickFix } from "./clickfix_detector";
+import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -85,6 +86,7 @@ import {
   handlePushStateBridgeMessage,
   isPushStateAbuseActive,
 } from "./pushstate_guard";
+import { correlatesShadowGuardPrompt } from "./shadow_guard_correlation";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
@@ -98,6 +100,7 @@ import {
   type SilentNavThrottleState,
 } from "./silent_decision";
 import { findSubmitControl, grantsTabNavigationAuthority } from "./nav_authority";
+import { isStaleDelivery } from "./rollback_staleness";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -110,7 +113,6 @@ const MAX_PENDING_BRIDGE_MESSAGES = 32;
 const BRIDGE_RETRY_MS = 100;
 const MAX_BRIDGE_RETRY_MS = 1000;
 const MAX_BRIDGE_INIT_MS = 10000;
-const SHADOW_GUARD_CORRELATION_MS = 500;
 const SHADOW_GUARD_ARRIVAL_MS = 1500;
 const RISKY_BLANK_REASONS = new Set([
   "intent_mismatch_under_interactive",
@@ -465,6 +467,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.session !== bridgeSession) return;
+  const receivedAtMs = Date.now();
 
   if (data.type === "ns-bridge-ready") {
     markMainGuardReady();
@@ -515,13 +518,17 @@ function handleBridgeMessage(message: unknown): void {
 
     const localPrompt = recentLocalBlankPrompt;
     if (
-      data.kind === "shadow_anchor" &&
       localPrompt &&
-      typeof data.ts === "number" &&
-      Date.now() - localPrompt.shownAt <= SHADOW_GUARD_ARRIVAL_MS &&
-      Math.abs(data.ts - localPrompt.shownAt) <= SHADOW_GUARD_CORRELATION_MS &&
-      localPrompt.params.url === url &&
-      (localPrompt.params.target ?? "_blank") === (data.target || "_blank")
+      correlatesShadowGuardPrompt({
+        kind: data.kind,
+        receivedAtMs,
+        promptShownAtMs: localPrompt.shownAt,
+        maxArrivalMs: SHADOW_GUARD_ARRIVAL_MS,
+        messageUrl: url,
+        promptUrl: localPrompt.params.url,
+        messageTarget: data.target,
+        promptTarget: localPrompt.params.target,
+      })
     ) {
       if (data.id !== undefined) localPrompt.params.actionId = data.id;
       recentLocalBlankPrompt = null;
@@ -601,10 +608,11 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-clipboard-write") {
-    const ts = typeof data.ts === "number" ? data.ts : Date.now();
-    const contentLength = typeof data.contentLength === "number" ? data.contentLength : -1;
-    const cmdLike = typeof data.looksLikeCommand === "boolean" ? data.looksLikeCommand : false;
-    recordClipboardWrite({ ts, contentLength, looksLikeCommand: cmdLike });
+    recordClipboardBridgeWrite({
+      ts: data.ts,
+      contentLength: data.contentLength,
+      looksLikeCommand: data.looksLikeCommand,
+    }, receivedAtMs);
     if (settings.defaultMode !== "off") {
       handleClickFixScan();
     }
@@ -613,7 +621,7 @@ function handleBridgeMessage(message: unknown): void {
 
   // --- DoubleClickjacking bridge messages from main_guard ---
   {
-    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data);
+    const dblResult = handleDblclickBridgeMessage(data.type ?? "", data, receivedAtMs);
     if (dblResult.handled) {
       // Forward to the SW so it can notify the opener tab.
       // This capture_isolated is running in the CHILD window; the opener tab
@@ -630,7 +638,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   // --- PushState abuse bridge messages from main_guard ---
-  if (handlePushStateBridgeMessage(data.type ?? "", data)) {
+  if (handlePushStateBridgeMessage(data.type ?? "", data, receivedAtMs)) {
     if (settings.defaultMode !== "off") {
       appendEventSafely({
         kind: "pushstate_abuse",
@@ -929,22 +937,19 @@ function handleClickFixScan(): void {
     reasons: result.reasons,
   });
 
+  // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
+  // fires for that explicit click only, never when a later notice replaces it.
   showToast({
     message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
-    actions: [
-      {
-        label: "Dismiss",
-        onClick: () => {
-          appendOutcomeSafely({
-            domain: siteKeyFromLocation(),
-            type: "nav",
-            score: result.score,
-            outcome: "dismiss",
-            ...(result.reasons?.length ? { reasons: result.reasons } : {}),
-          });
-        },
-      },
-    ],
+    onDismiss: () => {
+      appendOutcomeSafely({
+        domain: siteKeyFromLocation(),
+        type: "nav",
+        score: result.score,
+        outcome: "dismiss",
+        ...(result.reasons?.length ? { reasons: result.reasons } : {}),
+      });
+    },
     timeoutMs: 0,
   });
 }
@@ -1204,22 +1209,42 @@ function showRollbackPrompt(url: string): void {
             // ignore
           }
         }
-      },
-      {
-        label: "Dismiss",
-        onClick: () => {
-          // no-op
-        }
       }
+      // No caller Dismiss: the card always renders its own (#869).
     ],
     timeoutMs: 0
   });
+}
+
+/**
+ * Commit-time URL of the current document from NavigationTiming. Same-document
+ * `pushState` rewrites `location.href` without touching this entry, so it is
+ * the correct staleness basis where the live href can be quietly rewritten
+ * out from under a delivery (#855). Empty when unavailable (caller falls back
+ * to the live href).
+ */
+function currentCommittedHref(): string {
+  try {
+    const entries = performance.getEntriesByType("navigation");
+    const name = entries.length > 0 ? (entries[0] as PerformanceNavigationTiming).name : "";
+    return typeof name === "string" ? name : "";
+  } catch {
+    return "";
+  }
 }
 
 function handleRollback(url: string, prevUrl?: string): void {
   if (settings.defaultMode === "off") return;
   if (!isTopFrame()) return;
   if (!url) return;
+  // Staleness guard (#774): a rollback queued for a previous page must not
+  // execute after the tab moved on (stale in-flight delivery double-navigates
+  // and strands the tab with its forward offer lost). Fragment-stripped, so a
+  // same-document anchor jump cannot invalidate a legitimate rollback. Placed
+  // here so both the push and the ns-check-rollback poll paths are covered.
+  // Compared against the commit-time URL (#855): a quiet same-document query
+  // push must not void a legitimate rollback the way a real navigation does.
+  if (isStaleDelivery(url, location.href, currentCommittedHref() || undefined)) return;
   const referrerTarget = (() => {
     if (!document.referrer || document.referrer === location.href) return "";
     try {
@@ -1393,7 +1418,7 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
 
 function allowOnce(url: string, target?: string, features?: string): void {
   notifyNavAllow();
-  postToMain("ns-allow-once");
+  postToMain("ns-allow-once", { url });
   window.setTimeout(() => {
     try {
       window.open(url, target ?? "_blank", features);
@@ -1544,6 +1569,9 @@ function showAllowPrompt(params: AllowPromptParams): void {
     site: sourceDomain,
     url: params.url,
     ...(params.host ? { destHost: params.host } : {}),
+    // Local decisions carry their CDS/NRS codes (#867); MAIN-world interceptions
+    // have no scorer decision behind them and stay reasonless.
+    ...(outcomeFeatures.reasons ? { reasons: outcomeFeatures.reasons } : {}),
     ...(params.overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
   });
 
@@ -1584,6 +1612,15 @@ if (chrome?.runtime?.onMessage) {
     if (settings.defaultMode === "off") return;
     const url = typeof message.url === "string" ? message.url : "";
     if (!url || !/^https?:\/\//i.test(url)) return;
+    // Staleness guards (#774). Unlike ns-rollback, the tab is legitimately
+    // NEVER at message.url when an offer arrives (it is at returnUrl, the page
+    // we rolled back to), so a location==url check would kill every real
+    // offer. Instead: ignore when already at the offered URL (fragment race
+    // the SW's exact check missed), and when returnUrl is known but the tab
+    // has moved on from it.
+    if (!isStaleDelivery(url, location.href)) return;
+    const returnUrl = typeof message.returnUrl === "string" ? message.returnUrl : "";
+    if (returnUrl && isStaleDelivery(returnUrl, location.href)) return;
     showRollbackPrompt(url);
   });
 
@@ -1869,6 +1906,8 @@ window.addEventListener(
         site: siteKeyFromLocation(),
         url: openerNavUrl || location.href,
         destHost: (() => { try { return new URL(openerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
+        // The same signal computeNRS scores as doubleClickHijackActive (#867).
+        reasons: ["nrs_double_click_hijack"],
       });
     }
 

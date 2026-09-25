@@ -185,8 +185,17 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
     // Recorded separately (soft) so the procedure continues: the same-tab
     // rollback toast is a pre-existing page-injected surface (capture_isolated.ts
     // showRollbackPrompt), outside the Protection Center/export UI under test.
-    await session.step("setup-c2. same-tab rollback toast: no page-injected Allow/Proceed control", async () => {
-      expect(await allowProceedControls(page), "page-injected Allow/Proceed control on the rollback toast").toEqual([]);
+    // Owner ruling 2026-09-25 (#872, D-2026-09-25-Q): this post-commit rollback
+    // notice keeps its trusted-input Proceed. Any other page-injected
+    // Allow/Proceed control on it still fails; the synthetic-activation arm
+    // lives in ai47-4 and redteam-1.
+    await session.step("setup-c2. same-tab rollback toast: only the ruled Proceed exception, no other Allow/Proceed control", async () => {
+      const controls = await allowProceedControls(page);
+      session.observe("rollback toast Allow/Proceed controls", controls.join(" | ") || "none");
+      expect(
+        controls.filter((label) => label.toLowerCase() !== "proceed"),
+        "page-injected Allow/Proceed control other than the rollback notice's Proceed",
+      ).toEqual([]);
     }, { soft: true });
 
     await session.step("setup-d. cross-site HTTP password submit with a marker password is prompted and cancelled", async () => {
@@ -627,6 +636,9 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
     // Soft steps keep the procedure running past a finding; the test still fails on any.
     const failedSteps = session.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
     expect(failedSteps, "every procedure step passed").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

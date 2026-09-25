@@ -136,6 +136,9 @@ test("AI-36: popup mode changes reach a dirty Options page live and survive its 
 
     const failedSteps = session.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
     expect(failedSteps, "every procedure step passed").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

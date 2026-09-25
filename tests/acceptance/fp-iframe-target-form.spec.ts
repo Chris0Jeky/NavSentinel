@@ -32,6 +32,9 @@ test("a background form post into the page's own named iframe is neither blocked
         expect(rows).not.toContain("nav_blank_prompt");
       }, { soft: true });
     }
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

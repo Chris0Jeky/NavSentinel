@@ -177,6 +177,12 @@ export class PendingNavigationDecisionClient {
 
   async create(request: PendingBlankNavigationRequest): Promise<boolean> {
     if (!isExactHttpUrl(request.destinationUrl)) return false;
+// A newer intent supersedes every unreleased raw-URL capability in
+// this document/frame immediately, before the worker can await any
+// browser context or persistence boundary.
+for (const id of [...this.pending.keys()]) {
+  this.clearRecord(id);
+}
     const generation = ++this.requestGeneration;
     const sourceUrl = this.dependencies.currentUrl();
     const response = await this.dependencies.sendMessage({
@@ -404,6 +410,8 @@ export default function showPendingBlankNavigationPrompt(
     kind: "nav_blank_prompt",
     site: sourceDomain,
     destHost: destinationHost,
+    // The CDS/NRS codes that held this navigation (#867); storage bounds them.
+    ...(outcomeFeatures.reasons ? { reasons: outcomeFeatures.reasons } : {}),
     ...(request.overlayHidden ? { extra: { overlayAutoDismissed: true } } : {}),
   }).catch(() => {});
   const pending = requestPendingBlankNavigation({

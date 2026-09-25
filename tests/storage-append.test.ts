@@ -279,6 +279,109 @@ describe("appendEvent", () => {
     ]);
   });
 
+  it("re-caps oversized legacy rows at worker startup so later appends cannot carry them forward (#869)", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [
+        null,
+        5,
+        "x",
+        {
+          id: "corrupt-big",
+          ts: 1,
+          kind: "nav_click_block",
+          site: `127.0.0.1${"s".repeat(10_000)}`,
+          score: 80,
+          reasons: Array.from({ length: 40 }, (_, i) => `r${i}${"z".repeat(200)}`),
+          extra: { blob: "b".repeat(200_000) },
+          // Not an EventLogEntry field: a legacy/corrupt row can still carry it.
+          detail: "d".repeat(50_000),
+        },
+        { id: "corrupt-kind", ts: "now", kind: 123, site: {} },
+        { id: "ok-1", ts: 2, kind: "nav_click_block", site: "example.com", extra: { tabId: 3 } },
+      ],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent, migrateStoredEventLogUrls } = await import("../extension/src/shared/storage");
+    await migrateStoredEventLogUrls();
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log.map((entry) => entry.id)).toEqual(["corrupt-big", "ok-1"]);
+    const big = log[0]!;
+    expect(big).toMatchObject({ id: "corrupt-big", ts: 1, kind: "nav_click_block", score: 80 });
+    expect(big.extra).toBeUndefined(); // oversized extra shed, row kept
+    expect("detail" in big).toBe(false); // unknown bulk field not carried forward
+    expect((big.site as string).length).toBeLessThanOrEqual(2048);
+    expect(big.reasons as string[]).toHaveLength(32);
+    expect((big.reasons as string[]).every((reason) => reason.length <= 80)).toBe(true);
+    expect(log[1]).toEqual({ id: "ok-1", ts: 2, kind: "nav_click_block", site: "example.com", extra: { tabId: 3 } });
+
+    await appendEvent({ id: "new-1", ts: 3, kind: "nav_click_block", site: "example.com" });
+    const serialized = JSON.stringify(store[EVENT_LOG_KEY]);
+    expect(serialized.length).toBeLessThan(10_000);
+    expect((store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id)).toEqual(["corrupt-big", "ok-1", "new-1"]);
+  });
+
+  it("does not rewrite an already-bounded journal or an absent one (#869)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+
+    const { appendEvent, migrateStoredEventLogUrls } = await import("../extension/src/shared/storage");
+    await migrateStoredEventLogUrls();
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(EVENT_LOG_KEY in store).toBe(false);
+
+    // Rows written by the live-append path are already canonical and bounded.
+    await appendEvent({
+      id: "live-1",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "example.com",
+      url: "https://example.com/page?q=1",
+      reasons: ["a", "b"],
+      extra: { tabId: 42 },
+    });
+    await appendEvent({ id: "live-2", ts: 2, kind: "nav_silent_allow", pageSite: "example.com" });
+    const before = JSON.stringify(store[EVENT_LOG_KEY]);
+    setSpy.mockClear();
+
+    await migrateStoredEventLogUrls();
+    await migrateStoredEventLogUrls();
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(JSON.stringify(store[EVENT_LOG_KEY])).toBe(before);
+  });
+
+  it("does not rewrite a bounded journal whose rows come back with sorted keys (#869)", async () => {
+    // Real chrome.storage round-trips objects with their keys sorted; the
+    // sanitizer rebuilds rows in field order. That difference alone must not
+    // trigger a rewrite on every worker start.
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+    const { appendEvent, migrateStoredEventLogUrls } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      id: "live-1",
+      ts: 1,
+      kind: "nav_click_block",
+      site: "example.com",
+      url: "https://example.com/page",
+      reasons: ["a"],
+      extra: { tabId: 42, frameId: 0 },
+    });
+    const sortKeys = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(sortKeys)
+        : value && typeof value === "object"
+          ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]))
+          : value;
+    store[EVENT_LOG_KEY] = sortKeys(store[EVENT_LOG_KEY]);
+    setSpy.mockClear();
+
+    await migrateStoredEventLogUrls();
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
   it("delegates a clear to the service-worker event-log queue from an extension page", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [{ id: "legacy-1", ts: 1, kind: "nav_click_block" }],

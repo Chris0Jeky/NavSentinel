@@ -55,14 +55,19 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
       session.note(`A1a nav toast: ${JSON.stringify(toast)}`);
       const hasAllow = toast.buttons.some((b) => b.startsWith("Allow"));
       await session.screenshot(page, "a1a-nav-allow-toast");
+      // Without the Allow toast there is nothing to attack; fail rather than
+      // record a vacuous "secure" pass (#873).
+      expect(hasAllow, "the scripted submit must raise the Allow toast this step attacks").toBe(true);
 
       session.note(`A1a page before synthetic click: ${page.url()}`);
       const navigated = page.waitForURL((url) => url.href.includes(`/dest/${marker}/`), { timeout: 6000 })
         .then(() => true, () => false);
-      const clicked = hasAllow ? await ev<string>(page, "__synthClickToast", "Allow") : "no-allow-button";
+      const clicked = await ev<string>(page, "__synthClickToast", "Allow");
+      // Read the toast straight after the click: it auto-hides after ~5 s, so a
+      // read after the navigation wait cannot tell "consumed" from "expired" (#873).
+      const after = await toastState(page);
       session.note(`A1a synthetic 'Allow once' -> ${clicked}`);
       const reachedNav = await navigated;
-      const after = await toastState(page);
       const controlFired = clicked === "clicked" && (reachedNav || (toast.buttons.length > 0 && after.buttons.length === 0));
       session.note(`A1a reachedNav=${reachedNav} finalUrl=${page.url()} toastAfter=${JSON.stringify(after)} controlFired=${controlFired}`);
       attempts.push({
@@ -230,6 +235,9 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
 
     session.note(`REDTEAM-1 attempts: ${JSON.stringify(attempts)}`);
     session.observe("summary", JSON.stringify(attempts));
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

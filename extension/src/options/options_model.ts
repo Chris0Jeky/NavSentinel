@@ -358,3 +358,32 @@ export function describeJsBehaviorCapability(enabled: boolean): JsBehaviorCapabi
       "part of the standard beta build.",
   };
 }
+
+/** Same-Options-instance ordering only; the worker remains the authority. */
+export class OptionsWriteCoordinator {
+  private tail: Promise<void> = Promise.resolve();
+  private importing = false;
+
+  get importPending(): boolean { return this.importing; }
+
+  /** Already admitted writes drain before import; later writes are not queued. */
+  write(operation: () => Promise<void>): Promise<void> {
+    if (this.importing) return Promise.resolve();
+    return this.enqueue(operation);
+  }
+
+  /** Lock synchronously, including the time spent waiting for earlier writes. */
+  async import(operation: () => Promise<void>): Promise<void> {
+    if (this.importing) return;
+    this.importing = true;
+    try { await this.enqueue(operation); }
+    finally { this.importing = false; }
+  }
+
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const result = this.tail.then(operation);
+    // A failed preference/save must not poison the next import or recovery save.
+    this.tail = result.catch(() => {});
+    return result;
+  }
+}
