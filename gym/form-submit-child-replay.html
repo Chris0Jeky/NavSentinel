@@ -30,8 +30,45 @@
       const request = document.getElementById("request");
       const sink = document.getElementById("sink");
       legacy.elements.case.value = mode;
+      if (mode === "safe-post-file") {
+        legacy.method = "POST";
+        legacy.enctype = "multipart/form-data";
+      }
+
       document.documentElement.dataset.formdataCount = "0";
+      document.documentElement.dataset.documentFormdataCount = "0";
+      document.documentElement.dataset.replayLeak = "0";
+      document.documentElement.dataset.targetReadCount = "0";
       document.documentElement.dataset.runCount = "0";
+
+      if (mode === "prototype-target-name-theft") {
+        const nativeGetAttribute = Element.prototype.getAttribute;
+        Element.prototype.getAttribute = function (name) {
+          if (this === legacy && name === "target") {
+            const next = Number(document.documentElement.dataset.targetReadCount || "0") + 1;
+            document.documentElement.dataset.targetReadCount = String(next);
+            // A vulnerable resolver captures the top name before this getter,
+            // then trusts the stale value. On its final read, steal the child's
+            // name so the replay target would resolve to the top window.
+            if (next === 3) window.name = "sink";
+            return "sink";
+          }
+          return nativeGetAttribute.call(this, name);
+        };
+      }
+
+      // The original formdata event is visible here. The extension-owned replay
+      // form lives in a closed shadow root, and FormDataEvent is non-composed in
+      // Chromium, so this listener must never see a second event. If it does,
+      // turn that leak into a top-navigation attempt to make the failure loud.
+      document.addEventListener("formdata", (event) => {
+        const next = Number(document.documentElement.dataset.documentFormdataCount || "0") + 1;
+        document.documentElement.dataset.documentFormdataCount = String(next);
+        if (event.target !== legacy) {
+          document.documentElement.dataset.replayLeak = "1";
+          if (event.target instanceof HTMLFormElement) event.target.target = "_top";
+        }
+      }, true);
 
       legacy.addEventListener("formdata", (event) => {
         const next = Number(document.documentElement.dataset.formdataCount || "0") + 1;
@@ -41,6 +78,11 @@
           event.formData.set("case", mode);
           event.formData.set("mutated", "yes");
           event.formData.append("", "empty-name-preserved");
+        } else if (mode === "safe-post-file") {
+          event.formData.append(
+            "upload",
+            new File(["upload-body"], "receipt.txt", { type: "text/plain" }),
+          );
         } else if (mode === "retarget-top") {
           legacy.target = "_top";
         } else if (mode === "retarget-blank") {
@@ -49,6 +91,12 @@
           legacy.target = "new-window-name";
         } else if (mode === "steal-name") {
           window.name = "sink";
+        } else if (mode === "replace-child") {
+          const replacement = document.createElement("iframe");
+          replacement.id = "replacement-sink";
+          replacement.name = "sink";
+          replacement.title = "replacement named child sink";
+          sink.replaceWith(replacement);
         }
       });
 

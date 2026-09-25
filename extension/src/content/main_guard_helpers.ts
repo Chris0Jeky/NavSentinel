@@ -111,6 +111,77 @@ export function gestureBranchEmissionBound(
 }
 
 /**
+ * The browsing-context name a form submission targets, resolved the way the
+ * HTML "get an element's target" steps do: the submitter's `formtarget`
+ * attribute when present, else the form's `target` attribute, else the first
+ * `<base target>` in the form's document, else the empty string (this browsing
+ * context). Attribute PRESENCE decides, so an explicitly empty value still
+ * overrides. (#865)
+ */
+export function effectiveFormTarget(form: HTMLFormElement, submitter?: Element | null): string {
+  const fromSubmitter = submitter?.getAttribute("formtarget");
+  if (typeof fromSubmitter === "string") return fromSubmitter;
+  const fromForm = form.getAttribute("target");
+  if (fromForm !== null) return fromForm;
+  return form.ownerDocument?.querySelector("base[target]")?.getAttribute("target") ?? "";
+}
+
+/**
+ * Upper bound on how many direct child navigables {@link resolveChildNavigable}
+ * compares by identity. Callers read `window.length` through its native getter,
+ * but the cap keeps a malformed or hostile value from producing an unbounded
+ * scan in the MAIN world.
+ */
+export const MAX_CHILD_NAVIGABLE_SCAN = 256;
+
+/** What {@link resolveChildNavigable} reads from the current window. */
+export interface ChildNavigableView {
+  /** This browsing context's own current name. */
+  selfName: string;
+  /** Lowercase only the reserved-keyword comparison through a captured native. */
+  lowercaseTarget(target: string): string;
+  /** Browser-owned named-property lookup for `name` on this window. */
+  namedObject(name: string): unknown;
+  /** Number of direct child navigables. */
+  childCount: number;
+  /** The WindowProxy of direct child navigable `index`. */
+  child(index: number): unknown;
+}
+
+/**
+ * Return the direct child WindowProxy a target name resolves to, or `null` when
+ * that name can navigate this context, a new context, or something other than a
+ * direct child. Identity is load-bearing for #865: after the original form's
+ * `formdata` handlers run, the runtime re-resolves the target and requires the
+ * SAME child before replaying the captured payload.
+ */
+export function resolveChildNavigable(target: string, view: ChildNavigableView): unknown | null {
+  if (!target) return null;
+  const keyword = view.lowercaseTarget(target);
+  if (keyword === "_self" || keyword === "_top" || keyword === "_parent" || keyword === "_blank") {
+    return null;
+  }
+  if (target === view.selfName) return null;
+
+  const candidate = view.namedObject(target);
+  if (candidate === null || candidate === undefined) return null;
+
+  let count = view.childCount;
+  if (typeof count !== "number" || count !== count || count <= 0) return null;
+  if (count > MAX_CHILD_NAVIGABLE_SCAN) count = MAX_CHILD_NAVIGABLE_SCAN;
+  count |= 0;
+  for (let index = 0; index < count; index += 1) {
+    if (view.child(index) === candidate) return candidate;
+  }
+  return null;
+}
+
+/** True when `target` resolves to a direct child navigable. */
+export function targetsChildNavigable(target: string, view: ChildNavigableView): boolean {
+  return resolveChildNavigable(target, view) !== null;
+}
+
+/**
  * Redirect (form-submit) allowance for the MAIN-world guard (#864).
  *
  * The isolated world decides every trusted click and, when it allows one,
