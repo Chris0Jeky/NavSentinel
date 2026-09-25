@@ -1393,7 +1393,7 @@ function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
 
 function allowOnce(url: string, target?: string, features?: string): void {
   notifyNavAllow();
-  postToMain("ns-allow-once");
+  postToMain("ns-allow-once", { url });
   window.setTimeout(() => {
     try {
       window.open(url, target ?? "_blank", features);
