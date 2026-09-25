@@ -32,12 +32,13 @@ describe("user-activation presentation (#217)", () => {
     expect(popupIsRiskReducingReason("nrs_user_activation_active")).toBe(false);
   });
 
-  it("describes the observation without claiming that it makes navigation safer", () => {
+  it("describes the gesture at the navigation-attempt boundary (#718)", () => {
     const explanation = explainReasonCode("nrs_user_activation_active");
 
     expect(explanation).toBe(
-      "The browser still considered a user gesture active when navigation began",
+      "The browser still considered a user gesture active when navigation was attempted",
     );
+    expect(explanation.toLowerCase()).not.toContain("navigation began");
     expect(explanation.toLowerCase()).not.toContain("safer");
     expect(explanation.toLowerCase()).not.toContain("lower risk");
   });
