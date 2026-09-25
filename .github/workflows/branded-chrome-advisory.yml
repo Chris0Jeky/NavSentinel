@@ -1,0 +1,75 @@
+name: Branded Chrome Advisory
+
+# This lane records real Google Chrome behaviour without adding a PR merge gate.
+# It complements CI's bundled-Chromium lane; failures remain visible here.
+on:
+  schedule:
+    - cron: "15 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branded-chrome:
+    name: Branded Chrome / acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NAVSENTINEL_REALISTIC_CHROME: "1"
+      NAVSENTINEL_LIVE: "0"
+      NAVSENTINEL_BRANDED_RECORD: test-results/branded-chrome-launches.jsonl
+      NAVSENTINEL_ACCEPTANCE_RUN: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        id: build
+        run: npm run build
+
+      - name: Install Playwright browsers and dependencies
+        id: browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Record exact browser and artifact
+        id: chrome
+        run: |
+          # GitHub's Ubuntu runner image ships Chrome stable; fail if that changes.
+          test -x /opt/google/chrome/chrome
+          mkdir -p test-results
+          chrome_version=$(/opt/google/chrome/chrome --version)
+          printf 'head=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
+          cat test-results/branded-run.txt
+
+      - name: Run realistic branded Chrome E2E
+        id: e2e
+        timeout-minutes: 45
+        run: xvfb-run -a npm run test:e2e:branded
+
+      - name: Run non-live acceptance procedures
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' && steps.chrome.outcome == 'success' }}
+        timeout-minutes: 25
+        run: xvfb-run -a npm run test:acceptance
+
+      - name: Upload browser receipts and failure evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: branded-chrome-advisory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/
+            playwright-report/
+            artifacts/acceptance/
+          if-no-files-found: warn
+          retention-days: 14
