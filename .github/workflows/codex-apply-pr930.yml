@@ -28,8 +28,57 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git apply --check .github/codex-pr930-hidden-submit.patch
-          git apply .github/codex-pr930-hidden-submit.patch
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("extension/src/content/js_behavior_monitor.core.ts")
+          source = path.read_text(encoding="utf-8")
+          old = '''/**
+           * Check whether a form contains credential-type input fields.
+           *
+           * Looks for inputs with type="password" within the form. Future versions
+           * may also check for email/username fields in sensitive contexts.
+           *
+           * @param form - The form element to inspect
+           * @returns true if the form contains password inputs
+           *
+           */
+          export function formHasCredentialFields(form: HTMLFormElement): boolean {
+            const inputs = queryPasswordInputs(form);
+            for (let i = 0; i < inputs.length; i++) {
+              if (isVisiblePasswordField(inputs[i] as HTMLInputElement)) return true;
+            }
+            return false;
+          }
+          '''
+          new = '''/**
+           * Check whether a form contains credential-type input fields.
+           *
+           * Visible, non-disabled password controls count as credential fields even when
+           * they are unnamed because page code can still read them during submission.
+           * Inline-hidden controls count only when named: unlike passive page/beacon
+           * heuristics, this boundary must account for successful controls whose values
+           * the browser will serialize despite `display:none` or `visibility:hidden`.
+           * Disabled controls never count.
+           *
+           * @param form - The form element to inspect
+           * @returns true if the form can expose or submit password data
+           *
+           */
+          export function formHasCredentialFields(form: HTMLFormElement): boolean {
+            const inputs = queryPasswordInputs(form);
+            for (let i = 0; i < inputs.length; i++) {
+              const input = inputs[i] as HTMLInputElement;
+              if (isVisiblePasswordField(input)) return true;
+              if (!input.disabled && input.name.length > 0) return true;
+            }
+            return false;
+          }
+          '''
+          if source.count(old) != 1:
+              raise SystemExit(f"expected one credential helper, found {source.count(old)}")
+          path.write_text(source.replace(old, new), encoding="utf-8")
+          PY
           rm .github/codex-pr930-hidden-submit.patch .github/workflows/codex-apply-pr930.yml
           git diff --check
           npm ci
