@@ -89,9 +89,19 @@ export async function readPopupGauge(popup: CdpPageClient): Promise<PopupGauge> 
   });
 }
 
-/** Wait until the popup has rendered its gauge (refreshUi is async after load). */
-export async function waitForPopupGauge(popup: CdpPageClient): Promise<PopupGauge> {
-  await popup.waitFor("/^(Tab risk score: \\d+|Threat alert recorded)/.test(document.getElementById('shieldArc')?.getAttribute('aria-label') ?? '')", 8000);
+/**
+ * Wait until the popup has rendered its gauge (refreshUi is async after load).
+ * Without an expected score, accept any numeric gauge label or the unscored
+ * threat note (AI-35 behavior). With an expected score, wait until the
+ * rendered ARIA label equals exactly `Tab risk score: <expected>`, so callers
+ * never snapshot the popup's initial 0 before refreshUi applies the import.
+ */
+export async function waitForPopupGauge(popup: CdpPageClient, expectedScore?: number): Promise<PopupGauge> {
+  if (expectedScore === undefined) {
+    await popup.waitFor("/^(Tab risk score: \\d+|Threat alert recorded)/.test(document.getElementById('shieldArc')?.getAttribute('aria-label') ?? '')", 8000);
+  } else {
+    await popup.waitFor(`document.getElementById('shieldArc')?.getAttribute('aria-label') === 'Tab risk score: ${expectedScore}'`, 8000);
+  }
   return readPopupGauge(popup);
 }
 

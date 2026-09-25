@@ -48,6 +48,11 @@ Chris can record the browser result.
    }
    ```
 
+   The `ts` values above show row order only. Before importing, replace them
+   with Unix millisecond timestamps from the past ten minutes, keeping their
+   order (for example, `Date.now() - 60000 + 1`, `+ 2`, and `+ 3`). The popup
+   intentionally excludes older events from its Current page gauge.
+
    The import must complete without an error. In the Options event log, the
    full URL must not appear as a `pageSite` value; its path, query, and
    fragment must not be retained.
@@ -55,15 +60,17 @@ Chris can record the browser result.
    must show the imported loopback risk (60), proving that the malformed
    `pageSite` fell back to the valid legacy `site`. The valid cross-host row
    must associate with loopback when it is the newest applicable row; repeat
-   with that row last if needed to make the visible association explicit.
+   with that row last and give it the newest timestamp to make the visible
+   association explicit.
 4. Repeat the import with valid ordinary, IPv4, and IPv6 `pageSite` values as
-   needed for the target Chrome environment. Confirm no popup, page, or
+   needed for the target Chrome environment. Give these rows recent Unix
+   millisecond timestamps too. Confirm no popup, page, or
    service-worker console errors, then close the disposable profile and stop
    the fixture server.
 5. For the #646 follow-up, repeat with accepted noncanonical IP literals such
-   as `127.000.000.001` and `[2001:0DB8:0:0:0:0:0:1]`. Confirm that the event
-   log stores the browser-compatible hostnames (`127.0.0.1` and
-   `2001:db8::1`) and that the popup association follows the browser's
+   as `127.000.000.001` and `[2001:0DB8:0:0:0:0:0:1]`, using recent
+   timestamps. Confirm that the event log stores the browser-compatible
+   hostnames (`127.0.0.1` and `2001:db8::1`) and that the popup association follows the browser's
    `location.hostname` where the target address is available.
 
 Record this as the former AI-44 sub-result under AI-47, including the exact
