@@ -109,8 +109,11 @@ test("approving the first prompt can execute only its original blocked closure (
     await popup.waitForLoadState("domcontentloaded", { timeout: 10_000 });
 
     expect(new URL(popup.url()).searchParams.get("authority")).toBe("first");
-    await expect.poll(() => context?.pages().filter((candidate) => !candidate.isClosed()).length ?? 0)
-      .toBe(2);
+    const authorityPages = context.pages()
+      .filter((candidate) => !candidate.isClosed())
+      .map((candidate) => new URL(candidate.url()).searchParams.get("authority"))
+      .filter((authority): authority is string => authority !== null);
+    expect(authorityPages).toEqual(["first"]);
 
     const messages = await page.evaluate(() => (window as Window & {
       blockedActionIdProbe?: Array<{ id: string; url?: string }>;
