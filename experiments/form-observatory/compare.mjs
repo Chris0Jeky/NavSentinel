@@ -349,6 +349,50 @@ export function validateFormTraces(rows) {
   };
 }
 
+/** Receiver agreement is separate from both consequence parity and trace shape. */
+function reconcileFormReceivers(rows, results, tracesValid) {
+  const result = {
+    schema: "navsentinel.form-observer-receivers.v1",
+    matched: false,
+    cases: 0,
+    differences: [],
+    evidencePolicy: "EXACT_PER_ARM_RECEIVER_PARITY_NOT_PREVENTION",
+  };
+  // Do not interpret malformed, missing, duplicated or page-attributed traces
+  // as receiver evidence, even if their payloads happen to match a result file.
+  if (!tracesValid) return { ...result, error: "FORM_TRACE_INVALID" };
+  try {
+    const receipts = normalized(results);
+    const attemptsByArm = new Map(rows.map((row) => [
+      `${row.variant}:${row.protectedArm}`,
+      row.events.filter((event) => event.kind === "receiver.attempt").map(({ data }) =>
+        [data.role, data.method, data.accepted, data.ordinal]),
+    ]));
+    // Compare sequences, not sets or totals: zero-attempt arms, accepted/rejected
+    // order, duplicate delivery and wrong-arm attribution are all consequential.
+    const differences = expectedKeys
+      .filter((key) => JSON.stringify(attemptsByArm.get(key)) !== JSON.stringify(receipts.get(key).attempts))
+      .map((key) => `FORM_TRACE_RECEIVER_MISMATCH:${key}`);
+    return { ...result, matched: differences.length === 0, cases: expectedKeys.length, differences };
+  } catch (error) {
+    return { ...result, error: error.message };
+  }
+}
+
+export function compareFormEvidence(full, control, traces) {
+  const parityEvidence = compareFormOutcomes(full, control);
+  const traceEvidence = validateFormTraces(traces);
+  const receiverEvidence = reconcileFormReceivers(traces, full, traceEvidence.matched);
+  return {
+    ...parityEvidence,
+    matched: parityEvidence.matched && traceEvidence.matched && receiverEvidence.matched,
+    parityEvidence,
+    traceEvidence,
+    receiverEvidence,
+    evidencePolicy: "CONSEQUENCE_PARITY_AND_STRICT_COMPLETE_FORM_TRACE",
+  };
+}
+
 function collectJson(root, suffix, sizeLimit) {
   const rows = [];
   let entries = 0;
@@ -375,14 +419,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if (process.argv.length !== 4) throw Error("FORM_ARGUMENTS");
     const fullRoot = process.argv[2];
     const controlRoot = process.argv[3];
-    const parity = compareFormOutcomes(collectFormResults(fullRoot), collectFormResults(controlRoot));
-    const traceEvidence = validateFormTraces(collectFormTraces(fullRoot));
-    const result = {
-      ...parity,
-      matched: parity.matched && traceEvidence.matched,
-      traceEvidence,
-      evidencePolicy: "CONSEQUENCE_PARITY_AND_STRICT_COMPLETE_FORM_TRACE",
-    };
+    const result = compareFormEvidence(
+      collectFormResults(fullRoot), collectFormResults(controlRoot), collectFormTraces(fullRoot),
+    );
     console.log(JSON.stringify(result));
     process.exitCode = result.matched ? 0 : 1;
   } catch {
