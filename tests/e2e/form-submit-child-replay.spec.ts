@@ -67,7 +67,7 @@ async function openFixture(context: BrowserContext, baseUrl: string, mode: strin
 
 async function runCase(page: Page): Promise<void> {
   await page.evaluate(() => {
-    (window as Window & { __nsRunFormCase(): void }).__nsRunFormCase();
+    (window as unknown as Window & { __nsRunFormCase(): void }).__nsRunFormCase();
   });
 }
 
