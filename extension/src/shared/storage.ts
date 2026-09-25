@@ -61,8 +61,16 @@ export type SuiteSettingsUpdateMessage = {
   expected?: unknown;
 };
 
-/** A worker response that preserves the current settings for conflict recovery. */
-export type SuiteSettingsUpdateResponse = SuiteSettings & { conflict?: true };
+/** A successful worker response that preserves current settings for conflict recovery. */
+export type SuiteSettingsUpdateSuccessResponse = SuiteSettings & { conflict?: true };
+
+/** A rejected worker write, serialized across the runtime message boundary. */
+export type SuiteSettingsUpdateErrorResponse = { ok: false; error: string };
+
+/** The complete service-worker response contract for a settings update. */
+export type SuiteSettingsUpdateResponse =
+  | SuiteSettingsUpdateSuccessResponse
+  | SuiteSettingsUpdateErrorResponse;
 
 /** Raised in an extension page when the worker rejects a stale Options patch. */
 export class SuiteSettingsConflictError extends Error {
@@ -389,8 +397,8 @@ function patchMatchesExpectedSettings(
 function updateSuiteSettingsDirect(
   partial: SuiteSettingsPatch,
   expected?: SuiteSettings,
-): Promise<SuiteSettingsUpdateResponse> {
-  return queueSuiteSettingsWrite(async (): Promise<SuiteSettingsUpdateResponse> => {
+): Promise<SuiteSettingsUpdateSuccessResponse> {
+  return queueSuiteSettingsWrite(async (): Promise<SuiteSettingsUpdateSuccessResponse> => {
     const cur = await getSuiteSettings();
     if (expected && !patchMatchesExpectedSettings(
       cur as unknown as SettingsRecord,
@@ -427,7 +435,7 @@ function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, un
 export async function handleSuiteSettingsUpdateMessage(
   message: SuiteSettingsUpdateMessage,
   sender?: chrome.runtime.MessageSender,
-): Promise<SuiteSettingsUpdateResponse> {
+): Promise<SuiteSettingsUpdateSuccessResponse> {
   if (!sender || sender.id !== chrome.runtime.id || (
     sender.url !== chrome.runtime.getURL("src/popup/popup.html") &&
     sender.url !== chrome.runtime.getURL("src/options/options.html")
@@ -453,6 +461,9 @@ export async function handleSuiteSettingsUpdateMessage(
 
 function unwrapSuiteSettingsUpdate(response: SuiteSettingsUpdateResponse | undefined): SuiteSettings {
   if (!response) throw new Error("suite-settings update failed");
+  if ("ok" in response) {
+    throw new Error(response.error || "suite-settings update failed");
+  }
   if (response.conflict) {
     const { conflict: _conflict, ...settings } = response;
     throw new SuiteSettingsConflictError(settings);
