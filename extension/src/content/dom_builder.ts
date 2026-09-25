@@ -138,37 +138,24 @@ function opacityWithin(el: Element, control: Element): number {
   return product;
 }
 
-/** Alpha of a computed background colour; unknown formats count as unpainted. */
-function backgroundAlpha(el: Element): number {
-  const bg = window.getComputedStyle(el).backgroundColor.trim().toLowerCase();
-  if (!bg || bg === "transparent") return 0;
-  const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(bg);
-  if (slash) return Number.parseFloat(slash[1]!) / (slash[2] ? 100 : 1);
-  const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(bg);
-  if (rgba) return Number.parseFloat(rgba[1]!);
-  return bg.startsWith("rgb(") ? 1 : 0;
-}
-
-/** Alpha of a computed text colour, including CSS Color 4 slash syntax. */
-function textColorAlpha(value: string): number {
-  const color = value.trim().toLowerCase();
-  if (color === "transparent") return 0;
+/** Alpha of a computed colour; background and text use different unknown fallbacks. */
+function colorAlpha(value: string, unknownAlpha = 0): number {
+  // getComputedStyle serializes these CSS color tokens in lowercase.
+  const color = value;
+  if (!color || color === "transparent") return color ? 0 : unknownAlpha;
   const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(color);
-  if (slash) return Number.parseFloat(slash[1]!) / (slash[2] ? 100 : 1);
+  if (slash) return +slash[1]! / (slash[2] ? 100 : 1);
   const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(color);
-  if (rgba) return Number.parseFloat(rgba[1]!);
-  // Attached Chromium elements expose an opaque computed rgb() here. A blank
-  // value is possible in synthetic DOM tests; retain their previous default.
-  return 1;
+  if (rgba) return +rgba[1]!;
+  return unknownAlpha || +color.startsWith("rgb(");
 }
 
 /** Test glyph runs rather than a whole text node, whose rect can include blank padding. */
 function directTextPaints(el: Element, x: number, y: number): boolean {
   const style = window.getComputedStyle(el);
-  const fillColor = style.getPropertyValue("-webkit-text-fill-color");
-  if (style.visibility === "hidden" || style.visibility === "collapse" ||
-      textColorAlpha(style.color) < CONCEALED_OPACITY_CEILING ||
-      (fillColor && fillColor !== "currentcolor" && textColorAlpha(fillColor) < CONCEALED_OPACITY_CEILING)) {
+  if ((style.visibility && style.visibility !== "visible") ||
+      colorAlpha(style.color, 1) < CONCEALED_OPACITY_CEILING ||
+      colorAlpha(style.getPropertyValue("-webkit-text-fill-color"), 1) < CONCEALED_OPACITY_CEILING) {
     return false;
   }
   let remainingRuns = 32;
@@ -196,7 +183,7 @@ function directTextPaints(el: Element, x: number, y: number): boolean {
 /** The control paints a direct glyph at the point, or a visible background. */
 function paintsOwnContent(el: Element, x: number, y: number): boolean {
   if (directTextPaints(el, x, y)) return true;
-  return backgroundAlpha(el) >= CONCEALED_OPACITY_CEILING;
+  return colorAlpha(window.getComputedStyle(el).backgroundColor) >= CONCEALED_OPACITY_CEILING;
 }
 
 /**

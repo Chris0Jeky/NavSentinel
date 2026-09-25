@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 
 test("transparent text fill keeps a glyph rect beneath a concealed child (#886) @regression", async ({ page }) => {
   await page.setContent(`
-    <a id="control" href="#" style="position:relative;display:block;width:120px;height:30px;color:black;-webkit-text-fill-color:transparent">
+    <a id="control" href="#" style="position:relative;display:block;width:120px;height:30px;color:BLACK;-webkit-text-fill-color:TRANSPARENT">
       Hidden<span id="concealed" style="position:absolute;inset:0;opacity:0.01"></span>
     </a>
   `);
   const measured = await page.evaluate(() => {
     const link = document.getElementById("control")!;
+    const colorCaseProbe = document.createElement("span");
+    colorCaseProbe.style.color = "TRANSPARENT";
+    document.body.append(colorCaseProbe);
     const text = Array.from(link.childNodes).find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes("Hidden"))!;
     const range = document.createRange();
     range.selectNodeContents(text);
@@ -16,11 +19,13 @@ test("transparent text fill keeps a glyph rect beneath a concealed child (#886) 
     const y = rect.top + rect.height / 2;
     return {
       fill: getComputedStyle(link).getPropertyValue("-webkit-text-fill-color"),
+      computedTransparentColor: getComputedStyle(colorCaseProbe).color,
       glyphWidth: rect.width,
       hits: document.elementsFromPoint(x, y).slice(0, 2).map((element) => element.id),
     };
   });
   expect(measured.fill).toMatch(/transparent|rgba\([^)]*,\s*0\)|rgb\([^)]*\/\s*0\)/);
+  expect(measured.computedTransparentColor).toMatch(/transparent|rgba\([^)]*,\s*0\)|rgb\([^)]*\/\s*0\)/);
   expect(measured.glyphWidth).toBeGreaterThan(0);
   expect(measured.hits).toEqual(["concealed", "control"]);
 });
