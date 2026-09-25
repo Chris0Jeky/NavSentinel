@@ -19,8 +19,20 @@ export function stripUrlFragment(href: string): string {
  * targets. Comparison is fragment-stripped: fragment navigations fire
  * `onCommitted`, so a naive exact match would drop legitimate deliveries
  * after an in-page anchor jump. An empty target is always stale.
+ *
+ * When `committedHref` (the document's commit-time URL from NavigationTiming)
+ * is provided, it — not the live href — is the comparison basis. Same-document
+ * `pushState` rewrites `location.href` without a navigation, so a live-href
+ * comparison lets a quiet query push void a legitimate rollback; the commit
+ * entry is immune to that while real navigations (new document, new entry)
+ * still compare stale. (#855)
  */
-export function isStaleDelivery(messageUrl: string, currentHref: string): boolean {
+export function isStaleDelivery(
+  messageUrl: string,
+  currentHref: string,
+  committedHref?: string,
+): boolean {
   if (!messageUrl) return true;
-  return stripUrlFragment(currentHref) !== stripUrlFragment(messageUrl);
+  const basis = committedHref ? stripUrlFragment(committedHref) : stripUrlFragment(currentHref);
+  return basis !== stripUrlFragment(messageUrl);
 }
