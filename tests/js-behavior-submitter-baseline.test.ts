@@ -137,4 +137,26 @@ describe("submitter action baselines", () => {
       })
     );
   });
+
+  it("does not flag removing an override when the inherited form destination is unchanged", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    document.body.innerHTML = `
+      <form action="https://same.example/submit">
+        <button type="submit" formaction="https://same.example/submit">Continue</button>
+      </form>
+    `;
+    const form = document.querySelector("form") as HTMLFormElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    button.removeAttribute("formaction");
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).not.toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.anything()
+    );
+  });
 });
