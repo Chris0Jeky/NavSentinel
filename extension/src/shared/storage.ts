@@ -511,7 +511,13 @@ function normalizeTrustedDomain(value: unknown): string {
   if (!host) return "";
   const normalized = normalizeHost(host);
   if (!normalized) return "";
-  return getRegistrableDomain(normalized);
+  const registrable = getRegistrableDomain(normalized);
+  // URL parsing accepts hosts no DNS name or IP literal can be, such as
+  // "__proto__" or a single 5,000-character label. Options adds, popup and
+  // credential-prompt trust, imports and reads all come through here, so hold
+  // them all to the event-log hostname grammar: LDH labels of at most 63
+  // characters, 253 in total, or a canonical IP literal (#869).
+  return normalizeEventPageSite(registrable) === registrable ? registrable : "";
 }
 
 function normalizeDomainList(list: unknown): string[] {
@@ -1056,21 +1062,39 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   return redactSensitivePathSegments(stripUrlQueryAndFragment(rawUrl));
 }
 
-/** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
+/**
+ * Rewrite stored event rows through the service worker's serialized write lane:
+ * pre-RI-06 URLs are minimized and every row gets the append-time caps (#829).
+ *
+ * Appends re-normalize the stored journal for shape only, so a row written by
+ * an older build or corrupted in place (a 200 KB `extra`, a 50 KB string)
+ * used to be carried forward by every later append. The worker runs this lane
+ * at startup, ahead of any append it serves, and rebuilds each row with the
+ * same bounded sanitizer the import path uses (#869). Doing this on every
+ * append instead would repeat the work for rows that are already bounded.
+ */
+/** JSON with object keys sorted at every level, for order-independent equality. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, entry: unknown) =>
+    entry && typeof entry === "object" && !Array.isArray(entry)
+      ? Object.fromEntries(
+          Object.keys(entry).sort().map((key) => [key, (entry as Record<string, unknown>)[key]]),
+        )
+      : entry,
+  );
+}
+
 export function migrateStoredEventLogUrls(): Promise<void> {
   return queueEventLogWrite(async () => {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const current = normalizeEventLog(res[EVENT_LOG_KEY]);
-    let changed = false;
-    const minimized = current.map((entry) => {
-      if (entry.url === undefined) return entry;
-      const url = minimizeEventUrl(entry.url);
-      if (url === entry.url) return entry;
-      changed = true;
-      return { ...entry, url };
-    });
-    if (changed) {
-      await chrome.storage.local.set({ [EVENT_LOG_KEY]: minimized });
+    const stored: unknown = res[EVENT_LOG_KEY];
+    if (stored === undefined) return;
+    const bounded = normalizeEventLog(stored).map(sanitizeImportedEventLogEntry);
+    // chrome.storage returns object keys sorted, while the sanitizer builds rows
+    // in field order, so compare key-order-independently; otherwise every
+    // worker start would rewrite an already-bounded journal.
+    if (canonicalJson(bounded) !== canonicalJson(stored)) {
+      await chrome.storage.local.set({ [EVENT_LOG_KEY]: bounded });
     }
   });
 }
