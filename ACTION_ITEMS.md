@@ -12,6 +12,14 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
+**2026-09-25, v0.5.0 integration ([`D-2026-09-25-Q`](docs/agentic/DECISIONS.md)):**
+Chris authorized browser-facing PRs to merge after automated gates (exact-head
+CI, one review, and the branded-Chrome realistic E2E and acceptance lanes). His
+manual checks become one AI-47 pass on the v0.5.0 release build, which is
+published as a GitHub pre-release. He also resolved #872: the same-tab rollback
+notice keeps its trusted-input Proceed. #599 (AI-37) and #572 (SP-F-013) stay
+parked, and every AI-47 Human result stays **OPEN — not run**.
+
 **Browser-gate index refreshed 2026-09-12 from merge receipts:** Chris explicitly
 authorized the named browser-gated candidates to merge before manual Chrome
 testing under [`D-2026-09-12-P`](docs/agentic/DECISIONS.md), provided every
@@ -258,7 +266,9 @@ revision printed by the build, then run this consolidated sequence:
    input reactions, and proof that a later hostile page layer cannot cover the
    extension host.
 2. **Proceed authority ([#608 / former AI-39](docs/agentic/GATE3_GUIDES.md#active-guide-ai-39--issue-601-extension-origin-proceed-once)):** complete the exact AI-39 guide.
-   Page-injected UI remains warn/dismiss only; Proceed once lives in the
+   Page-injected UI remains warn/dismiss only, except the same-tab rollback
+   notice's trusted-input Proceed (row 4; owner ruling 2026-09-25, #872,
+   D-2026-09-25-Q); Proceed once lives in the
    extension popup, shows only the bounded origin/countdown presentation, opens
    exactly once with a null opener, and remains fail-closed after replay,
    expiry, navigation, or use from another tab. Confirm path/query/fragment data
@@ -275,7 +285,8 @@ revision printed by the build, then run this consolidated sequence:
 5. **Protection Center and export ([#640 / former AI-42](docs/vision-overhaul/BROWSER_ACCEPTANCE.md) and [#641 / former AI-45](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45)):** complete both
    exact guides, including popup/Options entry points, themes, category states,
    keyboard operation, cancel paths, preview/download byte parity, minimized
-   export privacy, and the absence of page-injected Allow/Proceed controls.
+   export privacy, and the absence of page-injected Allow/Proceed controls
+   other than the same-tab rollback notice's trusted-input Proceed (#872).
 6. **Settings concurrency ([#643/#655/#658 / former AI-43](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md)):** complete the exact
    guide for merged #643/#655/#658. Default autosave, explicit conflicts, and
    imported integer log limit `55` must match the guide. #658's same-field
@@ -303,9 +314,19 @@ All written trusted-input steps passed except row 5's "readable reasons" step,
 which fails as written (#867). The added adversarial arms for rows 1 and 4 fail:
 a page script can press NavSentinel's own controls (#783/#826; fix candidates
 #784/#827 were verified to close it). Consider landing those fixes before the
-owner pass. Rows 2 and 5 forbid page-injected Proceed controls, but row 4
-requires the same-tab rollback notice's page-injected Proceed. Chris decides
-which wording holds (#872).
+owner pass. Rows 2 and 5 forbade page-injected Proceed controls while row 4
+requires the same-tab rollback notice's Proceed. **Resolved 2026-09-25 by Chris
+(#872, D-2026-09-25-Q):** row 4 holds, and rows 2 and 5 now exempt that notice.
+
+**Release-build scope, 2026-09-25 (D-2026-09-25-Q):** Chris chose to run AI-47
+once, on the v0.5.0 release build, instead of per PR. The PRs merged under that
+decision for v0.5.0 are listed in the v0.5.0 section of `CHANGELOG.md`. The
+pass also covers the everyday flows this release targets: cross-site links whose
+text sits in a span or icon (DuckDuckGo results, GitHub tabs, YouTube "Watch
+on YouTube"), script-submitted sign-in forms (Stack Overflow "Log in with
+Google"), forms posted into a page's own iframe, and the credential prompt's
+buttons, Escape and backdrop with mouse and keyboard. Every Human result stays
+**OPEN — not run** until Chris records it.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
 Gate-3.** This is no longer a pre-merge gate. PR #589 merged on 2026-08-27 (head
