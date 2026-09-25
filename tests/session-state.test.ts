@@ -114,13 +114,13 @@ describe("SessionStateManager", () => {
       // oauthFlow: corrupt startedAt (NaN-poisons pruneStaleOAuthFlows) + bad phase
       // (evades redirect-mismatch detection); one valid entry survives.
       "ns_sw:oauthFlow": {
-        "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: null, phase: "redirect" },
-        "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "not-a-phase" },
-        "3": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "consent" },
+        "1": { expectedCallbackDomain: "app.test", startedAt: null, phase: "redirect" },
+        "2": { expectedCallbackDomain: "app.test", startedAt: 1000, phase: "not-a-phase" },
+        "3": { expectedCallbackDomain: "app.test", startedAt: 1000, phase: "consent" },
         // NaN startedAt survives structured-clone (chrome.storage.session is NOT JSON) and
         // would poison pruneStaleOAuthFlows' `now - startedAt` comparison — only Number.isFinite
         // rejects it (a plain typeof===number check would pass). (#365 review F-1)
-        "4": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: NaN, phase: "redirect" },
+        "4": { expectedCallbackDomain: "app.test", startedAt: NaN, phase: "redirect" },
       },
       // childWindow: corrupt createdAt -> NaN prune + DoubleClickjacking false-negative;
       // openerTabId 0 passes isFiniteNumber but makes the child-closed sendMessage fail
@@ -137,8 +137,8 @@ describe("SessionStateManager", () => {
       },
       // lastCommitted: corrupt ts -> false rollback for a same-site nav after restart.
       "ns_sw:lastCommitted": {
-        "30": { url: "https://example.com/p1", prevUrl: "https://example.com/", transitionType: "link", qualifiers: [], ts: "corrupted", allowedAtCommit: true },
-        "31": { url: "https://example.com/p2", transitionType: "link", qualifiers: [], ts: 9000, allowedAtCommit: false },
+        "30": { url: "https://example.com/p1", prevUrl: "https://example.com/", qualifiers: [], ts: "corrupted", allowedAtCommit: true },
+        "31": { url: "https://example.com/p2", qualifiers: [], ts: 9000, allowedAtCommit: false },
       },
       // rollbackReturn: corrupt expiresAt (string -> coercion keeps a stale return alive).
       "ns_sw:rollbackReturn": {
@@ -190,16 +190,18 @@ describe("SessionStateManager", () => {
         "90": 42,
         "91": "https://ok.test/",
       },
-      // redirectChains: corrupt startedAt / hop.ts / hop.transitionType -> NaN sort +
-      // never-pruned (#339); empty-hops is rejected (a live chain always has >= 1 hop, #390).
+      // redirectChains: corrupt startedAt / hop.ts -> NaN sort + never-pruned
+      // (#339); empty-hops is rejected (a live chain always has >= 1 hop, #390).
+      // Case 104 carries a legacy pre-#796 hop.transitionType with a garbage
+      // value: unknown keys are ignored and the entry restores.
       "ns_sw:redirectChains": {
-        "100": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: "bad" },
-        "101": { hops: [{ url: "https://a.test/", ts: null, transitionType: "link" }], startedAt: 1000 },
-        "102": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: 1000 },
+        "100": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: "bad" },
+        "101": { hops: [{ url: "https://a.test/", ts: null }], startedAt: 1000 },
+        "102": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: 1000 },
         "103": { hops: [], startedAt: 1000 },
         "104": { hops: [{ url: "https://a.test/", ts: 10, transitionType: 42 }], startedAt: 1000 },
         // Infinity startedAt: never time-pruned (`now - Infinity > X` is false) + NaN sort key.
-        "105": { hops: [{ url: "https://a.test/", ts: 10, transitionType: "link" }], startedAt: Infinity },
+        "105": { hops: [{ url: "https://a.test/", ts: 10 }], startedAt: Infinity },
       },
     });
 
@@ -243,7 +245,7 @@ describe("SessionStateManager", () => {
     expect(mgr.redirectChainData.has(101)).toBe(false); // hop.ts null
     expect(mgr.redirectChainData.get(102)?.startedAt).toBe(1000);
     expect(mgr.redirectChainData.has(103)).toBe(false); // empty hops rejected (#390)
-    expect(mgr.redirectChainData.has(104)).toBe(false); // hop.transitionType not a string
+    expect(mgr.redirectChainData.get(104)?.startedAt).toBe(1000); // legacy unknown keys tolerated (#796)
     expect(mgr.redirectChainData.has(105)).toBe(false); // startedAt Infinity
     expect(warnSpy).toHaveBeenCalled(); // corrupt restore is surfaced, not silent
     warnSpy.mockRestore();
@@ -256,8 +258,8 @@ describe("SessionStateManager", () => {
       // to 'complete' before persistMap); a restored 'callback' would slip past the
       // redirect/consent-only mismatch branch, so it must be dropped. 'complete' is durable.
       "ns_sw:oauthFlow": {
-        "1": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "callback" },
-        "2": { initiatorUrl: "https://app.test/", consentUrl: "https://accounts.google.com/authorize", expectedCallbackDomain: "app.test", startedAt: 1000, phase: "complete" },
+        "1": { expectedCallbackDomain: "app.test", startedAt: 1000, phase: "callback" },
+        "2": { expectedCallbackDomain: "app.test", startedAt: 1000, phase: "complete" },
       },
       // pendingForward returnUrl: a corrupt truthy non-string strands the forward offer
       // (matches neither the `=== currentUrl` nor the `!returnUrl` branch).
@@ -273,8 +275,8 @@ describe("SessionStateManager", () => {
       },
       // lastCommitted prevUrl: same string-or-absent gate.
       "ns_sw:lastCommitted": {
-        "30": { url: "https://example.com/p", transitionType: "link", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: {} },
-        "31": { url: "https://example.com/p", transitionType: "link", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: "https://example.com/" },
+        "30": { url: "https://example.com/p", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: {} },
+        "31": { url: "https://example.com/p", qualifiers: [], ts: 1, allowedAtCommit: true, prevUrl: "https://example.com/" },
       },
       // an array where a record is expected must be rejected (isRecord excludes arrays);
       // likewise an array-typed silentEvent must not pass the `isRecord` check.
@@ -481,7 +483,6 @@ describe("SessionStateManager", () => {
     mgrA.lastCommittedByTab.set(7, {
       url: "https://evil.test/",
       prevUrl: "https://safe.test/",
-      transitionType: "link",
       qualifiers: ["client_redirect"],
       ts: 100000,
       allowedAtCommit: false,
@@ -492,16 +493,14 @@ describe("SessionStateManager", () => {
       openerNavObserved: true,
     });
     mgrA.oauthFlowByTab.set(7, {
-      initiatorUrl: "https://app.test/",
-      consentUrl: "https://oauth.test/authorize",
       expectedCallbackDomain: "app.test",
       startedAt: 100000,
       phase: "redirect",
     });
     mgrA.redirectChainData.set(7, {
       hops: [
-        { url: "https://a.test/", ts: 100000, transitionType: "link" },
-        { url: "https://b.test/", ts: 100100, transitionType: "link" },
+        { url: "https://a.test/", ts: 100000 },
+        { url: "https://b.test/", ts: 100100 },
       ],
       startedAt: 100000,
     });
@@ -544,7 +543,6 @@ describe("SessionStateManager", () => {
     expect(mgrB.lastCommittedByTab.get(7)).toEqual({
       url: "https://evil.test/",
       prevUrl: "https://safe.test/",
-      transitionType: "link",
       qualifiers: ["client_redirect"],
       ts: 100000,
       allowedAtCommit: false,
@@ -555,16 +553,14 @@ describe("SessionStateManager", () => {
       openerNavObserved: true,
     });
     expect(mgrB.oauthFlowByTab.get(7)).toEqual({
-      initiatorUrl: "https://app.test/",
-      consentUrl: "https://oauth.test/authorize",
       expectedCallbackDomain: "app.test",
       startedAt: 100000,
       phase: "redirect",
     });
     expect(mgrB.redirectChainData.get(7)).toEqual({
       hops: [
-        { url: "https://a.test/", ts: 100000, transitionType: "link" },
-        { url: "https://b.test/", ts: 100100, transitionType: "link" },
+        { url: "https://a.test/", ts: 100000 },
+        { url: "https://b.test/", ts: 100100 },
       ],
       startedAt: 100000,
     });
@@ -589,8 +585,6 @@ describe("SessionStateManager", () => {
     mgr.lastUrlByTab.set(8, "https://b.test/");
     mgr.childWindowByTab.set(7, { openerTabId: 1, createdAt: 0, openerNavObserved: false });
     mgr.oauthFlowByTab.set(7, {
-      initiatorUrl: "",
-      consentUrl: "",
       expectedCallbackDomain: "",
       startedAt: 0,
       phase: "redirect",
@@ -678,7 +672,6 @@ describe("SessionStateManager", () => {
     const entry = {
       url: "https://evil.test/phish",
       prevUrl: "https://safe.test/home",
-      transitionType: "link",
       qualifiers: ["client_redirect", "server_redirect"],
       ts: 1700000000000,
       allowedAtCommit: false,

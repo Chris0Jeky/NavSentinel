@@ -38,9 +38,18 @@ function enqueueAllowlistWrite<T>(op: () => Promise<T>): Promise<T> {
 }
 
 export function normalizeAllowlist(value: unknown): Allowlist {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  // Every list this module produces is null-prototype (see below), including
+  // the empty one: a plain `{}` here would let a later `list["__proto__"] = …`
+  // invoke the prototype setter instead of creating an own property. (#807)
+  if (!value || typeof value !== "object" || Array.isArray(value)) return Object.create(null);
   const input = value as Record<string, unknown>;
-  const out: Allowlist = {};
+  // Null prototype: siteKeys are raw hostnames, so "__proto__"/"constructor"/...
+  // are legal keys. On a plain object, `out["__proto__"] = hosts` would invoke
+  // the prototype setter (replacing the result's prototype), and reads like
+  // `list["constructor"]` would resolve to inherited members. A null-prototype
+  // map makes every hostname an ordinary own property; all consumers use only
+  // index/keys/spread/clone shapes, so this is behavior-identical otherwise. (#807)
+  const out: Allowlist = Object.create(null);
   for (const [rawSiteKey, rawHosts] of Object.entries(input)) {
     const siteKey = rawSiteKey.trim().toLowerCase();
     if (!siteKey || !Array.isArray(rawHosts)) continue;
@@ -80,7 +89,8 @@ async function readAllowlist(delegateMigration: boolean): Promise<Allowlist> {
     return legacy;
   }
 
-  return {};
+  // Null-prototype, like every list this module produces (see normalizeAllowlist). (#807)
+  return Object.create(null);
 }
 
 export function getAllowlist(): Promise<Allowlist> { return readAllowlist(hasDocumentContext()); }
@@ -97,7 +107,8 @@ export function applyAllowlistMutationDirect(message: AllowlistMutationMessage):
     if (message.op === "clear") {
       await chrome.storage.local.set({ [ALLOWLIST_KEY]: {} });
       await chrome.storage.local.remove(LEGACY_ALLOWLIST_KEY);
-      return {};
+      // Null-prototype, like every list this module produces. (#807)
+      return Object.create(null);
     }
     if (message.op === "replace") {
       const list = normalizeAllowlist(message.list);
@@ -107,7 +118,10 @@ export function applyAllowlistMutationDirect(message: AllowlistMutationMessage):
     const list = await readAllowlist(false);
     const key = message.siteKey.toLowerCase();
     const host = message.destHost.toLowerCase();
-    const existing = list[key] ?? [];
+    // Array guard (#807): with a null-prototype list a prototype-named key is a
+    // plain miss, and a non-array value never reaches push/filter below.
+    const current = list[key];
+    const existing = Array.isArray(current) ? current : [];
     if (message.op === "add") {
       if (!existing.includes(host)) existing.push(host);
       list[key] = existing;
@@ -145,7 +159,8 @@ export async function clearAllowlist(): Promise<void> {
 export function isAllowlisted(list: Allowlist, siteKey: string, destHost: string): boolean {
   const key = siteKey.toLowerCase();
   const host = destHost.toLowerCase();
-  return (list[key] ?? []).includes(host);
+  const entries = list[key];
+  return Array.isArray(entries) && entries.includes(host);
 }
 
 export function onAllowlistChange(cb: (list: Allowlist) => void): void {
