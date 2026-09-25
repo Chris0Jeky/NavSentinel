@@ -1156,7 +1156,9 @@ function sanitizeEventExtra(
 ): Record<string, unknown> | undefined {
   try {
     const json = JSON.stringify(extra);
-    if (typeof json !== "string") return undefined;
+    // Reject page-controlled bloat before parsing a second copy. The alert
+    // itself still persists without extra, as it did before #902.
+    if (typeof json !== "string" || json.length > MAX_EVENT_EXTRA_BYTES) return undefined;
     // Persist the admitted snapshot, not a caller-owned object that can grow
     // while the serialized write waits for storage or an earlier operation.
     const snapshot: unknown = JSON.parse(json);
