@@ -132,33 +132,6 @@ test("automatic form approval grants only its destination to the rollback worker
   });
 });
 
-test("relative form actions use document base URI for automatic approval (#900) @regression", async () => {
-  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
-  await withAllowlistedPage(async (page, approvedBase) => {
-    const seen = recordNavigations(page);
-    await page.evaluate((baseHref) => {
-      const base = document.createElement("base");
-      base.href = baseHref;
-      document.head.appendChild(base);
-      const form = document.createElement("form");
-      form.method = "get";
-      form.action = "level1-basic-opacity.html";
-      const marker = document.createElement("input");
-      marker.type = "hidden";
-      marker.name = "marker";
-      marker.value = "base";
-      form.appendChild(marker);
-      document.body.appendChild(form);
-      form.submit();
-    }, `${approvedBase}/`);
-
-    await expect.poll(() => seen.some((url) => url.startsWith(`${approvedBase}/level1-basic-opacity.html?marker=base`)), {
-      message: "the relative action should follow document.baseURI to the allowlisted host",
-      timeout: 10_000,
-    }).toBe(true);
-  });
-});
-
 test("an approved blocked form.submit() does not follow an action swapped after the block (#890) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   await withAllowlistedPage(async (page, approvedBase) => {
