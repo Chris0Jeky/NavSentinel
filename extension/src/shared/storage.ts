@@ -1017,21 +1017,25 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   return redactSensitivePathSegments(stripUrlQueryAndFragment(rawUrl));
 }
 
-/** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
+/**
+ * Rewrite stored event rows through the service worker's serialized write lane:
+ * pre-RI-06 URLs are minimized and every row gets the append-time caps (#829).
+ *
+ * Appends re-normalize the stored journal for shape only, so a row written by
+ * an older build or corrupted in place (a 200 KB `extra`, a 50 KB string)
+ * used to be carried forward by every later append. The worker runs this lane
+ * at startup, ahead of any append it serves, and rebuilds each row with the
+ * same bounded sanitizer the import path uses (#869). Doing this on every
+ * append instead would repeat the work for rows that are already bounded.
+ */
 export function migrateStoredEventLogUrls(): Promise<void> {
   return queueEventLogWrite(async () => {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const current = normalizeEventLog(res[EVENT_LOG_KEY]);
-    let changed = false;
-    const minimized = current.map((entry) => {
-      if (entry.url === undefined) return entry;
-      const url = minimizeEventUrl(entry.url);
-      if (url === entry.url) return entry;
-      changed = true;
-      return { ...entry, url };
-    });
-    if (changed) {
-      await chrome.storage.local.set({ [EVENT_LOG_KEY]: minimized });
+    const stored: unknown = res[EVENT_LOG_KEY];
+    if (stored === undefined) return;
+    const bounded = normalizeEventLog(stored).map(sanitizeImportedEventLogEntry);
+    if (JSON.stringify(bounded) !== JSON.stringify(stored)) {
+      await chrome.storage.local.set({ [EVENT_LOG_KEY]: bounded });
     }
   });
 }
