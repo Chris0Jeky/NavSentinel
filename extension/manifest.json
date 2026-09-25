@@ -29,7 +29,7 @@
     },
     {
       "matches": ["<all_urls>"],
-      "js": ["src/content/main_guard.ts", "src/content/history_url_boundary.ts"],
+      "js": ["src/content/main_guard_entry.ts"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": true

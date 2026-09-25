@@ -1,10 +1,9 @@
 /**
  * Preserve the History API's single observable URL-coercion boundary.
  *
- * Loaded immediately after main_guard.ts in the same MAIN-world content-script
- * entry. The guard calls the browser first and then inspects the URL. A stateful
- * object must therefore expose one stable string to both consumers rather than
- * being coerced again after the browser has already committed navigation state.
+ * The MAIN-world guard calls the browser first and then inspects the URL. A
+ * stateful object must therefore expose one stable primitive to both consumers
+ * rather than being coerced again after the browser committed navigation state.
  */
 
 type HistoryMethod = typeof History.prototype.pushState;
@@ -13,19 +12,22 @@ type HistoryMethodName = "pushState" | "replaceState";
 const stringify = String;
 const toPrimitive = Symbol.toPrimitive;
 
-function stableHistoryUrl(url: unknown): unknown {
-  if (url === null || url === undefined || typeof url === "string") return url;
+/** Return a lazily memoized URL value without replacing native primitive errors. */
+export function stabilizeHistoryUrl(url: unknown): unknown {
+  if (
+    url === null ||
+    url === undefined ||
+    typeof url === "string" ||
+    typeof url === "symbol"
+  ) {
+    return url;
+  }
 
   let resolved = false;
   let value = "";
   return {
     [toPrimitive](): string {
       if (!resolved) {
-        // Web IDL DOMString conversion rejects a Symbol primitive. String(symbol)
-        // is unusually permissive, so preserve the browser boundary explicitly.
-        if (typeof url === "symbol") {
-          throw new TypeError("Cannot convert a Symbol value to a string");
-        }
         value = stringify(url);
         resolved = true;
       }
@@ -34,7 +36,7 @@ function stableHistoryUrl(url: unknown): unknown {
   };
 }
 
-function installStableHistoryBoundary(name: HistoryMethodName): void {
+function installMethodBoundary(name: HistoryMethodName): void {
   const descriptor = Object.getOwnPropertyDescriptor(History.prototype, name);
   if (!descriptor || typeof descriptor.value !== "function") return;
 
@@ -45,7 +47,7 @@ function installStableHistoryBoundary(name: HistoryMethodName): void {
     unused: string,
     url?: string | URL | null,
   ): void {
-    Reflect.apply(monitored, this, [data, unused, stableHistoryUrl(url)]);
+    Reflect.apply(monitored, this, [data, unused, stabilizeHistoryUrl(url)]);
   };
 
   try {
@@ -59,7 +61,8 @@ function installStableHistoryBoundary(name: HistoryMethodName): void {
   }
 }
 
-installStableHistoryBoundary("pushState");
-installStableHistoryBoundary("replaceState");
-
-export {};
+/** Wrap the already-installed observational hooks with a stable coercion boundary. */
+export function installStableHistoryBoundary(): void {
+  installMethodBoundary("pushState");
+  installMethodBoundary("replaceState");
+}

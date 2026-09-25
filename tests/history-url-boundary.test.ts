@@ -36,10 +36,10 @@ describe("history URL coercion boundary", () => {
       },
     });
 
-    const boundary = (await import(
+    const boundary = await import(
       "../extension/src/content/history_url_boundary"
-    )) as unknown as { installStableHistoryBoundary?: () => void };
-    boundary.installStableHistoryBoundary?.();
+    );
+    boundary.installStableHistoryBoundary();
 
     const url = Symbol("history-url");
     history.pushState({}, "", url as unknown as string);
@@ -47,7 +47,7 @@ describe("history URL coercion boundary", () => {
     expect(capturedUrl).toBe(url);
   });
 
-  it("installs inside main_guard after its monitoring patch", () => {
+  it("uses one module graph so the guard patch precedes the boundary", () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(repoRoot, "extension", "manifest.json"), "utf8"),
     ) as {
@@ -56,7 +56,7 @@ describe("history URL coercion boundary", () => {
     const mainWorld = manifest.content_scripts.find(
       (entry) => entry.world === "MAIN",
     );
-    expect(mainWorld?.js).toEqual(["src/content/main_guard.ts"]);
+    expect(mainWorld?.js).toEqual(["src/content/main_guard_entry.ts"]);
 
     const source = fs.readFileSync(
       path.join(
@@ -64,19 +64,18 @@ describe("history URL coercion boundary", () => {
         "extension",
         "src",
         "content",
-        "main_guard.ts",
+        "main_guard_entry.ts",
       ),
       "utf8",
     );
-    expect(source).toContain(
+    const guardImport = source.indexOf('import "./main_guard";');
+    const boundaryImport = source.indexOf(
       'import { installStableHistoryBoundary } from "./history_url_boundary";',
     );
+    const install = source.indexOf("installStableHistoryBoundary();");
 
-    const patchIndex = source.lastIndexOf("patchHistory();");
-    const boundaryIndex = source.lastIndexOf(
-      "installStableHistoryBoundary();",
-    );
-    expect(patchIndex).toBeGreaterThan(-1);
-    expect(boundaryIndex).toBeGreaterThan(patchIndex);
+    expect(guardImport).toBeGreaterThan(-1);
+    expect(boundaryImport).toBeGreaterThan(guardImport);
+    expect(install).toBeGreaterThan(boundaryImport);
   });
 });
