@@ -285,10 +285,13 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
         const context = currentContext();
         if (context) {
           context.coreEmitted = true;
+          // Within a submit context, the facade's effective-destination
+          // comparison is authoritative. Forward the core payload only when the
+          // facade also found a suspicious effective destination or credentials.
           if (context.supplementalSignal) {
             config.postSignal(type, { ...payload, ...context.supplementalSignal });
-            return;
           }
+          return;
         }
       }
       config.postSignal(type, payload);
