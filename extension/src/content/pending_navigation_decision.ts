@@ -404,6 +404,8 @@ export default function showPendingBlankNavigationPrompt(
     kind: "nav_blank_prompt",
     site: sourceDomain,
     destHost: destinationHost,
+    // The CDS/NRS codes that held this navigation (#867); storage bounds them.
+    ...(outcomeFeatures.reasons ? { reasons: outcomeFeatures.reasons } : {}),
     ...(request.overlayHidden ? { extra: { overlayAutoDismissed: true } } : {}),
   }).catch(() => {});
   const pending = requestPendingBlankNavigation({

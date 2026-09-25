@@ -1541,6 +1541,9 @@ function showAllowPrompt(params: AllowPromptParams): void {
     site: sourceDomain,
     url: params.url,
     ...(params.host ? { destHost: params.host } : {}),
+    // Local decisions carry their CDS/NRS codes (#867); MAIN-world interceptions
+    // have no scorer decision behind them and stay reasonless.
+    ...(outcomeFeatures.reasons ? { reasons: outcomeFeatures.reasons } : {}),
     ...(params.overlaySuppression ? { extra: { overlayAutoDismissed: true } } : {}),
   });
 
@@ -1864,6 +1867,8 @@ window.addEventListener(
         site: siteKeyFromLocation(),
         url: openerNavUrl || location.href,
         destHost: (() => { try { return new URL(openerNavUrl || location.href, location.href).hostname; } catch { return location.hostname; } })(),
+        // The same signal computeNRS scores as doubleClickHijackActive (#867).
+        reasons: ["nrs_double_click_hijack"],
       });
     }
 
