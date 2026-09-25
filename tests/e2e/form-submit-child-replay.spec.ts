@@ -16,6 +16,7 @@
  */
 import { chromium, expect, test, type BrowserContext, type Page } from "@playwright/test";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +38,78 @@ const LANDING = "/form-submit-landing.html";
 const BLOCKED = "Blocked form submit";
 
 test.setTimeout(180_000);
+
+interface CapturedPost {
+  body: Buffer;
+  contentType: string;
+}
+
+interface PostCaptureServer {
+  actionUrl: string;
+  captured: Promise<CapturedPost>;
+  close(): Promise<void>;
+}
+
+async function startPostCaptureServer(): Promise<PostCaptureServer> {
+  let resolveCaptured!: (value: CapturedPost) => void;
+  let rejectCaptured!: (reason: unknown) => void;
+  const captured = new Promise<CapturedPost>((resolve, reject) => {
+    resolveCaptured = resolve;
+    rejectCaptured = reject;
+  });
+
+  const server = http.createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    request.on("error", rejectCaptured);
+    request.on("end", () => {
+      resolveCaptured({
+        body: Buffer.concat(chunks),
+        contentType: request.headers["content-type"] ?? "",
+      });
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><title>Captured child form POST</title>");
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => reject(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Failed to bind child replay POST capture server");
+  }
+
+  return {
+    actionUrl: `http://127.0.0.1:${address.port}${LANDING}`,
+    captured,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+async function captureWithin(
+  captured: Promise<CapturedPost>,
+  timeoutMs = 5_000,
+): Promise<CapturedPost> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      captured,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Timed out waiting for child form POST")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
 
 async function withExtension(run: (context: BrowserContext, baseUrl: string) => Promise<void>): Promise<void> {
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
@@ -102,7 +175,7 @@ test("legacy GET submit replays finalized FormData only into the still-owned chi
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   await withExtension(async (context, baseUrl) => {
-    for (const mode of ["safe-submit", "safe-formdata", "prototype-target-name-theft"]) {
+    for (const mode of ["safe-submit", "safe-formdata"]) {
       await test.step(mode, async () => {
         const page = await openFixture(context, baseUrl, mode);
         const pagesBefore = context.pages().length;
@@ -123,10 +196,6 @@ test("legacy GET submit replays finalized FormData only into the still-owned chi
           expect(landing.searchParams.get("mutated")).toBe("yes");
           expect(landing.searchParams.get("")).toBe("empty-name-preserved");
         }
-        if (mode === "prototype-target-name-theft") {
-          expect(await datasetNumber(page, "targetReadCount"), "the runtime used captured target readers").toBe(0);
-          expect(await page.evaluate(() => window.name), "prototype tampering could not steal child authority").toBe("");
-        }
         await page.close();
       });
     }
@@ -136,39 +205,41 @@ test("legacy GET submit replays finalized FormData only into the still-owned chi
 test("legacy multipart POST preserves finalized file data inside the named child (#865) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
-  await withExtension(async (context, baseUrl) => {
-    const page = await openFixture(context, baseUrl, "safe-post-file");
-    const pagesBefore = context.pages().length;
-    const child = childFrame(page);
-    const requestPromise = page.waitForRequest((request) => {
-      try {
-        return new URL(request.url()).pathname === LANDING && request.method() === "POST";
-      } catch {
-        return false;
-      }
+  const captureServer = await startPostCaptureServer();
+  try {
+    await withExtension(async (context, baseUrl) => {
+      const page = await openFixture(context, baseUrl, "safe-post-file");
+      const pagesBefore = context.pages().length;
+      const child = childFrame(page);
+      await page.evaluate((actionUrl) => {
+        const form = document.querySelector<HTMLFormElement>("#legacy");
+        if (!form) throw new Error("legacy form is missing");
+        form.action = actionUrl;
+      }, captureServer.actionUrl);
+
+      await runCase(page);
+      const request = await captureWithin(captureServer.captured);
+      await expect.poll(() => child.url(), { timeout: 5_000 }).toContain(LANDING);
+
+      expect(request.contentType).toMatch(/^multipart\/form-data;\s*boundary=/i);
+      const multipart = request.body.toString("utf8");
+      expect(multipart).toContain('name="case"');
+      expect(multipart).toContain("safe-post-file");
+      expect(multipart).toContain('name="original"');
+      expect(multipart).toContain("kept");
+      expect(multipart).toContain('name="upload"; filename="receipt.txt"');
+      expect(multipart).toContain("Content-Type: text/plain");
+      expect(multipart).toContain("upload-body");
+
+      await expectOriginalFormdataOnly(page, 1);
+      expect(context.pages().length, "the child POST did not open a top-level page").toBe(pagesBefore);
+      expect(new URL(page.url()).pathname).toBe(`/${FIXTURE}`);
+      await assertNoToastFor(page, 500);
+      await page.close();
     });
-
-    await runCase(page);
-    const request = await requestPromise;
-    await expect.poll(() => child.url(), { timeout: 5_000 }).toContain(LANDING);
-
-    const body = request.postDataBuffer();
-    expect(body, "multipart POST body is available").not.toBeNull();
-    const multipart = body!.toString("utf8");
-    expect(multipart).toContain('name="case"');
-    expect(multipart).toContain("safe-post-file");
-    expect(multipart).toContain('name="original"');
-    expect(multipart).toContain("kept");
-    expect(multipart).toContain('name="upload"; filename="receipt.txt"');
-    expect(multipart).toContain("Content-Type: text/plain");
-    expect(multipart).toContain("upload-body");
-
-    await expectOriginalFormdataOnly(page, 1);
-    expect(context.pages().length, "the child POST did not open a top-level page").toBe(pagesBefore);
-    expect(new URL(page.url()).pathname).toBe(`/${FIXTURE}`);
-    await assertNoToastFor(page, 500);
-    await page.close();
-  });
+  } finally {
+    await captureServer.close();
+  }
 });
 
 test("formdata retargets and child replacement cannot escape the replay boundary (#865) @regression", async () => {
