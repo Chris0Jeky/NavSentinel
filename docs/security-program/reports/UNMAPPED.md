@@ -4,7 +4,7 @@
 
 - RW-02, fake download CTA over legitimate content, has no current dedicated fixture/test vertical.
 - RW-05, multi-step ad chain, has no current dedicated fixture/test vertical.
-- The source tree has broader unit-level seams than the 63 journey and lane mappings. Capability-to-source coverage is recorded in [CAPABILITY_MATRIX.md](../CAPABILITY_MATRIX.md); this seed does not pretend each source file proves a scenario.
+- The source tree has broader unit-level seams than the 64 journey and lane mappings. Capability-to-source coverage is recorded in [CAPABILITY_MATRIX.md](../CAPABILITY_MATRIX.md); this seed does not pretend each source file proves a scenario.
 
 ## Evidence not promoted
 

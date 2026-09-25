@@ -851,6 +851,42 @@ describe("appendEvent", () => {
     expect(store[EVENT_LOG_KEY]).toEqual([]);
   });
 
+  it("retries reset-barrier hydration after a transient session-storage failure", async () => {
+    // One failed chrome.storage.session read must fail only the append that
+    // saw it. Caching the rejected hydration would make every later append,
+    // clear and import fail until the worker restarts, silently dropping events.
+    const { chrome, store } = createChromeMock();
+    const sessionGet = chrome.storage.session.get;
+    let failures = 1;
+    chrome.storage.session.get = async (keys?: string | string[] | Record<string, unknown>) => {
+      if (failures > 0) {
+        failures -= 1;
+        throw new Error("transient session failure");
+      }
+      return sessionGet(keys);
+    };
+    vi.stubGlobal("chrome", {
+      ...chrome,
+      clients: {},
+      registration: {},
+    } as unknown as typeof globalThis.chrome);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const worker = await import("../extension/src/shared/storage");
+    const during = await worker.handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "during-outage", ts: 1000, kind: "nav_click_block" },
+    });
+    expect(during.ok).toBe(false);
+
+    const after = await worker.handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "after-outage", ts: 1001, kind: "nav_click_block" },
+    });
+    expect(after.ok).toBe(true);
+    expect((store[EVENT_LOG_KEY] as Array<{ id: string }>).map((entry) => entry.id)).toEqual(["after-outage"]);
+  });
+
   it("clamps logLimit below minimum to 50", async () => {
     const { chrome, store } = createChromeMock({
       [SETTINGS_KEY]: { logLimit: 3 },
@@ -2166,6 +2202,33 @@ describe("getPromptOutcomes and clearPromptOutcomes", () => {
 
     await migrateStoredPromptOutcomes();
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
+  it("does not rewrite migrated prompt outcomes whose rows come back with sorted keys", async () => {
+    // Real chrome.storage round-trips objects with their keys sorted, while the
+    // migration rebuilds rows in field order. That difference alone must not
+    // rewrite the log and recompute adaptive scores on every worker start.
+    const { chrome, store } = createChromeMock({
+      [PROMPT_OUTCOMES_KEY]: [
+        { id: "o1", ts: 1, domain: "source.example", destDomain: "dest.example", type: "nav", score: 72, outcome: "allow", reasons: ["a"] },
+      ],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+    const { migrateStoredPromptOutcomes } = await import("../extension/src/shared/storage");
+    await migrateStoredPromptOutcomes();
+
+    const sortKeys = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(sortKeys)
+        : value && typeof value === "object"
+          ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]))
+          : value;
+    store[PROMPT_OUTCOMES_KEY] = sortKeys(store[PROMPT_OUTCOMES_KEY]);
+    setSpy.mockClear();
+
+    await migrateStoredPromptOutcomes();
+    expect(setSpy).not.toHaveBeenCalled();
   });
 
   it("clears outcomes", async () => {
