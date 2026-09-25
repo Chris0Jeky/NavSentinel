@@ -36,6 +36,7 @@ function loginSnapshot(opts: {
   scriptText?: string;
   metaTags?: Array<{ name: string; content: string }>;
   matchedSelectors?: string[];
+  baseUrl?: string;
 }): PageSnapshot {
   const hasPassword = opts.hasPassword !== false;
   return {
@@ -48,6 +49,8 @@ function loginSnapshot(opts: {
     formActions: [{ action: opts.formAction ?? "", hasPassword }],
     metaTags: opts.metaTags ?? [],
     matchedSelectors: opts.matchedSelectors ?? [],
+    // Conditional spread: exactOptionalPropertyTypes forbids an explicit undefined.
+    ...(opts.baseUrl !== undefined ? { baseUrl: opts.baseUrl } : {}),
   };
 }
 
@@ -444,6 +447,42 @@ describe("content_analyzer - suspicious form actions", () => {
   it("does NOT flag empty form action", () => {
     const snap = loginSnapshot({ formAction: "" });
     const result = analyzeSnapshot(snap, "myapp.com");
+    expect(result.suspiciousFormAction).toBe(false);
+  });
+
+  it("flags a relative password-form action as cross-domain when the base URL is cross-origin (#785)", () => {
+    const snap = loginSnapshot({
+      formAction: "login.php",
+      baseUrl: "https://cdn.evil/base/",
+    });
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(true);
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("does NOT flag a relative action when the base URL matches the page origin (#785)", () => {
+    const snap = loginSnapshot({
+      formAction: "login.php",
+      baseUrl: "https://bank.test/app/",
+    });
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(false);
+  });
+
+  it("leaves absolute form actions unaffected by the base URL (#785)", () => {
+    const snap = loginSnapshot({
+      formAction: "https://evil.com/steal",
+      baseUrl: "https://bank.test/",
+    });
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(true);
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("falls back to the page domain when the snapshot predates baseUrl (#785)", () => {
+    const snap = loginSnapshot({ formAction: "login.php" });
+    expect(snap.baseUrl).toBeUndefined();
+    const result = analyzeSnapshot(snap, "bank.test");
     expect(result.suspiciousFormAction).toBe(false);
   });
 });

@@ -52,6 +52,14 @@ export interface PageSnapshot {
   metaTags: Array<{ name: string; content: string }>;
   /** CSS selectors that exist in the document (for kit fingerprint matching) */
   matchedSelectors: string[];
+  /**
+   * Effective document base URL the browser resolves relative URLs against
+   * (`document.baseURI`, honoring `<base href>`). Set by buildPageSnapshot;
+   * manual snapshots may omit it, in which case relative form actions fall
+   * back to resolving against the page domain (legacy behavior — misbinds
+   * whenever a base element is present, same class as #650/#778). (#785)
+   */
+  baseUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -577,6 +585,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     formActions,
     metaTags,
     matchedSelectors,
+    baseUrl: doc.baseURI,
   };
 }
 
@@ -748,11 +757,15 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
       continue;
     }
 
-    // Cross-domain form action
+    // Cross-domain form action. Relative actions resolve against the observed
+    // effective base URL, matching what the browser actually submits to — the
+    // page-derived base is only the fallback for snapshots that predate it
+    // and misbinds whenever a base element is present (#785).
+    const base = snapshot.baseUrl || "https://" + hostForUrl(currentDomain);
     try {
       // Re-bracket an IPv6-literal host so the base URL is valid: currentDomain is
       // an unbracketed registrable domain and "https://::1" would throw (#208 R1).
-      const actionUrl = new URL(rawAction, "https://" + hostForUrl(currentDomain));
+      const actionUrl = new URL(rawAction, base);
       const actionHost = normalizeHost(actionUrl.hostname);
       const actionReg = getRegistrableDomain(actionHost);
       if (actionReg && currentReg && actionReg !== currentReg) {
