@@ -14,6 +14,8 @@ export const EVIDENCE_KINDS = [
 ] as const satisfies readonly EventKind[];
 const kinds = new Set<string>(EVIDENCE_KINDS);
 export const MAX_EVIDENCE_EVENTS = 5000;
+/** Scores above this are corrupt, not diminished NRS; same bound as the popup gauge. */
+const MAX_PLAUSIBLE_EVENT_SCORE = 1000;
 
 export interface EvidenceEvent {
   id: string;
@@ -64,7 +66,12 @@ export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (co
         ? [...new Set(entry.reasons.filter(code => typeof code === "string" && isReasonCode(code)))].slice(0, 16)
         : [],
     };
-    if (typeof entry.score === "number" && Number.isFinite(entry.score) && entry.score >= 0 && entry.score <= 100) event.score = entry.score;
+    // computeNRS applies diminishing returns above 100 instead of clamping, so real
+    // blocks journal scores such as 104. Show them as 100, as the popup gauge does
+    // (#715), and keep the export inside the Lab importer's 0-100 range. (#883)
+    if (typeof entry.score === "number" && Number.isFinite(entry.score) && entry.score >= 0 && entry.score <= MAX_PLAUSIBLE_EVENT_SCORE) {
+      event.score = Math.min(100, entry.score);
+    }
     events.push(event);
   }
   // Retention remains insertion-bounded above. Within that retained snapshot,
