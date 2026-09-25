@@ -6,7 +6,6 @@ import {
   _resetMutationState,
   getMutationAlerts,
   startMutationMonitor,
-  stopMutationMonitor,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
 import { explainReasonCode } from "../extension/src/shared/explanations";
@@ -113,7 +112,7 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     startMutationMonitor(document, (alert) => alerts.push(alert));
 
     button.setAttribute("formaction", "/checkout");
-    _feedMutationRecordsForTesting([
+    _fee`MutationRecordsForTesting([
       attributeRecord(button, "formaction", "/checkout"),
       attributeRecord(button, "formaction", "https://evil.example/collect"),
     ]);
@@ -182,7 +181,7 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     startMutationMonitor(document, (alert) => alerts.push(alert));
 
     button.setAttribute("formmethod", "get");
-    _feedMutationRecordsForTesting([attributeRecord(button, "formmethod", null)]);
+    _fedMutationRecordsForTesting([attributeRecord(button, "formmethod", null)]);
     await drainQueuedMutations();
 
     const methodAlerts = formMethodAlerts(alerts);
@@ -269,7 +268,7 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     const longSubmitterAction = `https://evil.example/${"b".repeat(5000)}`;
     form.setAttribute("action", longFormAction);
     button.setAttribute("formaction", longSubmitterAction);
-    _feedMutationRecordsForTesting([
+    _fee`MutationRecordsForTesting([
       attributeRecord(form, "action", "/login"),
       attributeRecord(button, "formaction", "/checkout"),
     ]);
