@@ -74,9 +74,8 @@ function readStyleHints(el: Element): Partial<ElementHint> {
   const z = cs.zIndex === "auto" ? 0 : Number.parseInt(cs.zIndex, 10);
   // Detached elements report "" for computed opacity; an unguarded parse
   // plants NaN in scoring, where every comparison fails open (#853).
-  const o = Number.parseFloat(cs.opacity);
   return {
-    opacity: Number.isFinite(o) ? o : 1,
+    opacity: effectiveOpacity(el),
     display: cs.display,
     visibility: cs.visibility,
     pointerEvents: cs.pointerEvents,
@@ -115,10 +114,25 @@ function ownOpacity(el: Element): number {
   return Number.isFinite(o) ? o : 1;
 }
 
+function composedParentElement(el: Element): Element | null {
+  if (el.assignedSlot) return el.assignedSlot;
+  if (el.parentElement) return el.parentElement;
+  const root = el.getRootNode();
+  return root instanceof ShadowRoot ? root.host : null;
+}
+
+function effectiveOpacity(el: Element): number {
+  let product = 1;
+  for (let current: Element | null = el; current; current = composedParentElement(current)) {
+    product *= ownOpacity(current);
+  }
+  return product;
+}
+
 /** Product of the own opacities from `el` up to, but excluding, `control`. */
 function opacityWithin(el: Element, control: Element): number {
   let product = 1;
-  for (let e: Element | null = el; e && e !== control; e = e.parentElement) {
+  for (let e: Element | null = el; e && e !== control; e = composedParentElement(e)) {
     product *= ownOpacity(e);
   }
   return product;
@@ -135,10 +149,17 @@ function backgroundAlpha(el: Element): number {
   return bg.startsWith("rgb(") ? 1 : 0;
 }
 
-/** The element paints something of its own: direct text, or a background. */
-function paintsOwnContent(el: Element): boolean {
+/** Direct text must paint a visible glyph at the click point to count. */
+function paintsOwnContent(el: Element, x: number, y: number): boolean {
   for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE && /\S/.test(node.textContent ?? "")) return true;
+    if (node.nodeType !== Node.TEXT_NODE || !/[^\s\u200b-\u200d\ufeff]/u.test(node.textContent ?? "")) continue;
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(node);
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.width > 0 && rect.height > 0 && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return true;
+      }
+    }
   }
   return backgroundAlpha(el) >= CONCEALED_OPACITY_CEILING;
 }
@@ -166,7 +187,7 @@ function paintsOwnContent(el: Element): boolean {
  * layered above a target as siblings or unrelated elements, and descendants
  * that escape their link's box to cover other content, never qualify.
  */
-function activatedAncestor(stack: Element[], leaf: Element): Element | null {
+function activatedAncestor(stack: Element[], leaf: Element, x: number, y: number): Element | null {
   if (isInteractiveCheap(leaf)) return null;
   const between: Element[] = [];
   for (const el of stack) {
@@ -176,8 +197,8 @@ function activatedAncestor(stack: Element[], leaf: Element): Element | null {
       if (!between.every((b) => el.contains(b))) return null;
       if (!hasAccessibleName(buildElementHint(el, { wantRect: false, wantStyle: false }))) return null;
       if (opacityWithin(leaf, el) >= CONCEALED_OPACITY_CEILING) return el;
-      const visibleOwnPaint = paintsOwnContent(el) || between.some((b) =>
-        opacityWithin(b, el) >= CONCEALED_OPACITY_CEILING && paintsOwnContent(b));
+      const visibleOwnPaint = paintsOwnContent(el, x, y) || between.some((b) =>
+        opacityWithin(b, el) >= CONCEALED_OPACITY_CEILING && paintsOwnContent(b, x, y));
       return visibleOwnPaint ? el : null;
     }
     between.push(el);
@@ -251,7 +272,7 @@ export function buildClickContextFromEvents(params: {
   // Score the control the user activated, not the non-interactive child the
   // pointer happened to land on (#863). The retargeting check above still
   // compares the raw pointerdown and click leaves.
-  const topEl = activatedAncestor(params.click.stack, leafEl) ?? leafEl;
+  const topEl = activatedAncestor(params.click.stack, leafEl, params.click.x, params.click.y) ?? leafEl;
   const underEl = firstUnderlyingCandidate(params.click.stack, topEl);
   const top = buildElementHint(topEl, { wantRect: true, wantStyle: true });
   const isLegitModalBackdrop = detectLegitModalBackdrop(topEl, params.click.stack, viewport);
