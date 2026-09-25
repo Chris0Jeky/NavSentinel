@@ -30,6 +30,8 @@
     "test:e2e:proving-ground": "playwright test tests/e2e/proving-ground-overlay-sink.spec.ts --project=regression",
     "test:e2e:clipboard-timebomb": "playwright test tests/e2e/clipboard-timebomb.spec.ts --project=regression",
     "test:e2e:rollback": "playwright test -c playwright.rollback.config.ts",
+    "test:e2e:branded": "playwright test -c playwright.branded.config.ts",
+    "test:acceptance": "playwright test -c playwright.acceptance.config.ts",
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "test:e2e:stress": "playwright test tests/e2e/navsentinel.stress.spec.ts -c playwright.stress.config.ts",
     "test:e2e:state-authority": "node scripts/launch-state-authority-campaign.mjs",

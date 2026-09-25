@@ -298,7 +298,10 @@ describe("state-authority launcher replay boundary", () => {
     expect(result.stdout).not.toContain(
       "NAVSENTINEL_STATE_AUTHORITY_KEY",
     );
-  }, 15_000);
+    // 60s cap (was 15s): full-history preflight spawn still exceeds 15s
+    // under parallel load on Windows (4.7s isolated and slow under
+    // contention). Still bounded enough to catch real hangs. (#766)
+  }, 60_000);
 
   it("rejects direct worktree loading before Playwright can list tests", async () => {
     const { sanitizedEnvironment } = await loadLauncherModule();

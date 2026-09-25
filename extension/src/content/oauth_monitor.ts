@@ -34,8 +34,6 @@ import { getRegistrableDomain, normalizeHost } from "../shared/domain";
 // --- Public types ---
 
 export interface OAuthFlowState {
-  initiatorUrl: string;
-  consentUrl: string;
   expectedCallbackDomain: string;
   startedAt: number;
   phase: "redirect" | "consent" | "callback" | "complete";
