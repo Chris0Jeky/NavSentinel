@@ -100,6 +100,27 @@ describe("release profiles", () => {
     expect(result.hasBrandTemplatesAsset).toBe(false);
   });
 
+  it("rejects an interaction-only dist that ships reputation_data.bin without manifest exposure", () => {
+    const dist = makeDist("interaction-only");
+    fs.writeFileSync(path.join(dist, "reputation_data.bin"), makeValidTestBloom());
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(
+      "interaction-only profile must omit reputation_data.bin from dist and manifest",
+    );
+  });
+
+  it("rejects an interaction-only manifest that exposes reputation_data.bin without the file", () => {
+    const dist = makeDist("interaction-only");
+    const manifestPath = path.join(dist, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    manifest.web_accessible_resources = [
+      { resources: ["reputation_data.bin"], matches: ["<all_urls>"] },
+    ];
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(
+      "interaction-only profile must omit reputation_data.bin from dist and manifest",
+    );
+  });
+
   it("rejects reputation loaders from an interaction-only bundle", () => {
     const dist = makeDist("interaction-only");
     fs.writeFileSync(path.join(dist, "runtime.js"), "fetch('reputation_data.bin');\n");
