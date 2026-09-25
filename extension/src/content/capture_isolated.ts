@@ -991,9 +991,17 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   if (cleanup.action === "budget_exhausted") {
     if (!overlayCleanupBudgetWarned) {
       overlayCleanupBudgetWarned = true;
+      lastOverlayCleanupToastUndo = cleanup.undo;
       sendIconUpdate("yellow");
       showToast({
         message: "Overlay cleanup reached its safety limit.",
+        // The budget result carries the same group undo that restores the
+        // hidden subset; without it up to 128 overlays stay unrestorable
+        // except via the settings toggle. (#748)
+        actions: [{ label: "Undo", onClick: () => runOverlayCleanupUndo(cleanup.undo) }],
+        // Persistent like the regular cleanup card: it replaces that card,
+        // survives unrelated warnings, and is torn down with the setting.
+        persistent: true,
         timeoutMs: 0,
       });
     }
@@ -1003,23 +1011,24 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   if (cleanup.undo !== lastOverlayCleanupToastUndo) {
     lastOverlayCleanupToastUndo = cleanup.undo;
     sendIconUpdate("yellow");
-    const undo = () => {
-      const restored = cleanup.undo();
-      if (lastOverlayCleanupToastUndo === cleanup.undo) {
-        lastOverlayCleanupToastUndo = null;
-      }
-      appendEventSafely({
-        kind: "mutation_alert",
-        site: siteKeyFromLocation(),
-        url: location.href,
-        reasons: ["overlay_cleanup_undo"],
-        extra: { overlayCleanupOutcome: "restored", restored },
-      });
-      return restored;
-    };
-    showOverlayCleanupToast(undo);
+    showOverlayCleanupToast(() => runOverlayCleanupUndo(cleanup.undo));
   }
   return true;
+}
+
+function runOverlayCleanupUndo(undo: OverlaySuppression): boolean {
+  const restored = undo();
+  if (lastOverlayCleanupToastUndo === undo) {
+    lastOverlayCleanupToastUndo = null;
+  }
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: ["overlay_cleanup_undo"],
+    extra: { overlayCleanupOutcome: "restored", restored },
+  });
+  return restored;
 }
 
 function handleMutationAlert(alert: MutationAlert): void {
