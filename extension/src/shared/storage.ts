@@ -1,5 +1,5 @@
 import type { Mode } from "./types";
-import { ALLOWLIST_KEY, getAllowlist, normalizeAllowlist, type Allowlist } from "./allowlist";
+import { ALLOWLIST_KEY, applyAllowlistMutationDirect, getAllowlist, normalizeAllowlist, type Allowlist, type AllowlistMutationMessage } from "./allowlist";
 import { getRegistrableDomain, hostForUrl, isIPAddress, normalizeHost, safeUrlParse } from "./domain";
 import {
   ADAPTIVE_SCORES_KEY,
@@ -191,6 +191,22 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Math.max(min, Math.min(max, n));
 }
 
+const PROTECTION_MODES: readonly string[] = ["off", "smart", "strict"] satisfies Mode[];
+
+/**
+ * The single validation authority for the navigation and credential protection
+ * modes (#866). Matching is exact: enforcement compares against the lowercase
+ * literals, so a value such as `"OFF"` or `"bogus"` is not a mode at all and
+ * must not be displayed as one.
+ */
+export function isProtectionMode(value: unknown): value is Mode {
+  return typeof value === "string" && PROTECTION_MODES.includes(value);
+}
+
+function normalizeProtectionMode(value: unknown, fallback: Mode): Mode {
+  return isProtectionMode(value) ? value : fallback;
+}
+
 // RI-05 retired the test-only DNR backstop, but installed profiles still hold its
 // `dnrEnabled` flag inside the stored nav settings. Rebuild nav from known fields
 // only so the retired flag is dropped instead of being spread forward and
@@ -201,10 +217,17 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 // build) cannot survive a settings read and cannot re-enable JavaScript-behaviour
 // instrumentation. That capability is a build-time release-profile decision, so no
 // stored value participates in it at all.
+//
+// An unknown or non-string mode (a crafted backup, a corrupt store) keeps the
+// current mode, and every read and import merges onto DEFAULT_SUITE_SETTINGS,
+// so such a value reads as the default "smart" on every surface (#866).
 function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | undefined): NavSettings {
   const merged = { ...cur, ...(partial ?? {}) };
   return {
-    defaultMode: merged.defaultMode,
+    defaultMode: normalizeProtectionMode(
+      merged.defaultMode,
+      normalizeProtectionMode(cur.defaultMode, DEFAULT_SUITE_SETTINGS.nav.defaultMode),
+    ),
     debug: merged.debug,
     autoDismissOverlays: merged.autoDismissOverlays === true,
   };
@@ -222,6 +245,10 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
     }
   };
 
+  next.credential.mode = normalizeProtectionMode(
+    next.credential.mode,
+    normalizeProtectionMode(cur.credential.mode, DEFAULT_SUITE_SETTINGS.credential.mode),
+  );
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
   next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
   next.credential.mediumRiskThreshold = clampInt(
@@ -289,6 +316,19 @@ export function rebaseOptionsSettingsDraft(
   ) as unknown as SuiteSettings;
 }
 
+/**
+ * The settings every reader derives from a stored settings value: validated and
+ * merged over the defaults. Pages, content scripts and the service worker's
+ * synchronous mode cache all go through this, so they agree on the effective
+ * mode even when the stored value is hostile (#866).
+ */
+export function normalizeStoredSuiteSettings(stored: unknown): SuiteSettings {
+  return mergeSuiteSettings(
+    structuredClone(DEFAULT_SUITE_SETTINGS),
+    isRecord(stored) ? stored as SuiteSettingsPatch : {},
+  );
+}
+
 export async function getSuiteSettings(): Promise<SuiteSettings> {
   const res = await chrome.storage.local.get([SUITE_SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
   const stored = res[SUITE_SETTINGS_KEY] as SuiteSettings | undefined;
@@ -302,7 +342,7 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
     }
     return structuredClone(DEFAULT_SUITE_SETTINGS);
   }
-  return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
+  return normalizeStoredSuiteSettings(stored);
 }
 
 function createStorageWriteQueue(reportError?: (error: unknown) => void) {
@@ -376,7 +416,7 @@ function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, un
       if (!sanitizeSuiteSettingsFields(candidate, defaultValue)) return null;
     } else if (typeof candidate !== typeof defaultValue ||
       (typeof candidate === "number" && !Number.isFinite(candidate)) ||
-      ((key === "defaultMode" || key === "mode") && !["off", "smart", "strict"].includes(candidate as string))) {
+      ((key === "defaultMode" || key === "mode") && !isProtectionMode(candidate))) {
       return null;
     }
   }
@@ -437,8 +477,7 @@ export function onSuiteSettingsChange(cb: (s: SuiteSettings) => void): void {
     if (areaName !== "local") return;
     const change = changes[SUITE_SETTINGS_KEY];
     if (!change) return;
-    const next = (change.newValue as SuiteSettings | undefined) ?? DEFAULT_SUITE_SETTINGS;
-    cb(mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), next));
+    cb(normalizeStoredSuiteSettings(change.newValue));
   });
 }
 
@@ -472,7 +511,13 @@ function normalizeTrustedDomain(value: unknown): string {
   if (!host) return "";
   const normalized = normalizeHost(host);
   if (!normalized) return "";
-  return getRegistrableDomain(normalized);
+  const registrable = getRegistrableDomain(normalized);
+  // URL parsing accepts hosts no DNS name or IP literal can be, such as
+  // "__proto__" or a single 5,000-character label. Options adds, popup and
+  // credential-prompt trust, imports and reads all come through here, so hold
+  // them all to the event-log hostname grammar: LDH labels of at most 63
+  // characters, 253 in total, or a canonical IP literal (#869).
+  return normalizeEventPageSite(registrable) === registrable ? registrable : "";
 }
 
 function normalizeDomainList(list: unknown): string[] {
@@ -1017,21 +1062,39 @@ export function minimizeEventUrl(rawUrl: string | undefined): string | undefined
   return redactSensitivePathSegments(stripUrlQueryAndFragment(rawUrl));
 }
 
-/** Rewrite pre-RI-06 event URLs through the service worker's serialized write lane. */
+/**
+ * Rewrite stored event rows through the service worker's serialized write lane:
+ * pre-RI-06 URLs are minimized and every row gets the append-time caps (#829).
+ *
+ * Appends re-normalize the stored journal for shape only, so a row written by
+ * an older build or corrupted in place (a 200 KB `extra`, a 50 KB string)
+ * used to be carried forward by every later append. The worker runs this lane
+ * at startup, ahead of any append it serves, and rebuilds each row with the
+ * same bounded sanitizer the import path uses (#869). Doing this on every
+ * append instead would repeat the work for rows that are already bounded.
+ */
+/** JSON with object keys sorted at every level, for order-independent equality. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, entry: unknown) =>
+    entry && typeof entry === "object" && !Array.isArray(entry)
+      ? Object.fromEntries(
+          Object.keys(entry).sort().map((key) => [key, (entry as Record<string, unknown>)[key]]),
+        )
+      : entry,
+  );
+}
+
 export function migrateStoredEventLogUrls(): Promise<void> {
   return queueEventLogWrite(async () => {
     const res = await chrome.storage.local.get(EVENT_LOG_KEY);
-    const current = normalizeEventLog(res[EVENT_LOG_KEY]);
-    let changed = false;
-    const minimized = current.map((entry) => {
-      if (entry.url === undefined) return entry;
-      const url = minimizeEventUrl(entry.url);
-      if (url === entry.url) return entry;
-      changed = true;
-      return { ...entry, url };
-    });
-    if (changed) {
-      await chrome.storage.local.set({ [EVENT_LOG_KEY]: minimized });
+    const stored: unknown = res[EVENT_LOG_KEY];
+    if (stored === undefined) return;
+    const bounded = normalizeEventLog(stored).map(sanitizeImportedEventLogEntry);
+    // chrome.storage returns object keys sorted, while the sanitizer builds rows
+    // in field order, so compare key-order-independently; otherwise every
+    // worker start would rewrite an already-bounded journal.
+    if (canonicalJson(bounded) !== canonicalJson(stored)) {
+      await chrome.storage.local.set({ [EVENT_LOG_KEY]: bounded });
     }
   });
 }
@@ -1045,17 +1108,51 @@ function stripUrlQueryAndFragment(raw: string): string {
   return raw.slice(0, end);
 }
 
+/**
+ * Cap a persisted journal display string (#299/#829). Live callers pass raw
+ * page-derived values (e.g. `url: location.href`), so an uncapped megabyte-scale
+ * page path would persist verbatim and exhaust the shared chrome.storage.local
+ * quota. Non-strings pass through untouched for downstream shape validation.
+ */
+function capEventString(value: string): string {
+  return typeof value !== "string" || value.length <= MAX_EVENT_STRING_LEN
+    ? value
+    : value.slice(0, MAX_EVENT_STRING_LEN);
+}
+
+/**
+ * Keep a journal `extra` payload only when it serializes within budget
+ * (#299/#829). Oversized or unserializable (cyclic) extras are dropped
+ * fail-closed; the entry itself persists. Shared by the live-append and
+ * import paths.
+ */
+function sanitizeEventExtra(extra: Record<string, unknown>): Record<string, unknown> | undefined {
+  try {
+    const json = JSON.stringify(extra);
+    // UTF-16 length is only an inexpensive lower bound on the encoded size.
+    if (typeof json !== "string" || json.length > MAX_EVENT_EXTRA_BYTES
+      || new TextEncoder().encode(json).byteLength > MAX_EVENT_EXTRA_BYTES) return undefined;
+    // Persist the admitted snapshot, not a caller-owned object that can grow
+    // while the serialized write waits for storage or an earlier operation.
+    const snapshot: unknown = JSON.parse(json);
+    return isRecord(snapshot) ? snapshot : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
+  const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra);
   return {
-    id: partial.id ?? makeId(),
+    id: capEventString(partial.id ?? makeId()),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(pageSite === undefined ? {} : { pageSite }),
-    ...(partial.site !== undefined ? { site: partial.site } : {}),
+    ...(partial.site !== undefined ? { site: capEventString(partial.site) } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
-    ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
-    ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
+    ...(partial.url !== undefined ? { url: capEventString(minimizeEventUrl(partial.url)) } : {}),
+    ...(partial.destHost !== undefined ? { destHost: capEventString(partial.destHost) } : {}),
     ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
     // malformed runtime append message could carry non-string reasons; left raw, the
@@ -1063,7 +1160,7 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     // silently drop it (mistaking the drop for an intentional silent-decision eviction).
     // Sanitizing keeps the entry valid (and bounds per-entry size, cf. #299). (#339)
     ...(partial.reasons !== undefined ? { reasons: sanitizeCodeList(partial.reasons) ?? [] } : {}),
-    ...(partial.extra !== undefined ? { extra: partial.extra } : {})
+    ...(extra !== undefined ? { extra } : {})
   };
 }
 
@@ -1436,32 +1533,29 @@ function sanitizeCodeList(value: unknown): string[] | undefined {
  * Bound the content of a (shape-valid) imported EventLogEntry so a crafted backup cannot exhaust
  * the shared chrome.storage.local quota (#299). Mirrors the re-sanitization the PromptOutcome
  * import path already does (buildPromptOutcomeRecord): caps the string fields, reuses
- * sanitizeCodeList for reasons, and drops an oversized/unserializable `extra`. Import-only — the
- * live-append path (buildEventLogEntry) is fed by trusted internal code, not user-supplied JSON.
+ * sanitizeCodeList for reasons, and drops an oversized/unserializable `extra`. The caps are
+ * shared with the live-append path (buildEventLogEntry, #829), which likewise persists
+ * page-derived values — the two paths cannot drift apart.
  */
 function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // Caps by UTF-16 code-unit count (not bytes); a percent-encoded tail could be sliced mid-sequence,
   // but the stored strings are display-only (no caller parses them via new URL/decodeURIComponent), so
   // a truncated tail is at worst cosmetic. (#299 R2)
-  const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
-  const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
+  const out: EventLogEntry = { id: capEventString(e.id), ts: e.ts, kind: e.kind };
   const pageSite = normalizeEventPageSite(e.pageSite);
   if (pageSite !== undefined) out.pageSite = pageSite;
-  if (e.site !== undefined) out.site = cap(e.site);
-  if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
-  if (e.destHost !== undefined) out.destHost = cap(e.destHost);
+  if (e.site !== undefined) out.site = capEventString(e.site);
+  if (e.url !== undefined) out.url = capEventString(minimizeEventUrl(e.url));
+  if (e.destHost !== undefined) out.destHost = capEventString(e.destHost);
   if (e.score !== undefined) out.score = e.score;
   // reasons elements are already strings here (isEventLogEntry pre-filtered them in
   // normalizeEventLog); sanitizeCodeList only applies the count (32) + per-string-length (80) caps.
   const reasons = sanitizeCodeList(e.reasons);
   if (reasons !== undefined) out.reasons = reasons;
   if (e.extra !== undefined) {
-    try {
-      if (JSON.stringify(e.extra).length <= MAX_EVENT_EXTRA_BYTES) out.extra = e.extra;
-      // else: drop the oversized extra (fail closed) — keep the entry, shed the bloat.
-    } catch {
-      // Unserializable extra (cycles, etc.) — drop it.
-    }
+    // Drop the oversized extra (fail closed) — keep the entry, shed the bloat.
+    const extra = sanitizeEventExtra(e.extra);
+    if (extra !== undefined) out.extra = extra;
   }
   return out;
 }
@@ -1526,6 +1620,9 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   const out: ClickContext = { viewport, input: c.input === "keyboard" ? "keyboard" : "pointer", top };
   const underlying = sanitizeElementHint(c.underlying);
   if (underlying) out.underlying = underlying;
+  // computeCDS consumes inTop (benign-container suppression); dropping it
+  // made replayed CDS diverge +35 from the live score (#794).
+  if (typeof c.inTop === "boolean") out.inTop = c.inTop;
   if (typeof c.retargeted === "boolean") out.retargeted = c.retargeted;
   if (typeof c.explicitNewTabIntent === "boolean") out.explicitNewTabIntent = c.explicitNewTabIntent;
   if (typeof c.isLegitModalBackdrop === "boolean") out.isLegitModalBackdrop = c.isLegitModalBackdrop;
@@ -2170,6 +2267,41 @@ export async function exportAll(): Promise<{
 export const queueBulkDataOperation = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] bulk data serialization error:", err);
 });
+
+/** The worker owns one queue for allowlist edits, imports, and resets. */
+export async function handleAllowlistMutationMessage(
+  value: unknown,
+  sender?: chrome.runtime.MessageSender
+): Promise<{ ok: true; list: Allowlist } | { ok: false; error: string }> {
+  if (!isRecord(value) || value.type !== "ns-allowlist-mutate") return { ok: false, error: "Invalid allowlist update" };
+  const op = value.op;
+  if (op !== "add" && op !== "remove" && op !== "clear" && op !== "replace" && op !== "migrate") {
+    return { ok: false, error: "Invalid allowlist operation" };
+  }
+  const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  const base = runtime?.getURL?.("");
+  const ownPage = !!base && !!sender?.url?.startsWith(base) && isTrustedExtensionPageSender(sender);
+  const ownContent = sender?.id === runtime?.id && typeof sender?.tab?.id === "number" &&
+    Number.isSafeInteger(sender.frameId) && typeof sender.documentId === "string" && !!sender.documentId;
+  if (!sender || sender.id !== runtime?.id || (op === "add" || op === "migrate" ? !ownPage && !ownContent : !ownPage)) {
+    return { ok: false, error: "Unauthorized allowlist update" };
+  }
+  if ((op === "add" || op === "remove") &&
+      (typeof value.siteKey !== "string" || !value.siteKey || value.siteKey.length > 253 ||
+       typeof value.destHost !== "string" || !value.destHost || value.destHost.length > 253)) {
+    return { ok: false, error: "Invalid allowlist entry" };
+  }
+  if (op === "replace" && (!isRecord(value.list) || Array.isArray(value.list))) {
+    return { ok: false, error: "Invalid allowlist replacement" };
+  }
+  const message = value as AllowlistMutationMessage;
+  try {
+    const list = await queueBulkDataOperation(() => applyAllowlistMutationDirect(message));
+    return { ok: true, list };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 export function importAll(payload: unknown): Promise<ImportAllResult> {
   const runtime = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;

@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Acceptance - ordinary links whose text sits in a child element</title>
+  <style> body { font-family: sans-serif; padding: 24px; } a { display: inline-block; margin: 10px 0; font-size: 20px; } </style>
+</head>
+<body>
+  <h1>Ordinary visible links</h1>
+  <p>Only the link named by <code>?case=</code> is present.</p>
+  <div id="slot"></div>
+  <script>
+    const which = new URLSearchParams(location.search).get("case") || "";
+    const other = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    const href = `http://${other}:${location.port}/acceptance/dest/link-${which}/article.html`;
+    const a = document.createElement("a");
+    a.id = "link";
+    a.href = href;
+    if (which.includes("blank")) a.target = "_blank";
+    if (which.startsWith("span")) {
+      const span = document.createElement("span");
+      span.textContent = "Read the full article";
+      a.appendChild(span);
+    } else if (which.startsWith("icon")) {
+      a.setAttribute("aria-label", "Open the full article");
+      a.innerHTML = '<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" fill="#36c"/></svg>';
+    } else {
+      a.textContent = "Read the full article";
+    }
+    document.getElementById("slot").appendChild(a);
+  </script>
+</body>
+</html>

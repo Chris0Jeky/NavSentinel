@@ -1,5 +1,5 @@
 import { getEventLog, getSuiteSettings } from "../shared/storage";
-import { explainReasonCode } from "../shared/explanations";
+import { explainJournalReason } from "./evidence_reasons";
 import { createEvidenceExport, eventTitle, filterEvidence, projectEvidence, summarizeEvidence, type EvidenceCategory, type EvidenceEvent } from "./evidence_model";
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -53,7 +53,7 @@ function render(): void {
     if (event.score !== undefined) detail.append(element("p", "Score is a heuristic ranking, not a probability or protection rate."));
     if (event.reasons.length) {
       const list = element("ul", "");
-      for (const code of event.reasons) list.append(element("li", explainReasonCode(code)));
+      for (const code of event.reasons) list.append(element("li", explainJournalReason(code)));
       detail.append(list);
     } else detail.append(element("p", "No recognized signal explanation is available for this entry."));
     row.append(summary, detail);

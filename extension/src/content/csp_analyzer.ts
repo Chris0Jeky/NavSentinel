@@ -55,7 +55,9 @@ export function parseCSP(raw: string): Map<string, string[]> {
     if (!trimmed) continue;
     const tokens = trimmed.split(/\s+/);
     const name = (tokens[0] ?? "").toLowerCase();
-    if (SCORED_DIRECTIVES.has(name)) {
+    // First occurrence wins: CSP3 §3.1 ignores a repeated directive, so a
+    // later duplicate must not overwrite the enforced (first) one. (#780)
+    if (SCORED_DIRECTIVES.has(name) && !directives.has(name)) {
       directives.set(name, tokens.slice(1).map((t) => t.toLowerCase()));
     }
   }

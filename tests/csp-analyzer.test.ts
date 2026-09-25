@@ -34,6 +34,16 @@ describe("parseCSP", () => {
     expect(result.size).toBe(0);
   });
 
+  it("keeps the FIRST occurrence of a duplicated directive (CSP3 #780)", () => {
+    const result = parseCSP("script-src 'none'; script-src 'unsafe-inline'");
+    expect(result.get("script-src")).toEqual(["'none'"]);
+  });
+
+  it("keeps the FIRST occurrence regardless of order (#780)", () => {
+    const result = parseCSP("script-src 'unsafe-inline'; script-src 'none'");
+    expect(result.get("script-src")).toEqual(["'unsafe-inline'"]);
+  });
+
   it("handles extra whitespace and semicolons", () => {
     const result = parseCSP("  script-src   'self'  ;  ; default-src 'none'  ;");
     expect(result.get("script-src")).toEqual(["'self'"]);

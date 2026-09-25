@@ -9,7 +9,6 @@
 export interface RedirectHop {
   url: string;
   ts: number;
-  transitionType: string;
 }
 
 export interface RedirectChain {
@@ -187,11 +186,11 @@ export class RedirectChainTracker {
    * chain window of the previous hop, it extends the chain; otherwise
    * a new chain is started.
    */
-  recordHop(tabId: number, url: string, ts: number, transitionType: string): void {
+  recordHop(tabId: number, url: string, ts: number): void {
     this.pruneStale(ts);
 
     const existing = this.chains.get(tabId);
-    const hop: RedirectHop = { url, ts, transitionType };
+    const hop: RedirectHop = { url, ts };
 
     if (existing && existing.hops.length > 0) {
       const lastHop = existing.hops[existing.hops.length - 1]!;

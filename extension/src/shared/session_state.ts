@@ -67,7 +67,6 @@ export interface RollbackReturnEntry {
 export interface LastCommittedEntry {
   url: string;
   prevUrl?: string;
-  transitionType: string;
   qualifiers: string[];
   ts: number;
   allowedAtCommit: boolean;
@@ -121,7 +120,6 @@ const isValidRollbackReturn = (v: unknown): boolean =>
 const isValidLastCommitted = (v: unknown): boolean =>
   isRecord(v) &&
   isString(v.url) &&
-  isString(v.transitionType) &&
   isStringArray(v.qualifiers) &&
   isFiniteNumber(v.ts) &&
   typeof v.allowedAtCommit === "boolean" &&
@@ -152,8 +150,6 @@ const isValidTypedOrigin = (v: unknown): boolean =>
 const OAUTH_PHASES = new Set(["redirect", "consent", "complete"]);
 const isValidOAuthFlow = (v: unknown): boolean =>
   isRecord(v) &&
-  isString(v.initiatorUrl) &&
-  isString(v.consentUrl) &&
   isString(v.expectedCallbackDomain) &&
   isFiniteNumber(v.startedAt) &&
   typeof v.phase === "string" &&
@@ -444,7 +440,7 @@ export class SessionStateManager {
         v.hops.length > 0 &&
         v.hops.every(
           (h: unknown) =>
-            isRecord(h) && isString(h.url) && isFiniteNumber(h.ts) && isString(h.transitionType),
+            isRecord(h) && isString(h.url) && isFiniteNumber(h.ts),
         )
       ) {
         this.redirectChainData.set(k, v as unknown as RedirectChain);

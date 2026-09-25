@@ -59,11 +59,6 @@ const arbTabId = fc.integer({ min: 1, max: 10000 });
 
 const arbTimestamp = fc.integer({ min: 1_700_000_000_000, max: 1_800_000_000_000 });
 
-const arbTransitionType = fc.constantFrom(
-  "link", "typed", "auto_bookmark", "auto_subframe",
-  "manual_subframe", "generated", "auto_toplevel", "form_submit", "reload"
-);
-
 // ---------------------------------------------------------------------------
 // isKnownRedirector property tests
 // ---------------------------------------------------------------------------
@@ -202,9 +197,9 @@ describe("isKnownRedirector property tests", () => {
 describe("RedirectChainTracker property tests", () => {
   it("single hop never produces a chain", () => {
     fc.assert(
-      fc.property(arbTabId, arbHttpUrl, arbTimestamp, arbTransitionType, (tabId, url, ts, tt) => {
+      fc.property(arbTabId, arbHttpUrl, arbTimestamp, (tabId, url, ts) => {
         const tracker = new RedirectChainTracker();
-        tracker.recordHop(tabId, url, ts, tt);
+        tracker.recordHop(tabId, url, ts);
         expect(tracker.getChainInfo(tabId, ts)).toBeNull();
       }),
       { numRuns: 200 }
@@ -218,11 +213,10 @@ describe("RedirectChainTracker property tests", () => {
         arbHttpUrl, arbHttpUrl,
         arbTimestamp,
         fc.integer({ min: 0, max: 10000 }),
-        arbTransitionType, arbTransitionType,
-        (tabId, url1, url2, ts1, delta, tt1, tt2) => {
+        (tabId, url1, url2, ts1, delta) => {
           const tracker = new RedirectChainTracker();
-          tracker.recordHop(tabId, url1, ts1, tt1);
-          tracker.recordHop(tabId, url2, ts1 + delta, tt2);
+          tracker.recordHop(tabId, url1, ts1);
+          tracker.recordHop(tabId, url2, ts1 + delta);
           const info = tracker.getChainInfo(tabId, ts1 + delta);
           expect(info).not.toBeNull();
           expect(info!.depth).toBe(2);
@@ -239,11 +233,10 @@ describe("RedirectChainTracker property tests", () => {
         arbHttpUrl, arbHttpUrl,
         arbTimestamp,
         fc.integer({ min: 10001, max: 100000 }),
-        arbTransitionType, arbTransitionType,
-        (tabId, url1, url2, ts1, gap, tt1, tt2) => {
+        (tabId, url1, url2, ts1, gap) => {
           const tracker = new RedirectChainTracker();
-          tracker.recordHop(tabId, url1, ts1, tt1);
-          tracker.recordHop(tabId, url2, ts1 + gap, tt2);
+          tracker.recordHop(tabId, url1, ts1);
+          tracker.recordHop(tabId, url2, ts1 + gap);
           expect(tracker.getChainInfo(tabId, ts1 + gap)).toBeNull();
         }
       ),
@@ -256,15 +249,15 @@ describe("RedirectChainTracker property tests", () => {
       fc.property(
         arbTabId,
         fc.array(
-          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 }), arbTransitionType),
+          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 })),
           { minLength: 2, maxLength: 20 }
         ),
         arbTimestamp,
         (tabId, hops, startTs) => {
           const tracker = new RedirectChainTracker();
           let ts = startTs;
-          for (const [url, delta, tt] of hops) {
-            tracker.recordHop(tabId, url, ts, tt);
+          for (const [url, delta] of hops) {
+            tracker.recordHop(tabId, url, ts);
             ts += delta;
           }
           const info = tracker.getChainInfo(tabId, ts);
@@ -282,15 +275,15 @@ describe("RedirectChainTracker property tests", () => {
       fc.property(
         arbTabId,
         fc.array(
-          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 }), arbTransitionType),
+          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 })),
           { minLength: 2, maxLength: 5 }
         ),
         arbTimestamp,
         (tabId, hops, startTs) => {
           const tracker = new RedirectChainTracker();
           let ts = startTs;
-          for (const [url, delta, tt] of hops) {
-            tracker.recordHop(tabId, url, ts, tt);
+          for (const [url, delta] of hops) {
+            tracker.recordHop(tabId, url, ts);
             ts += delta;
           }
           tracker.deleteTab(tabId);
@@ -309,12 +302,11 @@ describe("RedirectChainTracker property tests", () => {
         fc.integer({ min: 5001, max: 10000 }),
         arbHttpUrl, arbHttpUrl, arbHttpUrl,
         arbTimestamp,
-        arbTransitionType,
-        (tabA, tabB, url1, url2, url3, ts, tt) => {
+        (tabA, tabB, url1, url2, url3, ts) => {
           const tracker = new RedirectChainTracker();
-          tracker.recordHop(tabA, url1, ts, tt);
-          tracker.recordHop(tabA, url2, ts + 100, tt);
-          tracker.recordHop(tabB, url3, ts, tt);
+          tracker.recordHop(tabA, url1, ts);
+          tracker.recordHop(tabA, url2, ts + 100);
+          tracker.recordHop(tabB, url3, ts);
 
           const infoA = tracker.getChainInfo(tabA, ts + 100);
           const infoB = tracker.getChainInfo(tabB, ts);
@@ -334,13 +326,12 @@ describe("RedirectChainTracker property tests", () => {
         fc.integer({ min: 5000, max: 9999 }),
         arbHttpUrl, arbHttpUrl, arbHttpUrl,
         arbTimestamp,
-        arbTransitionType,
-        (staleTab, freshTab, url1, url2, url3, ts, tt) => {
+        (staleTab, freshTab, url1, url2, url3, ts) => {
           const tracker = new RedirectChainTracker();
-          tracker.recordHop(staleTab, url1, ts, tt);
-          tracker.recordHop(staleTab, url2, ts + 100, tt);
+          tracker.recordHop(staleTab, url1, ts);
+          tracker.recordHop(staleTab, url2, ts + 100);
 
-          tracker.recordHop(freshTab, url3, ts + 100 + 15001, tt);
+          tracker.recordHop(freshTab, url3, ts + 100 + 15001);
           expect(tracker.getChainInfo(staleTab, ts + 100 + 15001)).toBeNull();
         }
       ),
@@ -355,7 +346,7 @@ describe("RedirectChainTracker property tests", () => {
         (startTs) => {
           const tracker = new RedirectChainTracker();
           for (let i = 0; i < 120; i++) {
-            tracker.recordHop(i + 1, `https://tab${i}.example/`, startTs + i, "link");
+            tracker.recordHop(i + 1, `https://tab${i}.example/`, startTs + i);
           }
           expect(tracker.size).toBeLessThanOrEqual(100);
         }
@@ -371,11 +362,10 @@ describe("RedirectChainTracker property tests", () => {
         arbHttpUrl, arbHttpUrl,
         arbTimestamp,
         fc.integer({ min: 1, max: 5000 }),
-        arbTransitionType,
-        (tabId, url1, url2, ts, delta, tt) => {
+        (tabId, url1, url2, ts, delta) => {
           const tracker = new RedirectChainTracker();
-          tracker.recordHop(tabId, url1, ts, tt);
-          tracker.recordHop(tabId, url2, ts + delta, tt);
+          tracker.recordHop(tabId, url1, ts);
+          tracker.recordHop(tabId, url2, ts + delta);
 
           const now = ts + delta + 1;
           const hasActive = tracker.hasActiveChain(tabId, now);
@@ -397,11 +387,10 @@ describe("RedirectChainTracker property tests", () => {
         arbHttpUrl, arbHttpUrl,
         arbTimestamp,
         fc.integer({ min: 1, max: 5000 }),
-        arbTransitionType,
-        (tabId, url1, url2, ts, delta, tt) => {
+        (tabId, url1, url2, ts, delta) => {
           const tracker = new RedirectChainTracker();
-          tracker.recordHop(tabId, url1, ts, tt);
-          tracker.recordHop(tabId, url2, ts + delta, tt);
+          tracker.recordHop(tabId, url1, ts);
+          tracker.recordHop(tabId, url2, ts + delta);
 
           const staleNow = ts + delta + 10001;
           expect(tracker.hasActiveChain(tabId, staleNow)).toBe(false);
@@ -418,11 +407,10 @@ describe("RedirectChainTracker property tests", () => {
         arbHttpUrl,
         fc.integer({ min: 2, max: 15 }),
         arbTimestamp,
-        arbTransitionType,
-        (tabId, url, count, ts, tt) => {
+        (tabId, url, count, ts) => {
           const tracker = new RedirectChainTracker();
           for (let i = 0; i < count; i++) {
-            tracker.recordHop(tabId, url, ts + i * 100, tt);
+            tracker.recordHop(tabId, url, ts + i * 100);
           }
           const info = tracker.getChainInfo(tabId, ts + (count - 1) * 100);
           expect(info).not.toBeNull();
@@ -438,7 +426,7 @@ describe("RedirectChainTracker property tests", () => {
       fc.property(
         arbTabId,
         fc.array(
-          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 }), arbTransitionType),
+          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 })),
           { minLength: 2, maxLength: 5 }
         ),
         arbTimestamp,
@@ -446,8 +434,8 @@ describe("RedirectChainTracker property tests", () => {
           const map = new Map();
           const tracker = new RedirectChainTracker(map);
           let ts = startTs;
-          for (const [url, delta, tt] of hops) {
-            tracker.recordHop(tabId, url, ts, tt);
+          for (const [url, delta] of hops) {
+            tracker.recordHop(tabId, url, ts);
             ts += delta;
           }
           expect(map.has(tabId)).toBe(true);
@@ -464,7 +452,7 @@ describe("RedirectChainTracker property tests", () => {
       fc.property(
         arbTabId,
         fc.array(
-          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 }), arbTransitionType),
+          fc.tuple(arbHttpUrl, fc.integer({ min: 1, max: 100 })),
           { minLength: 2, maxLength: 10 }
         ),
         arbTimestamp,
@@ -472,8 +460,8 @@ describe("RedirectChainTracker property tests", () => {
           const tracker = new RedirectChainTracker();
           let ts = startTs;
           const urls: string[] = [];
-          for (const [url, delta, tt] of hops) {
-            tracker.recordHop(tabId, url, ts, tt);
+          for (const [url, delta] of hops) {
+            tracker.recordHop(tabId, url, ts);
             urls.push(url);
             ts += delta;
           }

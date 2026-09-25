@@ -364,6 +364,53 @@ describe("suite storage and allowlist migration", () => {
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
 
+  it("holds imported and added trusted domains to hostname syntax (#869)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomainWithResult, getTrustedDomains, importAll } = await import(
+      "../extension/src/shared/storage"
+    );
+    const label63 = "a".repeat(63);
+    await importAll({
+      trustedDomains: [
+        "__proto__",
+        7,
+        "a".repeat(5000),
+        `${"b".repeat(64)}.com`,
+        "under_score.example",
+        "-leading-hyphen.com",
+        "Example.COM",
+        `${label63}.com`,
+        "localhost",
+        "127.0.0.1",
+        "[2001:db8::1]",
+        "bücher.de",
+      ],
+    });
+
+    const expected = ["127.0.0.1", "2001:db8::1", `${label63}.com`, "example.com", "localhost", "xn--bcher-kva.de"];
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(expected);
+
+    // The Options add control and the popup/credential trust actions share this
+    // rule: junk is refused rather than persisted.
+    expect(await addTrustedDomainWithResult("__proto__")).toBeNull();
+    expect(await addTrustedDomainWithResult("x".repeat(300))).toBeNull();
+    expect(await getTrustedDomains()).toEqual(expected);
+  });
+
+  it("drops junk trusted domains already in storage on the next read and write (#869)", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:trusted_domains_v1": ["__proto__", "a".repeat(5000), "example.com", 7],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, getTrustedDomains } = await import("../extension/src/shared/storage");
+    expect(await getTrustedDomains()).toEqual(["example.com"]);
+    await addTrustedDomain("example.org");
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com", "example.org"]);
+  });
+
   it("loads settings stored by a pre-RI-05 build without the retired dnrEnabled flag", async () => {
     // An installed profile still holds the retired DNR backstop flag. Loading must
     // keep working and must not surface the retired field to callers.
@@ -456,6 +503,140 @@ describe("suite storage and allowlist migration", () => {
     const settings = await getSuiteSettings();
     expect(settings.nav.defaultMode).toBe("off"); // pre-fix: clobbered back to default
     expect(settings.credential.mode).toBe("strict");
+  });
+
+  describe("protection-mode validation (#866)", () => {
+    const HOSTILE_MODES: unknown[] = ["bogus", "OFF", "Strict", "", 7, null, true, {}, ["off"]];
+
+    it.each(HOSTILE_MODES)("reads a stored mode of %j as the default smart on both axes", async (bad) => {
+      const { chrome } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: bad, debug: false }, credential: { mode: bad } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { getSuiteSettings, getNavSettings, getCredentialSettings } = await import("../extension/src/shared/storage");
+      const settings = await getSuiteSettings();
+      expect(settings.nav.defaultMode).toBe("smart");
+      expect(settings.credential.mode).toBe("smart");
+      // Content scripts read through these; they must agree with the popup/Options read.
+      expect((await getNavSettings()).defaultMode).toBe("smart");
+      expect((await getCredentialSettings()).mode).toBe("smart");
+    });
+
+    it.each(["off", "smart", "strict"] as const)("keeps a valid stored mode %s unchanged", async (mode) => {
+      const { chrome } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: mode }, credential: { mode } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { getSuiteSettings } = await import("../extension/src/shared/storage");
+      const settings = await getSuiteSettings();
+      expect(settings.nav.defaultMode).toBe(mode);
+      expect(settings.credential.mode).toBe(mode);
+    });
+
+    it("sanitizes hostile modes on import and round-trips the result through export", async () => {
+      const { chrome, store } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: "off" }, credential: { mode: "off" } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { exportAll, getSuiteSettings, importAll } = await import("../extension/src/shared/storage");
+      await importAll({ settings: { nav: { defaultMode: "bogus" }, credential: { mode: 7 }, logLimit: "9999999" } });
+
+      const persisted = store["sentinelsuite:settings_v1"] as { nav: { defaultMode: unknown }; credential: { mode: unknown }; logLimit: unknown };
+      // Pre-fix the import persisted "bogus" and 7 verbatim.
+      expect(persisted.nav.defaultMode).toBe("smart");
+      expect(persisted.credential.mode).toBe("smart");
+      expect(persisted.logLimit).toBe(300);
+
+      const exported = await exportAll();
+      expect(exported.settings.nav.defaultMode).toBe("smart");
+      expect(exported.settings.credential.mode).toBe("smart");
+      await importAll({ settings: exported.settings });
+      expect(await getSuiteSettings()).toEqual(exported.settings);
+    });
+
+    it("imports valid modes verbatim", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { importAll } = await import("../extension/src/shared/storage");
+      await importAll({ settings: { nav: { defaultMode: "off" }, credential: { mode: "strict" } } });
+
+      const persisted = store["sentinelsuite:settings_v1"] as { nav: { defaultMode: unknown }; credential: { mode: unknown } };
+      expect(persisted.nav.defaultMode).toBe("off");
+      expect(persisted.credential.mode).toBe("strict");
+    });
+
+    it("delivers a normalized mode to settings-change subscribers", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { onNavSettingsChange, onSuiteSettingsChange } = await import("../extension/src/shared/storage");
+      const suite: Array<{ nav: string; cred: string }> = [];
+      const nav: string[] = [];
+      onSuiteSettingsChange((s) => suite.push({ nav: s.nav.defaultMode, cred: s.credential.mode }));
+      onNavSettingsChange((s) => nav.push(s.defaultMode));
+
+      await chrome.storage.local.set({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: 7 }, credential: { mode: "nope" } },
+      });
+      await chrome.storage.local.set({ "sentinelsuite:settings_v1": "not-a-record" });
+
+      expect(suite).toEqual([{ nav: "smart", cred: "smart" }, { nav: "smart", cred: "smart" }]);
+      expect(nav).toEqual(["smart", "smart"]);
+    });
+
+    it("normalizeStoredSuiteSettings is the shared read authority for non-record values", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { normalizeStoredSuiteSettings, isProtectionMode } = await import("../extension/src/shared/storage");
+      for (const stored of [undefined, null, 7, "x", []]) {
+        const normalized = normalizeStoredSuiteSettings(stored);
+        expect(normalized.nav.defaultMode).toBe("smart");
+        expect(normalized.credential.mode).toBe("smart");
+      }
+      expect(["off", "smart", "strict"].every(isProtectionMode)).toBe(true);
+      expect(HOSTILE_MODES.some(isProtectionMode)).toBe(false);
+    });
+
+    it("a direct write with a hostile mode keeps the current mode", async () => {
+      // Production pages go through the worker message path, which rejects the patch
+      // outright; the direct lane (worker-owned, and non-extension tests) must still
+      // never persist an invalid mode.
+      const { chrome, store } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: "strict" }, credential: { mode: "off" } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { updateSuiteSettings } = await import("../extension/src/shared/storage");
+      await updateSuiteSettings(JSON.parse('{"nav":{"defaultMode":"bogus"},"credential":{"mode":7}}'));
+
+      const persisted = store["sentinelsuite:settings_v1"] as { nav: { defaultMode: unknown }; credential: { mode: unknown } };
+      expect(persisted.nav.defaultMode).toBe("strict");
+      expect(persisted.credential.mode).toBe("off");
+    });
+
+    it("the worker message path rejects a hostile mode patch", async () => {
+      const { chrome, store } = createChromeMock();
+      Object.assign(chrome, {
+        runtime: {
+          id: "suite-test",
+          getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+        },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
+      const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+      for (const patch of [{ nav: { defaultMode: "bogus" } }, { credential: { mode: 7 } }, { nav: { defaultMode: "OFF" } }]) {
+        await expect(handleSuiteSettingsUpdateMessage({ type: "ns-suite-settings-update", patch }, options))
+          .rejects.toThrow("invalid");
+      }
+      expect(store["sentinelsuite:settings_v1"]).toBeUndefined();
+    });
   });
 
   it("serializes popup and Options worker requests so non-overlapping patches survive (#558)", async () => {
@@ -1040,5 +1221,92 @@ describe("suite storage and allowlist migration", () => {
     expect(storedLog).toEqual([]);
     const storedOutcomes = store["sentinelsuite:prompt_outcomes_v1"] as Array<unknown>;
     expect(storedOutcomes).toEqual([]);
+  });
+});
+
+describe("worker-owned allowlist mutations (#753)", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const extensionBase = "chrome-extension://test-extension/";
+  const contentSender = (documentId: string) => ({
+    id: "test-extension", tab: { id: 7 }, frameId: 2, documentId,
+    url: "https://site.example/",
+  }) as unknown as chrome.runtime.MessageSender;
+  const optionsSender = {
+    id: "test-extension", url: extensionBase + "src/options/options.html",
+  } as chrome.runtime.MessageSender;
+
+  it("serializes writes from separate content module instances through one worker", async () => {
+    const { chrome, store } = createChromeMock();
+    let sender = contentSender("first");
+    const runtime = {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+      sendMessage: (message: unknown) => handler(message, sender),
+    };
+    vi.stubGlobal("chrome", { ...chrome, runtime } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage: handler } = await import("../extension/src/shared/storage");
+    vi.stubGlobal("document", {});
+    const firstModule = await import("../extension/src/shared/allowlist");
+    const first = firstModule.addAllowlistEntry("site.example", "first.example");
+    sender = contentSender("second");
+    vi.resetModules();
+    const secondModule = await import("../extension/src/shared/allowlist");
+    const second = secondModule.addAllowlistEntry("site.example", "second.example");
+    await Promise.all([first, second]);
+    expect(store[firstModule.ALLOWLIST_KEY]).toEqual({
+      "site.example": ["first.example", "second.example"],
+    });
+  });
+
+  it("orders imported replacement after an in-flight content add", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", { ...chrome, runtime: {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+    } } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage, handleSuiteImportMessage } = await import("../extension/src/shared/storage");
+    const added = handleAllowlistMutationMessage({ type: "ns-allowlist-mutate", op: "add",
+      siteKey: "site.example", destHost: "added.example" }, contentSender("child"));
+    const imported = handleSuiteImportMessage({ type: "ns-suite-import", payload: {
+      allowlist: { "site.example": ["imported.example"] },
+    } }, optionsSender);
+    expect(await added).toMatchObject({ ok: true });
+    expect(await imported).toMatchObject({ ok: true });
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({ "site.example": ["imported.example"] });
+  });
+
+  it("orders legacy migration with a concurrent content add", async () => {
+    const { chrome, store } = createChromeMock({
+      "navsentinel:allowlist": { "site.example": ["legacy.example"] },
+    });
+    const sender = contentSender("child");
+    const runtime = {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+      sendMessage: (message: unknown) => handler(message, sender),
+    };
+    vi.stubGlobal("chrome", { ...chrome, runtime } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage: handler } = await import("../extension/src/shared/storage");
+    vi.stubGlobal("document", {});
+    const { getAllowlist, addAllowlistEntry } = await import("../extension/src/shared/allowlist");
+    await Promise.all([getAllowlist(), addAllowlistEntry("site.example", "new.example")]);
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({
+      "site.example": ["legacy.example", "new.example"],
+    });
+    expect(store).not.toHaveProperty("navsentinel:allowlist");
+  });
+
+  it("rejects a content-script clear and accepts an extension-page clear", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:nav_allowlist_v1": { "site.example": ["saved.example"] },
+    });
+    vi.stubGlobal("chrome", { ...chrome, runtime: {
+      id: "test-extension", getURL: (path: string) => extensionBase + path,
+    } } as unknown as typeof globalThis.chrome);
+    const { handleAllowlistMutationMessage } = await import("../extension/src/shared/storage");
+    const clear = { type: "ns-allowlist-mutate", op: "clear" };
+    expect(await handleAllowlistMutationMessage(clear, contentSender("child"))).toMatchObject({ ok: false });
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({ "site.example": ["saved.example"] });
+    expect(await handleAllowlistMutationMessage(clear, optionsSender)).toMatchObject({ ok: true });
+    expect(store["sentinelsuite:nav_allowlist_v1"]).toEqual({});
   });
 });

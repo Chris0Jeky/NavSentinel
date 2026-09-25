@@ -83,8 +83,12 @@ function pslSuffixLength(labels: string[]): number {
   for (let i = labels.length - 1; i >= 0; i--) {
     const label = labels[i] as string;
 
-    // Check for an exact match first
-    const exactChild = node[label];
+    // Check for an exact match first. Object.hasOwn so a "__proto__" label
+    // (valid in a URL hostname) can't detour the walk onto Object.prototype —
+    // the same class classifyDomain already guards. No PSL rule contains such
+    // a label, so the detour can only waste cycles today; the walk must still
+    // never leave the trie.
+    const exactChild = Object.hasOwn(node, label) ? node[label] : undefined;
     if (exactChild === 1) {
       // Compact PSL leaf: this label is a public suffix and has no children.
       return depth + 1;
@@ -849,7 +853,9 @@ export function detectLookalike(
   if (reg) {
     const normalizedCur = normalizeHomoglyphs(reg);
     let best: { target: string; distance: number } | null = null;
-    for (const t of trustedDomains) {
+    // Null-safe like findClosestLookalike: a nullish trusted list means "no
+    // Levenshtein targets", not a TypeError (brand/stuffing checks below still run).
+    for (const t of trustedDomains ?? []) {
       const target = normalizeHost(t);
       if (!target || target === reg) continue;
       const normalizedTarget = normalizeHomoglyphs(target);

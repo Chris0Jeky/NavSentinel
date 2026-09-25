@@ -9,6 +9,8 @@ import {
   MAX_TITLE_LEN,
   MAX_FORMS,
   MAX_FORM_ACTION_LEN,
+  MAX_METAS,
+  SCRIPT_TEXT_MAX,
 } from "../extension/src/content/content_analyzer";
 
 // Guards the slice <-> HTML_SNIPPET_MAX coupling (D-REDOS R3 nit): the exfil
@@ -242,5 +244,79 @@ describe("buildPageSnapshot formActions cap (#401)", () => {
       `<body><form action="${padded}"><input type="password"></form></body>`;
     const snap = buildPageSnapshot(document);
     expect(snap.formActions[0]!.action).toBe("");
+  });
+});
+
+describe("buildPageSnapshot effective base URL (#785)", () => {
+  it("captures document.baseURI honoring <base href>", () => {
+    document.documentElement.innerHTML =
+      `<head><base href="https://cdn.evil/static/"></head>` +
+      `<body><form action="login.php"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.baseUrl).toBe("https://cdn.evil/static/");
+  });
+
+  it("flags a relative password-form action via a cross-origin <base href>", () => {
+    document.documentElement.innerHTML =
+      `<head><base href="https://cdn.evil/static/"></head>` +
+      `<body><form action="login.php"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(true);
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("stays clean when <base href> matches the page origin", () => {
+    document.documentElement.innerHTML =
+      `<head><base href="https://bank.test/app/"></head>` +
+      `<body><form action="login.php"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(false);
+  });
+});
+
+describe("buildPageSnapshot channel bounds (#786)", () => {
+  it("caps metaTags at MAX_METAS in document order", () => {
+    const metas = Array.from(
+      { length: MAX_METAS + 50 },
+      (_, i) => `<meta name="tag-${i}" content="v${i}">`,
+    ).join("");
+    document.documentElement.innerHTML = `<head>${metas}</head><body></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.metaTags.length).toBe(MAX_METAS);
+    expect(snap.metaTags[0]).toEqual({ name: "tag-0", content: "v0" });
+    expect(snap.metaTags[MAX_METAS - 1]!.name).toBe(`tag-${MAX_METAS - 1}`);
+  });
+
+  it("keeps head generator/refresh metas under the cap (the only ones fingerprints read)", () => {
+    const metas =
+      `<meta name="generator" content="gophish">` +
+      `<meta http-equiv="refresh" content="0;url=data:text/html,evil">` +
+      Array.from({ length: MAX_METAS }, (_, i) => `<meta name="pad-${i}" content="x">`).join("");
+    document.documentElement.innerHTML = `<head>${metas}</head><body></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.metaTags.length).toBe(MAX_METAS);
+    // Both head metas survived the cap: whichever fingerprint the kit order
+    // prefers, detection fired on head-meta evidence past MAX_METAS paddings.
+    const result = analyzeSnapshot(snap, "phish.com");
+    expect(result.phishingKitMatch).toBe(true);
+    expect(["Gophish", "Suspicious-Meta-Refresh"]).toContain(result.kitName);
+  });
+
+  it("keeps scriptText byte-identical to concat-then-slice with multi-MB scripts", () => {
+    const blob = "var bundle_" + "x".repeat(500000);
+    const scripts = Array.from({ length: 30 }, (_, i) => `<script>/*${i}*/${blob}</script>`).join("");
+    document.documentElement.innerHTML = `<body>${scripts}</body>`;
+    const snap = buildPageSnapshot(document);
+    // Same SCRIPT_TEXT_MAX-char prefix the old concat-then-slice produced.
+    expect(snap.scriptText.length).toBe(SCRIPT_TEXT_MAX);
+    expect(snap.scriptText.startsWith("/*0*/var bundle_")).toBe(true);
+  });
+
+  it("does not truncate small script text", () => {
+    document.documentElement.innerHTML = `<body><script>var gophish = 1;</script></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.scriptText).toBe("var gophish = 1; ");
   });
 });
