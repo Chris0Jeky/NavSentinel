@@ -1,17 +1,20 @@
-export function setSegValue(seg: HTMLDivElement, value: string): void {
-  let matched = false;
-  for (const btn of Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"))) {
-    const active = btn.dataset.value === value.toLowerCase();
-    if (active) matched = true;
+/**
+ * Select the segment whose `data-value` equals `value`. The value comes from
+ * storage and may be hostile, so it is typed `unknown`: a non-string or
+ * unmatched value selects `fallback` (the safe default) rather than the first
+ * segment, which for a mode control is "Off" (#866). Matching is exact, the
+ * same rule enforcement applies.
+ */
+export function setSegValue(seg: HTMLDivElement, value: unknown, fallback = "smart"): void {
+  const btns = Array.from(seg.querySelectorAll<HTMLButtonElement>(".seg-btn"));
+  const values = btns.map((btn) => btn.dataset.value);
+  const selected = typeof value === "string" && values.includes(value)
+    ? value
+    : values.includes(fallback) ? fallback : values[0];
+  for (const btn of btns) {
+    const active = selected !== undefined && btn.dataset.value === selected;
     btn.setAttribute("aria-checked", String(active));
     btn.setAttribute("tabindex", active ? "0" : "-1");
-  }
-  if (!matched) {
-    const first = seg.querySelector<HTMLButtonElement>(".seg-btn");
-    if (first) {
-      first.setAttribute("aria-checked", "true");
-      first.setAttribute("tabindex", "0");
-    }
   }
 }
 

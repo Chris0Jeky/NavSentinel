@@ -124,6 +124,51 @@ describe("isAllowlisted", () => {
   });
 });
 
+describe("prototype-named siteKeys (#807)", () => {
+  const PROTO_KEYS = ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"];
+
+  it("normalizeAllowlist stores __proto__ as an own property on a null-prototype map", () => {
+    // JSON.parse models a tampered/stored payload with an own __proto__ key.
+    // Pre-fix, `out["__proto__"] = hosts` invoked the prototype setter and
+    // replaced the result's prototype with the hosts array.
+    const result = normalizeAllowlist(JSON.parse('{"__proto__":["evil.com"]}'));
+    expect(Object.getPrototypeOf(result)).toBeNull();
+    expect(Object.hasOwn(result, "__proto__")).toBe(true);
+    expect(result["__proto__"]).toEqual(["evil.com"]);
+  });
+
+  it("isAllowlisted returns false (never throws) for proto-named keys on any list shape", () => {
+    // Pre-fix, `list[key] ?? []` resolved to the inherited member (truthy) and
+    // `.includes` threw TypeError — reachable from single-label intranet hosts
+    // like http://constructor/ via siteKeyFromLocation().
+    for (const key of PROTO_KEYS) {
+      expect(isAllowlisted({}, key, "anything.com")).toBe(false);
+      expect(isAllowlisted({ "site.com": ["dest.com"] }, key, "anything.com")).toBe(false);
+      expect(isAllowlisted(normalizeAllowlist({}), key, "anything.com")).toBe(false);
+    }
+  });
+
+  it("normalized lists match proto-named entries added through the API", async () => {
+    // Full round-trip through mocked storage (structuredClone): proto-named
+    // siteKeys are fully functional, not merely non-crashing.
+    for (const key of ["__proto__", "constructor"]) {
+      await addAllowlistEntry(key, "evil.com");
+      const list = await getAllowlist();
+      expect(isAllowlisted(list, key, "evil.com")).toBe(true);
+      expect(isAllowlisted(list, key, "other.com")).toBe(false);
+      await removeAllowlistEntry(key, "evil.com");
+      expect(isAllowlisted(await getAllowlist(), key, "evil.com")).toBe(false);
+    }
+  });
+
+  it("removeAllowlistEntry ignores proto-named keys that were never added", async () => {
+    for (const key of PROTO_KEYS) {
+      const list = await removeAllowlistEntry(key, "anything.com");
+      expect(isAllowlisted(list, key, "anything.com")).toBe(false);
+    }
+  });
+});
+
 describe("getAllowlist", () => {
   it("returns empty object when storage is empty", async () => {
     const result = await getAllowlist();
@@ -161,6 +206,8 @@ describe("getAllowlist", () => {
     ["zero", 0],
     ["an empty string", ""],
     ["an array", ["not", "an", "allowlist"]],
+    ["a non-empty string", "junk"],
+    ["a positive integer", 42],
   ])("migrates legacy when the new key holds %s (#306)", async (_label, badValue) => {
     store[ALLOWLIST_KEY] = badValue;
     store[LEGACY_KEY] = { "old.com": ["target.com"] };
@@ -213,6 +260,12 @@ describe("addAllowlistEntry", () => {
     const result = await addAllowlistEntry("SITE.COM", "DEST.COM");
     expect(isAllowlisted(result, "site.com", "dest.com")).toBe(true);
   });
+
+  it("persists the updated list to chrome.storage.local", async () => {
+    await addAllowlistEntry("site.com", "dest.com");
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["dest.com"] });
+    expect(chrome.storage.local.set).toHaveBeenCalled();
+  });
 });
 
 describe("removeAllowlistEntry", () => {
@@ -245,6 +298,13 @@ describe("removeAllowlistEntry", () => {
     store[ALLOWLIST_KEY] = { "site.com": ["dest.com"] };
     const result = await removeAllowlistEntry("SITE.COM", "DEST.COM");
     expect(result["site.com"]).toBeUndefined();
+  });
+
+  it("persists the updated list to chrome.storage.local", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["a.com", "b.com"] };
+    await removeAllowlistEntry("site.com", "a.com");
+    expect(store[ALLOWLIST_KEY]).toEqual({ "site.com": ["b.com"] });
+    expect(chrome.storage.local.set).toHaveBeenCalled();
   });
 });
 
@@ -296,5 +356,45 @@ describe("onAllowlistChange", () => {
     onAllowlistChange(cb);
     handler!({ "other_key": { newValue: "something" } }, "local");
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+// Overlapping in-process mutations serialize FIFO by enqueue order: each
+// call's get-mutate-set runs only after the previous call settled, so the
+// later-enqueued call's result is what storage holds. (#753)
+describe("allowlist write queue (#753)", () => {
+  it("keeps both hosts from overlapping adds on the same key", async () => {
+    await Promise.all([
+      addAllowlistEntry("site.com", "a.com"),
+      addAllowlistEntry("site.com", "b.com"),
+    ]);
+    expect(await getAllowlist()).toEqual({ "site.com": ["a.com", "b.com"] });
+  });
+
+  it("composes overlapping add vs remove of different hosts", async () => {
+    store[ALLOWLIST_KEY] = { "site.com": ["drop.com"] };
+    await Promise.all([
+      addAllowlistEntry("site.com", "keep.com"),
+      removeAllowlistEntry("site.com", "drop.com"),
+    ]);
+    expect(await getAllowlist()).toEqual({ "site.com": ["keep.com"] });
+  });
+
+  it("applies the later-enqueued add after a clear (FIFO)", async () => {
+    // Seeded with a different key so a stale-snapshot write would resurrect
+    // "other.com" instead of landing on exactly one serialized outcome.
+    store[ALLOWLIST_KEY] = { "other.com": ["y.com"] };
+    const cleared = clearAllowlist();
+    const added = addAllowlistEntry("site.com", "x.com");
+    await Promise.all([cleared, added]);
+    expect(await getAllowlist()).toEqual({ "site.com": ["x.com"] });
+  });
+
+  it("applies the later-enqueued clear after an add (FIFO)", async () => {
+    store[ALLOWLIST_KEY] = { "other.com": ["y.com"] };
+    const added = addAllowlistEntry("site.com", "x.com");
+    const cleared = clearAllowlist();
+    await Promise.all([added, cleared]);
+    expect(await getAllowlist()).toEqual({});
   });
 });

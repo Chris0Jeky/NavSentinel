@@ -107,7 +107,7 @@ export function computeAdjustment(
   // requiring more evidence before becoming LESS protective (raising the threshold) is
   // the point, but requiring evidence before becoming MORE protective is backwards —
   // protecting on thin evidence is the fail-safe direction. Blocks are never
-  // discounted, so without this asymmetry a small block sample diluted by discounted
+  // discounted, so without this asymmetry a small block sample diluted with discounted
   // allows (e.g. [block, block, allow@80], total 2.3 -> confidence 0.77) would lose
   // protection vs the prior code (-8 -> -7). Keeping confidence = 1 for the block
   // direction makes every protective adjustment bit-identical to the prior code.
@@ -163,9 +163,22 @@ export async function updateAdaptiveScores(
   await chrome.storage.local.set({ [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, baseThreshold) });
 }
 
+/**
+ * Resolve a stored threshold adjustment to a safe number (#832). A corrupt
+ * truthy non-number (string, object, NaN) would otherwise flow into
+ * `base + adaptiveAdjustment` and NaN-poison the block threshold (fail-open),
+ * since the [30,100] clamp bounds magnitude but not type. Finite values must
+ * also fit the writer's existing adjustment range; otherwise a corrupt large
+ * positive value could relax the block threshold to 100. Reject, do not clamp.
+ */
+export function resolveThresholdAdjustment(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    && value >= MIN_ADJUSTMENT && value <= MAX_ADJUSTMENT ? value : 0;
+}
+
 export async function getEffectiveThresholdAdjustment(domain: string): Promise<number> {
   const scores = await getAdaptiveScores();
-  return scores[domain]?.adjustment ?? 0;
+  return resolveThresholdAdjustment(scores[domain]?.adjustment);
 }
 
 /**

@@ -64,4 +64,14 @@ test('hostile review packages fail validation before history changes',()=>{
   assert.throws(()=>E.merge(full,incoming),/Correction history is full/);
   assert.equal(full.events.length,1);assert.equal(full.corrections.length,5000);
 });
+test('inclusive score, event-count and correction caps stay open at the limit',()=>{
+  assert.equal(E.envelope(file([row({score:0})])).events[0].score,0);
+  assert.equal(E.envelope(file([row({score:100})])).events[0].score,100);
+  const exact=Array.from({length:E.MAX_EVENTS},(_,i)=>row({id:'event-'+i}));
+  assert.equal(E.envelope(file(exact)).events.length,E.MAX_EVENTS);
+  const seeded=E.merge(E.empty(),file()).state;
+  const full={...seeded,corrections:Array.from({length:5000},()=>({eventId:'observation-1',kind:'uncertain',timestamp}))};
+  assert.throws(()=>E.correct(full,'observation-1','should-allow',timestamp),/Correction history is full/);
+  assert.equal(full.corrections.length,5000);
+});
 test('portable event and reason allowlists stay aligned with upstream source',()=>{const root=path.resolve(__dirname,'../../..');const storage=fs.readFileSync(path.join(root,'extension/src/shared/storage.ts'),'utf8');const kinds=storage.slice(storage.indexOf('export type EventKind =')).split(';')[0];assert.deepEqual([...kinds.matchAll(/"([a-z_]+)"/g)].map(match=>match[1]).sort(),[...E.KINDS].sort());const explanations=fs.readFileSync(path.join(root,'extension/src/shared/explanations.ts'),'utf8').split('};')[0];assert.deepEqual([...explanations.matchAll(/^\s+([a-z_]+):/gm)].map(match=>match[1]).sort(),[...E.REASONS].sort());});

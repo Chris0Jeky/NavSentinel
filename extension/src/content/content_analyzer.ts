@@ -13,7 +13,7 @@
  */
 
 import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domain";
-import { hasVisiblePasswordField } from "./password_field";
+import { hasVisiblePasswordField, queryPasswordInputs } from "./password_field";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -52,6 +52,14 @@ export interface PageSnapshot {
   metaTags: Array<{ name: string; content: string }>;
   /** CSS selectors that exist in the document (for kit fingerprint matching) */
   matchedSelectors: string[];
+  /**
+   * Effective document base URL the browser resolves relative URLs against
+   * (`document.baseURI`, honoring `<base href>`). Set by buildPageSnapshot;
+   * manual snapshots may omit it, in which case relative form actions fall
+   * back to resolving against the page domain (legacy behavior — misbinds
+   * whenever a base element is present, same class as #650/#778). (#785)
+   */
+  baseUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +247,24 @@ export const MAX_FORMS = 50;
  * length%4===0 + the strict alphabet. Kept a multiple of 4 for exactly that. (#401)
  */
 export const MAX_FORM_ACTION_LEN = 2048;
+
+/**
+ * Max chars kept from the concatenated inline-script text. Accumulated with
+ * incremental slicing (not concat-then-slice) so multi-MB bundles never
+ * materialize as an intermediate string on the synchronous submit path. The
+ * output is byte-identical to the old concat-then-slice (same prefix of the
+ * same joined sequence) — zero detection change. (#786)
+ */
+export const SCRIPT_TEXT_MAX = 30000;
+
+/**
+ * Max number of `<meta>` elements snapshotted, mirroring the form/image/script
+ * count caps. `querySelectorAll` returns document order, so head generator /
+ * refresh metas (the only ones any fingerprint reads) are retained; a hostile
+ * page padding thousands of metas past the cap only drops unscanned ones.
+ * (#786)
+ */
+export const MAX_METAS = 100;
 
 export interface KitFingerprint {
   name: string;
@@ -484,14 +510,19 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   // entire DOM (the exfil htmlPatterns derive their quantifier bounds from this).
   const htmlSnippet = doc.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
 
-  // Script text
+  // Script text -- each script sliced to the remaining budget BEFORE concat,
+  // so the intermediate string never exceeds SCRIPT_TEXT_MAX (a concat-then-
+  // slice would first materialize the full multi-MB bundle text). Output is
+  // identical to the old ordering: the same SCRIPT_TEXT_MAX-char prefix of the
+  // same space-joined sequence.
   const scripts = doc.querySelectorAll("script");
   let scriptText = "";
   const scriptLimit = Math.min(scripts.length, 30);
   for (let i = 0; i < scriptLimit; i++) {
-    scriptText += ((scripts[i] as HTMLScriptElement).textContent || "") + " ";
+    const remaining = SCRIPT_TEXT_MAX - scriptText.length;
+    if (remaining <= 0) break;
+    scriptText += (((scripts[i] as HTMLScriptElement).textContent || "") + " ").slice(0, remaining);
   }
-  scriptText = scriptText.slice(0, 30000);
 
   // Image signals -- each alt/src is head+tail sampled to ~MAX_IMG_ATTR chars (a
   // multi-MB data:-URI src would otherwise blow the analysis budget). The 50-image
@@ -534,14 +565,16 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
       ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
       : rawAttr;
     const action = bounded.trim();
-    const hasPw = !!form.querySelector('input[type="password"]');
+    const hasPw = queryPasswordInputs(form).length > 0;
     formActions.push({ action, hasPassword: hasPw });
   }
 
-  // Meta tags
+  // Meta tags -- capped like every other channel (document order keeps the
+  // head generator/refresh metas the fingerprints read).
   const metaTags: Array<{ name: string; content: string }> = [];
   const metas = doc.querySelectorAll("meta[name], meta[http-equiv]");
-  for (let i = 0; i < metas.length; i++) {
+  const metaLimit = Math.min(metas.length, MAX_METAS);
+  for (let i = 0; i < metaLimit; i++) {
     const meta = metas[i] as HTMLMetaElement;
     const name = (meta.getAttribute("name") || meta.getAttribute("http-equiv") || "").toLowerCase();
     const content = meta.getAttribute("content") || "";
@@ -577,6 +610,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     formActions,
     metaTags,
     matchedSelectors,
+    baseUrl: doc.baseURI,
   };
 }
 
@@ -593,6 +627,19 @@ export interface BrandSignal {
   /** Tiered score contribution:
    *  title+img = 45, title only = 30, bodyText only = 10, img only = 15 */
   score: number;
+}
+
+/**
+ * Token-boundary substring test for common-word brands in imgSignals (#831).
+ * Filenames and URLs ("purchase-logo.png", "pineapple.png") otherwise match
+ * "chase"/"apple" mid-word and mint a spurious img-only (+15) signal. The
+ * boundary is any non-alphanumeric character rather than `\b`, because
+ * JavaScript treats "_" as a word character and "apple_logo.png" must still
+ * match. Both inputs are already lowercased.
+ */
+function matchesWordBoundary(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`).test(haystack);
 }
 
 function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal | null {
@@ -617,7 +664,7 @@ function detectBrand(snapshot: PageSnapshot, currentDomain: string): BrandSignal
 
     // Check image signals (favicon / logo src / alt text)
     const brandLower = brand.name.toLowerCase();
-    if (snapshot.imgSignals.includes(brandLower)) {
+    if (brand.commonWord ? matchesWordBoundary(snapshot.imgSignals, brandLower) : snapshot.imgSignals.includes(brandLower)) {
       imgMatch = true;
     }
 
@@ -748,11 +795,15 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
       continue;
     }
 
-    // Cross-domain form action
+    // Cross-domain form action. Relative actions resolve against the observed
+    // effective base URL, matching what the browser actually submits to — the
+    // page-derived base is only the fallback for snapshots that predate it
+    // and misbinds whenever a base element is present (#785).
+    const base = snapshot.baseUrl || "https://" + hostForUrl(currentDomain);
     try {
       // Re-bracket an IPv6-literal host so the base URL is valid: currentDomain is
       // an unbracketed registrable domain and "https://::1" would throw (#208 R1).
-      const actionUrl = new URL(rawAction, "https://" + hostForUrl(currentDomain));
+      const actionUrl = new URL(rawAction, base);
       const actionHost = normalizeHost(actionUrl.hostname);
       const actionReg = getRegistrableDomain(actionHost);
       if (actionReg && currentReg && actionReg !== currentReg) {

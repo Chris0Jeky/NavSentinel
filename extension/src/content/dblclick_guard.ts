@@ -45,9 +45,14 @@ let dblclickChildClosedTs = 0;
 export function handleDblclickBridgeMessage(
   type: string,
   data: Record<string, unknown>,
+  receivedAtMs = Date.now(),
 ): { handled: boolean; forwardToSW?: { type: string; url: string; ts: number } } {
+  const receiptTs = Number.isFinite(receivedAtMs) ? receivedAtMs : Date.now();
+
   if (type === "ns-dblclick-window-open") {
-    dblclickWindowOpenTs = typeof data.ts === "number" ? data.ts : Date.now();
+    // Producer timestamps remain untrusted metadata; correlation TTLs use the
+    // isolated world's authenticated bridge receipt time.
+    dblclickWindowOpenTs = receiptTs;
     // Reset stale signals from a previous detection cycle to prevent
     // a stale dblclickChildClosed flag from causing false positives.
     dblclickOpenerNavTs = 0;
@@ -59,7 +64,7 @@ export function handleDblclickBridgeMessage(
   }
 
   if (type === "ns-dblclick-opener-nav") {
-    dblclickOpenerNavTs = typeof data.ts === "number" ? data.ts : Date.now();
+    dblclickOpenerNavTs = receiptTs;
     dblclickOpenerNavUrl = typeof data.url === "string" ? data.url : "";
     // Signal that this needs to be forwarded to the SW so it can notify
     // the opener tab. capture_isolated.ts will handle the actual send.
@@ -74,7 +79,7 @@ export function handleDblclickBridgeMessage(
   }
 
   if (type === "ns-dblclick-second-click") {
-    dblclickSecondClickTs = typeof data.ts === "number" ? data.ts : Date.now();
+    dblclickSecondClickTs = receiptTs;
     return { handled: true };
   }
 
@@ -90,17 +95,23 @@ export function handleDblclickBridgeMessage(
  *
  * Returns true if the message was handled, false otherwise.
  */
-export function handleDblclickRuntimeMessage(message: Record<string, unknown> | null | undefined): boolean {
+export function handleDblclickRuntimeMessage(
+  message: Record<string, unknown> | null | undefined,
+  receivedAtMs = Date.now(),
+): boolean {
   if (!message) return false;
+  const receiptTs = Number.isFinite(receivedAtMs) ? receivedAtMs : Date.now();
 
   if (message.type === "ns-dblclick-child-closed") {
     dblclickChildClosed = true;
-    dblclickChildClosedTs = Date.now();
+    dblclickChildClosedTs = receiptTs;
     return true;
   }
 
   if (message.type === "ns-dblclick-opener-nav-from-child") {
-    dblclickOpenerNavTs = typeof message.ts === "number" ? message.ts : Date.now();
+    // The worker-forwarded timestamp describes its producer; this document's
+    // receipt time owns the local correlation window.
+    dblclickOpenerNavTs = receiptTs;
     dblclickOpenerNavUrl = typeof message.url === "string" ? message.url : "";
     return true;
   }

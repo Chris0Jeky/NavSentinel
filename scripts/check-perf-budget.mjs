@@ -103,7 +103,11 @@ const budgets = [
     glob: "assets/popup.html-*.js",
     // #601 keeps the ~3.9KB decision controller in a lazy chunk; this measured
     // 0.2KB allowance is only the popup entry's dynamic-import bootstrap.
-    maxKB: 10.5,
+    // Raised 10.5 -> 11.5KB for v0.5.0 (2026-09-25): #850's fail-closed save
+    // resync filled the chunk to 10.5KB, and #715's exact-host "Current page"
+    // gauge measures 10.7KB on top of it. The popup loads only when opened, so
+    // this adds no page-load cost; the decision controller stays lazy.
+    maxKB: 11.5,
   },
   {
     label: "options JS",
@@ -154,7 +158,15 @@ const budgets = [
   {
     label: "total dist",
     path: ".",
-    maxKB: 500,
+    // Raised 500 -> 540KB for the v0.5.0 release integration (2026-09-25).
+    // Measured with the September fix wave merged: interaction-only 499.0KB and
+    // research-reputation 502.5KB, while ~10KB of reviewed fixes are still
+    // queued. The runtime-relevant guards stay unchanged: every per-chunk
+    // budget above (content scripts, MAIN world, worker, popup, options) still
+    // binds. Most of the total is the storage chunk's bundled public-suffix and
+    // top-site data plus on-demand extension pages, which cost no page-load
+    // time. This remains the aggregate growth guard.
+    maxKB: 540,
     recursive: true,
   },
 ];

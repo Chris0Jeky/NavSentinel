@@ -62,64 +62,12 @@ export function _resetClipboardEvents(): void {
   recentClipboardWrites.length = 0;
 }
 
-// --- Command pattern detection (used in main_guard) ---
-
-/**
- * Shell/command keywords that suggest malicious clipboard content.
- * Checked against the written text in the main world before sending metadata
- * to the isolated world (content is NOT sent, only the boolean result).
- */
-const COMMAND_KEYWORDS = [
-  // Windows shells and scripting
-  "powershell",
-  "cmd /",
-  "cmd.exe",
-  "mshta",
-  "msiexec",
-  "certutil",
-  "bitsadmin",
-  "rundll32",
-  "regsvr32",
-  "wscript",
-  "cscript",
-  // Windows LOLBins
-  "forfiles",
-  "pcalua",
-  "schtasks",
-  "installutil",
-  // Unix/macOS shells
-  "curl ",
-  "wget ",
-  "bash",
-  "sh ",
-  "/bin/",
-  "osascript",
-  // PowerShell cmdlets and patterns
-  "invoke-",
-  "iex ",
-  "iex(",
-  "iwr ",
-  "start-process",
-  "downloadstring",
-  "downloadfile",
-  "new-object",
-  "system.net",
-  "frombase64",
-  "base64",
-  "-encodedcommand",
-  "-enc ",
-];
-// NOTE: Keep this list in sync with COMMAND_KEYWORDS in main_guard.ts
-// (main_guard runs in the main world and cannot import this module)
-
-export function looksLikeCommand(text: string): boolean {
-  if (!text || text.length < 5) return false;
-  const lower = text.toLowerCase();
-  for (const kw of COMMAND_KEYWORDS) {
-    if (lower.includes(kw)) return true;
-  }
-  return false;
-}
+// Shell/command keyword matching lives in ./command_keywords, shared with the
+// main-world guard (whose former copy was live but untested) and the tests.
+// Re-exported here so existing test imports keep working; the isolated world
+// itself receives only the match boolean over the ns-clipboard-write bridge
+// and never calls this directly. (#810)
+export { looksLikeCommand } from "./command_keywords";
 
 // --- ClickFix instruction text pattern matching ---
 
@@ -376,9 +324,10 @@ export interface ClickFixScanResult {
  *
  * Returns a scan result with detection status, reasons, and score.
  *
- * Performance: designed to complete in < 5ms on typical pages.
- * The function exits early when no clipboard write has occurred,
- * avoiding expensive DOM scanning on benign pages.
+ * Performance: designed to complete in < 5ms on typical pages (bounded
+ * candidate scan, sliced text). It runs only after a clipboard write lands
+ * (see handleClickFixScan), so benign pages without clipboard activity pay
+ * nothing. (#810: an earlier docstring claimed an early exit that never existed.)
  */
 export function scanForClickFix(root: Document = document): ClickFixScanResult {
   const reasons: string[] = [];

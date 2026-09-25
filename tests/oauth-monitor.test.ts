@@ -36,8 +36,6 @@ function baseNav(overrides: Partial<NavigationContext> = {}): NavigationContext 
 
 function makeFlow(overrides: Partial<OAuthFlowState> = {}): OAuthFlowState {
   return {
-    initiatorUrl: "https://app.example.com",
-    consentUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     expectedCallbackDomain: "app.example.com",
     startedAt: Date.now(),
     phase: "consent",
@@ -538,7 +536,6 @@ describe("legitimate OAuth flows", () => {
   it("legitimate callback to same domain is not unexpected", () => {
     const flow = makeFlow({
       expectedCallbackDomain: "myapp.com",
-      consentUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     });
     expect(isUnexpectedCallback(flow, "https://myapp.com/callback?code=abc123")).toBe(false);
   });

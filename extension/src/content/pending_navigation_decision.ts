@@ -177,6 +177,12 @@ export class PendingNavigationDecisionClient {
 
   async create(request: PendingBlankNavigationRequest): Promise<boolean> {
     if (!isExactHttpUrl(request.destinationUrl)) return false;
+// A newer intent supersedes every unreleased raw-URL capability in
+// this document/frame immediately, before the worker can await any
+// browser context or persistence boundary.
+for (const id of [...this.pending.keys()]) {
+  this.clearRecord(id);
+}
     const generation = ++this.requestGeneration;
     const sourceUrl = this.dependencies.currentUrl();
     const response = await this.dependencies.sendMessage({
@@ -404,6 +410,8 @@ export default function showPendingBlankNavigationPrompt(
     kind: "nav_blank_prompt",
     site: sourceDomain,
     destHost: destinationHost,
+    // The CDS/NRS codes that held this navigation (#867); storage bounds them.
+    ...(outcomeFeatures.reasons ? { reasons: outcomeFeatures.reasons } : {}),
     ...(request.overlayHidden ? { extra: { overlayAutoDismissed: true } } : {}),
   }).catch(() => {});
   const pending = requestPendingBlankNavigation({
@@ -412,14 +420,29 @@ export default function showPendingBlankNavigationPrompt(
     signals,
     onProceed: () => recordOutcome("allow_once"),
   });
-  void pending.then((created) => {
-    showToast({
-      message: created
-        ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open NavSentinel to review.`
-        : `${request.title}: ${destinationHost}. Navigation remains blocked.`,
-      coalesce: !request.overlayHidden,
-      onDismiss: () => recordOutcome("dismiss"),
-    });
-  });
-  return pending;
+  // Settle locally: a messaging failure (e.g. sendMessage throwing
+  // synchronously when the extension context is gone) must fail closed with
+  // the remains-blocked toast — never an unhandled rejection plus silence.
+  // The returned promise therefore always resolves, honoring the boolean
+  // contract for callers. (#849)
+  return pending.then(
+    (created) => {
+      showToast({
+        message: created
+          ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open NavSentinel to review.`
+          : `${request.title}: ${destinationHost}. Navigation remains blocked.`,
+        coalesce: !request.overlayHidden,
+        onDismiss: () => recordOutcome("dismiss"),
+      });
+      return created;
+    },
+    () => {
+      showToast({
+        message: `${request.title}: ${destinationHost}. Navigation remains blocked.`,
+        coalesce: !request.overlayHidden,
+        onDismiss: () => recordOutcome("dismiss"),
+      });
+      return false;
+    },
+  );
 }

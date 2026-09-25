@@ -10,7 +10,7 @@
 
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = resolve(
@@ -25,7 +25,8 @@ const OUT_PATH = resolve(
 // Bloom filter primitives (same as build-bloom-filter.mjs)
 // ---------------------------------------------------------------------------
 
-function murmurhash3_32(key, seed) {
+// Exported for the cross-implementation hash-agreement test (#805).
+export function murmurhash3_32(key, seed) {
   let h = seed >>> 0;
   const len = key.length;
   const nblocks = len >> 2;
@@ -118,7 +119,8 @@ function serializeFilter(filter) {
 // Test domains
 // ---------------------------------------------------------------------------
 
-const TEST_BAD_DOMAINS = [
+// Exported so the agreement test checks the fixture list itself, not a copy. (#805)
+export const TEST_BAD_DOMAINS = [
   "evil-phishing-test.example",
   "malware-dropper-test.example",
   "fake-login-test.example",
@@ -137,20 +139,23 @@ const TEST_BAD_DOMAINS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Main
+// Main (CLI only — the module is importable for the hash-agreement test
+// without rewriting the committed asset; same guard as build-bloom-filter.mjs)
 // ---------------------------------------------------------------------------
 
-const { m, k } = optimalParams(TEST_BAD_DOMAINS.length, 0.0001);
-const filter = createFilter(m, k);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const { m, k } = optimalParams(TEST_BAD_DOMAINS.length, 0.0001);
+  const filter = createFilter(m, k);
 
-for (const domain of TEST_BAD_DOMAINS) {
-  insertDomain(filter, domain);
+  for (const domain of TEST_BAD_DOMAINS) {
+    insertDomain(filter, domain);
+  }
+
+  const binary = serializeFilter(filter);
+  writeFileSync(OUT_PATH, binary);
+
+  console.log(`Wrote test bloom filter: ${OUT_PATH}`);
+  console.log(`  Domains: ${TEST_BAD_DOMAINS.length}`);
+  console.log(`  Size: ${binary.length} bytes`);
+  console.log(`  k=${k}, m=${m}`);
 }
-
-const binary = serializeFilter(filter);
-writeFileSync(OUT_PATH, binary);
-
-console.log(`Wrote test bloom filter: ${OUT_PATH}`);
-console.log(`  Domains: ${TEST_BAD_DOMAINS.length}`);
-console.log(`  Size: ${binary.length} bytes`);
-console.log(`  k=${k}, m=${m}`);
