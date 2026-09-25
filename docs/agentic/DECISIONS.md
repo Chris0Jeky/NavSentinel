@@ -16,6 +16,32 @@ When a decision changes, edit it in place and date the change.
 
 ## 2026-09-25 — v0.5.0 release integration
 
+### D-2026-09-25-R — AI-37 accepted; AI-19 deferred to the store submission; AI-23 retirements approved
+
+**Decision:** in a second batch of explicit questions on 2026-09-25, Chris chose:
+
+1. **AI-37 (#599, issue #523): accepted.** Until the MAIN-world bridge has
+   verified its isolated peer, queued `ns-clipboard-write` receipts collapse to
+   the latest command-like receipt and the latest other receipt. A flood of
+   benign clipboard writes then cannot crowd out the trusted fake-verification
+   signal. The accepted cost is that earlier receipts from that unverified
+   window are dropped. #599 may merge on D-2026-09-25-Q's automated gates, and
+   its owner Chrome check joins the AI-47 pass on the release build.
+2. **AI-19 (product name): decide later.** The planned GitHub pre-release will keep the
+   working name. AI-19 stays open and still gates the Chrome Web Store
+   submission.
+3. **AI-23 (housekeeping): approved.** The `nav-floor-sync` worktree (branch
+   `chore/deny-floor-v1.6.3`, which targets the harness removed by #499) and the
+   local `fix/cooldown-map-cap` branch were retired with a plain
+   `git worktree remove` and `git branch -d`. Both commits stay on `origin`
+   (`chore/deny-floor-v1.6.3` at `f438b530`, and
+   `archive/fix-cooldown-map-cap-308` at `d682f144`). The RI-01 and issue-496
+   worktrees and `fix/user-activation-neutral-chip` are kept.
+
+**Why:** #599 was the last reviewed security fix held only by a policy choice,
+and the two housekeeping retirements had waited on named approval since
+2026-08-08.
+
 ### D-2026-09-25-Q — Browser-facing PRs merge on automated gates for the v0.5.0 release; rollback Proceed stays
 
 **Decision:** Chris asked the agent to advance development as far as possible
@@ -29,7 +55,9 @@ explicit questions on 2026-09-25 he chose:
    `NAVSENTINEL_REALISTIC_CHROME=1`) pass on the integrated tree. Chris's manual
    Chrome checks become one consolidated pass on the release build (AI-47).
    A red check, a confirmed CRITICAL/HIGH defect, or an open owner decision
-   still parks a PR: #599 (AI-37) and #572 (SP-F-013) stay parked.
+   still parks a PR. At this decision's time, #599 (AI-37) remained parked
+   pending Chris's choice; D-2026-09-25-R later accepted it and #599 merged.
+   #572 (SP-F-013) remains parked.
 2. **Release.** Tag `v0.5.0` on `main` and publish it as a GitHub
    **pre-release**. The Chrome Web Store unlisted beta keeps every gate it has
    (AI-19 name clearance, #455 consent, external review) and ships later as a
