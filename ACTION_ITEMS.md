@@ -17,8 +17,15 @@ Chris authorized browser-facing PRs to merge after automated gates (exact-head
 CI, one review, and the branded-Chrome realistic E2E and acceptance lanes). His
 manual checks become one AI-47 pass on the v0.5.0 release build, which is
 published as a GitHub pre-release. He also resolved #872: the same-tab rollback
-notice keeps its trusted-input Proceed. #599 (AI-37) and #572 (SP-F-013) stay
-parked, and every AI-47 Human result stays **OPEN — not run**.
+notice keeps its trusted-input Proceed. #572 (SP-F-013) stays parked, and every
+AI-47 Human result stays **OPEN — not run**.
+
+**2026-09-25, second batch ([`D-2026-09-25-R`](docs/agentic/DECISIONS.md)):**
+Chris accepted AI-37: #599's unverified-window clipboard coalescing may merge on
+the same automated gates, and its Chrome check joins AI-47. He deferred AI-19
+until the store submission and approved the two AI-23 retirements, which are
+now done. Items that need only his acknowledgement, not a decision, are listed
+under "Owner acknowledgement list" below.
 
 **Browser-gate index refreshed 2026-09-12 from merge receipts:** Chris explicitly
 authorized the named browser-gated candidates to merge before manual Chrome
@@ -28,8 +35,8 @@ below. Every AI-47 Human result is **OPEN — not run**: a merge, CI, or automat
 Chromium result is not a human-test result. Browser merge receipts cover #600,
 #609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658. PR #658
 merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result remains
-**OPEN — not run**. PR #599 remains outside pending AI-37's explicit
-queue-policy choice, and PR #572 remains parked outside on SP-F-013. PR #687
+**OPEN — not run**. PR #599 stayed outside until AI-37 was accepted on
+2026-09-25 (D-2026-09-25-R), and PR #572 remains parked outside on SP-F-013. PR #687
 merged as `63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, but remains a test-only
 delayed-clipboard lane: its evidence is `MODELLED`/`UNVERIFIED`, not owner
 Chrome evidence or OS-paste prevention. This is not the total open-PR count or
@@ -53,9 +60,9 @@ PR #609 merged as `e35f5430660767d4998c8f4d727b38444f3f9b14` under the same
 waiver. Its Back/Forward Cache Chrome work is now a current-`main` AI-47
 subprocedure, not a branch-held item or a human-test pass.
 
-**Guided resolution cursor:** `AI-19` (`Resume at: AI-19`; conversational label
-`q-5`). Current ready order: AI-19 → AI-47 → optional AI-24 → AI-23 (low
-priority). The #649 child-form, #655 imported-log-limit, and #658 conditional-write
+**Guided resolution cursor:** `AI-47` (`Resume at: AI-47`). Current ready order:
+AI-47 on the v0.5.0 build → optional AI-24 → AI-19 before the store submission
+(deferred by Chris on 2026-09-25). AI-23 was resolved on 2026-09-25. The #649 child-form, #655 imported-log-limit, and #658 conditional-write
 checks are attached to AI-47 after their merges, but remain **OPEN — not run**.
 The four older post-merge checks (AI-30, AI-33, AI-35,
 AI-36) are unordered additions to that queue.
@@ -211,11 +218,13 @@ live.
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
 - **AI-37** — PR #599 (issue #523), branch
-  `fix/issue523-unverified-clipboard-cap`, exact head
-  `d6f6b7efa2dd83e6845d474eb059a81afce863d7`. Scope: an owner accept/reject of
-  the #523 unverified-queue design, plus a bridge queue-pressure Chrome check
-  that a benign clipboard write cannot suppress the trusted fake-verification
-  warning. Full procedure in that branch's `docs/agentic/GATE3_GUIDES.md`.
+  `fix/issue523-unverified-clipboard-cap`. **Policy accepted 2026-09-25**
+  (D-2026-09-25-R): Chris accepted unverified-only latest-value coalescing, and
+  the PR merges on D-2026-09-25-Q's automated gates. What remains open is the
+  bridge queue-pressure Chrome check (a benign clipboard write must not suppress
+  the trusted fake-verification warning). It joins the AI-47 pass on the release
+  build, with the procedure in `docs/agentic/GATE3_GUIDES.md` once #599 lands.
+  Human result: **OPEN — not run**.
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
@@ -407,7 +416,9 @@ For either route, record the intended territories and goods/services, search
 relevant trademark/product/store/domain/handle sources, retain dated results, and
 obtain professional advice before a commercial or public launch. A rename must
 coordinate product, store, asset, and repository names. Reply `AI-19 done:
-<decision>` when complete.
+<decision>` when complete. **2026-09-25:** Chris chose to decide later; the
+GitHub pre-release keeps the working name, and AI-19 still gates the store
+submission.
 
 **OPEN: AI-24 — Optional post-merge real-Chrome confirmation.** Build current
 `main`, load `extension/dist` unpacked in a fresh temporary Chrome profile, and
@@ -432,22 +443,34 @@ stale branch guide. An agent must recreate or defer the change from current `mai
 resolve its preserved review findings, prove focused checks and hosted CI, then
 provide a new visual-check guide.
 
-**OPEN: AI-23 — Worktree and branch housekeeping (low priority).** No blanket
-prune: each removal or deletion needs Chris's explicit approval for its exact path
-or branch. Before requesting it, re-run `git worktree list --porcelain`, inspect
-both ordinary and ignored status, prove the commit is merged or otherwise
-preserved, and state an ignored-artifact preservation plan. Use plain
-`git worktree remove` and `git branch -d` only after named approval.
+**RESOLVED 2026-09-25: AI-23 — Worktree and branch housekeeping.** Chris
+approved both named retirements (D-2026-09-25-R). A fresh inventory showed:
 
-The 2026-08-08 inspection recommends retiring `chore/deny-floor-v1.6.3` / the
-`nav-floor-sync` worktree only after approval and ignored-cache preservation: all
-three commits target repository-local harness surfaces deliberately removed by
-owner decision #499. Retain the RI-01 and issue-496 worktrees; do not delete the
-local-only `fix/user-activation-neutral-chip` branch because it preserves the
-closed #273 intent. `fix/cooldown-map-cap` is recommended for owner-approved
-retirement because its guarantee is already implemented differently on `main`.
-Reply `AI-23 inspect nav-floor-sync`, `AI-23 retire nav-floor-sync`, or
-`AI-23 done` only after the named decision and a fresh inventory.
+- the `nav-floor-sync` worktree clean, with only an ignored `__pycache__/`;
+- `chore/deny-floor-v1.6.3` equal to `origin` at `f438b530`;
+- `fix/cooldown-map-cap` holding one local-only commit, `d682f144`.
+
+`d682f144` was pushed to `origin/archive/fix-cooldown-map-cap-308` first. Then
+both were removed with a plain `git worktree remove` and `git branch -d`. The
+RI-01 and issue-496 worktrees and the local-only
+`fix/user-activation-neutral-chip` branch are kept. Any future removal still
+needs named approval.
+
+### Owner acknowledgement list (non-blocking)
+
+Chris asked for decisions made on his behalf that need a look but no action to
+be listed in one place. Nothing here blocks v0.5.0. Reply `ack` with the row
+numbers (for example `ack 1-6`), or name a row to reopen it.
+
+| # | What was decided or done | Where | Ack |
+| --- | --- | --- | --- |
+| 1 | The total-dist size budget rose from 500 KB to 540 KB, and the popup script budget from 10.5 KB to 11.5 KB. Budgets for scripts injected into pages are unchanged. | #876, #885 | — |
+| 2 | Codex findings declined with a reason on the thread: #788 (a huge `<base href>` only slows the attacker's own page), #789 (the page author controls its own metas), #827 (redressing a trusted click is the known #601 residue), #814/#823 (process note covered by D-2026-09-25-Q). | PR threads | — |
+| 3 | PRs closed without merging. Superseded: #772 by #757, #767 by #761, #779 by #823. Not needed: #847/#848 (the listeners were already registered once), #815/#816 (`tabs.sendMessage` cannot come from another extension). | PR threads | — |
+| 4 | Parked, not in v0.5.0: #572 (SP-F-013), #842/#858 (open Codex findings), #791/#819/#860 (JavaScript-behaviour instrumentation is compiled out), #755 (overlaps #768), #698/#707/#709 (need a rebase and size work). | PR comments | — |
+| 5 | #882 (#863) deliberately leaves two false-positive shapes: a see-through state layer inside a link that paints nothing at the click point is still held, and an unnamed overlay link still scores as before. GitHub's pushState bursts still raise `pushstate_abuse`, but stay under the block threshold. | #882 | — |
+| 6 | Follow-up issues filed during the release push rather than fixed in it: #877 (MAIN-world clock capture), #883 (Protection Center drops scores above 100), #884 (popup readiness marker), #886 (#882's own-paint check), #887 (RW-01 onboarding-tab race). | Issues | — |
+| 7 | The automated branded-Chrome and acceptance runs are evidence, not your Gate-3 result: every AI-47 row stays **OPEN — not run** until you record it. | AI-47 | — |
 
 **BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** Keep #223
 blocked until #417 supplies valid methodology and a current slice provides focused
@@ -457,6 +480,11 @@ headed-measurement result and does not waive future methodology.
 
 ## Completed and superseded log
 
+- AI-23 — resolved 2026-09-25: Chris approved retiring `nav-floor-sync` /
+  `chore/deny-floor-v1.6.3` and `fix/cooldown-map-cap`. Both commits are
+  preserved on `origin` (D-2026-09-25-R).
+- AI-37 (policy half) — resolved 2026-09-25: Chris accepted #599's
+  unverified-window clipboard coalescing. The Chrome check stays open under AI-47.
 - AI-29 - resolved 2026-08-28: Chris accepted PR #557's exact `ee804fa` overlay
   behavior and authorized merge; the PR merged as
   `d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555, #559, and #568. #560

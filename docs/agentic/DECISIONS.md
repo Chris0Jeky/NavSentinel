@@ -16,6 +16,32 @@ When a decision changes, edit it in place and date the change.
 
 ## 2026-09-25 — v0.5.0 release integration
 
+### D-2026-09-25-R — AI-37 accepted; AI-19 deferred to the store submission; AI-23 retirements approved
+
+**Decision:** in a second batch of explicit questions on 2026-09-25, Chris chose:
+
+1. **AI-37 (#599, issue #523): accepted.** Until the MAIN-world bridge has
+   verified its isolated peer, queued `ns-clipboard-write` receipts collapse to
+   the latest command-like receipt and the latest other receipt. A flood of
+   benign clipboard writes then cannot crowd out the trusted fake-verification
+   signal. The accepted cost is that earlier receipts from that unverified
+   window are dropped. #599 may merge on D-2026-09-25-Q's automated gates, and
+   its owner Chrome check joins the AI-47 pass on the release build.
+2. **AI-19 (product name): decide later.** The GitHub pre-release keeps the
+   working name. AI-19 stays open and still gates the Chrome Web Store
+   submission.
+3. **AI-23 (housekeeping): approved.** The `nav-floor-sync` worktree (branch
+   `chore/deny-floor-v1.6.3`, which targets the harness removed by #499) and the
+   local `fix/cooldown-map-cap` branch were retired with a plain
+   `git worktree remove` and `git branch -d`. Both commits stay on `origin`
+   (`chore/deny-floor-v1.6.3` at `f438b530`, and
+   `archive/fix-cooldown-map-cap-308` at `d682f144`). The RI-01 and issue-496
+   worktrees and `fix/user-activation-neutral-chip` are kept.
+
+**Why:** #599 was the last reviewed security fix held only by a policy choice,
+and the two housekeeping retirements had waited on named approval since
+2026-08-08.
+
 ### D-2026-09-25-Q — Browser-facing PRs merge on automated gates for the v0.5.0 release; rollback Proceed stays
 
 **Decision:** Chris asked the agent to advance development as far as possible
