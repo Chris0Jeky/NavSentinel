@@ -173,4 +173,29 @@ describe("release profiles", () => {
       /not release eligible/i,
     );
   });
+
+  it("rejects a research profile dist missing reputation_data.bin", () => {
+    const dist = makeDist("research-reputation");
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(
+      "reputation research profile must emit and expose reputation_data.bin",
+    );
+  });
+
+  it("rejects a research profile dist that does not expose reputation_data.bin", () => {
+    const dist = makeDist("research-reputation");
+    fs.writeFileSync(path.join(dist, "reputation_data.bin"), makeValidTestBloom());
+    const manifestPath = path.join(dist, "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    delete manifest.web_accessible_resources;
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(
+      "reputation research profile must emit and expose reputation_data.bin",
+    );
+  });
+
+  it("rejects a research profile dist with malformed Bloom bytes", () => {
+    const dist = makeDist("research-reputation");
+    fs.writeFileSync(path.join(dist, "reputation_data.bin"), Buffer.from("not-a-valid-bloom-filter"));
+    expect(() => inspectBuiltReleaseProfile(dist)).toThrow(/bloom/i);
+  });
 });
