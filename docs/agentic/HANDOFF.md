@@ -42,7 +42,7 @@ re-read it before acting.
   Their hosted CI was green, but the applicable branded-Chrome/full-acceptance
   gates were not complete; #865's named-iframe false block is a known acceptance
   failure. Recheck each exact head, base, reviews, and browser receipts before
-  any merge. #865 is in planned M2 and was not promoted by this checkpoint.
+  any merge. #865 is in planned EV-1 and was not promoted by this checkpoint.
 - Read-only Muse scouts found a testable M1 #175 boundary: the bridge retries
   before verification, but a verified same-document port has no periodic
   ping/missing-pong recovery. A future fix needs a bounded live-port-death
