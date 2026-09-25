@@ -44,6 +44,40 @@
  */
 
 /**
+ * ASCII case-insensitive `type=password` match for an element. (#820)
+ *
+ * The `type` attribute is an enumerated keyword: per spec the browser matches
+ * it ASCII case-insensitively (`type="PASSWORD"` renders a native masked
+ * field), so an exact `input[type="password"]` selector misses it. The match
+ * is done programmatically on purpose: the CSS `[type=password i]` flag
+ * throws in the happy-dom test harness, while `getAttribute` returns the raw
+ * attribute verbatim in every engine and lowercasing in JS reproduces the
+ * spec semantics exactly (no whitespace trimming on either side: like the
+ * browser, `type="password "` does NOT match).
+ */
+export function isPasswordTypeInput(el: Element): boolean {
+  return (
+    el.tagName.toLowerCase() === "input" &&
+    (el.getAttribute("type") ?? "").toLowerCase() === "password"
+  );
+}
+
+/**
+ * All password-typed inputs under a root, with the case-insensitive semantics
+ * of {@link isPasswordTypeInput}. Shared by every consumer that used to carry
+ * its own `input[type="password"]` selector. (#820)
+ */
+export function queryPasswordInputs(root: ParentNode): Element[] {
+  const all = root.querySelectorAll("input");
+  const out: Element[] = [];
+  for (let i = 0; i < all.length; i++) {
+    const el = all[i]!;
+    if (isPasswordTypeInput(el)) out.push(el);
+  }
+  return out;
+}
+
+/**
  * True when a password input is a "real" credential field: not disabled and not
  * inline-hidden via `display:none` / `visibility:hidden`. Exported for granular
  * unit testing; runtime consumers use {@link hasVisiblePasswordField}.
@@ -67,7 +101,7 @@ export function isVisiblePasswordField(input: HTMLInputElement): boolean {
  * checker and content fingerprinting.
  */
 export function hasVisiblePasswordField(doc: Document): boolean {
-  const inputs = doc.querySelectorAll('input[type="password"]');
+  const inputs = queryPasswordInputs(doc);
   for (let i = 0; i < inputs.length; i++) {
     if (isVisiblePasswordField(inputs[i] as HTMLInputElement)) return true;
   }

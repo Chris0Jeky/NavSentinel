@@ -141,6 +141,15 @@ describe("buildClickContextFromEvents", () => {
     expect(result.top.targetBlank).toBe(true);
   });
 
+  it("captures anchor targetBlank for a case-variant keyword (#820)", () => {
+    const el = makeEl("a", { href: "https://example.com", target: "_BLANK" });
+    const result = buildClickContextFromEvents({
+      down: fakeDown({ top: el }),
+      click: fakeClick({ top: el }),
+    });
+    expect(result.top.targetBlank).toBe(true);
+  });
+
   it("captures hasOnClick for elements with onclick attr", () => {
     const el = makeEl("div", { onclick: "alert(1)" });
     const result = buildClickContextFromEvents({

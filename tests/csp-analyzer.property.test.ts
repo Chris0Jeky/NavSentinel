@@ -196,10 +196,10 @@ describe("parseCSP property tests", () => {
     );
   });
 
-  it("duplicate directive names: last one wins", () => {
+  it("duplicate directive names: first one wins per CSP3 §3.1 (#780)", () => {
     const raw = "script-src 'self'; script-src 'unsafe-inline'";
     const result = parseCSP(raw);
-    expect(result.get("script-src")).toEqual(["'unsafe-inline'"]);
+    expect(result.get("script-src")).toEqual(["'self'"]);
   });
 
   it("values array has no empty strings", () => {

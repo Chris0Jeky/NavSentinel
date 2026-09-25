@@ -91,12 +91,13 @@ import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } fro
 import { isRiskReducingReason } from "../shared/reason_codes";
 import {
   isDocumentNavigationHref,
+  isSameTabTarget,
   shouldLogImmediateSilentNav,
   shouldQueueSameTabSilentCommit,
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
-import { grantsTabNavigationAuthority } from "./nav_authority";
+import { findSubmitControl, grantsTabNavigationAuthority } from "./nav_authority";
 import { isStaleDelivery } from "./rollback_staleness";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
@@ -991,9 +992,17 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   if (cleanup.action === "budget_exhausted") {
     if (!overlayCleanupBudgetWarned) {
       overlayCleanupBudgetWarned = true;
+      lastOverlayCleanupToastUndo = cleanup.undo;
       sendIconUpdate("yellow");
       showToast({
         message: "Overlay cleanup reached its safety limit.",
+        // The budget result carries the same group undo that restores the
+        // hidden subset; without it up to 128 overlays stay unrestorable
+        // except via the settings toggle. (#748)
+        actions: [{ label: "Undo", onClick: () => runOverlayCleanupUndo(cleanup.undo) }],
+        // Persistent like the regular cleanup card: it replaces that card,
+        // survives unrelated warnings, and is torn down with the setting.
+        persistent: true,
         timeoutMs: 0,
       });
     }
@@ -1003,23 +1012,24 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   if (cleanup.undo !== lastOverlayCleanupToastUndo) {
     lastOverlayCleanupToastUndo = cleanup.undo;
     sendIconUpdate("yellow");
-    const undo = () => {
-      const restored = cleanup.undo();
-      if (lastOverlayCleanupToastUndo === cleanup.undo) {
-        lastOverlayCleanupToastUndo = null;
-      }
-      appendEventSafely({
-        kind: "mutation_alert",
-        site: siteKeyFromLocation(),
-        url: location.href,
-        reasons: ["overlay_cleanup_undo"],
-        extra: { overlayCleanupOutcome: "restored", restored },
-      });
-      return restored;
-    };
-    showOverlayCleanupToast(undo);
+    showOverlayCleanupToast(() => runOverlayCleanupUndo(cleanup.undo));
   }
   return true;
+}
+
+function runOverlayCleanupUndo(undo: OverlaySuppression): boolean {
+  const restored = undo();
+  if (lastOverlayCleanupToastUndo === undo) {
+    lastOverlayCleanupToastUndo = null;
+  }
+  appendEventSafely({
+    kind: "mutation_alert",
+    site: siteKeyFromLocation(),
+    url: location.href,
+    reasons: ["overlay_cleanup_undo"],
+    extra: { overlayCleanupOutcome: "restored", restored },
+  });
+  return restored;
 }
 
 function handleMutationAlert(alert: MutationAlert): void {
@@ -1339,13 +1349,6 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
 }
 
 /**
- * Selector for a control whose default action submits a form: a `<button>`
- * whose type defaults to submit, or a submit/image input.
- */
-const SUBMIT_INTENT_SELECTOR =
-  "button:not([type=button]):not([type=reset]),input[type=submit],input[type=image]";
-
-/**
  * True when a click resolves to a navigation the clicking frame itself declared
  * through a form submit control. Paired with a cross-document anchor href, this
  * is the "in-frame navigation intent" that lets a child frame mint tab-wide
@@ -1361,7 +1364,7 @@ const SUBMIT_INTENT_SELECTOR =
  */
 function formSubmitIntentUrl(e: MouseEvent): string | null {
   const target = e.target instanceof Element ? e.target : null;
-  const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
+  const control = findSubmitControl(target);
   const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
   if (!form) return null;
   const submitterAction = control?.getAttribute("formaction");
@@ -1778,7 +1781,9 @@ window.addEventListener(
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
-    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    // _top/_parent count as same-tab in the top frame so those navigations
+    // join the silent-nav journal; child-frame semantics unchanged (#782).
+    const isSameTabAnchor = !!(anchor && isSameTabTarget(anchorTarget, isTopFrame()));
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
