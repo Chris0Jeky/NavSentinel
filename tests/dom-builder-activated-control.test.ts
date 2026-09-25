@@ -226,16 +226,16 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
   });
 
-  it("a benign empty state layer over named link padding still activates the link (#886)", () => {
+  it("off-point transparent link text cannot hide a translucent overlay (#886 review)", () => {
     vi.mocked(Range.prototype.getClientRects).mockReturnValue(
       [new DOMRect(80, 0, 40, 24)] as unknown as DOMRectList,
     );
-    const link = el("a", { href: "https://other.example/" });
-    link.appendChild(document.createTextNode("Watch"));
-    const layer = el("span", { style: "position:absolute;inset:0;opacity:0.08" }, link);
+    const link = el("a", { href: "https://evil.example/", style: "color:transparent" });
+    link.appendChild(document.createTextNode("Hidden"));
+    const layer = el("span", { style: "position:absolute;inset:0;opacity:0.1" }, link);
     const ctx = click([layer, link, document.body]);
-    expect(ctx.top.tag).toBe("A");
-    expect(computeCDS(ctx).cds).toBe(0);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("intent_mismatch_under_interactive");
   });
 
   it("keeps effective ancestor opacity when re-rooting a clicked child (#886)", () => {

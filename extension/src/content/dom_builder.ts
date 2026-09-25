@@ -150,8 +150,7 @@ function backgroundAlpha(el: Element): number {
 }
 
 /** Test glyph runs rather than a whole text node, whose rect can include blank padding. */
-function directTextPaints(el: Element, x: number, y: number, allowElsewhere = false): boolean {
-  const box = allowElsewhere ? el.getBoundingClientRect() : null;
+function directTextPaints(el: Element, x: number, y: number): boolean {
   let remainingRuns = 32;
   for (let i = 0; i < Math.min(el.childNodes.length, 32); i++) {
     const node = el.childNodes[i]!;
@@ -168,9 +167,6 @@ function directTextPaints(el: Element, x: number, y: number, allowElsewhere = fa
       for (const rect of Array.from(range.getClientRects())) {
         if (rect.width <= 0 || rect.height <= 0) continue;
         if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
-        if (box && rect.right > box.left && rect.left < box.right && rect.bottom > box.top && rect.top < box.bottom) {
-          return true;
-        }
       }
     }
   }
@@ -218,13 +214,7 @@ function activatedAncestor(stack: Element[], leaf: Element, x: number, y: number
       if (opacityWithin(leaf, el) >= CONCEALED_OPACITY_CEILING) return el;
       const visibleOwnPaint = paintsOwnContent(el, x, y) || between.some((b) =>
         opacityWithin(b, el) >= CONCEALED_OPACITY_CEILING && paintsOwnContent(b, x, y));
-      if (visibleOwnPaint) return el;
-      // An empty Material state layer can cover a link's padding while its
-      // visible label sits elsewhere inside the same box. Preserve that benign
-      // re-root without letting a concealed text-bearing child borrow it.
-      const emptyStateLayer = between.length === 0 && leaf.childNodes.length === 0 &&
-        opacityWithin(leaf, el) >= 0.08 && !paintsOwnContent(leaf, x, y);
-      return emptyStateLayer && directTextPaints(el, x, y, true) ? el : null;
+      return visibleOwnPaint ? el : null;
     }
     between.push(el);
   }
