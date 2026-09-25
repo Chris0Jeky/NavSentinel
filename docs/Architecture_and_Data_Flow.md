@@ -537,6 +537,12 @@ latest-hop expiry and drops its cached answer on a BFCache `pageshow` restore.
 - All toast and credential modal messages use plain English
 - Debug overlay retains technical reason codes
 - Concise messages (< 80 characters)
+- Its keys are also the portable reason vocabulary of the `navsentinel-evidence`
+  export (the Lab importer accepts exactly these). Stored codes that no toast
+  shows (credential risk, pushState, overlay cleanup) get Protection Center text
+  from `extension/src/evidence/evidence_reasons.ts`; they are displayed locally
+  and not exported. `tests/evidence-reasons.test.ts` fails when a stored code
+  has no readable text (#867).
 
 ## Test-facing hooks and observability
 
