@@ -101,16 +101,19 @@ export class PendingDecisionsPopupController {
       response = await this.dependencies.sendMessage({ type: "ns-pending-decision-list" });
     } catch {
       this.showFailure("Decision controls are unavailable. Navigation remains blocked.");
+      this.markReady();
       return;
     }
     const listed = parseListedDecisions(response, this.dependencies.now());
     if (!listed) {
       this.showFailure("Decision controls are unavailable. Navigation remains blocked.");
+      this.markReady();
       return;
     }
     this.status = "";
     this.decisions = listed;
     this.render();
+    this.markReady();
     this.updateTimer();
   }
 
@@ -213,6 +216,10 @@ export class PendingDecisionsPopupController {
     this.decisions = [];
     this.status = message;
     this.render();
+  }
+
+  private markReady(): void {
+    this.host.dataset.pendingDecisionsReady = "true";
   }
 
   private updateTimer(): void {
