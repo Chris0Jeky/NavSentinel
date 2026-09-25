@@ -295,6 +295,18 @@ until Chris records its observation. On a mismatch, Chris records
 reopens the smallest affected issue/PR slice; it does not invalidate unrelated
 checks. The general guided cursor remains AI-19.
 
+**Agent pre-check, 2026-09-24 (automated evidence only; every Human result above
+stays OPEN — not run):** each AI-47 row and AI-24/30/33/35/36 now has an
+acceptance spec that ran in branded Chrome 153 on main `da3db0b6`; see
+[`docs/testing/BRANDED_CHROME_VALIDATION_2026-09-24.md`](docs/testing/BRANDED_CHROME_VALIDATION_2026-09-24.md).
+All written trusted-input steps passed except row 5's "readable reasons" step,
+which fails as written (#867). The added adversarial arms for rows 1 and 4 fail:
+a page script can press NavSentinel's own controls (#783/#826; fix candidates
+#784/#827 were verified to close it). Consider landing those fixes before the
+owner pass. Rows 2 and 5 forbid page-injected Proceed controls, but row 4
+requires the same-tab rollback notice's page-injected Proceed. Chris decides
+which wording holds (#872).
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
 Gate-3.** This is no longer a pre-merge gate. PR #589 merged on 2026-08-27 (head
 `ee75bf408e04f528b0ee08006471f318fba3ef96`, merge commit
