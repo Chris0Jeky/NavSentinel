@@ -629,9 +629,13 @@ describe("ui_toast", () => {
       showToast({ message: "fake verification dialog", onDismiss: recordDismiss, timeoutMs: 0 });
       expect(labels()).toEqual(["Dismiss"]);
 
+      // Trusted activation goes through the owned-control relay (#783): a page
+      // synthetic .click() never reaches the action. A second activation of the
+      // removed card is refused, so the outcome is recorded exactly once.
       const dismiss = getButtons()[0]!;
-      dismiss.click();
-      dismiss.click();
+      const host = getHost();
+      expect(activateOwnedToastControl(host, [dismiss, host, document, window])).toBe(true);
+      expect(activateOwnedToastControl(host, [dismiss, host, document, window])).toBe(false);
       expect(recordDismiss).toHaveBeenCalledTimes(1);
     });
 
