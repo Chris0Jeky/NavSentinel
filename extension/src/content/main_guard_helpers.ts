@@ -111,82 +111,6 @@ export function gestureBranchEmissionBound(
 }
 
 /**
- * The browsing-context name a form submission targets, resolved the way the
- * HTML "get an element's target" steps do: the submitter's `formtarget`
- * attribute when present (only `requestSubmit(submitter)` has a submitter),
- * else the form's `target` attribute, else the first `<base target>` in the
- * form's document, else the empty string (this browsing context). Attribute
- * PRESENCE decides, so an explicitly empty value still overrides. (#865)
- */
-export function effectiveFormTarget(form: HTMLFormElement, submitter?: Element | null): string {
-  const fromSubmitter = submitter?.getAttribute("formtarget");
-  if (typeof fromSubmitter === "string") return fromSubmitter;
-  const fromForm = form.getAttribute("target");
-  if (fromForm !== null) return fromForm;
-  return form.ownerDocument?.querySelector("base[target]")?.getAttribute("target") ?? "";
-}
-
-/**
- * Upper bound on how many direct child navigables {@link targetsChildNavigable}
- * compares by identity. A page can replace `window.length` (it is
- * [Replaceable]); callers read the native getter, and this cap bounds the loop
- * even if they cannot.
- */
-export const MAX_CHILD_NAVIGABLE_SCAN = 256;
-
-/** What {@link targetsChildNavigable} reads from the current window. */
-export interface ChildNavigableView {
-  /** This browsing context's own current name. */
-  selfName: string;
-  /**
-   * The browser's named-property lookup for `name` on this window: the child
-   * navigable's WindowProxy when a direct child currently has that target
-   * name, else an element, a collection, or undefined.
-   */
-  namedObject(name: string): unknown;
-  /** Number of direct child navigables. */
-  childCount: number;
-  /** The WindowProxy of direct child navigable `index`. */
-  child(index: number): unknown;
-}
-
-/**
- * True when a navigation targeting `target` lands in a DIRECT child navigable
- * of this document, which cannot navigate this tab (#865). Hidden-iframe
- * uploads, SSO keep-alive posts, 3-D Secure challenge frames and analytics
- * beacons all post into a named iframe of their own page.
- *
- * Mirrors Chromium's name resolution for the cases it answers `true`:
- *   - `_self`, `_top`, `_parent`, `_blank` and the empty name keep their
- *     keyword meaning (case-insensitive), so they never count;
- *   - the browser checks THIS context's own name before its children, so a
- *     name this context also carries navigates this context, not a child;
- *   - the named lookup reflects a child's CURRENT name, cross-origin children
- *     included, so a child that renamed itself no longer answers to its old
- *     `<iframe name>`;
- *   - a name nothing answers to opens a new window, so it does not count.
- * The candidate must be identical to one of the indexed child WindowProxies,
- * so an element with that id or name, or a page global aliasing some other
- * window, is not accepted. Descendants deeper than one level are not searched;
- * such a target keeps the existing gate (a false positive, never a bypass).
- */
-export function targetsChildNavigable(target: string, view: ChildNavigableView): boolean {
-  if (!target) return false;
-  const keyword = target.toLowerCase();
-  if (keyword === "_self" || keyword === "_top" || keyword === "_parent" || keyword === "_blank") {
-    return false;
-  }
-  if (target === view.selfName) return false;
-  const candidate = view.namedObject(target);
-  if (candidate === null || candidate === undefined) return false;
-  const count = Math.min(view.childCount, MAX_CHILD_NAVIGABLE_SCAN);
-  for (let index = 0; index < count; index += 1) {
-    if (view.child(index) === candidate) return true;
-  }
-  return false;
-}
-
-/**
  * Redirect (form-submit) allowance for the MAIN-world guard (#864).
  *
  * The isolated world decides every trusted click and, when it allows one,
@@ -195,14 +119,17 @@ export function targetsChildNavigable(target: string, view: ChildNavigableView):
  * microtask from its click handler used to find no allowance, while the same
  * submit deferred by one task passed. The MAIN world therefore arms the SAME
  * allowance for the click's own task from a document-capture listener that runs
- * after the isolated world's window-capture decision (a blocked click stops
- * propagation there and never arms), and the isolated message stays the
- * authority for everything after that task.
+ * after the isolated world's window-capture decision. Every trusted click that
+ * world allows arms it, as the deferred grant always did; only a click that
+ * world stops (its interceptBlank/blockSameTab branches call
+ * stopImmediatePropagation) never reaches the listener. The isolated message
+ * stays the authority for everything after that task.
  *
  * Invariant: this never grants more than the one-task-deferred submit already
  * got. The same-task arm has the isolated grant's scope (unrestricted in the
- * top frame, the declared submit action in a child frame), expires with the
- * task, and shares the per-gesture budget: the isolated follow-up for an armed
+ * top frame, the declared submit action in a child frame), is cleared by the
+ * next timer tick and in any case within the grant TTL (a delayed timer cannot
+ * stretch it further), and shares the per-gesture budget: the isolated follow-up for an armed
  * click keeps the redirects already spent instead of resetting them. The
  * follow-up is recognised by the click's `event.timeStamp`, which both worlds
  * read from the same Event (measured identical on Chromium).

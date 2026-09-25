@@ -11,10 +11,13 @@
  * The budget pair shows one click still buys at most two submissions whether
  * they run in the click's task or one task later.
  *
- * #865: a post into the page's own named iframe never navigates the tab and
- * passes silently; names that would navigate the tab or open a new window
- * (submitter `_top`, an unknown name, a child that renamed itself, a name the
- * top window itself carries) keep the gate.
+ * #865 (still open): gesture-less posts aimed at the page's own named iframe
+ * stay gated whenever they would navigate the tab or open a window: submitter
+ * `_top`, an unknown name, a child that renamed itself, a name the top window
+ * carries, and a post retargeted by a `submit` or `formdata` handler, which
+ * runs before the browser resolves the target. The last two are why an exemption
+ * checked when submit()/requestSubmit() is called is unsound; any future #865
+ * design must keep every case here blocked.
  *
  * Fixture: gym/form-submit-gesture-task.html. Child-frame (#593/#637) behaviour
  * for same-task submits is covered by the `-sync` arms of
@@ -26,7 +29,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  assertNoToastFor,
   getGymBaseUrl,
   waitForNavSentinelBridge,
   waitForToastText,
@@ -165,7 +167,7 @@ test("same-task form submits after a trusted click pass; forged triggers do not 
   });
 });
 
-test("a post into the page's own named iframe passes silently; other names keep the gate (#865) @regression", async () => {
+test("frame-targeted posts that would leave the page stay gated, including after retargeting (#865) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
   await withExtension(async (context, baseUrl) => {
@@ -174,18 +176,14 @@ test("a post into the page's own named iframe passes silently; other names keep 
       return url.startsWith("http") ? new URL(url).pathname + new URL(url).search : url;
     };
 
-    for (const mode of ["frame-post", "frame-request-submit", "base-target"]) {
-      await test.step(`${mode}: reaches the child frame with no notice`, async () => {
-        const page = await openFixture(context, baseUrl, mode);
-        await page.evaluate(() => (window as unknown as { __nsRunNamedFrameCase(): void }).__nsRunNamedFrameCase());
-        await expect.poll(() => sinkPath(page), { timeout: 5_000 }).toBe(`/form-submit-landing.html?case=${mode}`);
-        await assertNoToastFor(page, 1_500);
-        expect(new URL(page.url()).pathname).toBe(`/${FIXTURE}`);
-        await page.close();
-      });
-    }
-
-    for (const mode of ["frame-formtarget-top", "unknown-name", "renamed-child", "self-name"]) {
+    for (const mode of [
+      "frame-formtarget-top",
+      "unknown-name",
+      "renamed-child",
+      "self-name",
+      "frame-retarget-submit-event",
+      "frame-retarget-formdata",
+    ]) {
       await test.step(`${mode}: would leave the page, so it stays gated`, async () => {
         const page = await openFixture(context, baseUrl, mode);
         const pagesBefore = context.pages().length;

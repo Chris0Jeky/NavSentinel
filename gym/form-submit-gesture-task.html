@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Form submits: gesture task (#864) and named child frames (#865)</title>
+  <title>Form submits: gesture task (#864) and frame-targeted posts (#865)</title>
   <style>
     body { font-family: sans-serif; padding: 24px; }
     button, label { font-size: 16px; margin: 6px; }
@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <h1>Form submits: gesture task (#864) and named child frames (#865)</h1>
+  <h1>Form submits: gesture task (#864) and frame-targeted posts (#865)</h1>
   <p>Only the behaviour named by <code>?mode=</code> is armed. Every destination
      is this Gym's own <code>form-submit-landing.html</code>.</p>
 
@@ -36,19 +36,16 @@
   <form id="blank-b" method="GET" action="form-submit-landing.html" target="_blank"><input type="hidden" name="n" value="b" /></form>
   <form id="blank-c" method="GET" action="form-submit-landing.html" target="_blank"><input type="hidden" name="n" value="c" /></form>
 
-  <!-- #865: the page's own named child frame and the forms aimed at it. -->
+  <!-- #865: the page's own named child frame. Every post below must stay gated:
+       each would navigate the tab or open a window, some only after a
+       submit/formdata handler has retargeted it. -->
   <iframe name="sink" id="sink" title="sink"></iframe>
   <form id="to-sink" method="GET" action="form-submit-landing.html" target="sink"><input type="hidden" name="case" value="" /></form>
-  <form id="to-top" method="GET" action="form-submit-landing.html" target="_top">
-    <input type="hidden" name="case" value="" />
-    <button id="to-sink-submitter" type="submit" formtarget="sink">Into the frame</button>
-  </form>
   <form id="to-sink-top-submitter" method="GET" action="form-submit-landing.html" target="sink">
     <input type="hidden" name="case" value="" />
     <button id="top-submitter" type="submit" formtarget="_top">Whole tab</button>
   </form>
   <form id="to-unknown" method="GET" action="form-submit-landing.html" target="no-such-frame"><input type="hidden" name="case" value="" /></form>
-  <form id="no-target" method="GET" action="form-submit-landing.html"><input type="hidden" name="case" value="" /></form>
 
   <script>
     (() => {
@@ -102,9 +99,7 @@
       // #865 cases run without any user input, from the harness.
       window.__nsRunNamedFrameCase = () => {
         ran(`frame:${mode}`);
-        if (mode === "frame-post") byId("to-sink").submit();
-        else if (mode === "frame-request-submit") byId("to-top").requestSubmit(byId("to-sink-submitter"));
-        else if (mode === "frame-formtarget-top") byId("to-sink-top-submitter").requestSubmit(byId("top-submitter"));
+        if (mode === "frame-formtarget-top") byId("to-sink-top-submitter").requestSubmit(byId("top-submitter"));
         else if (mode === "unknown-name") byId("to-unknown").submit();
         else if (mode === "renamed-child") {
           byId("sink").contentWindow.name = "renamed-sink";
@@ -112,11 +107,16 @@
         } else if (mode === "self-name") {
           window.name = "sink";
           byId("to-sink").submit();
-        } else if (mode === "base-target") {
-          const base = document.createElement("base");
-          base.target = "sink";
-          document.head.append(base);
-          byId("no-target").submit();
+        } else if (mode === "frame-retarget-submit-event") {
+          // The browser resolves the target only after `submit` fires, so a
+          // handler can move a frame-bound post to the whole tab (#865 review).
+          byId("to-sink").addEventListener("submit", () => { byId("to-sink").target = "_top"; });
+          byId("to-sink").requestSubmit();
+        } else if (mode === "frame-retarget-formdata") {
+          // `formdata` also fires before the name is resolved; taking the
+          // child's name for this window makes the post navigate the tab.
+          byId("to-sink").addEventListener("formdata", () => { window.name = "sink"; });
+          byId("to-sink").submit();
         }
       };
     })();
