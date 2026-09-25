@@ -1,4 +1,9 @@
-import { hasAccessibleName, type ClickContext, type ElementHint } from "../shared/scoring";
+import {
+  CONCEALED_OPACITY_CEILING,
+  hasAccessibleName,
+  type ClickContext,
+  type ElementHint
+} from "../shared/scoring";
 
 export interface DownCapture {
   ts: number;
@@ -105,6 +110,39 @@ function buildElementHint(el: Element, opts: { wantStyle: boolean; wantRect: boo
   return hint;
 }
 
+function ownOpacity(el: Element): number {
+  const o = Number.parseFloat(window.getComputedStyle(el).opacity);
+  return Number.isFinite(o) ? o : 1;
+}
+
+/** Product of the own opacities from `el` up to, but excluding, `control`. */
+function opacityWithin(el: Element, control: Element): number {
+  let product = 1;
+  for (let e: Element | null = el; e && e !== control; e = e.parentElement) {
+    product *= ownOpacity(e);
+  }
+  return product;
+}
+
+/** Alpha of a computed background colour; unknown formats count as unpainted. */
+function backgroundAlpha(el: Element): number {
+  const bg = window.getComputedStyle(el).backgroundColor.trim().toLowerCase();
+  if (!bg || bg === "transparent") return 0;
+  const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(bg);
+  if (slash) return Number.parseFloat(slash[1]!) / (slash[2] ? 100 : 1);
+  const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(bg);
+  if (rgba) return Number.parseFloat(rgba[1]!);
+  return bg.startsWith("rgb(") ? 1 : 0;
+}
+
+/** The element paints something of its own: direct text, or a background. */
+function paintsOwnContent(el: Element): boolean {
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE && /\S/.test(node.textContent ?? "")) return true;
+  }
+  return backgroundAlpha(el) >= CONCEALED_OPACITY_CEILING;
+}
+
 /**
  * The named control a pointer click activates when the hit-test leaf is a
  * non-interactive part of it: link text in a `<span>`, an `<h3>` title, an
@@ -114,10 +152,16 @@ function buildElementHint(el: Element, opts: { wantStyle: boolean; wantRect: boo
  *     the leaf, so it is the ancestor whose activation the click triggers and
  *     its own box is hit at the click point,
  *   - every element painted between the leaf and that control belongs to the
- *     control, so no unrelated layer sits between the two, and
+ *     control, so no unrelated layer sits between the two,
  *   - the control has an accessible name. That is exactly the case in which
  *     the leaf used to score `intent_mismatch_under_interactive` against its
- *     own ancestor; unnamed controls keep their previous leaf-based score.
+ *     own ancestor; unnamed controls keep their previous leaf-based score, and
+ *   - the clicked content is not concealed, or the control visibly paints
+ *     something of its own at the click point. A leaf (or a wrapper between it
+ *     and the control) below the concealment opacity can hide the only content
+ *     the user would see, so re-rooting it onto an opaque link would erase
+ *     `invisible_but_clickable` and friends. A translucent state layer over a
+ *     painted button, or over the button's own visible label, still re-roots.
  * Otherwise returns null and the leaf keeps being scored on its own. Overlays
  * layered above a target as siblings or unrelated elements, and descendants
  * that escape their link's box to cover other content, never qualify.
@@ -130,7 +174,11 @@ function activatedAncestor(stack: Element[], leaf: Element): Element | null {
     if (isInteractiveCheap(el)) {
       if (!el.contains(leaf)) return null;
       if (!between.every((b) => el.contains(b))) return null;
-      return hasAccessibleName(buildElementHint(el, { wantRect: false, wantStyle: false })) ? el : null;
+      if (!hasAccessibleName(buildElementHint(el, { wantRect: false, wantStyle: false }))) return null;
+      if (opacityWithin(leaf, el) >= CONCEALED_OPACITY_CEILING) return el;
+      const visibleOwnPaint = paintsOwnContent(el) || between.some((b) =>
+        opacityWithin(b, el) >= CONCEALED_OPACITY_CEILING && paintsOwnContent(b));
+      return visibleOwnPaint ? el : null;
     }
     between.push(el);
   }

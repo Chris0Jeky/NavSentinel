@@ -115,6 +115,12 @@ function isBenignContainedNavigationContainer(h: ElementHint, ctx: ClickContext)
   return !(z >= 5000 && (pos === "fixed" || pos === "absolute"));
 }
 
+/**
+ * Opacity below which computeCDS scores a click target as concealed
+ * (`low_opacity` and stronger bands, and the cursor-affordance rule).
+ */
+export const CONCEALED_OPACITY_CEILING = 0.3;
+
 function isVisible(h: ElementHint): boolean {
   const rect = h.rect;
   if (rect && (rect.w <= 0 || rect.h <= 0)) return false;
@@ -212,7 +218,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
       cds += scaled;
       reasons.push("near_invisible_opacity");
     }
-  } else if (opacity >= 0.15 && opacity < 0.3) {
+  } else if (opacity >= 0.15 && opacity < CONCEALED_OPACITY_CEILING) {
     // Low-opacity gradient: 8 at 0.15, tapering to 0 at 0.3
     const scaled = Math.round(8 * (1 - (opacity - 0.15) / 0.15));
     if (scaled > 0) {
@@ -222,7 +228,7 @@ export function computeCDS(ctx: ClickContext): ScoreResult {
   }
 
   // --- Cursor pointer with no affordance (uses gradient opacity threshold) ---
-  if (topInteractive && isPointerCursor(top.cursor) && !topHasName && opacity < 0.3) {
+  if (topInteractive && isPointerCursor(top.cursor) && !topHasName && opacity < CONCEALED_OPACITY_CEILING) {
     cds += 10;
     reasons.push("cursor_pointer_no_affordance");
   }
