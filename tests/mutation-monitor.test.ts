@@ -9,6 +9,11 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 // We import the module functions. Because the module manages internal state
 // we reset between tests.
 import {
+  boundOverlayRetryCount,
+  bucketOverlayCoverage,
+  bucketOverlayPosition,
+  bucketOverlayStacking,
+  describeOverlayForDiagnostics,
   startMutationMonitor,
   scanExistingForegroundOverlay,
   stopMutationMonitor,
@@ -1940,5 +1945,65 @@ describe("mutation_monitor batch robustness (#813)", () => {
 
     stopMutationMonitor();
     expect(parent.isConnected).toBe(false);
+  });
+});
+
+describe("overlay diagnostic buckets are finite and hostile-safe (#591)", () => {
+  it("buckets positions finitely and maps hostile values to unknown", () => {
+    expect(bucketOverlayPosition("fixed")).toBe("fixed");
+    expect(bucketOverlayPosition("absolute")).toBe("absolute");
+    expect(bucketOverlayPosition("sticky")).toBe("sticky");
+    for (const hostile of [undefined, null, "", "FIXED", "fixed ", "static", "relative", 123, {}, [], "__proto__", "constructor"]) {
+      expect(bucketOverlayPosition(hostile)).toBe("unknown");
+    }
+  });
+
+  it("buckets coverage ratios without leaking exact values", () => {
+    expect(bucketOverlayCoverage(0.24)).toBe("unknown");
+    expect(bucketOverlayCoverage(0.25)).toBe("quarter_to_half");
+    expect(bucketOverlayCoverage(0.499)).toBe("quarter_to_half");
+    expect(bucketOverlayCoverage(0.5)).toBe("half_to_full");
+    expect(bucketOverlayCoverage(0.999)).toBe("half_to_full");
+    expect(bucketOverlayCoverage(1)).toBe("full_or_more");
+    expect(bucketOverlayCoverage(64)).toBe("full_or_more");
+    expect(bucketOverlayCoverage(64.001)).toBe("unknown");
+    for (const hostile of [NaN, Infinity, -Infinity, -1, "0.5", null, undefined, {}, []]) {
+      expect(bucketOverlayCoverage(hostile)).toBe("unknown");
+    }
+  });
+
+  it("buckets z-index values without leaking exact values", () => {
+    expect(bucketOverlayStacking(99)).toBe("unknown");
+    expect(bucketOverlayStacking(100)).toBe("elevated");
+    expect(bucketOverlayStacking(999)).toBe("elevated");
+    expect(bucketOverlayStacking(1000)).toBe("high");
+    expect(bucketOverlayStacking(9999)).toBe("high");
+    expect(bucketOverlayStacking(10000)).toBe("topmost");
+    expect(bucketOverlayStacking(2147483647)).toBe("topmost");
+    expect(bucketOverlayStacking(2147483648)).toBe("unknown");
+    expect(bucketOverlayStacking(1500.9)).toBe("high");
+    for (const hostile of [NaN, Infinity, -Infinity, -5, 0, "10000", null, undefined, {}, []]) {
+      expect(bucketOverlayStacking(hostile)).toBe("unknown");
+    }
+  });
+
+  it("describes hostile and missing elements as unknown without throwing or leaking", () => {
+    for (const hostile of [null, undefined, "x", 123, {}, [], { nodeType: 1, tagName: "DIV", style: null, getBoundingClientRect: "nope" }]) {
+      let described: ReturnType<typeof describeOverlayForDiagnostics> | undefined;
+      expect(() => { described = describeOverlayForDiagnostics(hostile); }).not.toThrow();
+      expect(described).toMatchObject({ positionBucket: "unknown", coverageBucket: "unknown", stackingBucket: "unknown", error: "layout_unavailable" });
+      expect(JSON.stringify(described)).not.toMatch(/width|height|selector|textContent|innerHTML/);
+    }
+  });
+
+  it("bounds retry counts as finite integers", () => {
+    expect(boundOverlayRetryCount(0)).toBe(0);
+    expect(boundOverlayRetryCount(5.9)).toBe(5);
+    expect(boundOverlayRetryCount(128)).toBe(128);
+    expect(boundOverlayRetryCount(-5)).toBe(0);
+    expect(boundOverlayRetryCount(200)).toBe(128);
+    for (const hostile of [NaN, Infinity, -Infinity, "3", null, undefined, {}, []]) {
+      expect(boundOverlayRetryCount(hostile)).toBe(0);
+    }
   });
 });

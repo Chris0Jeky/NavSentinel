@@ -509,6 +509,83 @@ export function classifyOverlayElement(el: Element): OverlayClassification | nul
   };
 }
 
+export const OVERLAY_POSITION_BUCKETS = ["fixed", "absolute", "sticky", "unknown"] as const;
+export type OverlayPositionBucket = (typeof OVERLAY_POSITION_BUCKETS)[number];
+export const OVERLAY_COVERAGE_BUCKETS = ["quarter_to_half", "half_to_full", "full_or_more", "unknown"] as const;
+export type OverlayCoverageBucket = (typeof OVERLAY_COVERAGE_BUCKETS)[number];
+export const OVERLAY_STACKING_BUCKETS = ["elevated", "high", "topmost", "unknown"] as const;
+export type OverlayStackingBucket = (typeof OVERLAY_STACKING_BUCKETS)[number];
+
+export interface OverlayDiagnosticBuckets {
+  positionBucket: OverlayPositionBucket;
+  coverageBucket: OverlayCoverageBucket;
+  stackingBucket: OverlayStackingBucket;
+}
+
+const MAX_REASONABLE_ZINDEX = 2147483647;
+
+/** Finite position bucket; hostile or missing values map to unknown. */
+export function bucketOverlayPosition(value: unknown): OverlayPositionBucket {
+  if (value === "fixed" || value === "absolute" || value === "sticky") return value;
+  return "unknown";
+}
+
+/** Finite coverage bucket for a viewport-coverage ratio; exact ratios never leave the page. */
+export function bucketOverlayCoverage(value: unknown): OverlayCoverageBucket {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "unknown";
+  if (value < MIN_OVERLAY_COVERAGE) return "unknown";
+  if (value < 0.5) return "quarter_to_half";
+  if (value < 1) return "half_to_full";
+  if (value <= 64) return "full_or_more";
+  return "unknown";
+}
+
+/** Finite stacking bucket for a parsed z-index; exact values never leave the page. */
+export function bucketOverlayStacking(value: unknown): OverlayStackingBucket {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "unknown";
+  const n = Math.trunc(value);
+  if (n < MIN_OVERLAY_ZINDEX || n > MAX_REASONABLE_ZINDEX) return "unknown";
+  if (n < 1000) return "elevated";
+  if (n < 10000) return "high";
+  return "topmost";
+}
+
+/**
+ * Describe one overlay element as finite buckets only. Never throws and never
+ * returns dimensions, selectors, text, or exact z-index values. Classifier or
+ * layout failures map to unknown buckets with a finite error category.
+ */
+export function describeOverlayForDiagnostics(element: unknown): OverlayDiagnosticBuckets & {
+  error: "none" | "layout_unavailable";
+} {
+  try {
+    if (!isHtmlElementLike(element)) return { positionBucket: "unknown", coverageBucket: "unknown", stackingBucket: "unknown", error: "layout_unavailable" };
+    const cs = getComputedStyle(element);
+    const positionBucket = bucketOverlayPosition((cs as { position?: unknown }).position);
+    const rawZ = (cs as { zIndex?: unknown }).zIndex;
+    const z = rawZ === "auto" ? 0 : Number.parseInt(String(rawZ), 10);
+    const stackingBucket = bucketOverlayStacking(z);
+    const rect = element.getBoundingClientRect();
+    const vw = Math.max(window.innerWidth, 1);
+    const vh = Math.max(window.innerHeight, 1);
+    const w = typeof rect?.width === "number" ? rect.width : NaN;
+    const h = typeof rect?.height === "number" ? rect.height : NaN;
+    const coverage = (w * h) / (vw * vh);
+    const coverageBucket = bucketOverlayCoverage(coverage);
+    return { positionBucket, coverageBucket, stackingBucket, error: "none" };
+  } catch {
+    return { positionBucket: "unknown", coverageBucket: "unknown", stackingBucket: "unknown", error: "layout_unavailable" };
+  }
+}
+
+/** Bounded retry/count helper for diagnostic metadata; hostile values clamp to 0. */
+export function boundOverlayRetryCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  const n = Math.trunc(value);
+  if (n < 0 || n > 128) return Math.max(0, Math.min(128, Number.isSafeInteger(n) ? n : 0));
+  return n;
+}
+
 function isCleanupLaneActive(): boolean {
   if (!overlayCleanupCallback) return false;
   try {

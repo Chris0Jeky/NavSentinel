@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEvidenceExport, evidenceHostname, filterEvidence, MAX_EVIDENCE_EVENTS, projectEvidence, summarizeEvidence } from "../extension/src/evidence/evidence_model";
+import { createEvidenceExport, evidenceHostname, filterEvidence, MAX_EVIDENCE_EVENTS, overlayReviewOutcomeLabel, projectEvidence, projectOverlayReviews, summarizeEvidence } from "../extension/src/evidence/evidence_model";
 import type { EventLogEntry } from "../extension/src/shared/storage";
 
 const event = (patch: Partial<EventLogEntry> = {}): EventLogEntry => ({
@@ -71,5 +71,58 @@ describe("minimized extension evidence", () => {
     expect(JSON.stringify(result)).not.toContain("NON_HTTPS_PAGE");
     expect(JSON.stringify(result)).not.toContain("IP_HOST");
     expect(JSON.stringify(result)).not.toContain("unrecognized-free-text-xyz");
+  });
+});
+
+describe("overlay cleanup review queue (#591)", () => {
+  const overlay = (patch: Partial<EventLogEntry> = {}): EventLogEntry => ({
+    id: "private-id", ts: 1_700_000_000_000, kind: "mutation_alert", site: "source.test",
+    url: "https://source.test/private?token=secret", reasons: ["overlay_injected"],
+    extra: { details: "Overlay detected: position=fixed, z-index=10000", severity: "high", overlayCleanupOutcome: "suppressed", overlayDiag: { frame: "top", positionBucket: "fixed", coverageBucket: "half_to_full", stackingBucket: "topmost", retryCount: 2, readiness: "ready", error: "none" } }, ...patch,
+  });
+  it("projects finite outcomes, buckets, and labels without URLs, hostnames, details, or scores", () => {
+    const items = projectOverlayReviews([overlay({ extra: { overlayCleanupOutcome: "budget_exhausted", overlayReviewLabel: "should_block", overlayDiag: { frame: "child", positionBucket: "fixed", coverageBucket: "quarter_to_half", stackingBucket: "high", retryCount: 128, readiness: "degraded", error: "none" } } })]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ outcome: "budget_limited", frame: "child", positionBucket: "fixed", coverageBucket: "quarter_to_half", stackingBucket: "high", label: "should_block" });
+    expect(overlayReviewOutcomeLabel(items[0]!.outcome)).toBe("Budget-limited");
+    expect(JSON.stringify(items)).not.toMatch(/private-id|source\.test|https:\/\/|token=secret|details|severity/);
+  });
+  it("shows restored, reported misses, and observed lanes while ignoring hostile extras", () => {
+    const hostile = { get frame() { throw new Error("hostile"); } } as unknown as Record<string, unknown>;
+    const items = projectOverlayReviews([
+      overlay({ id: "a", ts: 2, reasons: ["overlay_cleanup_undo"], extra: { overlayCleanupOutcome: "restored" } }),
+      overlay({ id: "b", ts: 3, reasons: ["overlay_user_reported_miss"], extra: { overlayCleanupOutcome: "user_reported_miss" } }),
+      overlay({ id: "c", ts: 4, reasons: ["overlay_detected"], extra: { overlayDiag: hostile } }),
+      { id: "d", ts: 5, kind: "nav_click_block" } as EventLogEntry,
+      overlay({ id: "e", ts: NaN, reasons: ["overlay_injected"] }),
+    ]);
+    expect(items.map((i) => i.outcome)).toEqual(["restored", "user_reported_miss", "observed"]);
+    expect(items[2]).toMatchObject({ frame: "unknown", positionBucket: "unknown" });
+    expect(items.every((i) => i.label === undefined)).toBe(true);
+  });
+  it("ignores invalid labels and caps hostile reason lists", () => {
+    const items = projectOverlayReviews([overlay({ extra: { overlayCleanupOutcome: "suppressed", overlayReviewLabel: "__proto__", overlayDiag: { frame: "top" } }, reasons: ["overlay_injected", "<img>", "__proto__", "overlay_injected", "overlay_cleanup_undo", "form_action_changed", "password_injected", "suspicious_iframe", "overlay_detected", "overlay_user_reported_miss", "overlay_cleanup_setting_off"] })]);
+    expect(items[0]!.label).toBeUndefined();
+    expect(items[0]!.reasons).toHaveLength(5);
+    expect(JSON.stringify(items[0])).not.toContain("<img>");
+  });
+  it("does not classify an imported finite outcome without an overlay reason", () => {
+    const imported = overlay({ reasons: ["form_action_changed"], extra: { overlayCleanupOutcome: "suppressed" } });
+    expect(projectOverlayReviews([imported])).toEqual([]);
+  });
+  it("covers every retained outcome and never mutates stored entries", () => {
+    const log = [
+      overlay({ id: "s1", ts: 1, reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "suppressed" } }),
+      overlay({ id: "s2", ts: 2, reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "reasserted" } }),
+      overlay({ id: "s3", ts: 3, reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "already_hidden" } }),
+      overlay({ id: "s4", ts: 4, reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "budget_exhausted" } }),
+      overlay({ id: "s5", ts: 5, reasons: ["overlay_cleanup_setting_off"], extra: {} }),
+      overlay({ id: "s6", ts: 6, reasons: ["overlay_user_reported_miss"], extra: {} }),
+      overlay({ id: "s7", ts: 7, reasons: ["overlay_detected"], extra: {} }),
+      { id: "s8", ts: 8, kind: "nav_click_block" } as EventLogEntry,
+    ];
+    const before = JSON.stringify(log);
+    expect(projectOverlayReviews(log).map((i) => i.outcome)).toEqual(["suppressed", "reasserted", "already_hidden", "budget_limited", "restored", "user_reported_miss", "observed"]);
+    expect(JSON.stringify(log)).toBe(before);
   });
 });

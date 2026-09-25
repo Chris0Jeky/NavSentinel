@@ -7,7 +7,7 @@
     <aside class="rail" aria-label="Workspace navigation">
       <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">N</span> NavSentinel</a>
       <p class="eyebrow">LOCAL PROTECTION WORKSPACE</p>
-      <nav aria-label="Protection Center"><a href="#overview">Overview</a><a href="#journal">Evidence journal</a><a href="#coverage">Coverage & limits</a><a href="../options/options.html">Protection settings ↗</a></nav>
+      <nav aria-label="Protection Center"><a href="#overview">Overview</a><a href="#journal">Evidence journal</a><a href="#overlay-review">Overlay review</a><a href="#diagnostics">Diagnostics</a><a href="#coverage">Coverage & limits</a><a href="../options/options.html">Protection settings ↗</a></nav>
       <div class="rail-bottom"><label for="theme">Appearance</label><select id="theme"><option value="forest">Forest</option><option value="paper">Paper</option><option value="midnight">Midnight</option></select><p>Appearance is stored only for this page. Protection settings are unchanged.</p></div>
     </aside>
     <main id="overview">
@@ -19,6 +19,14 @@
         <p class="fine">Exports contain timestamps, event codes, hostnames, known signal codes and optional scores. Hostnames can reveal browsing activity. Paths, queries, raw values and internal IDs are excluded.</p>
         <div class="filters"><label class="search" for="search">Find a hostname<input id="search" type="search" maxlength="253" placeholder="e.g. example.com" /></label><div class="category-control"><label for="category">Category</label><select id="category"><option value="all">All events</option><option value="navigation">Navigation</option><option value="credential">Credentials</option><option value="activity">Other activity</option></select></div><label class="check"><input type="checkbox" id="scoredOnly" /> With a score</label><button id="resetFilters" class="secondary">Reset filters</button></div>
         <p id="results" class="fine" role="status" aria-live="polite"></p><div id="events"></div><div class="paging"><button id="previous" class="secondary">Previous</button><span id="pageLabel"></span><button id="next" class="secondary">Next</button></div>
+      </section>
+      <section class="panel" id="overlay-review" aria-labelledby="overlay-review-title" tabindex="-1"><div class="section-head"><div><p class="eyebrow">LOCAL CLEANUP REVIEW</p><h2 id="overlay-review-title">Overlay cleanup review</h2></div><button id="reportMiss" class="secondary">Report a missed overlay</button></div>
+        <p class="fine">Retained local cleanup attempts only: suppressed, reasserted, budget-limited, restored by Undo or a setting change, and reported misses. Labels stay on this device and clear with behavioural data. Labels are not protection outcomes and do not change protection counts.</p>
+        <p id="reviewResults" class="fine" role="status" aria-live="polite"></p><div id="reviewList"></div>
+      </section>
+      <section class="panel" id="diagnostics" aria-labelledby="diagnostics-title" tabindex="-1"><div class="section-head"><div><p class="eyebrow">PRIVACY-SAFE DIAGNOSTICS</p><h2 id="diagnostics-title">Diagnostic bundle</h2></div><button id="prepareDiagnostic" disabled>Prepare diagnostic bundle</button></div>
+        <p class="fine">Optional and explicit only. The bundle contains product version, browser major, top-versus-child frame, finite reason codes, coarse geometry and stacking buckets, lifecycle timestamps and outcomes, bounded retry counts, and finite readiness and error categories. It excludes raw DOM, text, form values, clipboard, cookies, storage contents, request bodies, queries, fragments, history, screenshots, console and network logs, hostnames, URLs, internal IDs, and arbitrary detail strings.</p>
+        <p class="fine">To share voluntarily, prepare the bundle, review the exact preview, download the file, and attach it yourself to a GitHub or support report. Public GitHub issues make attachments public. There is no automatic upload and no direct submission. Future submission or training use needs a separate owner-approved privacy, security, and release change.</p>
       </section>
       <section class="panel" id="coverage" aria-labelledby="coverage-title"><p class="eyebrow">EVIDENCE WITH BOUNDARIES</p><h2 id="coverage-title">What this view can tell you</h2><div class="coverage"><article><h3>Recorded, not independently verified</h3><p>Entries describe extension observations and decisions. Counts are not prevented attacks, protection rates or a safety verdict. An empty journal means no retained events.</p></article><article><h3>Local and deliberately limited</h3><p>This view reads the extension’s existing bounded history. It does not collect new page data, contact a server or connect to a desktop service. Missing fields stay unavailable.</p></article><article><h3>You stay in control</h3><p>Review navigation and credential settings, trust lists and retention in <a href="../options/options.html">Protection settings</a>. Clear behavioural data there to erase existing history through the shared reset flow.</p></article><article><h3>Build and browser limits still apply</h3><p>The standard build focuses on browser interactions. Broad JavaScript instrumentation is off. This journal cannot prove complete coverage of a page or that an observed consequence was prevented.</p></article></div></section>
       <footer>NavSentinel · Pre-release local workspace · No new decision authority</footer>
@@ -32,6 +40,15 @@
     <textarea id="exportPreview" readonly spellcheck="false" wrap="off"></textarea>
     <p class="fine">To share voluntarily, download this file and attach it yourself to a support report. Public GitHub issues make attachments public. Cancel and narrow the journal filters if this file contains activity you do not want to share.</p>
     <div class="export-actions"><button id="cancelExport" class="secondary" autofocus>Cancel</button><button id="downloadExport">Download reviewed file</button></div>
+  </dialog>
+  <dialog id="diagnosticDialog" aria-labelledby="diagnosticTitle" aria-describedby="diagnosticDisclosure">
+    <h2 id="diagnosticTitle">Review your diagnostic bundle</h2>
+    <p id="diagnosticDisclosure">This preview is the exact file that Download saves. It contains only coarse diagnostic categories and no browsing identifiers. Nothing is uploaded.</p>
+    <p id="diagnosticSummary" class="fine"></p>
+    <label for="diagnosticPreview">File contents (read only)</label>
+    <textarea id="diagnosticPreview" readonly spellcheck="false" wrap="off"></textarea>
+    <p class="fine">To share voluntarily, download this file and attach it yourself to a GitHub or support report. Public GitHub issues make attachments public. Cancel discards this preview.</p>
+    <div class="export-actions"><button id="cancelDiagnostic" class="secondary" autofocus>Cancel</button><button id="copyDiagnostic" class="secondary">Copy preview</button><button id="downloadDiagnostic">Download reviewed file</button></div>
   </dialog>
   <script type="module" src="./evidence.ts"></script>
 </body></html>

@@ -63,7 +63,9 @@ import {
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
 import {
+  boundOverlayRetryCount,
   clearRestoredOverlayCleanupExclusions,
+  describeOverlayForDiagnostics,
   startMutationMonitor,
   scanExistingForegroundOverlay,
   stopMutationMonitor,
@@ -343,7 +345,7 @@ onNavSettingsChange((s) => {
         site: siteKeyFromLocation(),
         url: location.href,
         reasons: ["overlay_cleanup_setting_off"],
-        extra: { overlayCleanupOutcome: "restored", restored: true },
+        extra: { overlayCleanupOutcome: "restored", restored: true, ...buildOverlayDiagForRestore() },
       });
     }
     lastOverlayCleanupToastUndo = null;
@@ -973,6 +975,68 @@ function isOverlayCleanupEnabled(): boolean {
   return settings.defaultMode !== "off" && settings.autoDismissOverlays;
 }
 
+type OverlayDiagReadiness = "ready" | "degraded" | "unknown";
+type OverlayDiagError = "none" | "layout_unavailable" | "classifier_failed";
+
+function overlayFrameBucket(): "top" | "child" {
+  return isTopFrame() ? "top" : "child";
+}
+
+function overlayReadinessBucket(): OverlayDiagReadiness {
+  // Finite readiness only; never export exception text or bridge internals.
+  try {
+    return bridgeReady ? "ready" : "degraded";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Safe diagnostic metadata for the overlay review/diagnostic lane (#591).
+ * Finite buckets only: no element identity, selectors, dimensions, z-index
+ * values, text, URLs, or exception messages. Failures map to unknown/none.
+ */
+function buildOverlayDiagForElement(element: unknown, retryCount: unknown): Record<string, unknown> {
+  const buckets = (() => {
+    try {
+      const described = describeOverlayForDiagnostics(element);
+      return {
+        positionBucket: described.positionBucket,
+        coverageBucket: described.coverageBucket,
+        stackingBucket: described.stackingBucket,
+        error: described.error === "none" ? "none" as const : "layout_unavailable" as const,
+      };
+    } catch {
+      return { positionBucket: "unknown", coverageBucket: "unknown", stackingBucket: "unknown", error: "classifier_failed" as const };
+    }
+  })();
+  return {
+    overlayDiag: {
+      frame: overlayFrameBucket(),
+      positionBucket: buckets.positionBucket,
+      coverageBucket: buckets.coverageBucket,
+      stackingBucket: buckets.stackingBucket,
+      retryCount: boundOverlayRetryCount(retryCount),
+      readiness: overlayReadinessBucket(),
+      error: buckets.error,
+    },
+  };
+}
+
+function buildOverlayDiagForRestore(): Record<string, unknown> {
+  return {
+    overlayDiag: {
+      frame: overlayFrameBucket(),
+      positionBucket: "unknown",
+      coverageBucket: "unknown",
+      stackingBucket: "unknown",
+      retryCount: 0,
+      readiness: overlayReadinessBucket(),
+      error: "none" as OverlayDiagError,
+    },
+  };
+}
+
 function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
   const cleanup = reconcileDetectedOverlay(alert, isOverlayCleanupEnabled());
   if (!cleanup) return false;
@@ -990,6 +1054,7 @@ function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
       overlayCleanupOutcome: cleanup.action,
       overlayCleanupActive: cleanup.activeCount,
       overlayAutoDismissed: cleanup.action !== "budget_exhausted",
+      ...buildOverlayDiagForElement(alert.element, cleanup.reassertedCount),
     },
   });
 
@@ -1031,7 +1096,7 @@ function runOverlayCleanupUndo(undo: OverlaySuppression): boolean {
     site: siteKeyFromLocation(),
     url: location.href,
     reasons: ["overlay_cleanup_undo"],
-    extra: { overlayCleanupOutcome: "restored", restored },
+    extra: { overlayCleanupOutcome: "restored", restored, ...buildOverlayDiagForRestore() },
   });
   return restored;
 }
@@ -1057,6 +1122,7 @@ function handleMutationAlert(alert: MutationAlert): void {
     extra: {
       details: alert.details,
       severity: alert.severity,
+      ...buildOverlayDiagForElement(alert.element, 0),
     },
   });
 

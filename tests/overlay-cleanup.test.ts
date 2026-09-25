@@ -141,6 +141,7 @@ describe("overlay cleanup", () => {
     expect(reconciled.action).toBe("reasserted");
     expect(reconciled.undo).toBe(initial.undo);
     expect(reconciled.activeCount).toBe(1);
+    expect(reconciled.reassertedCount).toBe(1);
     expect(overlay.style.getPropertyValue("display")).toBe("none");
     expect(reconciled.undo()).toBe(true);
     expect(overlay.style.display).toBe("flex");

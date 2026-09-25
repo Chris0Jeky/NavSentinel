@@ -116,6 +116,43 @@ These are read-only. They are never updated at runtime and require no network ca
   transiently inspects clipboard text/selection in the page's MAIN world to
   derive length and a command-like boolean, then sends only that metadata.
 
+## Overlay Cleanup Review And Diagnostic Bundle (#591)
+
+Overlay cleanup outcomes are retained as `mutation_alert` rows in the existing
+bounded event log (`sentinelsuite:event_log_v1`, user-configured 50–5,000
+entries, default 300). The Protection Center review queue projects only finite
+outcomes (suppressed, reasserted, already hidden, budget-limited, restored by
+Undo or a setting change, reported miss, observed), journal reason codes,
+coarse frame and geometry/stacking buckets, timestamps, and local labels. Page
+URLs, hostnames, raw detail strings, scores, and internal IDs are never shown
+in the review projection.
+
+Review labels (“Should block” / “Should allow”) and reported misses live in
+the same event-log lane as `extra.overlayReviewLabel` and
+`extra.overlayCleanupOutcome = "user_reported_miss"`. They clear with **Clear
+log** and **Clear behavioural data**; no new store, permission, endpoint,
+identifier, upload, or automatic telemetry exists. Labels are local-only, are
+not protection outcomes, and never change protection counts or enter the
+diagnostic payload.
+
+The diagnostic bundle is explicit and preview-before-download only. Its fields
+are limited to product/build version, browser major (0 means unavailable),
+top-versus-child frame, finite reason codes, coarse geometry/stacking buckets,
+lifecycle timestamps/outcomes, bounded retry counts (0–128), and finite
+readiness/error categories. It excludes raw DOM/HTML, element text, form
+values, clipboard, cookies/storage contents, request/response bodies,
+query/fragment strings, full browsing history, screenshots, blanket page
+console/network logs, hostnames, URLs, internal IDs, and arbitrary detail
+strings. Every field is sanitized and capped; the preview shows the exact
+serialized bytes used by Download, with count and output bytes recorded
+(256 KiB limit). Cancel discards the pending preview and returns focus.
+
+To share voluntarily, prepare the bundle in Protection Center → Diagnostics,
+review the exact preview, choose Download (or Copy preview), and attach the
+file yourself to a GitHub or support report. Public GitHub issues make
+attachments public. Any future direct submission or training use remains a
+separate owner-approved privacy/security/release change.
+
 ## Import And Export
 
 The options page supports local JSON export and import of:

@@ -19,6 +19,8 @@ export interface OverlayCleanupResult {
   action: OverlayCleanupAction;
   undo: OverlaySuppression;
   activeCount: number;
+  /** Number of retained elements whose page-overwritten suppression was reasserted in this batch. */
+  reassertedCount: number;
 }
 
 type ElementSuppression = {
@@ -151,6 +153,7 @@ export function reconcileDetectedOverlay(
   if (force) elements.forEach(resumeOverlayCleanupForElement);
   let group = activeSuppressionGroup?.active ? activeSuppressionGroup : null;
   let reasserted = false;
+  let reassertedCount = 0;
   let suppressed = false;
   let budgetExhausted = false;
   let reconciledAny = false;
@@ -178,7 +181,10 @@ export function reconcileDetectedOverlay(
     group ??= createSuppressionGroup();
     if (!group.records.includes(result.record)) group.records.push(result.record);
     if (result.action === "suppressed") suppressed = true;
-    if (result.action === "reasserted") reasserted = true;
+    if (result.action === "reasserted") {
+      reasserted = true;
+      reassertedCount += 1;
+    }
   }
 
   if (!group) return null;
@@ -197,6 +203,7 @@ export function reconcileDetectedOverlay(
     action,
     undo: group.undo,
     activeCount: group.records.length,
+    reassertedCount,
   };
 }
 

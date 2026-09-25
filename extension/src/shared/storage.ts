@@ -701,10 +701,58 @@ export interface EventLogEntry {
   extra?: Record<string, unknown>;
 }
 
+export const OVERLAY_REVIEW_LABELS = ["should_block", "should_allow"] as const;
+export type OverlayReviewLabel = (typeof OVERLAY_REVIEW_LABELS)[number];
+export const OVERLAY_REVIEW_LABEL_KEY = "overlayReviewLabel";
+export const OVERLAY_CLEANUP_OUTCOME_KEY = "overlayCleanupOutcome";
+export const OVERLAY_DIAG_KEY = "overlayDiag";
+/** Stored cleanup outcomes, including the user-reported miss lane. `budget_exhausted` is the stored form of a budget-limited outcome. */
+export const OVERLAY_CLEANUP_OUTCOMES = [
+  "suppressed",
+  "reasserted",
+  "already_hidden",
+  "budget_exhausted",
+  "restored",
+  "user_reported_miss",
+] as const;
+export type OverlayCleanupOutcome = (typeof OVERLAY_CLEANUP_OUTCOMES)[number];
+const OVERLAY_CLEANUP_OUTCOME_SET = new Set<string>(OVERLAY_CLEANUP_OUTCOMES);
+
+export function isOverlayReviewLabel(value: unknown): value is OverlayReviewLabel {
+  return value === "should_block" || value === "should_allow";
+}
+
+export function isOverlayCleanupOutcome(value: unknown): value is OverlayCleanupOutcome {
+  return typeof value === "string" && OVERLAY_CLEANUP_OUTCOME_SET.has(value);
+}
+
+/** Local-only label on a retained entry; hostile or missing values read as unlabeled. */
+export function getOverlayReviewLabel(entry: Pick<EventLogEntry, "extra">): OverlayReviewLabel | undefined {
+  try {
+    const extra = entry.extra as Record<string, unknown> | undefined;
+    const candidate = extra?.[OVERLAY_REVIEW_LABEL_KEY];
+    return isOverlayReviewLabel(candidate) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Finite stored cleanup outcome, if present; hostile values read as absent. */
+export function getOverlayCleanupOutcome(entry: Pick<EventLogEntry, "extra">): OverlayCleanupOutcome | undefined {
+  try {
+    const extra = entry.extra as Record<string, unknown> | undefined;
+    const candidate = extra?.[OVERLAY_CLEANUP_OUTCOME_KEY];
+    return isOverlayCleanupOutcome(candidate) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
 export type EventLogMigrationMessage = { type: "ns-event-log-migrate" };
 export type EventLogControlMessage =
   | { type: "ns-event-log-clear" }
+  | { type: "ns-event-log-overlay-label"; entryId: string; label: OverlayReviewLabel | null }
   | { type: "ns-event-log-import-core"; writes: Record<string, unknown> };
 
 export type SuiteImportMessage = { type: "ns-suite-import"; payload: unknown };
@@ -832,6 +880,12 @@ export function isEventLogControlMessage(message: unknown): message is EventLogC
   if (!isRecord(message)) return false;
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-event-log-clear") return true;
+  if (candidate.type === "ns-event-log-overlay-label") {
+    return typeof candidate.entryId === "string" &&
+      candidate.entryId.length > 0 &&
+      candidate.entryId.length <= MAX_EVENT_STRING_LEN &&
+      (candidate.label === null || isOverlayReviewLabel(candidate.label));
+  }
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
@@ -1413,9 +1467,9 @@ export async function handleEventLogControlMessage(
   sender?: chrome.runtime.MessageSender
 ): Promise<EventLogStorageResponse> {
   // A content script runs on arbitrary web pages and therefore may append only.
-  // Clear/import replace the whole event corpus, so accept them only from this
-  // extension's options/popup pages (the same authorization boundary as prompt
-  // outcome clear/replace).
+  // Event-log controls (clear/import and single-entry review labels) are
+  // accepted only from this extension's options/popup pages. All of them are
+  // serialized in the service-worker's single event-log write queue.
   if (!isTrustedExtensionPageSender(sender)) {
     return {
       ok: false,
@@ -1426,8 +1480,10 @@ export async function handleEventLogControlMessage(
   try {
     if (message.type === "ns-event-log-clear") {
       await clearEventLogDirect();
-    } else {
+    } else if (message.type === "ns-event-log-import-core") {
       await importEventLogCoreDirect(message.writes);
+    } else if (!await setOverlayReviewLabelDirect(message.entryId, message.label)) {
+      return { ok: false, error: "Overlay review label target is unavailable" };
     }
     return { ok: true };
   } catch (err) {
@@ -1440,6 +1496,96 @@ export async function clearEventLog(): Promise<void> {
     return delegateEventLogControl({ type: "ns-event-log-clear" });
   }
   return clearEventLogDirect();
+}
+
+/**
+ * Local overlay review labels live inside the bounded EVENT_LOG_KEY lane so
+ * they clear with Clear behavioural data / Clear log and never create a new
+ * store or reset lane (#591). Labels are not protection outcomes and are never
+ * counted by protection metrics; they are read only by the Protection Center
+ * review projection and never enter the diagnostic payload.
+ */
+export function setOverlayReviewLabelDirect(entryId: string, label: OverlayReviewLabel | null): Promise<boolean> {
+  if (typeof entryId !== "string" || entryId.length === 0 || entryId.length > MAX_EVENT_STRING_LEN) {
+    return Promise.resolve(false);
+  }
+  if (label !== null && !isOverlayReviewLabel(label)) return Promise.resolve(false);
+  return queueEventLogWrite(async () => {
+    const res = await chrome.storage.local.get(EVENT_LOG_KEY);
+    const cur = normalizeEventLog(res[EVENT_LOG_KEY]);
+    const index = cur.findIndex((item) => item.id === entryId);
+    if (index === -1) return false;
+    const current = cur[index]!;
+    if (current.kind !== "mutation_alert") return false;
+    const baseExtra: Record<string, unknown> = isRecord(current.extra) ? { ...(current.extra as Record<string, unknown>) } : {};
+    if (label === null) {
+      delete baseExtra[OVERLAY_REVIEW_LABEL_KEY];
+    } else {
+      baseExtra[OVERLAY_REVIEW_LABEL_KEY] = label;
+    }
+    const sanitizedExtra = sanitizeEventExtra(baseExtra);
+    const next: EventLogEntry = { ...current };
+    if (sanitizedExtra === undefined) {
+      // Shedding an oversized extra must also shed the label write itself.
+      if (label !== null) return false;
+      delete next.extra;
+    } else {
+      if (label !== null && !isOverlayReviewLabel(sanitizedExtra[OVERLAY_REVIEW_LABEL_KEY])) return false;
+      next.extra = sanitizedExtra;
+    }
+    // Re-validate through the shared import sanitizer so hostile stored rows
+    // cannot gain a label while keeping arbitrary outcome strings.
+    const rebuilt = sanitizeImportedEventLogEntry(next);
+    cur[index] = rebuilt;
+    await chrome.storage.local.set({ [EVENT_LOG_KEY]: cur });
+    return true;
+  });
+}
+
+export async function setOverlayReviewLabel(entryId: string, label: OverlayReviewLabel | null): Promise<boolean> {
+  if (typeof entryId !== "string" || entryId.length === 0 || entryId.length > MAX_EVENT_STRING_LEN) return false;
+  if (label !== null && !isOverlayReviewLabel(label)) return false;
+  if (!shouldDelegateEventLogWrite()) return setOverlayReviewLabelDirect(entryId, label);
+  try {
+    await delegateEventLogControl({ type: "ns-event-log-overlay-label", entryId, label });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record a user-reported miss as a retained local event-log entry in the same
+ * bounded lane. This is not a protection success and never inflates protection
+ * metrics; it only appears in the local review queue (and the existing local
+ * journal as a recorded observation) until cleared with behavioural data.
+ */
+export function appendOverlayUserMissDirect(ts?: number): Promise<void> {
+  const entry: EventLogEntry = buildEventLogEntry({
+    kind: "mutation_alert",
+    reasons: ["overlay_user_reported_miss"],
+    extra: { [OVERLAY_CLEANUP_OUTCOME_KEY]: "user_reported_miss" as OverlayCleanupOutcome },
+    ...(typeof ts === "number" && Number.isFinite(ts) ? { ts } : {}),
+  });
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    if (entry.ts <= eventLogResetCutoffTs) return;
+    await persistEventLogEntry(entry);
+  });
+}
+
+export function appendOverlayUserMiss(): Promise<void> {
+  if (shouldDelegateEventLogWrite()) {
+    return delegateEventLogAppend({
+      type: "ns-event-log-append",
+      entry: buildEventLogEntry({
+        kind: "mutation_alert",
+        reasons: ["overlay_user_reported_miss"],
+        extra: { [OVERLAY_CLEANUP_OUTCOME_KEY]: "user_reported_miss" as OverlayCleanupOutcome },
+      }),
+    });
+  }
+  return appendOverlayUserMissDirect();
 }
 
 const PROMPT_OUTCOMES_LIMIT = 500;
@@ -1576,7 +1722,19 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   if (e.extra !== undefined) {
     // Drop the oversized extra (fail closed) — keep the entry, shed the bloat.
     const extra = sanitizeEventExtra(e.extra);
-    if (extra !== undefined) out.extra = extra;
+    if (extra !== undefined) {
+      // Review labels and cleanup outcomes stay finite: a crafted backup that
+      // smuggles an arbitrary string here must not persist as a label/outcome.
+      // The live review projection already ignores invalid values; shedding
+      // them on import keeps the lane canonical.
+      if (OVERLAY_REVIEW_LABEL_KEY in extra && !isOverlayReviewLabel(extra[OVERLAY_REVIEW_LABEL_KEY])) {
+        delete extra[OVERLAY_REVIEW_LABEL_KEY];
+      }
+      if (OVERLAY_CLEANUP_OUTCOME_KEY in extra && !isOverlayCleanupOutcome(extra[OVERLAY_CLEANUP_OUTCOME_KEY])) {
+        delete extra[OVERLAY_CLEANUP_OUTCOME_KEY];
+      }
+      if (Object.keys(extra).length > 0) out.extra = extra;
+    }
   }
   return out;
 }

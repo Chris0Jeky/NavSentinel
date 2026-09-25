@@ -41,16 +41,29 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
   // Overlay cleanup lifecycle (content/capture_isolated.ts)
   overlay_cleanup_setting_off: "Hidden overlays were restored because overlay cleanup was turned off",
   overlay_cleanup_undo: "You restored an overlay that NavSentinel had hidden",
+  overlay_user_reported_miss: "You reported an overlay that NavSentinel did not hide",
 
   // Child-frame destination check (content/capture_isolated.ts, research profile only)
   late_async_child_frame: "An embedded frame's destination was later matched to a known malicious domain",
 };
 
 const UNRECOGNIZED = "A signal without a readable description was recorded";
+const OVERLAY_REVIEW_REASON_CODES = new Set([
+  "overlay_detected",
+  "overlay_injected",
+  "overlay_cleanup_undo",
+  "overlay_cleanup_setting_off",
+  "overlay_user_reported_miss",
+]);
 
 /** Codes the Protection Center can explain: the portable registry plus journal-only codes. */
 export function isJournalReasonCode(code: string): boolean {
   return isKnownReasonCode(code) || Object.hasOwn(JOURNAL_ONLY_EXPLANATIONS, code);
+}
+
+/** Only producer-backed overlay lifecycle reasons belong in overlay review/export lanes. */
+export function isOverlayReviewReasonCode(code: string): boolean {
+  return OVERLAY_REVIEW_REASON_CODES.has(code) && isJournalReasonCode(code);
 }
 
 /** Plain-language text for a stored reason code; never echoes an unrecognized code. */

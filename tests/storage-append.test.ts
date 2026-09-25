@@ -997,6 +997,141 @@ describe("appendEvent", () => {
     expect(entry!.reasons![31]).toBe("code_31");
   });
 
+describe("overlay review labels in the EVENT_LOG_KEY lane (#591)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const overlaySeed = (patch: Record<string, unknown> = {}) => ({
+    id: "overlay-1",
+    ts: 1_700_000_000_000,
+    kind: "mutation_alert",
+    site: "synthetic.test",
+    url: "https://synthetic.test/clean",
+    destHost: "synthetic.test",
+    score: 10,
+    reasons: ["overlay_injected"],
+    extra: {
+      overlayCleanupOutcome: "suppressed",
+      overlayDiag: { frame: "top", positionBucket: "fixed", coverageBucket: "half_to_full", stackingBucket: "topmost", retryCount: 2, readiness: "ready", error: "none" },
+      customField: "keep-me",
+    },
+    ...patch,
+  });
+
+  it("sets a valid label, preserves unrelated fields, and clears it", async () => {
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [overlaySeed()] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const storage = await import("../extension/src/shared/storage");
+
+    expect(await storage.setOverlayReviewLabelDirect("overlay-1", "should_block")).toBe(true);
+    let log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    let entry = log.find((e) => e.id === "overlay-1")!;
+    expect((entry.extra as Record<string, unknown>)["overlayReviewLabel"]).toBe("should_block");
+    expect(entry.site).toBe("synthetic.test");
+    expect(entry.url).toBe("https://synthetic.test/clean");
+    expect(entry.destHost).toBe("synthetic.test");
+    expect(entry.score).toBe(10);
+    expect(entry.reasons).toEqual(["overlay_injected"]);
+    expect((entry.extra as Record<string, unknown>)["overlayCleanupOutcome"]).toBe("suppressed");
+    expect((entry.extra as Record<string, unknown>)["customField"]).toBe("keep-me");
+    expect(storage.getOverlayReviewLabel(entry as never)).toBe("should_block");
+
+    expect(await storage.setOverlayReviewLabelDirect("overlay-1", "should_allow")).toBe(true);
+    log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    entry = log.find((e) => e.id === "overlay-1")!;
+    expect((entry.extra as Record<string, unknown>)["overlayReviewLabel"]).toBe("should_allow");
+
+    expect(await storage.setOverlayReviewLabelDirect("overlay-1", null)).toBe(true);
+    log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    entry = log.find((e) => e.id === "overlay-1")!;
+    expect("overlayReviewLabel" in (entry.extra as Record<string, unknown>)).toBe(false);
+    expect((entry.extra as Record<string, unknown>)["overlayCleanupOutcome"]).toBe("suppressed");
+    expect(storage.getOverlayReviewLabel(entry as never)).toBeUndefined();
+  });
+
+  it.each(["__proto__", "SHOULD_BLOCK", "", "should block", 123, {}, undefined])("rejects malformed labels %j without mutating the entry", async (label) => {
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [overlaySeed()] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const storage = await import("../extension/src/shared/storage");
+    const before = JSON.stringify(store[EVENT_LOG_KEY]);
+    expect(await storage.setOverlayReviewLabelDirect("overlay-1", label as never)).toBe(false);
+    expect(JSON.stringify(store[EVENT_LOG_KEY])).toBe(before);
+  });
+
+  it.each(["", "x".repeat(2049), 123, null, undefined])("rejects malformed ids %j", async (id) => {
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [overlaySeed()] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const storage = await import("../extension/src/shared/storage");
+    const before = JSON.stringify(store[EVENT_LOG_KEY]);
+    expect(await storage.setOverlayReviewLabelDirect(id as never, "should_block")).toBe(false);
+    expect(JSON.stringify(store[EVENT_LOG_KEY])).toBe(before);
+  });
+
+  it("rejects labels on missing ids and non-mutation kinds", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [
+        overlaySeed(),
+        { id: "nav-1", ts: 1_700_000_000_001, kind: "nav_click_block", site: "synthetic.test" },
+      ],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const storage = await import("../extension/src/shared/storage");
+    expect(await storage.setOverlayReviewLabelDirect("no-such-id", "should_block")).toBe(false);
+    expect(await storage.setOverlayReviewLabelDirect("nav-1", "should_allow")).toBe(false);
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log).toHaveLength(2);
+    expect(JSON.stringify(log).includes("overlayReviewLabel")).toBe(false);
+  });
+
+  it("fails closed on hostile readers and sheds oversized extras on clear", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const storage = await import("../extension/src/shared/storage");
+    const hostile = { get extra() { throw new Error("hostile"); } };
+    expect(storage.getOverlayReviewLabel(hostile as never)).toBeUndefined();
+    expect(storage.getOverlayCleanupOutcome(hostile as never)).toBeUndefined();
+    expect(storage.isOverlayReviewLabel("__proto__")).toBe(false);
+
+    const big = createChromeMock({
+      [EVENT_LOG_KEY]: [{ ...overlaySeed(), extra: { pad: "x".repeat(5000) } }],
+    });
+    vi.stubGlobal("chrome", big.chrome as unknown as typeof globalThis.chrome);
+    const bigStorage = await import("../extension/src/shared/storage");
+    expect(await bigStorage.setOverlayReviewLabelDirect("overlay-1", "should_block")).toBe(false);
+    expect(await bigStorage.setOverlayReviewLabelDirect("overlay-1", null)).toBe(true);
+    const log = big.store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    expect(log[0]!.extra).toBeUndefined();
+  });
+
+  it("appends a bounded user miss with no identifiers and clears it with the log lane", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const storage = await import("../extension/src/shared/storage");
+
+    await storage.appendOverlayUserMissDirect(1_700_000_000_010);
+    await storage.appendOverlayUserMissDirect(1_700_000_000_011);
+    const log = await storage.getEventLog();
+    expect(log).toHaveLength(2);
+    for (const entry of log) {
+      expect(entry.kind).toBe("mutation_alert");
+      expect(entry.reasons).toEqual(["overlay_user_reported_miss"]);
+      expect((entry.extra as Record<string, unknown>)["overlayCleanupOutcome"]).toBe("user_reported_miss");
+      expect(entry.site).toBeUndefined();
+      expect(entry.url).toBeUndefined();
+      expect((entry as unknown as Record<string, unknown>)["destHost"]).toBeUndefined();
+      expect(entry.score).toBeUndefined();
+    }
+
+    await storage.clearEventLogDirect();
+    expect(await storage.getEventLog()).toEqual([]);
+  });
+});
+
   it("coerces a non-array reasons value to [] (persists, does not throw or drop) (#339)", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
@@ -2022,8 +2157,31 @@ describe("event-log control messages — sender authorization", () => {
         CONTENT_SCRIPT_SENDER
       )
     ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
+    await expect(
+      handleEventLogControlMessage(
+        { type: "ns-event-log-overlay-label", entryId: "keep-1", label: "should_block" },
+        CONTENT_SCRIPT_SENDER
+      )
+    ).resolves.toMatchObject({ ok: false, code: "unauthorized" });
 
     expect(store[EVENT_LOG_KEY]).toEqual(seed);
+  });
+
+  it("routes trusted overlay labels through the event-log control queue", async () => {
+    const { chrome, store } = createChromeMock({
+      [EVENT_LOG_KEY]: [{ id: "overlay-1", ts: 1_700_000_000_000, kind: "mutation_alert", reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "suppressed" } }],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handleEventLogControlMessage, isEventLogControlMessage } = await import("../extension/src/shared/storage");
+    const message = { type: "ns-event-log-overlay-label" as const, entryId: "overlay-1", label: "should_block" as const };
+
+    expect(isEventLogControlMessage(message)).toBe(true);
+    expect(isEventLogControlMessage({ ...message, entryId: "x".repeat(2049) })).toBe(false);
+    await expect(handleEventLogControlMessage(message, OPTIONS_SENDER)).resolves.toEqual({ ok: true });
+
+    const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+    const entry = log.find((candidate) => candidate.id === "overlay-1")!;
+    expect((entry.extra as Record<string, unknown>)["overlayReviewLabel"]).toBe("should_block");
   });
 
   it("accepts a core import from a trusted extension page", async () => {

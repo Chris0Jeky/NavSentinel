@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-const mocks = vi.hoisted(() => ({ getEventLog: vi.fn(), getSuiteSettings: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getEventLog: vi.fn(), getSuiteSettings: vi.fn(), setOverlayReviewLabel: vi.fn(), appendOverlayUserMiss: vi.fn() }));
 vi.mock("../extension/src/shared/storage", async (importOriginal) => ({
   ...await importOriginal<typeof import("../extension/src/shared/storage")>(),
   ...mocks,
@@ -18,6 +18,8 @@ describe("Protection Center wired UI", () => {
     localStorage.clear();
     mocks.getEventLog.mockReset().mockResolvedValue(Array.from({ length: 28 }, (_, i) => ({ id: `private-${i}`, ts: 1700000000000 + i, kind: i === 0 ? "cred_submit_prompt" : "nav_click_block", site: "source.test", destHost: i === 0 ? "credential.test" : "target.test", reasons: ["no_accessible_name"], score: i })));
     mocks.getSuiteSettings.mockReset().mockResolvedValue({ nav: { defaultMode: "off", autoDismissOverlays: false }, credential: { mode: "strict" } });
+    mocks.setOverlayReviewLabel.mockReset().mockResolvedValue(true);
+    mocks.appendOverlayUserMiss.mockReset().mockResolvedValue(undefined);
     await import("../extension/src/evidence/evidence");
     await vi.waitFor(() => expect(get("total").textContent).toBe("28"));
   });
@@ -192,5 +194,95 @@ describe("Protection Center wired UI", () => {
     expect(get("status").getAttribute("role")).toBe("status");
     expect(document.querySelector("details > summary")).not.toBeNull();
     expect(document.querySelector('a[href="#journal"]')).not.toBeNull();
+  });
+  it("renders every retained overlay outcome locally without identifiers", async () => {
+    mocks.getEventLog.mockResolvedValue([
+      { id: "private-s", ts: 1_700_000_000_000, kind: "mutation_alert", site: "synthetic.test", url: "https://synthetic.test/private?token=secret", destHost: "destination.test", score: 99, reasons: ["overlay_injected"], extra: { details: "raw details", severity: "high", overlayCleanupOutcome: "suppressed", overlayDiag: { frame: "top", positionBucket: "fixed", coverageBucket: "half_to_full", stackingBucket: "topmost", retryCount: 2, readiness: "ready", error: "none" } } },
+      { id: "private-r", ts: 1_700_000_000_001, kind: "mutation_alert", site: "synthetic.test", reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "reasserted" } },
+      { id: "private-h", ts: 1_700_000_000_002, kind: "mutation_alert", site: "synthetic.test", reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "already_hidden" } },
+      { id: "private-b", ts: 1_700_000_000_003, kind: "mutation_alert", site: "synthetic.test", reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "budget_exhausted" } },
+      { id: "private-u", ts: 1_700_000_000_004, kind: "mutation_alert", site: "synthetic.test", reasons: ["overlay_cleanup_undo"], extra: { overlayCleanupOutcome: "restored" } },
+      { id: "private-m", ts: 1_700_000_000_005, kind: "mutation_alert", reasons: ["overlay_user_reported_miss"], extra: { overlayCleanupOutcome: "user_reported_miss" } },
+      { id: "private-o", ts: 1_700_000_000_006, kind: "mutation_alert", site: "synthetic.test", reasons: ["overlay_detected"] },
+      { id: "private-n", ts: 1_700_000_000_007, kind: "nav_click_block", site: "synthetic.test", reasons: ["no_accessible_name"] },
+    ]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("reviewResults").textContent).toContain("7 retained"));
+    const list = get("reviewList").textContent ?? "";
+    for (const name of ["Suppressed", "Reasserted", "Already hidden", "Budget-limited", "Restored", "Reported miss", "Observed"]) {
+      expect(list).toContain(name);
+    }
+    expect(get("reviewList").textContent).not.toMatch(/private-|synthetic\.test|destination\.test|token=secret|raw details/);
+    expect(get<HTMLButtonElement>("prepareDiagnostic").disabled).toBe(false);
+    for (const button of Array.from(document.querySelectorAll("#reviewList button"))) {
+      expect(button.tagName).toBe("BUTTON");
+      expect((button as HTMLButtonElement).type).toBe("button");
+    }
+  });
+  it("sends Should block/Should allow through the local label lane and reports misses locally", async () => {
+    mocks.getEventLog.mockResolvedValue([
+      { id: "r1", ts: 1_700_000_000_000, kind: "mutation_alert", reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "suppressed" } },
+      { id: "r2", ts: 1_700_000_000_001, kind: "mutation_alert", reasons: ["overlay_detected"] },
+    ]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("reviewResults").textContent).toContain("2 retained"));
+    const first = document.querySelectorAll("#reviewList details")[0]!;
+    (first.querySelector("summary") as HTMLElement).click();
+    (Array.from(first.querySelectorAll("button")).find(b => b.textContent === "Should block") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(mocks.setOverlayReviewLabel).toHaveBeenCalledWith("r2", "should_block"));
+    await vi.waitFor(() => expect(get("status").textContent).toContain("Saved the local label"));
+    const refreshedFirst = document.querySelectorAll("#reviewList details")[0] as HTMLDetailsElement;
+    expect(refreshedFirst.open).toBe(true);
+    expect(document.activeElement).toBe(refreshedFirst.querySelector("button"));
+    (Array.from(refreshedFirst.querySelectorAll("button")).find(b => b.textContent === "Should allow") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(mocks.setOverlayReviewLabel).toHaveBeenCalledWith("r2", "should_allow"));
+    get("reportMiss").click();
+    await vi.waitFor(() => expect(mocks.appendOverlayUserMiss).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(get("status").textContent).toBe("Recorded a local reported miss. Nothing was uploaded."));
+  });
+  it("previews the exact diagnostic bytes, downloads them, and cancels without saving", async () => {
+    mocks.getEventLog.mockResolvedValue([
+      { id: "private-1", ts: 1_700_000_000_000, kind: "mutation_alert", site: "synthetic.test", url: "https://synthetic.test/private?token=secret", destHost: "destination.test", score: 50, reasons: ["overlay_injected", "no_accessible_name"], extra: { details: "raw", severity: "high", overlayReviewLabel: "should_block", overlayCleanupOutcome: "suppressed", overlayDiag: { frame: "top", positionBucket: "fixed", coverageBucket: "half_to_full", stackingBucket: "topmost", retryCount: 2, readiness: "ready", error: "none" } } },
+      { id: "private-2", ts: 1_700_000_000_001, kind: "mutation_alert", site: "synthetic.test", reasons: ["overlay_detected"] },
+    ]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get<HTMLButtonElement>("prepareDiagnostic").disabled).toBe(false));
+    let blob: Blob | undefined;
+    vi.spyOn(URL, "createObjectURL").mockImplementation(value => { blob = value as Blob; return "blob:test"; });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    get("prepareDiagnostic").click();
+    const reviewed = get<HTMLTextAreaElement>("diagnosticPreview").value;
+    expect(reviewed.length).toBeGreaterThan(0);
+    expect(get<HTMLDialogElement>("diagnosticDialog").open).toBe(true);
+    expect(blob).toBeUndefined();
+    const bundle = JSON.parse(reviewed);
+    expect(bundle).toMatchObject({ format: "navsentinel-overlay-diagnostics", schema: 1 });
+    expect(reviewed).not.toMatch(/private-|synthetic\.test|destination\.test|token=secret|should_block|overlayReviewLabel|raw|severity/);
+    get("downloadDiagnostic").click();
+    expect(blob?.type).toBe("application/json");
+    expect(await blob!.text()).toBe(reviewed);
+    expect(get("status").textContent).toContain("Nothing was uploaded");
+    expect(get<HTMLDialogElement>("diagnosticDialog").open).toBe(false);
+    get("prepareDiagnostic").click();
+    expect(get<HTMLDialogElement>("diagnosticDialog").open).toBe(true);
+    get("cancelDiagnostic").click();
+    await vi.waitFor(() => expect(get<HTMLTextAreaElement>("diagnosticPreview").value).toBe(""));
+    get("downloadDiagnostic").click();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(get("prepareDiagnostic"));
+  });
+  it("copies the reviewed preview without uploading", async () => {
+    mocks.getEventLog.mockResolvedValue([
+      { id: "r1", ts: 1_700_000_000_000, kind: "mutation_alert", reasons: ["overlay_injected"], extra: { overlayCleanupOutcome: "suppressed" } },
+    ]);
+    get("refresh").click();
+    await vi.waitFor(() => expect(get<HTMLButtonElement>("prepareDiagnostic").disabled).toBe(false));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    get("prepareDiagnostic").click();
+    const reviewed = get<HTMLTextAreaElement>("diagnosticPreview").value;
+    get("copyDiagnostic").click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(reviewed));
+    await vi.waitFor(() => expect(get("status").textContent).toContain("Nothing was uploaded"));
   });
 });

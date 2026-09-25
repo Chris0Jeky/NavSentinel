@@ -61,7 +61,9 @@ const EVENT_WRITERS = (function collect(dir: string): string[] {
     if (entry.isDirectory()) return collect(path);
     return entry.name.endsWith(".ts") ? [path] : [];
   });
-})(SRC).filter((path) => /import\s*\{[^}]*\bappendEvent\b[^}]*\}\s*from\s*"[^"]*shared\/storage"/.test(readFileSync(path, "utf8")));
+})(SRC).filter((path) => /import\s*\{[^}]*\bappendEvent\b[^}]*\}\s*from\s*"[^"]*shared\/storage"/.test(readFileSync(path, "utf8")))
+  // storage.ts also contains the direct bounded writer used for local reports.
+  .concat(join(SRC, "shared", "storage.ts"));
 
 function reasonExpressions(): Array<{ file: string; expression: string }> {
   return EVENT_WRITERS.flatMap((path) => {
@@ -82,6 +84,7 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   reasonCodes: "navigation",
   "params.reasonCodes": "navigation",
   "outcomeFeatures.reasons": "navigation",
+  "sanitizeCodeList(partial.reasons) ?? []": null,
   "result.reasons": "clickfix",
   "[alert.type]": "mutation",
   '[typeof data.reason === "string" ? data.reason : "unknown"]': "pushstate",
@@ -110,6 +113,7 @@ describe("stored reason vocabulary (#867)", () => {
     expect(literalCodes()).toEqual(expect.arrayContaining(["overlay_cleanup_setting_off", "overlay_cleanup_undo", "late_async_child_frame", "nrs_double_click_hijack"]));
     expect(EVENT_WRITERS.map((path) => relative(SRC, path).replaceAll("\\", "/")).sort()).toEqual(expect.arrayContaining([
       "content/capture_isolated.ts", "content/credential_guard.ts", "content/pending_navigation_decision.ts",
+      "shared/storage.ts",
     ]));
   });
 

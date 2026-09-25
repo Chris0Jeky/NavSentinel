@@ -1,7 +1,7 @@
 import type { EventKind, EventLogEntry } from "../shared/storage";
 import { normalizeEventPageSite } from "../shared/storage";
 import { isKnownReasonCode } from "../shared/explanations";
-import { isJournalReasonCode } from "./evidence_reasons";
+import { isJournalReasonCode, isOverlayReviewReasonCode } from "./evidence_reasons";
 
 /** Explicit wire vocabulary. A new runtime event needs deliberate export review. */
 export const EVIDENCE_KINDS = [
@@ -111,4 +111,165 @@ export function summarizeEvidence(events: readonly EvidenceEvent[]): { recorded:
 }
 export function eventTitle(kind: EventKind): string {
   return kind.replace(/^nav_/, "navigation_").replace(/^cred_/, "credential_").replace(/^suite_/, "settings_").replaceAll("_", " ");
+}
+
+// ---------------------------------------------------------------------------
+// Overlay cleanup review queue (#591)
+// ---------------------------------------------------------------------------
+
+/** Finite local-review outcomes. Stored `budget_exhausted` reads as `budget_limited`. */
+export const OVERLAY_REVIEW_OUTCOMES = [
+  "suppressed",
+  "reasserted",
+  "already_hidden",
+  "budget_limited",
+  "restored",
+  "user_reported_miss",
+  "observed",
+] as const;
+export type OverlayReviewOutcome = (typeof OVERLAY_REVIEW_OUTCOMES)[number];
+
+export interface OverlayReviewItem {
+  /** Local-only key for labeling; never enters the diagnostic payload. */
+  entryId: string;
+  timestamp: string;
+  outcome: OverlayReviewOutcome;
+  reasons: string[];
+  frame: "top" | "child" | "unknown";
+  positionBucket: string;
+  coverageBucket: string;
+  stackingBucket: string;
+  label?: "should_block" | "should_allow";
+}
+
+const OVERLAY_REVIEW_BUCKETS = new Set([
+  "fixed", "absolute", "sticky",
+  "quarter_to_half", "half_to_full", "full_or_more",
+  "elevated", "high", "topmost", "unknown",
+]);
+
+function reviewFrame(value: unknown): OverlayReviewItem["frame"] {
+  return value === "top" || value === "child" ? value : "unknown";
+}
+
+function reviewBucket(value: unknown): string {
+  return typeof value === "string" && OVERLAY_REVIEW_BUCKETS.has(value) ? value : "unknown";
+}
+
+function safeField(value: unknown, key: string): unknown {
+  try {
+    if (typeof value !== "object" || value === null) return undefined;
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function safeStringReasons(entry: unknown): string[] {
+  const value = safeField(entry, "reasons");
+  if (!Array.isArray(value)) return [];
+  const reasons: string[] = [];
+  try {
+    for (const code of value) if (typeof code === "string") reasons.push(code);
+  } catch {
+    return [];
+  }
+  return reasons;
+}
+
+function reviewOutcomeForEntry(entry: EventLogEntry): OverlayReviewOutcome | null {
+  if (!entry || safeField(entry, "kind") !== "mutation_alert") return null;
+  const extra = safeField(entry, "extra");
+  try {
+    const raw = safeField(extra, "overlayCleanupOutcome");
+    if (raw === "suppressed") return "suppressed";
+    if (raw === "reasserted") return "reasserted";
+    if (raw === "already_hidden") return "already_hidden";
+    if (raw === "budget_exhausted") return "budget_limited";
+    if (raw === "restored") return "restored";
+    if (raw === "user_reported_miss") return "user_reported_miss";
+  } catch {
+    return "observed";
+  }
+  try {
+    const reasons = safeStringReasons(entry);
+    if (reasons.includes("overlay_user_reported_miss")) return "user_reported_miss";
+    if (reasons.includes("overlay_cleanup_undo") || reasons.includes("overlay_cleanup_setting_off")) return "restored";
+    if (reasons.some((r) => r === "overlay_detected" || r === "overlay_injected")) return "observed";
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Explicit projection for the local overlay review queue. Never spreads or
+ * serializes the stored entry: only finite outcomes, journal reason codes,
+ * coarse buckets, timestamps, and local labels. URLs, hostnames, details,
+ * scores, and internal IDs (beyond the local labeling key) are omitted.
+ * Labels are local-only and never inflate protection metrics.
+ */
+export function projectOverlayReviews(
+  log: readonly EventLogEntry[],
+  isReasonCode: (code: string) => boolean = isOverlayReviewReasonCode,
+): OverlayReviewItem[] {
+  const items: OverlayReviewItem[] = [];
+  for (const entry of log.slice(-MAX_EVIDENCE_EVENTS)) {
+    const ts = safeField(entry, "ts");
+    if (!entry || safeField(entry, "kind") !== "mutation_alert" || typeof ts !== "number" || !Number.isFinite(ts)) continue;
+    const entryReasons = safeStringReasons(entry);
+    if (!entryReasons.some(isOverlayReviewReasonCode)) continue;
+    const outcome = reviewOutcomeForEntry(entry as EventLogEntry);
+    if (!outcome) continue;
+    const date = new Date(ts);
+    if (!Number.isFinite(date.getTime())) continue;
+    const extra = safeField(entry, "extra");
+    const candidateDiag = safeField(extra, "overlayDiag");
+    const diag = typeof candidateDiag === "object" && candidateDiag !== null && !Array.isArray(candidateDiag)
+      ? candidateDiag
+      : undefined;
+    const candidateLabel = safeField(extra, "overlayReviewLabel");
+    const label = candidateLabel === "should_block" || candidateLabel === "should_allow" ? candidateLabel : undefined;
+    const seenReasons = new Set<string>();
+    const reasons: string[] = [];
+    for (const code of entryReasons) {
+      if (reasons.length >= 8) break;
+      try {
+        if (isReasonCode(code) && !seenReasons.has(code)) {
+          seenReasons.add(code);
+          reasons.push(code);
+        }
+      } catch {
+        // An injected reason predicate must not make a local projection fail.
+      }
+    }
+    const id = safeField(entry, "id");
+    const item = {
+      timestamp: date.toISOString(),
+      outcome,
+      reasons,
+      frame: reviewFrame(safeField(diag, "frame")),
+      positionBucket: reviewBucket(safeField(diag, "positionBucket")),
+      coverageBucket: reviewBucket(safeField(diag, "coverageBucket")),
+      stackingBucket: reviewBucket(safeField(diag, "stackingBucket")),
+      ...(label === undefined ? {} : { label }),
+    } as OverlayReviewItem;
+    // Keep the row key available to the local label action without exposing it
+    // through ordinary serialization, logs, or diagnostic projections.
+    Object.defineProperty(item, "entryId", {
+      value: typeof id === "string" ? id.slice(0, 256) : `review-${items.length + 1}`,
+      enumerable: false,
+    });
+    items.push(item);
+  }
+  return items.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+}
+
+/** Human-readable outcome for the review queue; budget wording stays user-facing. */
+export function overlayReviewOutcomeLabel(outcome: OverlayReviewOutcome): string {
+  if (outcome === "budget_limited") return "Budget-limited";
+  if (outcome === "already_hidden") return "Already hidden";
+  if (outcome === "user_reported_miss") return "Reported miss";
+  if (outcome === "observed") return "Observed";
+  return outcome.charAt(0).toUpperCase() + outcome.slice(1);
 }

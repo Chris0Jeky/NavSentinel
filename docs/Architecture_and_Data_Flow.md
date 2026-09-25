@@ -480,6 +480,11 @@ latest-hop expiry and drops its cached answer on a BFCache `pageshow` restore.
   remains the fallback boundary in unit DOMs.
 - Records bounded cleanup outcomes in the existing local event log for review;
   no new permission, endpoint, or remote telemetry path is introduced.
+- Overlay review labels and reported misses live in the same event-log lane
+  (`extra.overlayReviewLabel`, `extra.overlayCleanupOutcome`) so Clear
+  behavioural data erases them; the Protection Center projects them with an
+  explicit allowlist and the strict diagnostic exporter
+  (`overlay_diagnostic_export.ts`) never spreads an EventLogEntry.
 - Feeds mutation alert count into the debug overlay
 
 ## CSP analysis
