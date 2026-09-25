@@ -6,6 +6,8 @@ on:
   schedule:
     - cron: "15 1 * * *"
   workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -13,6 +15,10 @@ permissions:
 jobs:
   branded-chrome:
     name: Branded Chrome / acceptance
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'gate:browser'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -45,13 +51,18 @@ jobs:
 
       - name: Record exact browser and artifact
         id: chrome
+        env:
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
+          PULL_REQUEST_HEAD: ${{ github.event.pull_request.head.sha || '' }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha || '' }}
         run: |
           # GitHub's Ubuntu runner image ships Chrome stable; fail if that changes.
           test -x /opt/google/chrome/chrome
           mkdir -p test-results
           chrome_version=$(/opt/google/chrome/chrome --version)
-          printf 'head=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
-            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
+          printf 'checkout_head=%s\npull_request=%s\npull_request_head=%s\npull_request_base=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
+            "$GITHUB_SHA" "$PULL_REQUEST_NUMBER" "$PULL_REQUEST_HEAD" "$PULL_REQUEST_BASE" \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
           cat test-results/branded-run.txt
 
       - name: Run realistic branded Chrome E2E
