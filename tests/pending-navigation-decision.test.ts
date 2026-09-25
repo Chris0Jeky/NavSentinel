@@ -251,6 +251,38 @@ describe("PendingNavigationDecisionClient", () => {
     expect(harness.timers.size).toBe(0);
   });
 
+it("burns an unreleased raw slot as soon as a newer create is admitted", async () => {
+  const harness = createHarness();
+  expect(await harness.create()).toBe(true);
+  expect(harness.client.pendingCountForTest).toBe(1);
+
+  let resolveResponse: ((value: unknown) => void) | undefined;
+  harness.responses.push(
+    new Promise((resolve) => {
+      resolveResponse = resolve;
+    }),
+  );
+  const superseding = harness.client.create({
+    destinationUrl: DESTINATION_URL,
+    score: 82,
+    signals: ["cross_site", "NRS-high"],
+    onProceed: harness.onProceed,
+  });
+
+  expect(harness.client.pendingCountForTest).toBe(0);
+  expect(
+    harness.deliver({
+      type: "ns-pending-decision-release",
+      id: FIRST_ID,
+      action: "proceed-once",
+    }),
+  ).toEqual({ ok: false, status: "rejected" });
+  resolveResponse?.(undefined);
+  await expect(superseding).resolves.toBe(false);
+  expect(harness.client.pendingCountForTest).toBe(0);
+  expect(harness.timers.size).toBe(0);
+});
+
   it("invalidates a create response that arrives after pagehide", async () => {
     const harness = createHarness();
     let resolveResponse: ((value: unknown) => void) | undefined;
