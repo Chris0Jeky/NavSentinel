@@ -93,6 +93,7 @@ import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } fro
 import { isRiskReducingReason } from "../shared/reason_codes";
 import {
   isDocumentNavigationHref,
+  isSameTabTarget,
   shouldLogImmediateSilentNav,
   shouldQueueSameTabSilentCommit,
   silentNavThrottleAllows,
@@ -1797,7 +1798,9 @@ window.addEventListener(
     const anchor = findAnchorFromEvent(e);
     const anchorTarget = (anchor?.target ?? "").toLowerCase();
     const isBlankAnchor = !!(anchor && anchorTarget === "_blank");
-    const isSameTabAnchor = !!(anchor && (!anchorTarget || anchorTarget === "_self"));
+    // _top/_parent count as same-tab in the top frame so those navigations
+    // join the silent-nav journal; child-frame semantics unchanged (#782).
+    const isSameTabAnchor = !!(anchor && isSameTabTarget(anchorTarget, isTopFrame()));
     const parsed = anchor ? parseDestination(anchor.getAttribute("href") ?? anchor.href) : null;
     const isAllowed = parsed?.host
       ? isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)
