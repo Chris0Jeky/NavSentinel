@@ -216,13 +216,13 @@ const setTraceReceivers = (trace, attempts) => {
   })));
   renumber(trace.events);
 };
-const runCampaign = (t, full, control, traceRows) => {
+const writeCampaign = (t, full, control, traceRows) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ns-form-receivers-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const fullRoot = path.join(root, "full");
-  const controlRoot = path.join(root, "control");
-  fs.mkdirSync(fullRoot);
-  fs.mkdirSync(controlRoot);
+  const fullRoot = path.join(root, "test-results/form-full");
+  const controlRoot = path.join(root, "test-results/form-control");
+  fs.mkdirSync(fullRoot, { recursive: true });
+  fs.mkdirSync(controlRoot, { recursive: true });
   for (const [directory, rows, suffix] of [
     [fullRoot, full, ".result.json"],
     [controlRoot, control, ".result.json"],
@@ -232,6 +232,10 @@ const runCampaign = (t, full, control, traceRows) => {
       path.join(directory, `${String(index).padStart(3, "0")}${suffix}`), JSON.stringify(row),
     ));
   }
+  return { root, fullRoot, controlRoot };
+};
+const runCampaign = (t, full, control, traceRows) => {
+  const { fullRoot, controlRoot } = writeCampaign(t, full, control, traceRows);
   const child = spawnSync(process.execPath, [
     fileURLToPath(new URL("./compare.mjs", import.meta.url)), fullRoot, controlRoot,
   ], { encoding: "utf8", timeout: 10_000 });
@@ -388,4 +392,76 @@ test("receiver payload equality cannot certify malformed, incomplete or page-att
     assert.equal(result.receiverEvidence.error, "FORM_TRACE_INVALID");
     assert.equal(result.matched, false);
   }
+});
+
+
+// Execute the checked-in pipeline using GitHub's actual shell flags. Running
+// the comparator alone cannot prove that the workflow propagates its exit code.
+const runWorkflowCampaign = (t, full, control, traceRows, setup = () => {}) => {
+  const { root, fullRoot } = writeCampaign(t, full, control, traceRows);
+  const scriptRoot = path.join(root, "experiments/form-observatory");
+  fs.mkdirSync(scriptRoot, { recursive: true });
+  for (const file of ["compare.mjs", "trace-contract.mjs"]) {
+    fs.copyFileSync(fileURLToPath(new URL(`./${file}`, import.meta.url)), path.join(scriptRoot, file));
+  }
+  const evidenceRoot = path.join(root, "form-evidence");
+  fs.mkdirSync(evidenceRoot);
+  setup({ root, fullRoot, evidenceRoot });
+  const workflow = fs.readFileSync(new URL("../../.github/workflows/observatory-form-evidence.yml", import.meta.url), "utf8");
+  // This deliberately supports only the current single-line comparison step;
+  // a structural workflow change must update this executable contract too.
+  const blocks = workflow.split(/(?=^      - )/m).filter((block) =>
+    /^        run: node experiments\/form-observatory\/compare\.mjs /m.test(block));
+  assert.equal(blocks.length, 1, "one authoritative comparison step is required");
+  const block = blocks[0];
+  const command = block.match(/^        run: (.+)$/m)[1];
+  const shell = block.match(/^        shell: (.+)$/m)?.[1];
+  assert.ok(shell === undefined || shell === "bash", "unsupported workflow shell");
+  assert.doesNotMatch(block, /continue-on-error:/, "comparison failures must remain blocking");
+  const script = path.join(root, "comparison-step.sh");
+  fs.writeFileSync(script, `${command}\n`);
+  const args = shell === "bash" ? ["--noprofile", "--norc", "-eo", "pipefail", script] : ["-e", script];
+  const child = spawnSync("bash", args, { cwd: root, encoding: "utf8", timeout: 10_000,
+    env: { ...process.env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ""}` },
+  });
+  assert.ifError(child.error);
+  assert.equal(child.signal, null);
+  return { ...child, report: path.join(evidenceRoot, "observer-parity.json") };
+};
+
+test("workflow pipeline preserves a receiver mismatch exit and its diagnostic JSON", (t) => {
+  const full = records();
+  full[0].attempts = [{ role: "harm", method: "POST", accepted: true, ordinal: 1 }];
+  const child = runWorkflowCampaign(t, full, full, traces());
+  assert.equal(child.status, 1);
+  assert.equal(child.stderr, "");
+  assert.equal(JSON.parse(child.stdout).receiverEvidence.matched, false);
+  assert.equal(fs.readFileSync(child.report, "utf8"), child.stdout);
+});
+
+test("workflow pipeline preserves input-error exit instead of tee success", (t) => {
+  const child = runWorkflowCampaign(t, records(), records(), traces(), ({ fullRoot }) =>
+    fs.writeFileSync(path.join(fullRoot, "000.result.json"), "{invalid JSON"));
+  assert.equal(child.status, 2);
+  assert.equal(JSON.parse(child.stderr).error, "FORM_COMPARISON_INPUT_ERROR");
+});
+
+test("workflow pipeline accepts consistent evidence and preserves the report", (t) => {
+  const { full, traceRows } = receiptCampaign();
+  const child = runWorkflowCampaign(t, full, full, traceRows);
+  assert.equal(child.status, 0);
+  assert.equal(child.stderr, "");
+  assert.equal(JSON.parse(child.stdout).matched, true);
+  assert.equal(fs.readFileSync(child.report, "utf8"), child.stdout);
+});
+
+test("workflow pipeline refuses a report-write failure even when evidence agrees", (t) => {
+  const { full, traceRows } = receiptCampaign();
+  const child = runWorkflowCampaign(t, full, full, traceRows, ({ evidenceRoot }) => {
+    fs.rmSync(evidenceRoot, { recursive: true });
+    fs.writeFileSync(evidenceRoot, "not a directory");
+  });
+  assert.equal(child.status, 1);
+  assert.equal(JSON.parse(child.stdout).matched, true);
+  assert.notEqual(child.stderr, "");
 });
