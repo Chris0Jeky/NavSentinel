@@ -228,3 +228,16 @@ fs.renameSync = (from, to) => { if (to === target) swap(); return rename(from, t
   assert.equal(fs.readFileSync(f.target, "utf8"), normalizedLicense);
   f.assertClean();
 });
+
+test("refuses a root LICENSE without the expected GPL terms before packaging", (t) => {
+  const f = packageFixture(t);
+  fs.writeFileSync(path.join(f.root, "LICENSE"), "Inert fixture license without the expected terms.\n");
+  fs.writeFileSync(f.target, "previous terms\n");
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Root LICENSE does not contain the expected GPL terms\./);
+  assert.equal(fs.readFileSync(f.target, "utf8"), "previous terms\n");
+  assert.equal(fs.existsSync(path.join(f.root, "artifacts/fixture-v1.0.0.zip")), false);
+  assert.deepEqual(fs.readdirSync(f.dist).filter((name) => name.startsWith(".LICENSE.") && name.endsWith(".tmp")), []);
+  f.assertClean();
+});
