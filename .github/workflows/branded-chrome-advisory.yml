@@ -1,7 +1,7 @@
 name: Branded Chrome Advisory
 
-# This lane records real Google Chrome behaviour without adding a PR merge gate.
-# It complements CI's bundled-Chromium lane; failures remain visible here.
+# This lane records real Google Chrome behaviour for scheduled/manual runs and
+# explicitly labelled same-repository PRs. It complements bundled-Chromium CI.
 on:
   schedule:
     - cron: "15 1 * * *"
@@ -11,6 +11,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: branded-chrome-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   branded-chrome:
