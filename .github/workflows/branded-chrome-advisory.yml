@@ -1,10 +1,11 @@
 name: Branded Chrome Advisory
 
-# This lane records real Google Chrome behaviour without adding a PR merge gate.
-# It complements CI's bundled-Chromium lane; failures remain visible here.
+# Disposable qualification trigger for PR #931. The workflow commit itself lives
+# only on the gate branch; the job checks out and verifies the exact PR head.
 on:
-  schedule:
-    - cron: "15 1 * * *"
+  push:
+    branches:
+      - codex/gate-pr931-branded-20260925
   workflow_dispatch:
 
 permissions:
@@ -16,15 +17,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
+      TARGET_SHA: b9e71ec6d074284ad3f8435ec25bcd0c4c57c544
       NAVSENTINEL_REALISTIC_CHROME: "1"
       NAVSENTINEL_LIVE: "0"
       NAVSENTINEL_BRANDED_RECORD: test-results/branded-chrome-launches.jsonl
       NAVSENTINEL_ACCEPTANCE_RUN: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - name: Checkout
+      - name: Checkout exact PR head
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: b9e71ec6d074284ad3f8435ec25bcd0c4c57c544
           fetch-depth: 0 # Acceptance procedures verify ancestry of merged fixes.
+
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -46,12 +52,11 @@ jobs:
       - name: Record exact browser and artifact
         id: chrome
         run: |
-          # GitHub's Ubuntu runner image ships Chrome stable; fail if that changes.
           test -x /opt/google/chrome/chrome
           mkdir -p test-results
           chrome_version=$(/opt/google/chrome/chrome --version)
-          printf 'head=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
-            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
+          printf 'target_head=%s\ntrigger_sha=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
+            "$TARGET_SHA" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
           cat test-results/branded-run.txt
 
       - name: Run realistic branded Chrome E2E
@@ -68,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: branded-chrome-advisory-${{ github.run_id }}-${{ github.run_attempt }}
+          name: pr931-branded-gate-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             test-results/
             playwright-report/
