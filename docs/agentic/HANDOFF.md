@@ -1,9 +1,66 @@
 # NavSentinel handoff
 
-Updated 2026-09-25 08:51 UTC. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-09-25 14:27 UTC. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
 required reading.
+
+## 2026-09-25 continuation checkpoint (14:27 UTC)
+
+The earlier 08:51 checkpoint below is retained as history. The last fetched
+`origin/main` here is `e5101fa526cffffbc5f5fd9ab9641d27daa23540`;
+reconcile GitHub again before acting.
+
+- #913 merged as `7348194afd67b301f845c5e1eb3b90305102bda9` after its
+  exact-head CI, review, and aging gate. The corrected hosted advisory run
+  [36137404423](https://github.com/Chris0Jeky/NavSentinel/actions/runs/36137404423)
+  used that exact head. Its full-history checkout, Node 24, build, and Chrome
+  153.0.8010.52 prerequisites worked. Realistic branded E2E passed 178 with
+  two skips. Non-live acceptance passed 22, failed three, and skipped one:
+  #864's same-task forms, #865's named-iframe form targets, and AI-47.5's
+  popup CDP socket close at Protection Center entry. These are separate
+  failures; the automated run is not AI-47 human signoff.
+- #915 merged as `1172813fab6f33efbe779e2b138d92ed2411d08a`. It pins the
+  portable evidence export boundary in unit tests; exact-head Build / Unit
+  and E2E passed, the connector review had no findings, and no late feedback
+  appeared at the next checkpoint.
+- #916 is a ready settings-import ordering fix for #891. A promise-gated test
+  failed before the fix and passed after it; the available local unit suite
+  passed 3,858/3,858. Its refreshed head `56f4c96f` merges #915, and hosted
+  CI passed Build / Unit and E2E at the refreshed head in run 36141882517.
+  An independent review found no merge blocker. Main has since gained #917
+  and #919; re-prove its base before any future merge. Because the change
+  affects browser settings, D-2026-09-25-Q still requires a passing integrated
+  branded E2E and acceptance gate; the known #864/#865 failures keep it open.
+- #917 merged as `81295cd4e9cff988efb2f8e7a1fb99cde54171ac` with a
+  test-only correction for AI-47.5's popup click race. It accepts CDP socket
+  closure only after the expected extension-owned evidence
+  tab loads, preserving other click failures. Its head `85e99791` passed the
+  full AI-47.5 procedure locally in installed realistic Chrome 153.0.8010.53
+  with clean product source; hosted advisory run
+  [36141673747](https://github.com/Chris0Jeky/NavSentinel/actions/runs/36141673747)
+  passed realistic branded E2E (178, two skips). Its exact-head AI-47.5 receipt
+  passed every step in Chrome 153.0.8010.52 with clean product source; the
+  overall acceptance lane remains red only on #864 and #865 (23 passed, two
+  failed, one skipped). Exact-head PR Build / Unit and E2E passed, with no
+  review findings or open threads. This is automated evidence, not AI-47
+  human signoff.
+- #874 closed after the open PR count fell below its target of 20. #919
+  merged as `e5101fa526cffffbc5f5fd9ab9641d27daa23540`, closing #918's
+  CDP `waitFor` diagnostic gap. Its connector found a real closed-socket send
+  hang; the guarded send and between-polls regression failed before and passed
+  after the fix, and the review thread was resolved. Exact-head Build / Unit
+  and E2E passed. The #917 + #919 integrated head passed the complete AI-47.5
+  procedure locally in realistic Chrome 153.0.8010.53, with clean product
+  source. #865 remains open: the measured `submit` / `formdata` retargeting
+  cases can escape a call-time named-child exemption into the top window or a
+  new tab, so that exemption stays out.
+
+The primary local `main` checkout still has the same four unrelated #650
+edits listed below. Isolated Muse worktrees with Defender-quarantined tracked
+files or ignored `node_modules` are preserved, not force-removed. No v0.5.0
+tag or GitHub release exists. `ACTION_ITEMS.md` still owns the open AI-47
+human run and deferred AI-19 name clearance.
 
 ## 2026-09-25 Muse improvement swarm checkpoint (08:51 UTC)
 
