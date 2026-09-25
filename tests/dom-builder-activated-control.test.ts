@@ -183,6 +183,58 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(reasonCodes).toContain("invisible_but_clickable");
   });
 
+  it("an invisible child that carries a link's only content keeps its concealment signals (Codex review on #882)", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(ctx.underlying?.tag).toBe("A");
+    const { cds, reasonCodes } = computeCDS(ctx);
+    expect(reasonCodes).toEqual(["intent_mismatch_under_interactive", "invisible_but_clickable"]);
+    expect(cds).toBe(60);
+  });
+
+  it("an invisible wrapper between the clicked child and its link blocks the re-root", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    const wrapper = el("div", { style: "opacity:0.01" }, link);
+    const leaf = el("span", {}, wrapper);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, wrapper, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("intent_mismatch_under_interactive");
+  });
+
+  it("a translucent layer over a hidden label in an unpainted link keeps the leaf score", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    const label = el("span", { style: "opacity:0.01" }, link);
+    label.textContent = "Pull requests";
+    const layer = el("span", { style: "position:absolute;inset:0;opacity:0.1" }, link);
+    const ctx = click([layer, label, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    const { reasonCodes } = computeCDS(ctx);
+    expect(reasonCodes).toContain("near_invisible_opacity");
+    expect(reasonCodes).toContain("intent_mismatch_under_interactive");
+  });
+
+  it("a concealed child over a link's own painted background re-roots onto the visible control", () => {
+    const link = el("a", { href: "https://other.example/", style: "background-color: rgb(51, 51, 51)" });
+    const layer = el("span", { style: "opacity:0.01" }, link);
+    layer.textContent = "Watch";
+    const ctx = click([layer, link, document.body]);
+    expect(ctx.top.tag).toBe("A");
+    expect(computeCDS(ctx).cds).toBe(0);
+  });
+
+  it("a see-through link background does not count as a visible affordance", () => {
+    const link = el("a", { href: "https://evil.example/", style: "background-color: rgba(51, 51, 51, 0.05)" });
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
   it("an unnamed control keeps the previous leaf-based score", () => {
     const link = el("a", { href: "https://other.example/" });
     const child = el("div", {}, link);
