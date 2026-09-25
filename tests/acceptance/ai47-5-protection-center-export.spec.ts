@@ -262,12 +262,25 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await session.gotoReady(page, session.url("/index.html"));
       const popup = await session.openPopup(page);
       const opened = session.context.waitForEvent("page", { timeout: 10_000 });
-      await popup.click("a.footer-link[href$='evidence/evidence.html']");
-      pc = await opened;
+      // Chrome can dismiss its toolbar popup as soon as the target=_blank link
+      // opens a tab, before CDP acknowledges the mouse release. Judge the
+      // navigation by the new page, while retaining any unrelated click error.
+      const [click, newPage] = await Promise.allSettled([
+        popup.click("a.footer-link[href$='evidence/evidence.html']"),
+        opened,
+      ]);
+      if (newPage.status === "rejected") {
+        if (click.status === "rejected") throw click.reason;
+        throw newPage.reason;
+      }
+      pc = newPage.value;
       pc.on("pageerror", (error) => pageErrors.push(`protection-center: ${error.message}`));
       await pc.waitForURL(`**/${EVIDENCE_PAGE}`, { timeout: 10_000 });
       await pc.waitForLoadState("load");
       expect(pc.url()).toBe(session.extensionUrl(EVIDENCE_PAGE));
+      if (click.status === "rejected" && !(popup.closed && String(click.reason).includes("popup DevTools socket closed"))) {
+        throw click.reason;
+      }
       await expect(pc).toHaveTitle("Protection Center · NavSentinel");
       await waitForSnapshot(pc);
       const total = Number(await pc.locator("#total").textContent());
