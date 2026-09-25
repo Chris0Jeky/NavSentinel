@@ -6,6 +6,7 @@ import {
   avg,
   fmtTime,
   computePromptOutcomeStats,
+  computeOverlayAutoDismissStats,
   withReentrancyGuard,
   classifyImportError,
   describeBehaviouralReset,
@@ -610,5 +611,52 @@ describe("runImportFlow (#188)", () => {
       }),
     ).resolves.toBeUndefined();
     expect(flash).toHaveBeenCalledWith("Imported.");
+  });
+});
+
+describe("computeOverlayAutoDismissStats (#562)", () => {
+  const base = (overrides: Record<string, unknown>) => ({
+    id: "evt",
+    ts: 1_710_000_000_000,
+    ...overrides,
+  });
+
+  it("counts one event per path when each carries the exact boolean flag", () => {
+    const stats = computeOverlayAutoDismissStats([
+      base({ id: "settle-1", kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "injected-1", kind: "mutation_alert", reasons: ["overlay_injected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "blocked-1", kind: "nav_blank_prompt", extra: { overlayAutoDismissed: true } }),
+    ]);
+    expect(stats).toEqual({ total: 3, pageSettle: 1, injectedOverlay: 1, blockedClick: 1 });
+  });
+
+  it("counts each non-empty id at most once across repeated records", () => {
+    const stats = computeOverlayAutoDismissStats([
+      base({ id: "dup", kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "dup", kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "dup", kind: "nav_blank_prompt", extra: { overlayAutoDismissed: true } }),
+    ]);
+    expect(stats).toEqual({ total: 1, pageSettle: 1, injectedOverlay: 0, blockedClick: 0 });
+  });
+
+  it("skips malformed, legacy, ambiguous, and unrelated entries", () => {
+    const stats = computeOverlayAutoDismissStats([
+      null,
+      { kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } },
+      base({ id: "", kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "legacy-missing", kind: "mutation_alert", reasons: ["overlay_detected"] }),
+      base({ id: "legacy-truthy", kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: 1 } }),
+      base({ id: "invalid-ts", ts: Number.NaN, kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "invalid-reason", kind: "mutation_alert", reasons: ["overlay_detected", 1], extra: { overlayAutoDismissed: true } }),
+      base({ id: "ambiguous", kind: "mutation_alert", reasons: ["overlay_detected", "overlay_injected"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "irrelevant-reason", kind: "mutation_alert", reasons: ["overlay_cleanup_undo"], extra: { overlayAutoDismissed: true } }),
+      base({ id: "unrelated-kind", kind: "nav_click_block", extra: { overlayAutoDismissed: true } }),
+      base({ id: "no-reasons", kind: "mutation_alert", extra: { overlayAutoDismissed: true } }),
+    ]);
+    expect(stats).toEqual({ total: 0, pageSettle: 0, injectedOverlay: 0, blockedClick: 0 });
+  });
+
+  it("returns zeros for empty input", () => {
+    expect(computeOverlayAutoDismissStats([])).toEqual({ total: 0, pageSettle: 0, injectedOverlay: 0, blockedClick: 0 });
   });
 });

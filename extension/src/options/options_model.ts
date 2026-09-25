@@ -1,5 +1,6 @@
 import type { BehaviouralDataLane, BehaviouralResetResult } from "../shared/behavioural_reset";
 import type {
+  EventLogEntry,
   ImportAllResult,
   PromptOutcome,
   SuiteSettings,
@@ -331,6 +332,61 @@ export function withReentrancyGuard(
 export interface JsBehaviorCapabilityDisplay {
   state: string;
   detail: string;
+}
+
+/** Retained local overlay auto-dismiss history for the options Analytics panel. */
+export interface OverlayAutoDismissStats {
+  total: number;
+  pageSettle: number;
+  injectedOverlay: number;
+  blockedClick: number;
+}
+
+/**
+ * Count retained local events with `extra.overlayAutoDismissed === true` into
+ * three mutually exclusive paths: page settle (`mutation_alert` with the
+ * `overlay_detected` reason), injected overlay (`mutation_alert` with the
+ * `overlay_injected` reason), and blocked click (`nav_blank_prompt`). Each
+ * non-empty event `id` counts at most once. Malformed records, legacy records
+ * without the exact boolean flag, ambiguous records carrying both relevant
+ * mutation reasons, mutation alerts with no relevant reason, and unrelated
+ * event kinds are skipped. Labels/counts only — no domain, URL, or overlay
+ * text is surfaced. (#562)
+ */
+export function computeOverlayAutoDismissStats(
+  entries: ReadonlyArray<EventLogEntry | unknown>,
+): OverlayAutoDismissStats {
+  const counted = new Set<string>();
+  let pageSettle = 0;
+  let injectedOverlay = 0;
+  let blockedClick = 0;
+  for (const candidate of entries) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const entry = candidate as Partial<EventLogEntry> & { extra?: unknown };
+    if (
+      typeof entry.id !== "string" || entry.id === "" ||
+      typeof entry.ts !== "number" || !Number.isFinite(entry.ts)
+    ) continue;
+    if (counted.has(entry.id)) continue;
+    const extra =
+      entry.extra && typeof entry.extra === "object" && !Array.isArray(entry.extra)
+        ? (entry.extra as Record<string, unknown>)
+        : undefined;
+    if (extra?.overlayAutoDismissed !== true) continue;
+    if (entry.kind === "nav_blank_prompt") {
+      counted.add(entry.id);
+      blockedClick++;
+    } else if (entry.kind === "mutation_alert") {
+      if (!Array.isArray(entry.reasons) || !entry.reasons.every((reason) => typeof reason === "string")) continue;
+      const hasDetected = (entry.reasons as unknown[]).includes("overlay_detected");
+      const hasInjected = (entry.reasons as unknown[]).includes("overlay_injected");
+      if (hasDetected === hasInjected) continue;
+      counted.add(entry.id);
+      if (hasDetected) pageSettle++;
+      else injectedOverlay++;
+    }
+  }
+  return { total: pageSettle + injectedOverlay + blockedClick, pageSettle, injectedOverlay, blockedClick };
 }
 
 /**

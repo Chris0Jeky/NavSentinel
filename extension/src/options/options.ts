@@ -6,6 +6,7 @@ import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control
 import {
   OptionsWriteCoordinator,
   computePromptOutcomeStats,
+  computeOverlayAutoDismissStats,
   acceptExternalSettings,
   findSettingsConflicts,
   describeJsBehaviorCapability,
@@ -118,6 +119,10 @@ const statTrustRateEl = document.getElementById("statTrustRate") as HTMLDivEleme
 const statDismissRateEl = document.getElementById("statDismissRate") as HTMLDivElement;
 const statAvgScoreAllowEl = document.getElementById("statAvgScoreAllow") as HTMLDivElement;
 const statAvgScoreBlockEl = document.getElementById("statAvgScoreBlock") as HTMLDivElement;
+const statOverlayTotalEl = document.getElementById("statOverlayTotal") as HTMLDivElement;
+const statOverlayPageSettleEl = document.getElementById("statOverlayPageSettle") as HTMLDivElement;
+const statOverlayInjectedEl = document.getElementById("statOverlayInjected") as HTMLDivElement;
+const statOverlayBlockedClickEl = document.getElementById("statOverlayBlockedClick") as HTMLDivElement;
 const refreshStatsBtn = document.getElementById("refreshStats") as HTMLButtonElement;
 const clearStatsBtn = document.getElementById("clearStats") as HTMLButtonElement;
 const topDomainsEl = document.getElementById("topDomains") as HTMLDivElement;
@@ -485,8 +490,21 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
   }
 }
 
+function renderOverlayStats(log: EventLogEntry[]): void {
+  const stats = computeOverlayAutoDismissStats(log);
+  statOverlayTotalEl.textContent = String(stats.total);
+  statOverlayPageSettleEl.textContent = String(stats.pageSettle);
+  statOverlayInjectedEl.textContent = String(stats.injectedOverlay);
+  statOverlayBlockedClickEl.textContent = String(stats.blockedClick);
+}
+
+async function refreshOverlayStats(): Promise<void> {
+  renderOverlayStats(await getEventLog());
+}
+
 async function refreshStats(): Promise<void> {
   renderStats(await getPromptOutcomes());
+  await refreshOverlayStats();
 }
 
 function renderDomainProfiles(profiles: DomainProfile[]): void {
@@ -748,6 +766,7 @@ refreshLogBtn.addEventListener("click", async () => {
 clearLogBtn.addEventListener("click", async () => {
   await clearEventLog();
   await refreshEventLog();
+  await refreshOverlayStats();
   flashStatus(statusEl, "Cleared.");
 });
 
