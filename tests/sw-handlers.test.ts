@@ -1844,7 +1844,7 @@ describe("service worker handlers", () => {
       expect(mismatchMsg).toBeUndefined();
     });
 
-    it("records the initiating page (not the consent URL) as initiatorUrl (#207)", async () => {
+    it("creates the flow on the consent nav with the redirect_uri domain captured (#207, #796)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
@@ -1867,9 +1867,15 @@ describe("service worker handlers", () => {
           (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
       );
       expect(flowMsg).toBeDefined();
-      const flow = (flowMsg!.message as { flow: { initiatorUrl: string; consentUrl: string } }).flow;
-      expect(flow.initiatorUrl).toBe("https://app.example/start");
-      expect(flow.consentUrl).toBe(consentUrl);
+      // The flow carries only what mismatch detection reads (#796 dropped the
+      // write-only initiatorUrl/consentUrl): the redirect_uri domain captured
+      // at creation, plus phase/startedAt bookkeeping.
+      const flow = (flowMsg!.message as { flow: Record<string, unknown> }).flow;
+      expect(flow.expectedCallbackDomain).toBe("app.example");
+      expect(flow.phase).toBe("redirect");
+      expect(typeof flow.startedAt).toBe("number");
+      expect("initiatorUrl" in flow).toBe(false);
+      expect("consentUrl" in flow).toBe(false);
     });
 
     it("a typed/bookmarked cross-domain page carrying a generic ?code= does not fire a redirect-mismatch (#207 R1)", async () => {

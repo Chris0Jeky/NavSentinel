@@ -29,7 +29,12 @@ const repositoryRoot = path.resolve(__dirname, "..");
 const tempRoots: string[] = [];
 
 function makeTempRoot(label: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `navsentinel-${label}-`));
+  // Canonicalize an 8.3 short-name TEMP prefix (#764): repository-root
+  // assertions compare against realpathSync.native, so hand them the
+  // canonical root.
+  const root = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), `navsentinel-${label}-`)),
+  );
   tempRoots.push(root);
   return root;
 }
@@ -140,7 +145,9 @@ describe("release input integrity", () => {
     expect(runGit(root, ["status", "--porcelain"])).toBe("");
 
     expect(() => assertExactCommittedInputs(root)).toThrow(/raw filesystem bytes differ/i);
-  });
+    // 60s cap: repository fixture + seven git spawns + clean-filter node
+    // subprocess exceed the 5s default under parallel load on Windows. (#766)
+  }, 60_000);
 
   it("rejects clean LF blobs materialized as CRLF", () => {
     const root = createRepository("crlf", {

@@ -163,6 +163,15 @@ describe("icon_manager", () => {
       expect(setBadgeText).toHaveBeenCalledWith({ tabId: 30, text: "" });
     });
 
+    it("resolves (never rejects) when tabs.query fails, with the cache cleared (#797)", async () => {
+      await updateTabIcon(40, "red", 2);
+      tabsQuery.mockRejectedValue(new Error("context invalidated"));
+
+      await expect(setAllTabsGray()).resolves.toBeUndefined();
+      expect(_getTabStateMap().size).toBe(0);
+      expect(getTabIconState(40)).toBe("gray");
+    });
+
     it("blanks AFTER an in-flight update so a reset tab never shows a stale badge (#272)", async () => {
       // Symmetric guard for the setAllTabsGray path (the clearTabIcon equivalent is the
       // #272 test above). Pre-fix the fire-and-forget blank could land before the in-flight

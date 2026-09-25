@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ClickContext } from "../extension/src/shared/scoring";
 
 type Store = Record<string, unknown>;
 
@@ -264,6 +265,31 @@ describe("prompt telemetry replay-grade enrichment (P5-C1 / #238)", () => {
     expect(entry!.elementContext?.top.targetBlank).toBe(true);
     expect(entry!.elementContext?.underlying?.tag).toBe("DIV");
     expect(entry!.elementContext?.retargeted).toBe(true);
+  });
+
+  it("round-trips inTop so CDS replay matches the live score (#794)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+    const { computeCDS } = await import("../extension/src/shared/scoring");
+    const live: ClickContext = {
+      viewport: { w: 1280, h: 720 },
+      input: "pointer",
+      top: { tag: "NAV", rect: { w: 200, h: 50 } },
+      underlying: { tag: "A", textLength: 8 },
+      inTop: true,
+    };
+    await appendPromptOutcome({
+      domain: "nav.example",
+      type: "nav",
+      score: 20,
+      outcome: "allow_once",
+      elementContext: live,
+    });
+
+    const [entry] = await getPromptOutcomes();
+    expect(entry!.elementContext?.inTop).toBe(true);
+    expect(computeCDS(entry!.elementContext!)).toEqual(computeCDS(live));
   });
 
   it("keeps thin legacy records valid (enrichment is optional)", async () => {

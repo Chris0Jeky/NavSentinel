@@ -34,7 +34,8 @@ const OUT_PATH = resolve(
 // Bloom filter primitives (duplicated from reputation.ts for Node.js use)
 // ---------------------------------------------------------------------------
 
-function murmurhash3_32(key, seed) {
+// Exported for the cross-implementation hash-agreement test (#805); the CLI path is unchanged.
+export function murmurhash3_32(key, seed) {
   let h = seed >>> 0;
   const len = key.length;
   const nblocks = len >> 2;

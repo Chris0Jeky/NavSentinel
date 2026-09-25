@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Red-team - credential submit guard (hostile page)</title>
+</head>
+<body>
+  <h1>Hostile credential page (acceptance red-team)</h1>
+  <p>A password form whose submit is intercepted by NavSentinel's credential
+     guard. This page attempts a fully gestureless bypass: it submits itself and
+     then synthesizes clicks on the extension-owned modal's own controls.</p>
+  <form id="login" method="get">
+    <input id="user" name="u" autocomplete="username" value="victim" />
+    <input id="pw" type="password" name="p" autocomplete="current-password" />
+    <button id="submit" type="submit">Sign in</button>
+  </form>
+  <script>
+    // Arm and fire a page-initiated (gestureless) credential submit. The action
+    // is the *other* loopback host so the destination is cross-site; over http
+    // the guard prompts regardless. The unique marker rides only the action URL.
+    // Point the form at a cross-site destination and fill the password, but do
+    // NOT submit yet. Returns the armed action URL.
+    window.__armCredentialForm = (marker) => {
+      const other = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+      const form = document.getElementById("login");
+      form.action = `http://${other}:${location.port}/acceptance/dest/${marker}/landing.html`;
+      document.getElementById("pw").value = "hunter2-" + marker;
+      return form.action;
+    };
+
+    // Arm, then fire a page-initiated (gestureless) submit via requestSubmit.
+    window.__armCredentialSubmit = (marker) => {
+      const action = window.__armCredentialForm(marker);
+      document.getElementById("login").requestSubmit(document.getElementById("submit"));
+      return action;
+    };
+
+    // Report the extension-owned credential modal's live buttons (open shadow
+    // root, so a hostile page can read and reach into it).
+    window.__modalButtons = () => {
+      const host = document.getElementById("__sentinelsuite_cred_modal_host__");
+      if (!host || !host.shadowRoot) return null;
+      return Array.from(host.shadowRoot.querySelectorAll("button")).map((b) => b.textContent.trim());
+    };
+
+    // Attacker capability: an UNTRUSTED synthetic click on a named modal control.
+    window.__synthClickModal = (label) => {
+      const host = document.getElementById("__sentinelsuite_cred_modal_host__");
+      if (!host || !host.shadowRoot) return "no-host";
+      const btn = Array.from(host.shadowRoot.querySelectorAll("button"))
+        .find((b) => b.textContent.trim() === label);
+      if (!btn) return "no-button";
+      btn.click(); // synthetic => event.isTrusted === false
+      return "clicked";
+    };
+
+    window.__toastButtons = () => {
+      const host = document.getElementById("__navsentinel_toast_host");
+      if (!host || !host.shadowRoot) return null;
+      return Array.from(host.shadowRoot.querySelectorAll("button")).map((b) => b.textContent.trim());
+    };
+
+    // Attacker capability: UNTRUSTED synthetic click on a toast action by prefix.
+    window.__synthClickToast = (prefix) => {
+      const host = document.getElementById("__navsentinel_toast_host");
+      if (!host || !host.shadowRoot) return "no-host";
+      const btn = Array.from(host.shadowRoot.querySelectorAll("button"))
+        .find((b) => b.textContent.trim().startsWith(prefix));
+      if (!btn) return "no-button";
+      btn.click(); // synthetic => event.isTrusted === false
+      return "clicked";
+    };
+  </script>
+</body>
+</html>

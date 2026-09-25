@@ -140,8 +140,11 @@ it("qualifies prefix identity and failure-safe publication in an isolated proces
   const result = spawnSync(
     process.execPath,
     ["--test", path.join(import.meta.dirname, "helpers/release-archive-adversarial.mjs")],
-    { encoding: "utf8", timeout: 10_000 },
+    // 30s spawn cap + 60s test cap: this boots a full node --test
+    // subprocess, which exceeds the 5s default / 10s spawn cap under
+    // parallel load on Windows. Still bounded enough to catch real hangs. (#766)
+    { encoding: "utf8", timeout: 30_000 },
   );
   expect(result.error).toBeUndefined();
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-});
+}, 60_000);

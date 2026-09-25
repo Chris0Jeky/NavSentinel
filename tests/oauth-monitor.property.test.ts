@@ -88,8 +88,6 @@ function makeOAuthUrl(
 
 function makeFlow(overrides: Partial<OAuthFlowState> = {}): OAuthFlowState {
   return {
-    initiatorUrl: "https://app.example.com",
-    consentUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     expectedCallbackDomain: "app.example.com",
     startedAt: Date.now(),
     phase: "consent",
@@ -533,8 +531,7 @@ describe("isUnexpectedCallback property tests", () => {
       const flow = makeFlow({
         expectedCallbackDomain: "app.example.com",
         phase,
-        initiatorUrl: "https://random.site.com",
-        consentUrl: "https://different.provider.com/auth",
+        startedAt: 123456789,
       });
       expect(isUnexpectedCallback(flow, "https://app.example.com/cb")).toBe(false);
       expect(isUnexpectedCallback(flow, "https://evil.com/cb")).toBe(true);
