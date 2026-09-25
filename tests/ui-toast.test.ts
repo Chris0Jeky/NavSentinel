@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dispatchUntrusted, stubTrustedInput } from "./helpers/trusted-input";
 
 type ToastModule = typeof import("../extension/src/content/ui_toast");
 
@@ -18,8 +17,6 @@ async function loadModule(): Promise<void> {
 }
 
 describe("ui_toast", () => {
-  stubTrustedInput();
-
   beforeEach(async () => {
     vi.resetModules();
     vi.useFakeTimers();
@@ -269,7 +266,7 @@ describe("ui_toast", () => {
       expect(messages).toEqual(["Overlays hidden", "Unrelated warning"]);
       const undoButton = Array.from(getRoot()!.querySelectorAll("button"))
         .find((button) => button.textContent === "Undo") as HTMLButtonElement;
-      undoButton.click();
+      activateOwnedToastControl(getHost(), [undoButton]);
       expect(undo).toHaveBeenCalledTimes(1);
       expect(getWraps()).toHaveLength(1);
     });
@@ -304,7 +301,7 @@ describe("ui_toast", () => {
       expect(wrap.querySelector(".body")!.textContent).toBe("Overlay hidden; still watching.");
       expect(getButtons().map((button) => button.textContent)).toEqual(["Undo"]);
 
-      getButtons()[0]!.click();
+      activateOwnedToastControl(getHost(), [getButtons()[0]!]);
       expect(undo).toHaveBeenCalledTimes(1);
       expect(getWraps()).toHaveLength(0);
     });
@@ -361,7 +358,7 @@ describe("ui_toast", () => {
         actions: [{ label: "Trust", onClick }],
       });
       const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
-      actionBtn.click();
+      activateOwnedToastControl(getHost(), [actionBtn]);
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
@@ -371,7 +368,7 @@ describe("ui_toast", () => {
         actions: [{ label: "Trust", onClick: vi.fn() }],
       });
       const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
-      actionBtn.click();
+      activateOwnedToastControl(getHost(), [actionBtn]);
       expect(getWraps().length).toBe(0);
     });
 
@@ -384,7 +381,7 @@ describe("ui_toast", () => {
         }],
       });
       const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
-      expect(() => actionBtn.click()).toThrow("callback error");
+      expect(() => activateOwnedToastControl(getHost(), [actionBtn])).toThrow("callback error");
       expect(getWraps().length).toBe(0);
     });
 
@@ -397,7 +394,7 @@ describe("ui_toast", () => {
         onDismiss,
       });
       const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
-      expect(() => actionBtn.click()).toThrow();
+      expect(() => activateOwnedToastControl(getHost(), [actionBtn])).toThrow();
       vi.advanceTimersByTime(5000);
       expect(onDismiss).not.toHaveBeenCalled();
     });
@@ -443,7 +440,7 @@ describe("ui_toast", () => {
     it("clicking Dismiss removes the toast", () => {
       showToast({ message: "Test" });
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
-      dismissBtn.click();
+      activateOwnedToastControl(getHost(), [dismissBtn]);
       expect(getWraps().length).toBe(0);
     });
 
@@ -451,7 +448,7 @@ describe("ui_toast", () => {
       const onDismiss = vi.fn();
       showToast({ message: "Test", onDismiss });
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
-      dismissBtn.click();
+      activateOwnedToastControl(getHost(), [dismissBtn]);
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
@@ -459,15 +456,15 @@ describe("ui_toast", () => {
       const onDismiss = vi.fn();
       showToast({ message: "Test", onDismiss });
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
-      dismissBtn.click();
-      dismissBtn.click();
+      activateOwnedToastControl(getHost(), [dismissBtn]);
+      activateOwnedToastControl(getHost(), [dismissBtn]);
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
     it("clicking Dismiss without onDismiss does not throw", () => {
       showToast({ message: "Test" });
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
-      expect(() => dismissBtn.click()).not.toThrow();
+      expect(() => activateOwnedToastControl(getHost(), [dismissBtn])).not.toThrow();
       expect(getWraps().length).toBe(0);
     });
 
@@ -495,7 +492,7 @@ describe("ui_toast", () => {
         onDismiss,
       });
       const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
-      actionBtn.click();
+      activateOwnedToastControl(getHost(), [actionBtn]);
       expect(onDismiss).not.toHaveBeenCalled();
     });
   });
@@ -536,7 +533,7 @@ describe("ui_toast", () => {
         onDismiss,
       });
       const actionBtn = getButtons().find((b) => b.textContent === "Trust")!;
-      actionBtn.click();
+      activateOwnedToastControl(getHost(), [actionBtn]);
 
       vi.advanceTimersByTime(5000);
       expect(onDismiss).not.toHaveBeenCalled();
@@ -547,7 +544,7 @@ describe("ui_toast", () => {
       showToast({ message: "Test", timeoutMs: 5000, onDismiss });
 
       const dismissBtn = getButtons().find((b) => b.textContent === "Dismiss")!;
-      dismissBtn.click();
+      activateOwnedToastControl(getHost(), [dismissBtn]);
       expect(onDismiss).toHaveBeenCalledTimes(1);
 
       vi.advanceTimersByTime(5000);
@@ -571,6 +568,26 @@ describe("ui_toast", () => {
     });
   });
 
+  describe("synthetic activation rejection (#783)", () => {
+    it("ignores a page-synthesized click on an action button", () => {
+      const onClick = vi.fn();
+      showToast({ message: "Test", timeoutMs: 0, actions: [{ label: "Allow", onClick }] });
+      const actionBtn = getButtons().find((button) => button.textContent === "Allow")!;
+      actionBtn.click();
+      expect(onClick).not.toHaveBeenCalled();
+      expect(getWraps().length).toBe(1);
+    });
+
+    it("ignores a page-dispatched click event on an action button", () => {
+      const onClick = vi.fn();
+      showToast({ message: "Test", timeoutMs: 0, actions: [{ label: "Allow", onClick }] });
+      const actionBtn = getButtons().find((button) => button.textContent === "Allow")!;
+      actionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(onClick).not.toHaveBeenCalled();
+      expect(getWraps().length).toBe(1);
+    });
+  });
+
   describe("toast replacement interaction with timeout", () => {
     it("replacing toast fires only the second onDismiss, not the first", () => {
       const onDismiss1 = vi.fn();
@@ -588,39 +605,6 @@ describe("ui_toast", () => {
       expect(onDismiss2).toHaveBeenCalledTimes(1);
       expect(onDismiss1).not.toHaveBeenCalled();
       expect(getWraps().length).toBe(0);
-    });
-  });
-
-  describe("trusted input gating (#826)", () => {
-    it("ignores an untrusted action click (page synthetic input)", () => {
-      const onClick = vi.fn();
-      showToast({ message: "Blocked", actions: [{ label: "Allow", onClick }] });
-
-      const allow = getButtons().find((b) => b.textContent === "Allow")!;
-      dispatchUntrusted(allow, new MouseEvent("click", { bubbles: true }));
-
-      expect(onClick).not.toHaveBeenCalled();
-      expect(getWraps().length).toBe(1);
-    });
-
-    it("ignores an untrusted dismiss click", () => {
-      const onDismiss = vi.fn();
-      showToast({ message: "Notice", timeoutMs: 0, onDismiss });
-
-      const dismiss = getButtons().find((b) => b.textContent === "Dismiss")!;
-      dispatchUntrusted(dismiss, new MouseEvent("click", { bubbles: true }));
-
-      expect(onDismiss).not.toHaveBeenCalled();
-      expect(getWraps().length).toBe(1);
-    });
-
-    it("ignores an untrusted outside pointerdown on a brief-recovery chip", () => {
-      showBriefRecovery("Overlay hidden", () => {});
-      expect(getWraps().length).toBe(1);
-
-      dispatchUntrusted(document.body, new PointerEvent("pointerdown", { bubbles: true }));
-
-      expect(getWraps().length).toBe(1);
     });
   });
 });

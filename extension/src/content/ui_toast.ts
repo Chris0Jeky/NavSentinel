@@ -64,15 +64,13 @@ function isolateInteraction(event: Event): void {
 
 function bindControl(control: HTMLElement, action: () => void): void {
   controlActions.set(control, action);
-  // Direct listener: the fallback for non-browser unit DOMs (and for engines
-  // where the document-start fence failed to install). Trusted browser input
-  // normally never reaches it because the fence consumes that input at window
-  // capture and calls activateOwnedToastControl instead — but page script CAN
-  // reach it with synthetic clicks through the open shadow root, so untrusted
-  // input is rejected here. isTrusted is unforgeable in Chrome (verified by
-  // experiment: redefining it throws), so this gate is airtight. (#826)
-  control.addEventListener("click", (event) => {
-    if (!event.isTrusted) return;
+  // Direct listener: in a real browser the document-start fence consumes
+  // trusted input at window capture and calls activateOwnedToastControl
+  // instead, so this listener only ever sees page-synthesized clicks — which
+  // must never activate a control (#783). Unit tests drive activation through
+  // activateOwnedToastControl directly.
+  control.addEventListener("click", (e) => {
+    if (!e.isTrusted) return;
     action();
   });
 }
@@ -374,7 +372,7 @@ function showOrUpdatePill(): void {
     };
     bindControl(pill, expand);
     pill.addEventListener("keydown", (e) => {
-      if (e instanceof KeyboardEvent && (e.key === "Enter" || e.key === " ")) {
+      if (e instanceof KeyboardEvent && e.isTrusted && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         expand();
       }

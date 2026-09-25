@@ -73,6 +73,36 @@ function clearFocusTrap(card: HTMLElement): void {
   state.getFallback = null;
 }
 
+const modalControlActions = new WeakMap<EventTarget, () => void>();
+
+/**
+ * Invoke the modal control found on a trusted event path, mirroring
+ * `activateOwnedToastControl`: ownership is decided by identity, never by id
+ * or attribute — `eventHost` must be the element this module created, and the
+ * control must be one this module bound. A page-created element that copies
+ * the host id therefore cannot activate a real control. The direct button
+ * listeners below only accept trusted clicks, so unit tests (which cannot
+ * forge trusted input) drive activation through this relay instead. (#783)
+ */
+export function activateOwnedModalControl(
+  eventHost: unknown,
+  path: readonly unknown[],
+): boolean {
+  if (!host || eventHost !== host) return false;
+  for (const node of path) {
+    if (node === host) return false;
+    const action =
+      typeof node === "object" && node !== null
+        ? modalControlActions.get(node as EventTarget)
+        : undefined;
+    if (action) {
+      action();
+      return true;
+    }
+  }
+  return false;
+}
+
 installGlobalFocusTrap();
 
 function listFocusable(rootNode: ParentNode): HTMLElement[] {
@@ -275,7 +305,12 @@ function ensureHost(): void {
 
 function removeModal(): void {
   if (!root) return;
-  root.querySelectorAll(".overlay").forEach((n) => n.remove());
+  root.querySelectorAll(".overlay").forEach((n) => {
+    // A detached control must never fire again, even if a stale reference
+    // reaches activateOwnedModalControl later.
+    n.querySelectorAll("button").forEach((control) => modalControlActions.delete(control));
+    n.remove();
+  });
 }
 
 export function showCredentialModal(spec: ModalSpec): Promise<string> {
@@ -458,12 +493,13 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       const kind = action.kind ?? "neutral";
       if (kind === "primary") btn.classList.add("primary");
       if (kind === "danger") btn.classList.add("danger");
-      // Trusted input only: page script reaches these buttons through the open
-      // shadow root, and a synthetic click must never resolve a security
-      // prompt. isTrusted is unforgeable in Chrome (verified by experiment:
-      // redefining it throws), so this gate is airtight. (#826)
-      btn.addEventListener("click", (event) => {
-        if (!event.isTrusted) return;
+      // Trusted input only: a hostile page shares this DOM and could
+      // otherwise self-approve the prompt with a synthesized click (#783).
+      // Keyboard activation (Enter/Space) produces trusted clicks, so
+      // keyboard and assistive-technology users are unaffected.
+      modalControlActions.set(btn, () => done(action.id));
+      btn.addEventListener("click", (e) => {
+        if (!e.isTrusted) return;
         done(action.id);
       });
       footer.appendChild(btn);
