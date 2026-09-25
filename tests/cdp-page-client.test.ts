@@ -33,7 +33,8 @@ class FakeCdpSocket {
     const request = JSON.parse(raw) as CdpRequest;
     this.sent.push(request);
     if (this.readyState !== WebSocket.OPEN) {
-      throw new Error("WebSocket is not open: readyState is CLOSED");
+      // WHATWG WebSocket silently drops sends made after CLOSING/CLOSED.
+      return;
     }
     if (request.method === "Runtime.evaluate") {
       const outcome: EvaluateOutcome = this.outcomes.shift() ?? { kind: "value", value: false };
@@ -117,7 +118,26 @@ describe("CdpPageClient.waitFor socket diagnostics (#918)", () => {
     expect(failure?.message).toContain(predicate);
     expect(failure?.message).toMatch(/socket closed|not open/i);
     expect(failure?.message).not.toMatch(/timed out/);
-    // Prompt: a single evaluate attempt, not a full polling loop.
+    expect(socket.sent.length).toBe(0);
+  });
+
+  it("rejects when the socket closes between false-predicate polls", async () => {
+    const socket = new FakeCdpSocket();
+    socket.enqueueValue(false);
+    const client = attachFake("popup", socket);
+    const predicate = "document.getElementById('late')";
+
+    const waiting = client.waitFor(predicate, 1000);
+    setTimeout(() => socket.close(), 0);
+    const failure = await waiting.then(
+      () => null,
+      (error: unknown) => error as Error,
+    );
+
+    expect(failure?.message).toContain("popup");
+    expect(failure?.message).toContain(predicate);
+    expect(failure?.message).toContain("socket closed");
+    expect(failure?.message).not.toContain("timed out");
     expect(socket.sent.length).toBe(1);
   });
 

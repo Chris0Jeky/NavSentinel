@@ -114,6 +114,9 @@ export class CdpPageClient {
   }
 
   send<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    // A closed WHATWG WebSocket may discard send() without throwing. The close
+    // event may already have fired, leaving a newly registered request pending.
+    if (this.closed) return Promise.reject(new Error(`${this.label} DevTools socket closed before ${method}`));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
