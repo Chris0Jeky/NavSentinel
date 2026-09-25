@@ -31,6 +31,18 @@ const loader = fs.readFileSync(loaderPath, "utf8");
 const digest = assertContentAddressedLoader(captureScript, loader);
 const revision = assertUiGuardRevision(loader);
 
+const mainScript = manifest.content_scripts
+  ?.find((entry) => entry.world === "MAIN" && /main_guard/.test(entry.js?.[0] ?? ""))
+  ?.js?.[0];
+if (!mainScript) throw new Error("MAIN-world guard content-script loader is missing");
+const mainPath = path.join(dist, mainScript);
+if (!fs.existsSync(mainPath)) throw new Error(`Manifest MAIN-world guard loader does not exist: ${mainScript}`);
+const mainLoader = fs.readFileSync(mainPath, "utf8");
+assertContentAddressedLoader(mainScript, mainLoader);
+if (!mainLoader.includes("Object.defineProperty(globalThis,'__navsentinelMainDateNow'")) {
+  throw new Error("MAIN-world guard loader is missing early clock capture");
+}
+
 console.log(
   `[content-loader] final isolated capture loader identity OK; revision=` +
   `${revision}; sha256=${digest}`,

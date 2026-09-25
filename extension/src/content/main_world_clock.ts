@@ -1,9 +1,11 @@
 /**
- * MAIN-world code shares the page's JavaScript realm. Capture Date.now at
- * module initialization so a later page replacement cannot forge TTL and
- * correlation timestamps produced by NavSentinel.
+ * MAIN-world code shares the page's JavaScript realm. The synchronous
+ * document_start loader captures Date.now before its async module import.
+ * Its non-writable window property survives an intervening page script.
  */
-const capturedDateNow = Date.now.bind(Date);
+const capturedDateNow = (globalThis as typeof globalThis & {
+  __navsentinelMainDateNow?: () => number;
+}).__navsentinelMainDateNow ?? Date.now.bind(Date);
 
 export function mainWorldNowMs(): number {
   return capturedDateNow();
