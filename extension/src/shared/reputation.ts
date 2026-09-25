@@ -111,6 +111,15 @@ export interface BloomFilterState {
 }
 
 /**
+ * Apply the binary loader's probe-count cap to directly constructed filters.
+ * Positivity/integrality alone still permits huge finite integers and can
+ * exhaust the CPU. Invalid counts must not enter either probe loop. (#805)
+ */
+function isUsableK(k: number): boolean {
+  return Number.isInteger(k) && k > 0 && k <= MAX_HASH_FUNCTIONS;
+}
+
+/**
  * Deserialize a bloom filter from its binary representation.
  *
  * Format:
@@ -189,7 +198,11 @@ export function checkDomain(filter: BloomFilterState, domain: string): boolean {
   // probe reads bit 0), which would return true for every domain (100% FP). A
   // filter from loadFilter can never be sub-byte, but checkDomain is exported
   // and could be called with a directly-constructed filter. (#292)
-  if (!filter.bits || filter.m < MIN_FILTER_BITS || filter.k === 0) return false;
+  //
+  // Use the same bounded positive-integer count as loadFilter, including for
+  // hand-constructed filters. This prevents vacuous matches and unbounded
+  // probing without changing valid loaded-filter behavior. (#805)
+  if (!filter.bits || filter.m < MIN_FILTER_BITS || !isUsableK(filter.k)) return false;
   if (!domain) return false;
 
   const key = domain.toLowerCase();
@@ -235,8 +248,9 @@ export function serializeFilter(filter: BloomFilterState): Uint8Array {
  * @internal
  *
  * Raw constructor with no validation: callers are responsible for ensuring
- * m >= MIN_FILTER_BITS and k > 0 if the filter is to be used with
- * insertDomain/checkDomain (both treat a sub-byte or k=0 filter as inert). (#292)
+ * m >= MIN_FILTER_BITS and integer k in [1, MAX_HASH_FUNCTIONS] if the filter
+ * is to be used with insertDomain/checkDomain (both treat a sub-byte filter
+ * or an out-of-range probe count as inert). (#292, #805)
  *
  * @param m Number of bits
  * @param k Number of hash functions
@@ -257,9 +271,10 @@ export function createFilter(m: number, k: number): BloomFilterState {
  */
 export function insertDomain(filter: BloomFilterState, domain: string): void {
   // Mirror checkDomain / loadFilter: never write into a degenerate filter --
-  // a sub-byte m (m < MIN_FILTER_BITS) or k=0. The k=0 case is also covered by
-  // the empty for-loop below; the explicit guard keeps parity with checkDomain. (#292)
-  if (!domain || filter.m < MIN_FILTER_BITS || filter.k === 0) return;
+  // a sub-byte m (m < MIN_FILTER_BITS) or an unusable k. The k=0 case is also
+  // covered by the empty for-loop below; the explicit guard keeps parity with
+  // checkDomain (and k = Infinity would hang the loop without it). (#292, #805)
+  if (!domain || filter.m < MIN_FILTER_BITS || !isUsableK(filter.k)) return;
   const key = domain.toLowerCase();
   const h1 = murmurhash3_32(key, 0x9747b28c);
   // Force h2 to be odd -- must match checkDomain's h2 derivation.
@@ -280,7 +295,8 @@ export function insertDomain(filter: BloomFilterState, domain: string): void {
  * @internal
  *
  * m = -(n * ln(p)) / (ln(2))^2
- * k = (m / n) * ln(2)
+ * k = (m / n) * ln(2), capped at MAX_HASH_FUNCTIONS. At extreme requested
+ * rates this CPU safety cap takes precedence over the target FP rate.
  *
  * @param n Number of items
  * @param p Target false positive rate (e.g. 0.0001 for 0.01%)
@@ -292,7 +308,8 @@ export function optimalParams(n: number, p: number): { m: number; k: number } {
   // Clamp to the MIN_FILTER_BITS floor so optimalParams never suggests a sub-byte
   // filter that loadFilter would then reject (e.g. n=1, p=0.49 -> raw m=2). (#292)
   const m = Math.max(MIN_FILTER_BITS, Math.ceil((-n * Math.log(p)) / (Math.LN2 * Math.LN2)));
-  const k = Math.max(1, Math.round((m / n) * Math.LN2));
+  // Keep the helper pipeline usable by insertDomain/checkDomain/loadFilter.
+  const k = Math.min(MAX_HASH_FUNCTIONS, Math.max(1, Math.round((m / n) * Math.LN2)));
   return { m, k };
 }
 

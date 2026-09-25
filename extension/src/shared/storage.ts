@@ -1045,17 +1045,51 @@ function stripUrlQueryAndFragment(raw: string): string {
   return raw.slice(0, end);
 }
 
+/**
+ * Cap a persisted journal display string (#299/#829). Live callers pass raw
+ * page-derived values (e.g. `url: location.href`), so an uncapped megabyte-scale
+ * page path would persist verbatim and exhaust the shared chrome.storage.local
+ * quota. Non-strings pass through untouched for downstream shape validation.
+ */
+function capEventString(value: string): string {
+  return typeof value !== "string" || value.length <= MAX_EVENT_STRING_LEN
+    ? value
+    : value.slice(0, MAX_EVENT_STRING_LEN);
+}
+
+/**
+ * Keep a journal `extra` payload only when it serializes within budget
+ * (#299/#829). Oversized or unserializable (cyclic) extras are dropped
+ * fail-closed; the entry itself persists. Shared by the live-append and
+ * import paths.
+ */
+function sanitizeEventExtra(extra: Record<string, unknown>): Record<string, unknown> | undefined {
+  try {
+    const json = JSON.stringify(extra);
+    // UTF-16 length is only an inexpensive lower bound on the encoded size.
+    if (typeof json !== "string" || json.length > MAX_EVENT_EXTRA_BYTES
+      || new TextEncoder().encode(json).byteLength > MAX_EVENT_EXTRA_BYTES) return undefined;
+    // Persist the admitted snapshot, not a caller-owned object that can grow
+    // while the serialized write waits for storage or an earlier operation.
+    const snapshot: unknown = JSON.parse(json);
+    return isRecord(snapshot) ? snapshot : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
+  const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra);
   return {
-    id: partial.id ?? makeId(),
+    id: capEventString(partial.id ?? makeId()),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(pageSite === undefined ? {} : { pageSite }),
-    ...(partial.site !== undefined ? { site: partial.site } : {}),
+    ...(partial.site !== undefined ? { site: capEventString(partial.site) } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
-    ...(partial.url !== undefined ? { url: minimizeEventUrl(partial.url) } : {}),
-    ...(partial.destHost !== undefined ? { destHost: partial.destHost } : {}),
+    ...(partial.url !== undefined ? { url: capEventString(minimizeEventUrl(partial.url)) } : {}),
+    ...(partial.destHost !== undefined ? { destHost: capEventString(partial.destHost) } : {}),
     ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
     // malformed runtime append message could carry non-string reasons; left raw, the
@@ -1063,7 +1097,7 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     // silently drop it (mistaking the drop for an intentional silent-decision eviction).
     // Sanitizing keeps the entry valid (and bounds per-entry size, cf. #299). (#339)
     ...(partial.reasons !== undefined ? { reasons: sanitizeCodeList(partial.reasons) ?? [] } : {}),
-    ...(partial.extra !== undefined ? { extra: partial.extra } : {})
+    ...(extra !== undefined ? { extra } : {})
   };
 }
 
@@ -1436,32 +1470,29 @@ function sanitizeCodeList(value: unknown): string[] | undefined {
  * Bound the content of a (shape-valid) imported EventLogEntry so a crafted backup cannot exhaust
  * the shared chrome.storage.local quota (#299). Mirrors the re-sanitization the PromptOutcome
  * import path already does (buildPromptOutcomeRecord): caps the string fields, reuses
- * sanitizeCodeList for reasons, and drops an oversized/unserializable `extra`. Import-only — the
- * live-append path (buildEventLogEntry) is fed by trusted internal code, not user-supplied JSON.
+ * sanitizeCodeList for reasons, and drops an oversized/unserializable `extra`. The caps are
+ * shared with the live-append path (buildEventLogEntry, #829), which likewise persists
+ * page-derived values — the two paths cannot drift apart.
  */
 function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // Caps by UTF-16 code-unit count (not bytes); a percent-encoded tail could be sliced mid-sequence,
   // but the stored strings are display-only (no caller parses them via new URL/decodeURIComponent), so
   // a truncated tail is at worst cosmetic. (#299 R2)
-  const cap = (s: string): string => (s.length > MAX_EVENT_STRING_LEN ? s.slice(0, MAX_EVENT_STRING_LEN) : s);
-  const out: EventLogEntry = { id: cap(e.id), ts: e.ts, kind: e.kind };
+  const out: EventLogEntry = { id: capEventString(e.id), ts: e.ts, kind: e.kind };
   const pageSite = normalizeEventPageSite(e.pageSite);
   if (pageSite !== undefined) out.pageSite = pageSite;
-  if (e.site !== undefined) out.site = cap(e.site);
-  if (e.url !== undefined) out.url = cap(minimizeEventUrl(e.url));
-  if (e.destHost !== undefined) out.destHost = cap(e.destHost);
+  if (e.site !== undefined) out.site = capEventString(e.site);
+  if (e.url !== undefined) out.url = capEventString(minimizeEventUrl(e.url));
+  if (e.destHost !== undefined) out.destHost = capEventString(e.destHost);
   if (e.score !== undefined) out.score = e.score;
   // reasons elements are already strings here (isEventLogEntry pre-filtered them in
   // normalizeEventLog); sanitizeCodeList only applies the count (32) + per-string-length (80) caps.
   const reasons = sanitizeCodeList(e.reasons);
   if (reasons !== undefined) out.reasons = reasons;
   if (e.extra !== undefined) {
-    try {
-      if (JSON.stringify(e.extra).length <= MAX_EVENT_EXTRA_BYTES) out.extra = e.extra;
-      // else: drop the oversized extra (fail closed) — keep the entry, shed the bloat.
-    } catch {
-      // Unserializable extra (cycles, etc.) — drop it.
-    }
+    // Drop the oversized extra (fail closed) — keep the entry, shed the bloat.
+    const extra = sanitizeEventExtra(e.extra);
+    if (extra !== undefined) out.extra = extra;
   }
   return out;
 }
@@ -1526,6 +1557,9 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   const out: ClickContext = { viewport, input: c.input === "keyboard" ? "keyboard" : "pointer", top };
   const underlying = sanitizeElementHint(c.underlying);
   if (underlying) out.underlying = underlying;
+  // computeCDS consumes inTop (benign-container suppression); dropping it
+  // made replayed CDS diverge +35 from the live score (#794).
+  if (typeof c.inTop === "boolean") out.inTop = c.inTop;
   if (typeof c.retargeted === "boolean") out.retargeted = c.retargeted;
   if (typeof c.explicitNewTabIntent === "boolean") out.explicitNewTabIntent = c.explicitNewTabIntent;
   if (typeof c.isLegitModalBackdrop === "boolean") out.isLegitModalBackdrop = c.isLegitModalBackdrop;

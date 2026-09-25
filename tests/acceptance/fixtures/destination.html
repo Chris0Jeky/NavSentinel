@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><title>Acceptance destination</title></head>
+<body>
+  <h1>Acceptance destination</h1>
+  <p id="opener"></p>
+  <script>
+    const openerLive = window.opener !== null;
+    document.documentElement.dataset.acceptanceOpener = String(openerLive);
+    document.getElementById("opener").textContent = `window.opener is ${openerLive ? "live" : "null"}`;
+  </script>
+</body>
+</html>
