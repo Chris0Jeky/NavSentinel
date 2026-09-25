@@ -61,7 +61,11 @@ export interface JsCredentialReadSignal {
 }
 
 import type { JsBehaviorMonitorConfig } from "./js_behavior_monitor.types";
-import { queryPasswordInputs } from "./password_field";
+import {
+  hasVisiblePasswordField,
+  isVisiblePasswordField,
+  queryPasswordInputs,
+} from "./password_field";
 
 export type { JsBehaviorMonitorConfig };
 
@@ -95,9 +99,6 @@ export const CREDENTIAL_READ_DEBOUNCE_MS = 500;
 /** Maximum tracked recent form submissions. */
 const MAX_RECENT_FORM_SUBMITS = 10;
 
-/** Maximum tracked recent network requests for correlation. */
-const MAX_RECENT_NETWORK_REQUESTS = 20;
-
 export {
   type JsBehaviorState,
   JS_BEHAVIOR_STATE_TTL_MS,
@@ -122,22 +123,16 @@ interface FormSubmitRecord {
   hasCredentials: boolean;
 }
 
-/** Recent network requests tracked for correlation. */
-interface NetworkRequestRecord {
-  ts: number;
-  destinationOrigin: string;
-  api: "fetch" | "xhr" | "beacon";
-}
-
 let _recentFormSubmits: FormSubmitRecord[] = [];
-let _recentNetworkRequests: NetworkRequestRecord[] = [];
-let _lastCredentialReadTs = 0;
 let _isInsideFormSubmit = false;
 let _config: JsBehaviorMonitorConfig | null = null;
 let _formSubmitPatched = false;
 
 /** Tracks original form action values at DOM parse time. */
 let _originalFormActions = new WeakMap<HTMLFormElement, string>();
+
+/** Tracks original submitter `formaction` values at DOM parse time. */
+let _originalSubmitterActions = new WeakMap<HTMLElement, string>();
 
 let _formObserver: MutationObserver | null = null;
 let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
@@ -154,12 +149,49 @@ function recordOriginalAction(form: HTMLFormElement): void {
   }
 }
 
-/** Scan existing forms on page and record their initial actions. */
+/** Record a submitter's initial `formaction` value for later comparison. */
+function recordOriginalSubmitterAction(submitter: HTMLElement): void {
+  if (!_originalSubmitterActions.has(submitter)) {
+    _originalSubmitterActions.set(submitter, submitter.getAttribute("formaction") ?? "");
+  }
+}
+
+/** Scan existing forms and submitter overrides and record their initial actions. */
 function snapshotExistingForms(): void {
   const forms = document.querySelectorAll("form");
   for (let i = 0; i < forms.length; i++) {
     recordOriginalAction(forms[i] as HTMLFormElement);
   }
+  const submitters = document.querySelectorAll("[formaction]");
+  for (let i = 0; i < submitters.length; i++) {
+    recordOriginalSubmitterAction(submitters[i] as HTMLElement);
+  }
+}
+
+/** Resolve a raw action attribute using browser form-submission base semantics. */
+function resolveAgainstBase(raw: string): string {
+  if (!raw.trim()) return location.href;
+  try {
+    return new URL(raw, document.baseURI).toString();
+  } catch {
+    return location.href;
+  }
+}
+
+/**
+ * Resolve the effective form destination. A present-but-empty `formaction`
+ * overrides the form action and means the current document; only a missing
+ * submitter attribute inherits the form action. (#818)
+ */
+function resolveEffectiveSubmitAction(
+  submitterAction: string | null,
+  formAction: string | null,
+): string {
+  return resolveAgainstBase(submitterAction ?? formAction ?? "");
+}
+
+function resolveActionOrigin(raw: string): string {
+  return raw.trim() ? extractOrigin(raw) : location.origin;
 }
 
 /** Handle a form submit event and emit signals if suspicious. */
@@ -167,17 +199,33 @@ function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null)
   if (!_config || _config.mode === "off") return;
 
   recordOriginalAction(form);
+  if (submitter) recordOriginalSubmitterAction(submitter);
+
   const hasCredentials = formHasCredentialFields(form);
-  const submitterFormAction = submitter?.getAttribute("formaction") ?? "";
-  const action = submitterFormAction || form.action || location.href;
+  const submitterFormAction = submitter?.getAttribute("formaction") ?? null;
+  const formAction = form.getAttribute("action");
+  const action = resolveEffectiveSubmitAction(submitterFormAction, formAction);
   const crossOrigin = isCrossOriginUrl(action);
-  const originalAction = _originalFormActions.get(form) ?? "";
-  const resolvedOriginal = originalAction
-    ? extractOrigin(originalAction)
-    : location.origin;
   const resolvedCurrent = extractOrigin(action);
+
+  const originalFormAction = _originalFormActions.get(form) ?? "";
+  const currentFormAction = formAction ?? "";
+  const submitterOverridesForm = submitter?.hasAttribute("formaction") ?? false;
+  const formDynamicallyChanged =
+    !submitterOverridesForm &&
+    originalFormAction !== currentFormAction &&
+    resolveActionOrigin(originalFormAction) !== resolveActionOrigin(currentFormAction);
+
+  const originalSubmitterAction = submitter
+    ? (_originalSubmitterActions.get(submitter) ?? "")
+    : "";
+  const currentSubmitterAction = submitterFormAction ?? "";
+  const submitterDynamicallyChanged =
+    !!submitter &&
+    originalSubmitterAction !== currentSubmitterAction &&
+    resolveActionOrigin(originalSubmitterAction) !== resolveActionOrigin(currentSubmitterAction);
   const actionDynamicallyChanged =
-    resolvedOriginal !== resolvedCurrent && originalAction !== (form.getAttribute("action") ?? "");
+    formDynamicallyChanged || submitterDynamicallyChanged;
 
   const now = Date.now();
 
@@ -221,13 +269,18 @@ function patchFormSubmitMonitoring(): void {
       const added = mutations[mi]!.addedNodes;
       for (let ni = 0; ni < added.length; ni++) {
         const node = added[ni];
-        if (node instanceof HTMLFormElement) {
-          recordOriginalAction(node);
-        } else if (node instanceof HTMLElement) {
-          const forms = node.querySelectorAll("form");
-          for (let fi = 0; fi < forms.length; fi++) {
-            recordOriginalAction(forms[fi] as HTMLFormElement);
-          }
+        if (!(node instanceof HTMLElement)) continue;
+
+        if (node instanceof HTMLFormElement) recordOriginalAction(node);
+        if (node.hasAttribute("formaction")) recordOriginalSubmitterAction(node);
+
+        const forms = node.querySelectorAll("form");
+        for (let fi = 0; fi < forms.length; fi++) {
+          recordOriginalAction(forms[fi] as HTMLFormElement);
+        }
+        const submitters = node.querySelectorAll("[formaction]");
+        for (let si = 0; si < submitters.length; si++) {
+          recordOriginalSubmitterAction(submitters[si] as HTMLElement);
         }
       }
     }
@@ -278,20 +331,13 @@ let _xhrPatched = false;
 let _beaconPatched = false;
 
 function pageHasCredentialFields(): boolean {
-  // Attribute-presence disabled check, exactly like the `:not([disabled])`
-  // selector this replaces (NOT the `disabled` IDL, which would additionally
-  // exclude fieldset-disabled inputs). (#820)
-  return queryPasswordInputs(document).some((el) => !el.hasAttribute("disabled"));
+  return hasVisiblePasswordField(document);
 }
 
 function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | "beacon"): void {
   if (!_config || _config.mode === "off") return;
 
   const now = Date.now();
-  _recentNetworkRequests.push({ ts: now, destinationOrigin, api });
-  if (_recentNetworkRequests.length > MAX_RECENT_NETWORK_REQUESTS) {
-    _recentNetworkRequests.shift();
-  }
 
   if (destinationOrigin === location.origin || !destinationOrigin) return;
 
@@ -510,7 +556,6 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
             const lastRead = _credReadDebounceMap.get(this) ?? 0;
             if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
               _credReadDebounceMap.set(this, now);
-              _lastCredentialReadTs = now;
               const signal: JsCredentialReadSignal = {
                 ts: now,
                 isInsideSubmitHandler: false,
@@ -587,14 +632,18 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  *
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
-  return queryPasswordInputs(form).length > 0;
+  const inputs = queryPasswordInputs(form);
+  for (let i = 0; i < inputs.length; i++) {
+    if (isVisiblePasswordField(inputs[i] as HTMLInputElement)) return true;
+  }
+  return false;
 }
 
 /**
  * Determine whether a URL is cross-origin relative to the current page.
  *
  * Compares the origin (protocol + host + port) of the given URL against
- * `location.origin`. Relative URLs are resolved against the current page.
+ * `location.origin`. Relative URLs are resolved against `document.baseURI`.
  *
  * @param url - The URL to check (absolute or relative)
  * @returns true if the URL resolves to a different origin
@@ -607,7 +656,7 @@ export function isCrossOriginUrl(url: string): boolean {
     return false;
   }
   try {
-    const resolved = new URL(url, location.href);
+    const resolved = new URL(url, document.baseURI);
     if (resolved.origin === "null") return false;
     return resolved.origin !== location.origin;
   } catch {
@@ -632,7 +681,7 @@ export function extractOrigin(url: string): string {
     return "";
   }
   try {
-    const resolved = new URL(url, location.href);
+    const resolved = new URL(url, document.baseURI);
     if (resolved.origin === "null") return "";
     return resolved.origin;
   } catch {
@@ -664,8 +713,6 @@ export function correlatesWithFormSubmit(requestTs: number): boolean {
  */
 export function _resetState(): void {
   _recentFormSubmits = [];
-  _recentNetworkRequests = [];
-  _lastCredentialReadTs = 0;
   _isInsideFormSubmit = false;
   _config = null;
 
@@ -682,6 +729,7 @@ export function _resetState(): void {
     _originalSubmitFn = null;
   }
   _originalFormActions = new WeakMap<HTMLFormElement, string>();
+  _originalSubmitterActions = new WeakMap<HTMLElement, string>();
   _formSubmitPatched = false;
 }
 
