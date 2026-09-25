@@ -18,6 +18,7 @@ import {
 } from "./credential_guard_model";
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
+import { queryPasswordInputs } from "./password_field";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
 
@@ -75,7 +76,7 @@ function isPasswordForm(form: HTMLFormElement): boolean {
         if (el) seen.add(el);
       }
     }
-    form.querySelectorAll('input[type="password"]').forEach((el) => seen.add(el));
+    queryPasswordInputs(form).forEach((el) => seen.add(el));
     return Array.from(seen).some(
       (el) => el instanceof HTMLInputElement && el.type === "password" && !el.disabled
     );
@@ -122,12 +123,22 @@ function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null):
     const probe = rawAttr.length > MAX_ACTION_SCAN_LEN
       ? rawAttr.slice(0, MAX_ACTION_SCAN_LEN)
       : rawAttr;
-    // Whitespace-only within the cap means a genuinely empty action -> current
-    // document. Past the cap we cannot say that cheaply, so fall through and let
-    // `new URL` decide (a wholly-whitespace value resolves to this document too).
-    if (!probe.trim() && rawAttr.length <= MAX_ACTION_SCAN_LEN) return location.href;
+    // Exactly-empty resolves to the current document per the spec empty rule
+    // (this also preserves the R1-5d formaction contract). Whitespace-only is
+    // NOT empty: the parser strips it and resolves to the BASE url, which
+    // differs from the document when a <base> element is present.
+    if (rawAttr.length === 0) return location.href;
+    // Whitespace-only within the cap means whitespace-only overall -> the base
+    // URL. Past the cap we cannot say that cheaply, so fall through and let
+    // `new URL` decide (a wholly-whitespace value resolves to base too).
+    if (!probe.trim() && rawAttr.length <= MAX_ACTION_SCAN_LEN) {
+      return new URL("", document.baseURI).href;
+    }
 
-    const resolved = new URL(rawAttr, location.href);
+    // Resolve against the document BASE url, like the browser's form submission
+    // algorithm: resolving against location.href lets a cross-origin <base>
+    // element smuggle a relative action cross-site past a same-site assessment.
+    const resolved = new URL(rawAttr, document.baseURI);
     // Scheme test on the parsed protocol rather than a lowercased prefix of the
     // raw string: same result without an O(len) toLowerCase allocation, and it
     // also catches schemes the URL parser normalizes (mixed case, embedded tabs

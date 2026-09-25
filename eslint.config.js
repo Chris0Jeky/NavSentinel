@@ -34,15 +34,30 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      "tests/helpers/happy-dom-mutation-observer-retention.mjs",
-      "tests/helpers/happy-dom-mutation-observer-retention-setup.mjs",
-    ],
+    // This dependency-free Node contract is JavaScript, not part of tsconfig.
+    // Keep normal lint rules active without requiring a TypeScript project.
+    files: ["tests/helpers/release-archive-adversarial.mjs"],
     languageOptions: {
       parserOptions: {
         project: false,
         projectService: false,
       },
+    },
+  },
+  {
+    // CommonJS preload loaded with `node --require`; also JavaScript outside
+    // tsconfig, so lint it without a TypeScript project.
+    files: ["tests/branded/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { require: "readonly", module: "writable", process: "readonly", __dirname: "readonly", setTimeout: "readonly", document: "readonly" },
+      parserOptions: {
+        project: false,
+        projectService: false,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
   {

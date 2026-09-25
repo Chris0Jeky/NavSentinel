@@ -39,9 +39,12 @@ let pushStateAbuseUrl = "";
 export function handlePushStateBridgeMessage(
   type: string,
   data: { ts?: number; url?: string; method?: string; reason?: string },
+  receivedAtMs = Date.now(),
 ): boolean {
   if (type === "ns-pushstate-suspicious") {
-    pushStateAbuseTs = typeof data.ts === "number" ? data.ts : Date.now();
+    // MAIN-world producer time is page-controlled metadata. Freshness begins
+    // when the isolated world receives the authenticated bridge message.
+    pushStateAbuseTs = Number.isFinite(receivedAtMs) ? receivedAtMs : Date.now();
     pushStateAbuseUrl = typeof data.url === "string" ? data.url : "";
     return true;
   }

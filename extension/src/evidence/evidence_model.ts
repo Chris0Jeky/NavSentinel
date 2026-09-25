@@ -1,5 +1,6 @@
 import type { EventKind, EventLogEntry } from "../shared/storage";
 import { isKnownReasonCode } from "../shared/explanations";
+import { isJournalReasonCode } from "./evidence_reasons";
 
 /** Explicit wire vocabulary. A new runtime event needs deliberate export review. */
 export const EVIDENCE_KINDS = [
@@ -41,8 +42,12 @@ export function evidenceHostname(value: unknown): string | null {
   return host;
 }
 
-/** New objects from a strict allowlist; never spread stored/caller-owned entries. */
-export function projectEvidence(log: readonly EventLogEntry[]): EvidenceEvent[] {
+/**
+ * New objects from a strict allowlist; never spread stored/caller-owned entries.
+ * Reasons keep only codes from a finite registry: the journal keeps every code
+ * it can explain, and the export passes the portable registry instead (#867).
+ */
+export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (code: string) => boolean = isJournalReasonCode): EvidenceEvent[] {
   const events: EvidenceEvent[] = [];
   for (const entry of log.slice(-MAX_EVIDENCE_EVENTS)) {
     if (!entry || !kinds.has(entry.kind) || !Number.isFinite(entry.ts)) continue;
@@ -56,7 +61,7 @@ export function projectEvidence(log: readonly EventLogEntry[]): EvidenceEvent[] 
       destinationSite: evidenceHostname(entry.destHost),
       outcome: "recorded",
       reasons: Array.isArray(entry.reasons)
-        ? [...new Set(entry.reasons.filter(code => typeof code === "string" && isKnownReasonCode(code)))].slice(0, 16)
+        ? [...new Set(entry.reasons.filter(code => typeof code === "string" && isReasonCode(code)))].slice(0, 16)
         : [],
     };
     if (typeof entry.score === "number" && Number.isFinite(entry.score) && entry.score >= 0 && entry.score <= 100) event.score = entry.score;
@@ -67,12 +72,14 @@ export function projectEvidence(log: readonly EventLogEntry[]): EvidenceEvent[] 
 
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {
   // Re-project even a caller-supplied view so export cannot inherit extra fields.
+  // Only portable registry codes leave the browser: journal-only codes (credential
+  // risk and similar) are shown locally but are outside the Lab importer's vocabulary.
   const projected = projectEvidence(events.map(event => ({
     id: "", ts: Date.parse(event.timestamp), kind: event.kind,
     ...(event.sourceSite === null ? {} : { site: event.sourceSite }),
     ...(event.destinationSite === null ? {} : { destHost: event.destinationSite }),
     reasons: event.reasons, ...(event.score === undefined ? {} : { score: event.score }),
-  })));
+  })), isKnownReasonCode);
   return { format: "navsentinel-evidence", schema: 1, exportedAt: now.toISOString(),
     source: "navsentinel-extension", evidence: "recorded-observation", events: projected };
 }

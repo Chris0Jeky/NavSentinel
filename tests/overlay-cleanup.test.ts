@@ -194,6 +194,43 @@ describe("overlay cleanup", () => {
     expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
   });
 
+  it("still restores the hidden subset through undo when the budget is exhausted", () => {
+    const hidden: HTMLElement[] = [];
+    let last: ReturnType<typeof reconcileDetectedOverlay> = null;
+    for (let index = 0; index <= MAX_ACTIVE_OVERLAY_SUPPRESSIONS; index += 1) {
+      const overlay = makeOverlay();
+      last = reconcileDetectedOverlay(mutationAlert(overlay), true);
+      if (index < MAX_ACTIVE_OVERLAY_SUPPRESSIONS) hidden.push(overlay);
+    }
+
+    expect(last?.action).toBe("budget_exhausted");
+    expect(last?.undo()).toBe(true);
+    for (const overlay of hidden) {
+      expect(overlay.style.display).toBe("flex");
+    }
+    expect((document.body.lastElementChild as HTMLElement).style.display).toBe("flex");
+  });
+
+  it("undo removes the suppression stamp when the overlay had no prior inline display", () => {
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.color = "red";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+
+    const suppression = suppressOverlayElement(overlay);
+    expect(suppression).not.toBeNull();
+    expect(overlay.style.getPropertyValue("display")).toBe("none");
+    expect(overlay.style.getPropertyPriority("display")).toBe("important");
+
+    expect(suppression?.()).toBe(true);
+    expect(overlay.style.getPropertyValue("display")).toBe("");
+    expect(overlay.style.color).toBe("red");
+  });
+
   it("finds the high-severity overlay ancestor behind an already-blocked click", () => {
     const overlay = makeOverlay();
     const child = document.createElement("button");
@@ -239,5 +276,94 @@ describe("overlay cleanup", () => {
     expect(suppressOverlayElement(document.documentElement)).toBeNull();
     expect(suppressOverlayElement(document.body)).toBeNull();
     expect(suppressOverlayElement(impostor)).not.toBeNull();
+  });
+
+  it("skips a throwing `style` accessor without aborting the rest of the batch (#748)", () => {
+    const hostile = document.createElement("div");
+    Object.defineProperty(hostile, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+    document.body.appendChild(hostile);
+    const benign = makeOverlay();
+
+    let result: ReturnType<typeof reconcileDetectedOverlay>;
+    expect(() => {
+      result = reconcileDetectedOverlay(
+        { ...mutationAlert(hostile), elements: [hostile, benign] },
+        true,
+      );
+    }).not.toThrow();
+
+    expect(result!.action).toBe("suppressed");
+    expect(benign.style.getPropertyValue("display")).toBe("none");
+    expect(result!.undo()).toBe(true);
+    expect(benign.style.display).toBe("flex");
+  });
+
+  it("does not report an all-throwing batch as already hidden by an earlier group (#748)", () => {
+    const earlier = makeOverlay();
+    const first = reconcileDetectedOverlay(mutationAlert(earlier), true);
+    expect(first?.action).toBe("suppressed");
+
+    const hostile = document.createElement("div");
+    Object.defineProperty(hostile, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+    document.body.appendChild(hostile);
+
+    let result: ReturnType<typeof reconcileDetectedOverlay> = undefined as never;
+    expect(() => {
+      result = reconcileDetectedOverlay(mutationAlert(hostile), true, true);
+    }).not.toThrow();
+    // Nothing in this batch was hidden, so the caller must keep its warning.
+    expect(result).toBeNull();
+    expect(first!.undo()).toBe(true);
+  });
+
+  it("restores the remaining group when one record turns hostile before Undo (#748)", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const result = reconcileDetectedOverlay(
+      { ...mutationAlert(first), elements: [first, second] },
+      true,
+    );
+    expect(result).not.toBeNull();
+
+    Object.defineProperty(first, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+
+    expect(() => result!.undo()).not.toThrow();
+    expect(second.style.display).toBe("flex");
   });
 });

@@ -1844,7 +1844,7 @@ describe("service worker handlers", () => {
       expect(mismatchMsg).toBeUndefined();
     });
 
-    it("records the initiating page (not the consent URL) as initiatorUrl (#207)", async () => {
+    it("creates the flow on the consent nav with the redirect_uri domain captured (#207, #796)", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
 
@@ -1867,9 +1867,15 @@ describe("service worker handlers", () => {
           (m.message as { type: string }).type === "ns-oauth-flow-update" && m.tabId === 10,
       );
       expect(flowMsg).toBeDefined();
-      const flow = (flowMsg!.message as { flow: { initiatorUrl: string; consentUrl: string } }).flow;
-      expect(flow.initiatorUrl).toBe("https://app.example/start");
-      expect(flow.consentUrl).toBe(consentUrl);
+      // The flow carries only what mismatch detection reads (#796 dropped the
+      // write-only initiatorUrl/consentUrl): the redirect_uri domain captured
+      // at creation, plus phase/startedAt bookkeeping.
+      const flow = (flowMsg!.message as { flow: Record<string, unknown> }).flow;
+      expect(flow.expectedCallbackDomain).toBe("app.example");
+      expect(flow.phase).toBe("redirect");
+      expect(typeof flow.startedAt).toBe("number");
+      expect("initiatorUrl" in flow).toBe(false);
+      expect("consentUrl" in flow).toBe(false);
     });
 
     it("a typed/bookmarked cross-domain page carrying a generic ?code= does not fire a redirect-mismatch (#207 R1)", async () => {
@@ -2611,6 +2617,54 @@ describe("service worker handlers", () => {
       expect(mock.chrome.action.setBadgeBackgroundColor).not.toHaveBeenCalledWith(
         expect.objectContaining({ tabId: 10, color: "#16a34a" }),
       );
+    });
+
+    it("caches the enforced smart mode for a non-string stored mode instead of a stale off (#866)", async () => {
+      const mock = createChromeMock();
+      mock.chrome.storage.local.get = (async () => ({
+        [SUITE_SETTINGS_KEY]: { nav: { defaultMode: "off" } },
+      })) as unknown as typeof mock.chrome.storage.local.get;
+
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // A corrupt write replaces "off" with a non-string mode. Content scripts read it
+      // as "smart" and protect; pre-fix the worker ignored it and kept painting gray.
+      mock.emitStorageChanged(
+        {
+          [SUITE_SETTINGS_KEY]: {
+            oldValue: { nav: { defaultMode: "off" } },
+            newValue: { nav: { defaultMode: 7 } },
+          },
+        },
+        "local",
+      );
+      await vi.runAllTimersAsync();
+
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: "https://example.com/",
+        transitionType: "link",
+      });
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 10, color: "#16a34a" }),
+      );
+    });
+
+    it("an unknown stored mode string does not gray the tabs (#866)", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+      mock.chrome.tabs.query.mockClear();
+
+      mock.emitStorageChanged(
+        { [SUITE_SETTINGS_KEY]: { oldValue: {}, newValue: { nav: { defaultMode: "bogus" } } } },
+        "local",
+      );
+      await vi.runAllTimersAsync();
+      expect(mock.chrome.tabs.query).not.toHaveBeenCalled();
     });
 
     it("the deferred wake-up navigation waits for the mode read before painting (#303)", async () => {

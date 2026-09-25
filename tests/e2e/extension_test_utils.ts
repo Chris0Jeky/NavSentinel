@@ -156,12 +156,65 @@ export async function readToastText(page: Page): Promise<string | null> {
 }
 
 export async function clickToastButton(page: Page, label: string): Promise<void> {
+  // Trusted activation only (#783): extension-owned controls ignore
+  // page-synthesized clicks, so resolve the button's viewport coordinates
+  // in-page and drive a real (trusted) mouse click at that point — the same
+  // pattern as toast-input-fence.spec.ts.
+  const point = await page.evaluate((expected) => {
+    const host = document.querySelector("#__navsentinel_toast_host");
+    const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
+    const match = buttons.find((button) => button.textContent?.trim() === expected);
+    if (!(match instanceof HTMLButtonElement)) {
+      throw new Error(`Toast button not found: ${expected}`);
+    }
+    const rect = match.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  }, label);
+  await page.mouse.click(point.x, point.y);
+}
+
+/**
+ * Attempts a hostile-page-style synthetic activation of a toast button.
+ * Must NOT trigger the action (#783). Negative-path helper only.
+ */
+export async function attemptSyntheticToastClick(page: Page, label: string): Promise<void> {
   await page.evaluate((expected) => {
     const host = document.querySelector("#__navsentinel_toast_host");
     const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
     const match = buttons.find((button) => button.textContent?.trim() === expected);
     if (!(match instanceof HTMLButtonElement)) {
       throw new Error(`Toast button not found: ${expected}`);
+    }
+    match.click();
+  }, label);
+}
+
+export async function clickModalButton(page: Page, label: string): Promise<void> {
+  // Trusted activation only (#783): see clickToastButton.
+  const point = await page.evaluate((expected) => {
+    const host = document.querySelector("#__sentinelsuite_cred_modal_host__");
+    const buttons = Array.from(host?.shadowRoot?.querySelectorAll(".footer button") ?? []);
+    const match = buttons.find((button) => button.textContent?.trim() === expected);
+    if (!(match instanceof HTMLButtonElement)) {
+      throw new Error(`Modal button not found: ${expected}`);
+    }
+    const rect = match.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  }, label);
+  await page.mouse.click(point.x, point.y);
+}
+
+/**
+ * Attempts a hostile-page-style synthetic activation of a credential-modal
+ * button. Must NOT resolve the prompt (#783). Negative-path helper only.
+ */
+export async function attemptSyntheticModalClick(page: Page, label: string): Promise<void> {
+  await page.evaluate((expected) => {
+    const host = document.querySelector("#__sentinelsuite_cred_modal_host__");
+    const buttons = Array.from(host?.shadowRoot?.querySelectorAll(".footer button") ?? []);
+    const match = buttons.find((button) => button.textContent?.trim() === expected);
+    if (!(match instanceof HTMLButtonElement)) {
+      throw new Error(`Modal button not found: ${expected}`);
     }
     match.click();
   }, label);

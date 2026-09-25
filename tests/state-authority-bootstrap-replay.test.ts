@@ -63,7 +63,8 @@ for (const format of ["sha1", "sha256"] as const) {
       assert.deepEqual(receipt.args, ["--repository", repository, "--preflight-only"]);
       assert.notEqual(receipt.file, launcher);
       assert.equal(fs.existsSync(receipt.file), false, "The temporary launcher must be cleaned up");
-    });
+      // Same 60s cap as the sibling: identical git + node-spawn fixture. (#766)
+    }, 60_000);
 
     it("rejects a substituted loose object after proving the same repository can execute", () => {
       const { repository, oid, run } = fixture(format);
@@ -84,6 +85,9 @@ for (const format of ["sha1", "sha256"] as const) {
       assert.notEqual(result.status, 91);
       assert.doesNotMatch(result.stdout, /committed-launcher-ran|substituted-object-ran/u);
       assert.match(result.stderr, /corrupt|mismatch/iu);
-    });
+      // 60s cap: fixture runs git init/add/commit/rev-parse plus two node
+      // subprocess spawns (20s spawn cap each), which exceeds the 5s default
+      // under parallel load on Windows. (#766)
+    }, 60_000);
   });
 }

@@ -12,6 +12,7 @@ import {
   isMainGuardAlertType,
   isFloodableAlertType,
 } from "./bridge_outbound";
+import { looksLikeCommand } from "./command_keywords";
 import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
@@ -20,6 +21,7 @@ import {
   MAX_PENDING_OUTBOUND,
   RESERVED_SCARCE_OUTBOUND_SLOTS,
 } from "./main_guard_constants";
+import { mainWorldNowMs as nowMs } from "./main_world_clock";
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -152,6 +154,10 @@ let openCount = 0;
 let redirectCount = 0;
 let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
+// URL the one-shot allowance is bound to. Without the binding, the first
+// window.open inside the TTL window consumes the allowance regardless of
+// destination, so a racing open can ride a user's Allow-once click (#851).
+let allowOnceUrl = "";
 let allowOpenUntil = 0;
 let allowRedirectUntil = 0;
 let restrictRedirectTarget = false;
@@ -189,10 +195,6 @@ const blockedActions = new Map<
 
 type NavStatus = "allowed" | "blocked";
 
-function nowMs(): number {
-  return Date.now();
-}
-
 function recordNav(status: NavStatus, params: { kind: string; url?: string }): void {
   if (!debug) return;
   postToIsolated("ns-debug-nav-record", {
@@ -222,9 +224,10 @@ function isOff(): boolean {
   return mode === "off";
 }
 
-function setAllowOnce(): void {
+function setAllowOnce(url?: string): void {
   allowOnceRemaining = 1;
   allowOnceUntil = nowMs() + ALLOW_ONCE_TTL_MS;
+  allowOnceUrl = typeof url === "string" ? url : "";
 }
 
 function textLength(el: Element): number {
@@ -263,7 +266,20 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
   if ((target as Node).nodeType !== Node.ELEMENT_NODE) return null;
   const el = target as Element;
   if (el.closest("a")) return null;
-  return el.closest("button, input[type='button'], input[type='submit']") as Element | null;
+  // Walk outward like the original value-selector did (skipping non-matching
+  // inputs), but compare `type` ASCII case-insensitively: the keyword is
+  // enumerated, so `type="SUBMIT"` submits while `[type='submit']` misses it.
+  // Programmatic on purpose — see findSubmitControl in nav_authority.ts. (#820)
+  let current: Element | null = el;
+  while (current) {
+    const candidate: Element | null = current.closest("button, input");
+    if (!candidate) return null;
+    if (candidate.tagName.toLowerCase() === "button") return candidate;
+    const type = (candidate.getAttribute("type") ?? "").toLowerCase();
+    if (type === "button" || type === "submit") return candidate;
+    current = candidate.parentElement;
+  }
+  return null;
 }
 
 function hasMeaningfulName(el: Element): boolean {
@@ -301,11 +317,16 @@ function isSafePopupIntentSource(el: Element): boolean {
   return true;
 }
 
-function consumeOpenAllowance(): "allow_once" | "allowed" | "none" {
+function consumeOpenAllowance(url?: string | URL): "allow_once" | "allowed" | "none" {
   const now = nowMs();
   if (allowOnceRemaining > 0 && now <= allowOnceUntil) {
-    allowOnceRemaining -= 1;
-    return "allow_once";
+    // Strict match on the authorized URL (same fail-closed shape as the
+    // redirect-target binding). A mismatch neither consumes nor burns the
+    // allowance, so a racing open can't steal or void the user's grant (#851).
+    if (allowOnceUrl !== "" && url !== undefined && String(url) === allowOnceUrl) {
+      allowOnceRemaining -= 1;
+      return "allow_once";
+    }
   }
   if (allowOpenUntil > 0 && now <= allowOpenUntil && openCount < MAX_OPENS_PER_GESTURE) {
     openCount += 1;
@@ -584,9 +605,9 @@ function recordWindowOpen(): void {
 
 function patchedOpen(
   this: Window | null | undefined,
-  url?: string | URL,
-  target?: string,
-  features?: string
+  rawUrl?: string | URL,
+  rawTarget?: string,
+  rawFeatures?: string
 ): Window | null {
   // Pages commonly capture `window.open` and call the saved function from an
   // arrow/strict wrapper, which supplies no receiver. Default only that nullish
@@ -594,6 +615,14 @@ function patchedOpen(
   // (which fail this realm's instanceof Window), and let the native throw its
   // normal Illegal invocation TypeError for genuinely invalid receivers.
   const receiver = this === null || this === undefined ? window : this;
+  // Coerce every argument exactly once. A page-supplied object could otherwise
+  // stringify to the authorized URL (or read as "_self") for the checks and to
+  // another destination (or "_blank") for the native call. A template literal
+  // performs the same ToString as the native binding, including throwing on a
+  // Symbol, and undefined keeps the native defaults.
+  const url = rawUrl === undefined ? undefined : `${rawUrl}`;
+  const target = rawTarget === undefined ? undefined : `${rawTarget}`;
+  const features = rawFeatures === undefined ? undefined : `${rawFeatures}`;
 
   if (isOff() || (isSubframe() && isSubframeSelfTarget(target))) {
     postAllowed({
@@ -606,7 +635,7 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
-  const allowance = consumeOpenAllowance();
+  const allowance = consumeOpenAllowance(url);
   if (allowance !== "none") {
     postAllowed({
       kind: "window_open",
@@ -799,6 +828,7 @@ function handleBridgeMessage(message: unknown): void {
     allowRedirect?: boolean;
     restrictRedirectTarget?: boolean;
     redirectTarget?: string;
+    url?: string;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
@@ -822,7 +852,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-allow-once") {
-    setAllowOnce();
+    setAllowOnce(typeof data.url === "string" ? data.url : undefined);
     return;
   }
 
@@ -983,33 +1013,9 @@ window.addEventListener(
   true
 );
 
-// --- Clipboard API command keyword detection ---
-
-// NOTE: Keep this list in sync with COMMAND_KEYWORDS in clickfix_detector.ts
-const COMMAND_KEYWORDS = [
-  // Windows shells and scripting
-  "powershell", "cmd /", "cmd.exe", "mshta", "msiexec", "certutil", "bitsadmin",
-  "rundll32", "regsvr32", "wscript", "cscript",
-  // Windows LOLBins
-  "forfiles", "pcalua", "schtasks", "installutil",
-  // Unix/macOS shells
-  "curl ", "wget ", "bash", "sh ", "/bin/", "osascript",
-  // PowerShell cmdlets and patterns
-  "invoke-", "iex ", "iex(", "iwr ", "start-process",
-  "downloadstring", "downloadfile", "new-object", "system.net",
-  "frombase64", "base64", "-encodedcommand", "-enc ",
-];
-
-function textLooksLikeCommand(text: string): boolean {
-  if (!text || text.length < 5) return false;
-  const lower = text.toLowerCase();
-  for (const kw of COMMAND_KEYWORDS) {
-    if (lower.includes(kw)) return true;
-  }
-  return false;
-}
-
 // --- Clipboard API patching ---
+// (Command keyword matching lives in ./command_keywords, shared with the
+// isolated-world detector and tests so the three copies cannot drift. #810)
 
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
@@ -1021,7 +1027,7 @@ function patchClipboard(): void {
         // only send the bridge message after the write succeeds so that
         // failed writes (permission denied, no user gesture) do not cause
         // false ClickFix detections.
-        const cmdLike = textLooksLikeCommand(data);
+        const cmdLike = looksLikeCommand(data);
         const len = data.length;
         return nativeClipboardWriteText!(data).then((result) => {
           postToIsolated("ns-clipboard-write", {
@@ -1059,7 +1065,7 @@ function patchClipboard(): void {
                     postToIsolated("ns-clipboard-write", {
                       ts: nowMs(),
                       contentLength: text.length,
-                      looksLikeCommand: textLooksLikeCommand(text),
+                      looksLikeCommand: looksLikeCommand(text),
                     });
                   }).catch(() => {});
                 }).catch(() => {});
@@ -1386,12 +1392,12 @@ try {
       postToIsolated("ns-clipboard-write", {
         ts: nowMs(),
         contentLength: selText.length || -1,
-        looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+        looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
       });
       if (debug) {
         console.debug("[NavSentinel] document.execCommand('copy') intercepted", {
           length: selText.length,
-          looksLikeCommand: selText.length > 0 ? textLooksLikeCommand(selText) : false,
+          looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
         });
       }
     }

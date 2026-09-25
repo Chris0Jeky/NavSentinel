@@ -6,14 +6,23 @@ on:
       - ".github/workflows/windows-trust-boundaries.yml"
       - "package.json"
       - "package-lock.json"
+      - "vitest.config.ts"
+      - "scripts/checkout-eol.mjs"
+      - "tests/checkout-eol.test.ts"
       - "scripts/launch-state-authority-campaign.mjs"
       - "scripts/launch-state-authority-campaign.ps1"
       - "scripts/content-loader-contract.mjs"
+      - "scripts/deterministic-zip.mjs"
+      - "scripts/package.mjs"
+      - "scripts/safe-release-path.mjs"
       - "scripts/release-input-integrity.*"
       - "scripts/release.mjs"
       - "scripts/run-state-authority-campaign.mjs"
       - "scripts/sensitive-environment.mjs"
       - "scripts/sensitive-environment.*"
+      - "tests/deterministic-release-archive.test.ts"
+      - "tests/helpers/release-archive-adversarial.mjs"
+      - "tests/safe-release-path.test.ts"
       - "tests/e2e/extension_build_provenance.ts"
       - "tests/e2e/extension_test_utils.ts"
       - "tests/e2e/local_fixture_target_bootstrap.ts"
@@ -38,14 +47,23 @@ on:
       - ".github/workflows/windows-trust-boundaries.yml"
       - "package.json"
       - "package-lock.json"
+      - "vitest.config.ts"
+      - "scripts/checkout-eol.mjs"
+      - "tests/checkout-eol.test.ts"
       - "scripts/launch-state-authority-campaign.mjs"
       - "scripts/launch-state-authority-campaign.ps1"
       - "scripts/content-loader-contract.mjs"
+      - "scripts/deterministic-zip.mjs"
+      - "scripts/package.mjs"
+      - "scripts/safe-release-path.mjs"
       - "scripts/release-input-integrity.*"
       - "scripts/release.mjs"
       - "scripts/run-state-authority-campaign.mjs"
       - "scripts/sensitive-environment.mjs"
       - "scripts/sensitive-environment.*"
+      - "tests/deterministic-release-archive.test.ts"
+      - "tests/helpers/release-archive-adversarial.mjs"
+      - "tests/safe-release-path.test.ts"
       - "tests/e2e/extension_build_provenance.ts"
       - "tests/e2e/extension_test_utils.ts"
       - "tests/e2e/local_fixture_target_bootstrap.ts"
@@ -98,12 +116,48 @@ jobs:
       - name: Run focused release and launcher contracts
         run: >-
           npx vitest run
+          tests/checkout-eol.test.ts
+          tests/deterministic-release-archive.test.ts
+          tests/safe-release-path.test.ts
           tests/release-input-integrity.test.ts
           tests/sensitive-environment-boundary.test.ts
           tests/state-authority-bootstrap-replay.test.ts
           tests/state-authority-launcher-contract.test.ts
           tests/state-authority-windows-bootstrap.test.ts
           --maxWorkers=2
+
+      - name: Prove deterministic Windows package bytes
+        shell: pwsh
+        run: |
+          npm run build
+          npm run package:ext
+          $archives = @(Get-ChildItem -LiteralPath artifacts -Filter '*.zip' -File)
+          if ($archives.Count -ne 1) {
+            throw "Expected exactly one extension archive, found $($archives.Count)."
+          }
+          $archive = $archives[0]
+          $firstHash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash
+
+          $changedTime = [DateTime]::Parse(
+            '2040-12-31T23:59:58Z',
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AdjustToUniversal
+          )
+          Get-ChildItem -LiteralPath extension/dist -Recurse -File | ForEach-Object {
+            $_.LastWriteTimeUtc = $changedTime
+          }
+
+          npm run package:ext
+          $secondHash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash
+          if ($firstHash -ne $secondHash) {
+            throw "Package hash changed after source mtime changes: $firstHash -> $secondHash"
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP 'navsentinel-package-extract'
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extractPath -Force
+          if (-not (Test-Path -LiteralPath (Join-Path $extractPath 'manifest.json') -PathType Leaf)) {
+            throw 'Windows could not extract manifest.json at the archive root.'
+          }
 
       - name: Run the external PowerShell bootstrap preflight
         shell: pwsh

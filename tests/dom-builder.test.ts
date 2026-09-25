@@ -141,6 +141,15 @@ describe("buildClickContextFromEvents", () => {
     expect(result.top.targetBlank).toBe(true);
   });
 
+  it("captures anchor targetBlank for a case-variant keyword (#820)", () => {
+    const el = makeEl("a", { href: "https://example.com", target: "_BLANK" });
+    const result = buildClickContextFromEvents({
+      down: fakeDown({ top: el }),
+      click: fakeClick({ top: el }),
+    });
+    expect(result.top.targetBlank).toBe(true);
+  });
+
   it("captures hasOnClick for elements with onclick attr", () => {
     const el = makeEl("div", { onclick: "alert(1)" });
     const result = buildClickContextFromEvents({
@@ -259,5 +268,41 @@ describe("buildKeyboardClickContext", () => {
     expect(result.top.tag).toBe("BUTTON");
     expect(result.top.role).toBe("tab");
     expect(result.top.textLength).toBeGreaterThan(0);
+  });
+});
+
+describe("style-hint numeric guards (#853)", () => {
+  it("defaults opacity to 1 when computed opacity is empty (detached element)", () => {
+    // Detached elements report "" for computed opacity; parseFloat("") is NaN,
+    // which must never reach scoring (NaN comparisons fail open).
+    const detached = document.createElement("div");
+    expect(window.getComputedStyle(detached).opacity).toBe("");
+    const result = buildClickContextFromEvents({
+      down: fakeDown({ top: detached, stack: [detached] }),
+      click: fakeClick({ top: detached, stack: [detached] }),
+    });
+    expect(Number.isFinite(result.top.opacity)).toBe(true);
+    expect(result.top.opacity).toBe(1);
+  });
+
+  it("keeps explicit computed opacity values", () => {
+    const el = makeEl("div");
+    el.style.opacity = "0.5";
+    const result = buildClickContextFromEvents({
+      down: fakeDown({ top: el, stack: [el] }),
+      click: fakeClick({ top: el, stack: [el] }),
+    });
+    expect(result.top.opacity).toBe(0.5);
+  });
+
+  it("keeps CDS numeric for detached-element contexts", async () => {
+    const { computeCDS } = await import("../extension/src/shared/scoring");
+    const detached = document.createElement("div");
+    const ctx = buildClickContextFromEvents({
+      down: fakeDown({ top: detached, stack: [detached] }),
+      click: fakeClick({ top: detached, stack: [detached] }),
+    });
+    const { cds } = computeCDS(ctx);
+    expect(Number.isFinite(cds)).toBe(true);
   });
 });
