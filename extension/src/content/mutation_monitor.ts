@@ -232,7 +232,11 @@ const originalFormActions = new WeakMap<Element, string>();
 
 function hostFromUrl(url: string): string | null {
   try {
-    return new URL(url, location.href).hostname.toLowerCase();
+    // Resolve against document.baseURI, not location.href: on pages with a
+    // <base> element the browser resolves submission targets against the base
+    // URL, and telemetry must classify the same target the browser navigates
+    // to. Same-class fix as #650/#776/#778/#785/#791. (#843)
+    return new URL(url, document.baseURI).hostname.toLowerCase();
   } catch {
     return null;
   }
