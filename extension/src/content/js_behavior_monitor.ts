@@ -17,10 +17,17 @@ import {
 export * from "./js_behavior_monitor.core";
 export type { JsBehaviorMonitorConfig };
 
+type ActionSnapshot = {
+  present: boolean;
+  raw: string;
+  baseUrl: string;
+  documentUrl: string;
+};
+
 type SubmitContext = {
   form: HTMLFormElement;
   submitter: HTMLElement | null;
-  dynamicSignal: Record<string, unknown> | null;
+  supplementalSignal: Record<string, unknown> | null;
   coreEmitted: boolean;
 };
 
@@ -31,15 +38,33 @@ let _endSubmitListener: ((event: Event) => void) | null = null;
 let _coreSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
 let _supplementalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
 let _contexts: SubmitContext[] = [];
-let _originalFormActions = new WeakMap<HTMLFormElement, string>();
-let _originalSubmitterActions = new WeakMap<HTMLElement, string>();
+let _originalFormActions = new WeakMap<HTMLFormElement, ActionSnapshot>();
+let _originalSubmitterActions = new WeakMap<HTMLElement, ActionSnapshot>();
+
+function currentActionSnapshot(element: HTMLElement, attribute: "action" | "formaction"): ActionSnapshot {
+  return {
+    present: element.hasAttribute(attribute),
+    raw: element.getAttribute(attribute) ?? "",
+    baseUrl: document.baseURI,
+    documentUrl: location.href,
+  };
+}
+
+function previousActionSnapshot(oldValue: string | null): ActionSnapshot {
+  return {
+    present: oldValue !== null,
+    raw: oldValue ?? "",
+    baseUrl: document.baseURI,
+    documentUrl: location.href,
+  };
+}
 
 function recordFormAction(
   form: HTMLFormElement,
-  action = form.getAttribute("action") ?? "",
+  snapshot = currentActionSnapshot(form, "action"),
 ): void {
   if (!_originalFormActions.has(form)) {
-    _originalFormActions.set(form, action);
+    _originalFormActions.set(form, snapshot);
   }
 }
 
@@ -53,10 +78,10 @@ function isPotentialSubmitter(element: HTMLElement): boolean {
 
 function recordSubmitterAction(
   submitter: HTMLElement,
-  action = submitter.getAttribute("formaction") ?? "",
+  snapshot = currentActionSnapshot(submitter, "formaction"),
 ): void {
   if (isPotentialSubmitter(submitter) && !_originalSubmitterActions.has(submitter)) {
-    _originalSubmitterActions.set(submitter, action);
+    _originalSubmitterActions.set(submitter, snapshot);
   }
 }
 
@@ -86,12 +111,12 @@ function processMutations(mutations: MutationRecord[]): void {
       mutation.attributeName === "action" &&
       mutation.target instanceof HTMLFormElement
     ) {
-      recordFormAction(mutation.target, mutation.oldValue ?? "");
+      recordFormAction(mutation.target, previousActionSnapshot(mutation.oldValue));
     } else if (
       mutation.attributeName === "formaction" &&
       mutation.target instanceof HTMLElement
     ) {
-      recordSubmitterAction(mutation.target, mutation.oldValue ?? "");
+      recordSubmitterAction(mutation.target, previousActionSnapshot(mutation.oldValue));
     }
   }
 
@@ -110,17 +135,23 @@ function flushMutations(): void {
   if (records.length > 0) processMutations(records);
 }
 
-function resolveAction(raw: string): string {
-  if (!raw.trim()) return location.href;
+function resolveAction(snapshot: ActionSnapshot): string {
+  // The HTML form algorithm treats an exactly-empty action as the current
+  // document. Whitespace is not empty: URL parsing strips it and resolves the
+  // result against the document base, which may be cross-origin.
+  if (snapshot.raw.length === 0) return snapshot.documentUrl;
   try {
-    return new URL(raw, document.baseURI).toString();
+    return new URL(snapshot.raw, snapshot.baseUrl).toString();
   } catch {
-    return location.href;
+    return snapshot.documentUrl;
   }
 }
 
-function actionOrigin(raw: string): string {
-  return raw.trim() ? extractOrigin(raw) : location.origin;
+function effectiveAction(
+  form: ActionSnapshot,
+  submitter: ActionSnapshot | null,
+): string {
+  return resolveAction(submitter?.present ? submitter : form);
 }
 
 function inspectSubmit(
@@ -131,28 +162,31 @@ function inspectSubmit(
   recordFormAction(form);
   if (submitter) recordSubmitterAction(submitter);
 
-  const formAction = form.getAttribute("action") ?? "";
-  const submitterOverrides = submitter?.hasAttribute("formaction") ?? false;
-  const submitterAction = submitter?.getAttribute("formaction") ?? "";
+  const originalForm = _originalFormActions.get(form)!;
+  const currentForm = currentActionSnapshot(form, "action");
+  const originalSubmitter = submitter
+    ? (_originalSubmitterActions.get(submitter) ?? null)
+    : null;
+  const currentSubmitter = submitter
+    ? currentActionSnapshot(submitter, "formaction")
+    : null;
 
-  const formChanged =
-    !submitterOverrides &&
-    (_originalFormActions.get(form) ?? "") !== formAction &&
-    actionOrigin(_originalFormActions.get(form) ?? "") !== actionOrigin(formAction);
-  const submitterChanged =
-    !!submitter &&
-    (_originalSubmitterActions.get(submitter) ?? "") !== submitterAction &&
-    actionOrigin(_originalSubmitterActions.get(submitter) ?? "") !==
-      actionOrigin(submitterAction);
+  const originalAction = effectiveAction(originalForm, originalSubmitter);
+  const action = effectiveAction(currentForm, currentSubmitter);
+  const actionDynamicallyChanged =
+    extractOrigin(originalAction) !== extractOrigin(action);
+  const hasCredentialFields = formHasCredentialFields(form);
+  const isCrossOrigin = isCrossOriginUrl(action);
 
-  if (!formChanged && !submitterChanged) return null;
+  if (!((hasCredentialFields && isCrossOrigin) || actionDynamicallyChanged)) {
+    return null;
+  }
 
-  const action = resolveAction(submitterOverrides ? submitterAction : formAction);
   return {
     ts: Date.now(),
-    hasCredentialFields: formHasCredentialFields(form),
-    isCrossOrigin: isCrossOriginUrl(action),
-    actionDynamicallyChanged: true,
+    hasCredentialFields,
+    isCrossOrigin,
+    actionDynamicallyChanged,
     destinationOrigin: extractOrigin(action),
   };
 }
@@ -165,7 +199,7 @@ function beginContext(form: HTMLFormElement, submitter: HTMLElement | null): Sub
   const context: SubmitContext = {
     form,
     submitter,
-    dynamicSignal: inspectSubmit(form, submitter),
+    supplementalSignal: inspectSubmit(form, submitter),
     coreEmitted: false,
   };
   _contexts.push(context);
@@ -173,8 +207,8 @@ function beginContext(form: HTMLFormElement, submitter: HTMLElement | null): Sub
 }
 
 function finishContext(context: SubmitContext): void {
-  if (context.dynamicSignal && !context.coreEmitted && _config?.mode !== "off") {
-    _config?.postSignal("ns-js-form-submit-suspicious", context.dynamicSignal);
+  if (context.supplementalSignal && !context.coreEmitted && _config?.mode !== "off") {
+    _config?.postSignal("ns-js-form-submit-suspicious", context.supplementalSignal);
   }
 
   const index = _contexts.lastIndexOf(context);
@@ -251,8 +285,8 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
         const context = currentContext();
         if (context) {
           context.coreEmitted = true;
-          if (context.dynamicSignal) {
-            config.postSignal(type, { ...payload, ...context.dynamicSignal });
+          if (context.supplementalSignal) {
+            config.postSignal(type, { ...payload, ...context.supplementalSignal });
             return;
           }
         }
@@ -291,8 +325,8 @@ export function _resetState(): void {
   _coreSubmitFn = null;
   _supplementalSubmitFn = null;
   _contexts = [];
-  _originalFormActions = new WeakMap<HTMLFormElement, string>();
-  _originalSubmitterActions = new WeakMap<HTMLElement, string>();
+  _originalFormActions = new WeakMap<HTMLFormElement, ActionSnapshot>();
+  _originalSubmitterActions = new WeakMap<HTMLElement, ActionSnapshot>();
 
   resetCoreState();
 }
