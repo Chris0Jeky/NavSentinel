@@ -937,22 +937,19 @@ function handleClickFixScan(): void {
     reasons: result.reasons,
   });
 
+  // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
+  // fires for that explicit click only, never when a later notice replaces it.
   showToast({
     message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
-    actions: [
-      {
-        label: "Dismiss",
-        onClick: () => {
-          appendOutcomeSafely({
-            domain: siteKeyFromLocation(),
-            type: "nav",
-            score: result.score,
-            outcome: "dismiss",
-            ...(result.reasons?.length ? { reasons: result.reasons } : {}),
-          });
-        },
-      },
-    ],
+    onDismiss: () => {
+      appendOutcomeSafely({
+        domain: siteKeyFromLocation(),
+        type: "nav",
+        score: result.score,
+        outcome: "dismiss",
+        ...(result.reasons?.length ? { reasons: result.reasons } : {}),
+      });
+    },
     timeoutMs: 0,
   });
 }
@@ -1212,16 +1209,28 @@ function showRollbackPrompt(url: string): void {
             // ignore
           }
         }
-      },
-      {
-        label: "Dismiss",
-        onClick: () => {
-          // no-op
-        }
       }
+      // No caller Dismiss: the card always renders its own (#869).
     ],
     timeoutMs: 0
   });
+}
+
+/**
+ * Commit-time URL of the current document from NavigationTiming. Same-document
+ * `pushState` rewrites `location.href` without touching this entry, so it is
+ * the correct staleness basis where the live href can be quietly rewritten
+ * out from under a delivery (#855). Empty when unavailable (caller falls back
+ * to the live href).
+ */
+function currentCommittedHref(): string {
+  try {
+    const entries = performance.getEntriesByType("navigation");
+    const name = entries.length > 0 ? (entries[0] as PerformanceNavigationTiming).name : "";
+    return typeof name === "string" ? name : "";
+  } catch {
+    return "";
+  }
 }
 
 function handleRollback(url: string, prevUrl?: string): void {
@@ -1233,7 +1242,9 @@ function handleRollback(url: string, prevUrl?: string): void {
   // and strands the tab with its forward offer lost). Fragment-stripped, so a
   // same-document anchor jump cannot invalidate a legitimate rollback. Placed
   // here so both the push and the ns-check-rollback poll paths are covered.
-  if (isStaleDelivery(url, location.href)) return;
+  // Compared against the commit-time URL (#855): a quiet same-document query
+  // push must not void a legitimate rollback the way a real navigation does.
+  if (isStaleDelivery(url, location.href, currentCommittedHref() || undefined)) return;
   const referrerTarget = (() => {
     if (!document.referrer || document.referrer === location.href) return "";
     try {

@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 type ToastModule = typeof import("../extension/src/content/ui_toast");
 
@@ -605,6 +607,46 @@ describe("ui_toast", () => {
       expect(onDismiss2).toHaveBeenCalledTimes(1);
       expect(onDismiss1).not.toHaveBeenCalled();
       expect(getWraps().length).toBe(0);
+    });
+  });
+
+  describe("one Dismiss per card (#869)", () => {
+    function labels(): string[] {
+      return getButtons().map((button) => button.textContent ?? "");
+    }
+
+    it("a rollback-shaped card renders Proceed and a single Dismiss", () => {
+      showToast({
+        message: "NavSentinel rolled back a suspicious redirect to example.test",
+        actions: [{ label: "Proceed", onClick: vi.fn() }],
+        timeoutMs: 0,
+      });
+      expect(labels()).toEqual(["Proceed", "Dismiss"]);
+    });
+
+    it("a ClickFix-shaped card records its dismissal through the only Dismiss, once", () => {
+      const recordDismiss = vi.fn();
+      showToast({ message: "fake verification dialog", onDismiss: recordDismiss, timeoutMs: 0 });
+      expect(labels()).toEqual(["Dismiss"]);
+
+      // Trusted activation goes through the owned-control relay (#783): a page
+      // synthetic .click() never reaches the action. A second activation of the
+      // removed card is refused, so the outcome is recorded exactly once.
+      const dismiss = getButtons()[0]!;
+      const host = getHost();
+      expect(activateOwnedToastControl(host, [dismiss, host, document, window])).toBe(true);
+      expect(activateOwnedToastControl(host, [dismiss, host, document, window])).toBe(false);
+      expect(recordDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it("no extension source passes its own Dismiss action: the card always renders one", () => {
+      // A caller-supplied Dismiss beside the built-in one rendered two identically
+      // named controls, announced twice by screen readers.
+      const root = resolve("extension/src");
+      const offenders = (readdirSync(root, { recursive: true }) as string[])
+        .filter((file) => file.endsWith(".ts"))
+        .filter((file) => /label:\s*["'`]Dismiss["'`]/.test(readFileSync(join(root, file), "utf8")));
+      expect(offenders).toEqual([]);
     });
   });
 });

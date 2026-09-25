@@ -11,7 +11,6 @@ export function isRiskReducingReason(reasonCode: string): boolean {
     r.startsWith("legit_") ||
     r.includes("allowlisted") ||
     r.includes("previously_allowed") ||
-    r.includes("explicit_new_tab") ||
-    r === "nrs_user_activation_active"
+    r.includes("explicit_new_tab")
   );
 }

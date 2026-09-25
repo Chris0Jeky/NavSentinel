@@ -621,7 +621,7 @@ describe("credential modal", () => {
         cancelable: true,
       });
       const preventSpy = vi.spyOn(tabEvent, "preventDefault");
-      window.dispatchEvent(tabEvent);
+      window.dispatchEvent(trusted(tabEvent));
 
       expect(preventSpy).toHaveBeenCalled();
 
@@ -655,7 +655,7 @@ describe("credential modal", () => {
         cancelable: true,
       });
       const preventSpy = vi.spyOn(shiftTabEvent, "preventDefault");
-      window.dispatchEvent(shiftTabEvent);
+      window.dispatchEvent(trusted(shiftTabEvent));
 
       expect(preventSpy).toHaveBeenCalled();
 
@@ -681,7 +681,7 @@ describe("credential modal", () => {
         cancelable: true,
       });
       const preventSpy = vi.spyOn(tabEvent, "preventDefault");
-      window.dispatchEvent(tabEvent);
+      window.dispatchEvent(trusted(tabEvent));
       expect(preventSpy).toHaveBeenCalled();
 
       window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
@@ -749,7 +749,7 @@ describe("credential modal", () => {
           cancelable: true,
         });
         const preventSpy = vi.spyOn(tabEvent, "preventDefault");
-        window.dispatchEvent(tabEvent);
+        window.dispatchEvent(trusted(tabEvent));
 
         expect(preventSpy).toHaveBeenCalled();
         expect(getShadow()!.activeElement).toBe(buttons[1]);

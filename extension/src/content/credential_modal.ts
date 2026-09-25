@@ -454,9 +454,11 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     };
 
     function onKeyDown(e: KeyboardEvent): void {
+      // Trusted input only (see the button listener below). (#826) This covers
+      // Tab as well as Escape: a synthetic Tab would let page script move focus
+      // onto another action before the user's next real Enter or Space.
+      if (!e.isTrusted) return;
       if (e.key === "Escape") {
-        // Trusted input only (see the button listener below). (#826)
-        if (!e.isTrusted) return;
         e.preventDefault();
         done(outside);
         return;
