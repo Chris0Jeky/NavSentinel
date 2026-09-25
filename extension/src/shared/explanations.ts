@@ -20,7 +20,7 @@ const EXPLANATIONS: Record<string, string> = {
   nrs_new_tab_window: "Navigation opens a new tab or window",
   nrs_cross_site: "Navigation goes to a different website",
   nrs_fast_attempt: "Navigation triggered unusually quickly after click",
-  nrs_user_activation_active: "Browser detected an active user gesture",
+  nrs_user_activation_active: "The browser still considered a user gesture active when navigation began",
   nrs_multiple_attempts: "Multiple navigation attempts from a single click",
   nrs_allowlisted: "Destination is on your allowlist",
   nrs_explicit_new_tab_intent: "You explicitly opened this in a new tab",
