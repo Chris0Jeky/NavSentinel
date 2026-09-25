@@ -94,7 +94,7 @@ function buildElementHint(el: Element, opts: { wantStyle: boolean; wantRect: boo
   if (role) hint.role = role;
 
   if (tag === "A") {
-    hint.targetBlank = (el as HTMLAnchorElement).target === "_blank";
+    hint.targetBlank = ((el as HTMLAnchorElement).target ?? "").toLowerCase() === "_blank";
   }
 
   if (opts.wantRect) {

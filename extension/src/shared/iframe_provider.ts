@@ -15,7 +15,7 @@ export interface ProviderHostEntry {
 }
 
 /**
- * Whether `src` (resolved against the current page) is an http(s) URL whose host matches an
+ * Whether `src` (resolved against the document base URL) is an http(s) URL whose host matches an
  * entry in `table` and, when the entry has a `pathPrefix`, whose path matches it at a whole
  * segment boundary (`=== prefix` OR `startsWith(prefix + "/")`). The segment anchoring
  * mirrors the host suffix boundary so a lookalike path like `/recaptcha-evil/x` cannot
@@ -29,7 +29,15 @@ export function matchProviderHostSrc(
 ): boolean {
   let url: URL;
   try {
-    url = new URL(src, typeof location !== "undefined" ? location.href : undefined);
+    // Resolve against the document base URL, as the browser does for iframe
+    // src, so the allowlist and the cross-domain check see the same host (#843).
+    const base =
+      typeof document !== "undefined" && document.baseURI
+        ? document.baseURI
+        : typeof location !== "undefined"
+          ? location.href
+          : undefined;
+    url = new URL(src, base);
   } catch {
     return false;
   }

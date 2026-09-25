@@ -277,4 +277,93 @@ describe("overlay cleanup", () => {
     expect(suppressOverlayElement(document.body)).toBeNull();
     expect(suppressOverlayElement(impostor)).not.toBeNull();
   });
+
+  it("skips a throwing `style` accessor without aborting the rest of the batch (#748)", () => {
+    const hostile = document.createElement("div");
+    Object.defineProperty(hostile, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+    document.body.appendChild(hostile);
+    const benign = makeOverlay();
+
+    let result: ReturnType<typeof reconcileDetectedOverlay>;
+    expect(() => {
+      result = reconcileDetectedOverlay(
+        { ...mutationAlert(hostile), elements: [hostile, benign] },
+        true,
+      );
+    }).not.toThrow();
+
+    expect(result!.action).toBe("suppressed");
+    expect(benign.style.getPropertyValue("display")).toBe("none");
+    expect(result!.undo()).toBe(true);
+    expect(benign.style.display).toBe("flex");
+  });
+
+  it("does not report an all-throwing batch as already hidden by an earlier group (#748)", () => {
+    const earlier = makeOverlay();
+    const first = reconcileDetectedOverlay(mutationAlert(earlier), true);
+    expect(first?.action).toBe("suppressed");
+
+    const hostile = document.createElement("div");
+    Object.defineProperty(hostile, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+    document.body.appendChild(hostile);
+
+    let result: ReturnType<typeof reconcileDetectedOverlay> = undefined as never;
+    expect(() => {
+      result = reconcileDetectedOverlay(mutationAlert(hostile), true, true);
+    }).not.toThrow();
+    // Nothing in this batch was hidden, so the caller must keep its warning.
+    expect(result).toBeNull();
+    expect(first!.undo()).toBe(true);
+  });
+
+  it("restores the remaining group when one record turns hostile before Undo (#748)", () => {
+    const first = makeOverlay();
+    const second = makeOverlay();
+    const result = reconcileDetectedOverlay(
+      { ...mutationAlert(first), elements: [first, second] },
+      true,
+    );
+    expect(result).not.toBeNull();
+
+    Object.defineProperty(first, "style", {
+      configurable: true,
+      get() {
+        return new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("hostile style");
+            },
+          },
+        );
+      },
+    });
+
+    expect(() => result!.undo()).not.toThrow();
+    expect(second.style.display).toBe("flex");
+  });
 });

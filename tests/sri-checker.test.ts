@@ -413,4 +413,35 @@ describe("sri_checker - edge cases", () => {
     expect(result.totalExternal).toBe(1);
     expect(result.withoutSRI).toBe(1);
   });
+
+  it("matches a case-variant rel the browser still honors (#822)", () => {
+    const doc = makeDoc(loginPage(
+      '<link rel="STYLESHEET" href="' + EXTERNAL_ORIGIN + '/theme.css">'
+    ));
+    const result = checkSRI(doc, PAGE_URL, PAGE_ORIGIN);
+    expect(result.totalExternal).toBe(1);
+    expect(result.withoutSRI).toBe(1);
+  });
+
+  it("resolves relative URLs against the base href, not the page URL (#822)", () => {
+    // Uses the live document (not DOMParser): baseURI honors <base href>
+    // there, and checkSRI's defaults read live location values.
+    const base = document.createElement("base");
+    base.setAttribute("href", "https://evil.example/app/");
+    document.head.appendChild(base);
+    try {
+      expect(document.baseURI).toBe("https://evil.example/app/");
+      document.body.innerHTML =
+        '<form><input type="password"></form>' +
+        '<script src="lib.js"></script>';
+      // location.origin is the happy-dom default, not evil.example.
+      expect(new URL(document.baseURI).origin).not.toBe(location.origin);
+      const result = checkSRI(document);
+      expect(result.totalExternal).toBe(1);
+      expect(result.withoutSRI).toBe(1);
+    } finally {
+      base.remove();
+      document.body.innerHTML = "";
+    }
+  });
 });
