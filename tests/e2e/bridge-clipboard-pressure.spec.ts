@@ -44,18 +44,32 @@ function createVulnerableExtensionCopy(): MutantExtension {
     fs.cpSync(extensionPath, mutantExtensionPath, { recursive: true });
 
     const assetDirectory = path.join(mutantExtensionPath, "assets");
-    const bridgeAssets = fs.readdirSync(assetDirectory).filter((name) =>
-      /^bridge_outbound-.*\.js$/u.test(name),
+    const builtScripts = fs.readdirSync(assetDirectory).filter((name) =>
+      name.endsWith(".js"),
     );
-    if (bridgeAssets.length !== 1 || !bridgeAssets[0]) {
+    if (builtScripts.length === 0) {
+      throw new Error("TEST_INVALID: expected built JS assets, found none");
+    }
+
+    const coalescingFunction = /function ([A-Za-z_$][\w$]*)\(e\)\{if\(e\.type===`ns-clipboard-write`\)return e\.payload\?\.looksLikeCommand===!0\?`ns-clipboard-write:command-like`:`ns-clipboard-write:other`\}/gu;
+    const matchingAssets: string[] = [];
+    let totalMatches = 0;
+    for (const name of builtScripts) {
+      const candidateSource = fs.readFileSync(path.join(assetDirectory, name), "utf8");
+      const candidateMatches = [...candidateSource.matchAll(coalescingFunction)];
+      totalMatches += candidateMatches.length;
+      if (candidateMatches.length > 0) {
+        matchingAssets.push(name);
+      }
+    }
+    if (totalMatches !== 1 || matchingAssets.length !== 1 || !matchingAssets[0]) {
       throw new Error(
-        `TEST_INVALID: expected exactly one built bridge_outbound asset, found ${bridgeAssets.length}`,
+        `TEST_INVALID: expected one coalescing function in exactly one built asset, found ${totalMatches} match(es) in ${matchingAssets.length} asset(s)`,
       );
     }
 
-    const patchedAsset = path.join(assetDirectory, bridgeAssets[0]);
+    const patchedAsset = path.join(assetDirectory, matchingAssets[0]);
     const source = fs.readFileSync(patchedAsset, "utf8");
-    const coalescingFunction = /function ([A-Za-z_$][\w$]*)\(e\)\{if\(e\.type===`ns-clipboard-write`\)return e\.payload\?\.looksLikeCommand===!0\?`ns-clipboard-write:command-like`:`ns-clipboard-write:other`\}/gu;
     const matches = [...source.matchAll(coalescingFunction)];
     if (matches.length !== 1) {
       throw new Error(
@@ -68,7 +82,7 @@ function createVulnerableExtensionCopy(): MutantExtension {
     }
     fs.writeFileSync(patchedAsset, patched, "utf8");
 
-    return { extensionPath: mutantExtensionPath, root, patchedAsset: bridgeAssets[0] };
+    return { extensionPath: mutantExtensionPath, root, patchedAsset: matchingAssets[0] };
   } catch (error) {
     fs.rmSync(root, { recursive: true, force: true });
     throw error;
