@@ -49,7 +49,16 @@ type Receipt = {
   finishedAt?: string;
   git: { head: string; productSourceTree: string; lastProductCommit: string; productSourceClean: boolean; statusLines: string[] };
   build: { distSha256: string; uiGuardRevision: string; manifestVersion: string };
-  browser: { product: "branded-chrome" | "bundled-chromium"; version: string; realistic: boolean; executable: string | null };
+  browser: {
+    /** What actually ran, from the browser's UA brands. */
+    product: "branded-chrome" | "bundled-chromium";
+    /** What the environment asked for. */
+    requested: "branded-chrome" | "bundled-chromium";
+    brands: string[];
+    version: string;
+    realistic: boolean;
+    executable: string | null;
+  };
   extensionId: string;
   gymBaseUrl: string;
   markers: Array<{ url: string; markers: Markers }>;
@@ -59,6 +68,8 @@ type Receipt = {
   storage: Array<{ label: string; area: "local" | "session"; value: unknown }>;
   console: ConsoleRecord[];
   result?: "PASS" | "FAIL";
+  /** Message of a hard failure thrown outside any step, if one occurred. */
+  hardFailure?: string;
 };
 
 function git(args: string[]): string {
@@ -124,6 +135,7 @@ export class AcceptanceSession {
   readonly receipt: Receipt;
   private popupClient: CdpPageClient | null = null;
   private readonly popupConsole: ConsoleRecord[] = [];
+  private hardFailure: string | null = null;
   private readonly directory: string;
   private stepCounter = 0;
   private currentContext: BrowserContext;
@@ -175,6 +187,12 @@ export class AcceptanceSession {
       launched = await launchProfile(userDataDir);
       const extensionId = new URL(launched.worker.url()).host;
       const branded = Boolean(process.env.NAVSENTINEL_BRANDED_CHROME && process.env.NAVSENTINEL_BRANDED_CHROME !== "0");
+      // Derive the product from the running browser (#873): the env flag only
+      // says what was requested. Branded Chrome reports a "Google Chrome" brand.
+      const brands = await launched.worker.evaluate(() =>
+        ((navigator as unknown as { userAgentData?: { brands?: Array<{ brand: string }> } }).userAgentData?.brands ?? []).map((b) => b.brand),
+      ).catch(() => [] as string[]);
+      const launchedBranded = brands.includes("Google Chrome");
       const receipt: Receipt = {
         schema: "navsentinel-acceptance-receipt/v1",
         guide,
@@ -192,7 +210,9 @@ export class AcceptanceSession {
         },
         build: { distSha256: hashDirectory(extensionPath), uiGuardRevision, manifestVersion: manifest.version },
         browser: {
-          product: branded ? "branded-chrome" : "bundled-chromium",
+          product: launchedBranded ? "branded-chrome" : "bundled-chromium",
+          requested: branded ? "branded-chrome" : "bundled-chromium",
+          brands,
           version: launched.context.browser()?.version() ?? "unknown",
           realistic: process.env.NAVSENTINEL_REALISTIC_CHROME === "1",
           executable: branded ? (process.env.NAVSENTINEL_BRANDED_CHROME === "1" ? "default-install" : process.env.NAVSENTINEL_BRANDED_CHROME ?? null) : null,
@@ -454,7 +474,10 @@ export class AcceptanceSession {
     if (opened !== "ok") throw new Error(`chrome.action.openPopup failed: ${opened}`);
     const prefix = this.extensionUrl("src/popup/popup.html");
     const client = await CdpPageClient.attach(this.devToolsPort, (target) => target.url.startsWith(prefix), "popup");
-    await client.waitFor("document.readyState === 'complete' && (document.getElementById('site')?.textContent ?? '').trim().length > 0", 8000);
+    // popup.html ships "#site" as the placeholder "-"; refreshUi() replaces it
+    // with a host label, so waiting for any other text means the popup has
+    // rendered its state and absence checks are meaningful (#873).
+    await client.waitFor("document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim())", 8000);
     await new Promise((resolve) => setTimeout(resolve, 400));
     this.popupClient = client;
     return client;
@@ -511,6 +534,15 @@ export class AcceptanceSession {
     return all.filter((entry) => (entry.level === "error" || entry.level === "exception") && !ignore.some((pattern) => pattern.test(entry.text)));
   }
 
+  /**
+   * Record a hard failure thrown outside any step. close() runs in the spec's
+   * finally block before Playwright marks the test failed, so without this the
+   * receipt could say PASS for a red test (#873).
+   */
+  markFailed(error: unknown): void {
+    this.hardFailure = error instanceof Error ? error.message : String(error);
+  }
+
   async close(): Promise<void> {
     await this.closePopup();
     this.receipt.console.push(...this.popupConsole);
@@ -523,7 +555,8 @@ export class AcceptanceSession {
     const failedSteps = this.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
     // Soft steps record and continue; the test must still end red.
     expect.soft(failedSteps, "procedure steps that failed (see receipt.json)").toEqual([]);
-    const failed = failedSteps.length > 0 || this.testInfo.status === "failed" || this.testInfo.status === "timedOut";
+    const failed = failedSteps.length > 0 || this.hardFailure !== null || this.testInfo.status === "failed" || this.testInfo.status === "timedOut";
+    if (this.hardFailure !== null) this.receipt.hardFailure = this.hardFailure.slice(0, 2000);
     this.receipt.result = failed ? "FAIL" : "PASS";
     const file = path.join(this.directory, "receipt.json");
     fs.writeFileSync(file, `${JSON.stringify(this.receipt, null, 2)}\n`);

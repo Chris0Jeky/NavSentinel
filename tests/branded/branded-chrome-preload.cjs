@@ -13,8 +13,8 @@
  * It is inert unless `NAVSENTINEL_BRANDED_CHROME` is set:
  *   NAVSENTINEL_BRANDED_CHROME=1                 -> default install path
  *   NAVSENTINEL_BRANDED_CHROME=<path to chrome>  -> that executable
- * Load it with `NODE_OPTIONS=--require=./tests/branded/branded-chrome-preload.cjs`
- * (see scripts/run-branded-lane.mjs).
+ * `playwright.branded.config.ts` and `playwright.acceptance.config.ts` load it
+ * themselves; Playwright workers re-evaluate the config, so no NODE_OPTIONS.
  *
  * This is automated evidence from a real Chrome build; it is not an owner
  * Gate-3 result and does not touch the owner's profile or chrome://extensions.

@@ -273,6 +273,9 @@ test("live web: user-requested navigation on real sites is never blocked or roll
       session.note(`extension-attributed console errors: ${JSON.stringify(extensionErrors).slice(0, 1500)}`);
       expect(extensionErrors.filter((entry) => entry.level === "exception")).toEqual([]);
     }, { soft: true });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

@@ -627,6 +627,9 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
     // Soft steps keep the procedure running past a finding; the test still fails on any.
     const failedSteps = session.receipt.steps.filter((step) => step.status === "failed").map((step) => `${step.id} ${step.title}`);
     expect(failedSteps, "every procedure step passed").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

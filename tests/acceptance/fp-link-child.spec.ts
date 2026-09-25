@@ -48,6 +48,9 @@ test("link-child matrix: clicks on a link's own child element are treated like c
         expect(reached, `${which}: the user's click must reach the link destination`).toBe(true);
       }, { soft: true });
     }
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

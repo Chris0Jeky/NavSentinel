@@ -62,6 +62,9 @@ test("state-layer link: a labelled new-tab link opens in the top frame and insid
         expect(journal).not.toContain("nav_blank_prompt");
       }, { soft: true });
     }
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

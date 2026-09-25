@@ -212,6 +212,9 @@ test("AI-24: merged #356/#464/#466 behaviour in branded Chrome", async ({}, test
 
     session.note(`AI-24 soft-step failures: ${JSON.stringify(failures)}`);
     expect(failures, "every AI-24 step passes").toEqual([]);
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }

@@ -93,6 +93,9 @@ test("red-team: overlay auto-cleanup evasions (main)", async ({}, testInfo) => {
 
     session.note(`REDTEAM-2 attempts: ${JSON.stringify(attempts)}`);
     session.observe("summary", JSON.stringify(attempts));
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
   } finally {
     await session.close();
   }
