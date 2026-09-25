@@ -61,3 +61,5 @@ function installStableHistoryBoundary(name: HistoryMethodName): void {
 
 installStableHistoryBoundary("pushState");
 installStableHistoryBoundary("replaceState");
+
+export {};
