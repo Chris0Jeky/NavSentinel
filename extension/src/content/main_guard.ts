@@ -257,7 +257,20 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
   if ((target as Node).nodeType !== Node.ELEMENT_NODE) return null;
   const el = target as Element;
   if (el.closest("a")) return null;
-  return el.closest("button, input[type='button'], input[type='submit']") as Element | null;
+  // Walk outward like the original value-selector did (skipping non-matching
+  // inputs), but compare `type` ASCII case-insensitively: the keyword is
+  // enumerated, so `type="SUBMIT"` submits while `[type='submit']` misses it.
+  // Programmatic on purpose — see findSubmitControl in nav_authority.ts. (#820)
+  let current: Element | null = el;
+  while (current) {
+    const candidate: Element | null = current.closest("button, input");
+    if (!candidate) return null;
+    if (candidate.tagName.toLowerCase() === "button") return candidate;
+    const type = (candidate.getAttribute("type") ?? "").toLowerCase();
+    if (type === "button" || type === "submit") return candidate;
+    current = candidate.parentElement;
+  }
+  return null;
 }
 
 function hasMeaningfulName(el: Element): boolean {

@@ -244,3 +244,32 @@ describe("buildPageSnapshot formActions cap (#401)", () => {
     expect(snap.formActions[0]!.action).toBe("");
   });
 });
+
+describe("buildPageSnapshot effective base URL (#785)", () => {
+  it("captures document.baseURI honoring <base href>", () => {
+    document.documentElement.innerHTML =
+      `<head><base href="https://cdn.evil/static/"></head>` +
+      `<body><form action="login.php"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.baseUrl).toBe("https://cdn.evil/static/");
+  });
+
+  it("flags a relative password-form action via a cross-origin <base href>", () => {
+    document.documentElement.innerHTML =
+      `<head><base href="https://cdn.evil/static/"></head>` +
+      `<body><form action="login.php"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(true);
+    expect(result.reasons.some((r) => r.includes("different domain"))).toBe(true);
+  });
+
+  it("stays clean when <base href> matches the page origin", () => {
+    document.documentElement.innerHTML =
+      `<head><base href="https://bank.test/app/"></head>` +
+      `<body><form action="login.php"><input type="password"></form></body>`;
+    const snap = buildPageSnapshot(document);
+    const result = analyzeSnapshot(snap, "bank.test");
+    expect(result.suspiciousFormAction).toBe(false);
+  });
+});
