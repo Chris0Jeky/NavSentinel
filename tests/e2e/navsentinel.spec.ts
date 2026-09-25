@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { EVENT_LOG_KEY, type EventLogEntry } from "../../extension/src/shared/storage";
+import { isJournalReasonCode } from "../../extension/src/evidence/evidence_reasons";
 import {
   assertNoToastFor,
   clickToastButton,
@@ -89,6 +90,17 @@ test("Level 1 blocks new tabs @smoke", async () => {
         }, EVENT_LOG_KEY),
         { timeout: 3000 }
       ).toContain("nav_blank_prompt");
+
+      // The held row journals the scorer codes behind it, each explainable in the
+      // Protection Center (#867).
+      const blankReasons = await serviceWorker.evaluate(async (eventLogKey) => {
+        const stored = await chrome.storage.local.get(eventLogKey);
+        const events = Array.isArray(stored[eventLogKey]) ? stored[eventLogKey] : [];
+        const entry = events.find((event: { kind?: unknown }) => event?.kind === "nav_blank_prompt") as { reasons?: unknown } | undefined;
+        return Array.isArray(entry?.reasons) ? entry.reasons.map(String) : [];
+      }, EVENT_LOG_KEY);
+      expect(blankReasons.length, "nav_blank_prompt stores its reason codes").toBeGreaterThan(0);
+      expect(blankReasons.filter((code) => !isJournalReasonCode(code)), "every stored code has journal text").toEqual([]);
 
       // The rejected click is a loud decision only. A later asynchronous write
       // must not misclassify the same action as an allowed navigation (#252).
