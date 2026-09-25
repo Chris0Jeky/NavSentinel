@@ -346,7 +346,7 @@ export interface OverlayAutoDismissStats {
  * Count retained local events with `extra.overlayAutoDismissed === true` into
  * three mutually exclusive paths: page settle (`mutation_alert` with the
  * `overlay_detected` reason), injected overlay (`mutation_alert` with the
- * `overlay_injected` reason), and blocked click (`nav_blank_prompt`). Each
+ * `overlay_injected` reason), and blocked click (`nav_blank_prompt` or `nav_click_block`). Each
  * non-empty event `id` counts at most once. Malformed records, legacy records
  * without the exact boolean flag, ambiguous records carrying both relevant
  * mutation reasons, mutation alerts with no relevant reason, and unrelated
@@ -373,7 +373,7 @@ export function computeOverlayAutoDismissStats(
         ? (entry.extra as Record<string, unknown>)
         : undefined;
     if (extra?.overlayAutoDismissed !== true) continue;
-    if (entry.kind === "nav_blank_prompt") {
+    if (entry.kind === "nav_blank_prompt" || entry.kind === "nav_click_block") {
       counted.add(entry.id);
       blockedClick++;
     } else if (entry.kind === "mutation_alert") {

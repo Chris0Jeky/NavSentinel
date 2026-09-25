@@ -630,6 +630,25 @@ describe("computeOverlayAutoDismissStats (#562)", () => {
     expect(stats).toEqual({ total: 3, pageSettle: 1, injectedOverlay: 1, blockedClick: 1 });
   });
 
+  it("counts same-tab nav_click_block dismissals as blocked clicks (#562)", () => {
+    const stats = computeOverlayAutoDismissStats([
+      base({ id: "sametab-1", kind: "nav_click_block", extra: { overlayAutoDismissed: true } }),
+      base({ id: "newtab-1", kind: "nav_blank_prompt", extra: { overlayAutoDismissed: true } }),
+      base({ id: "flag-false", kind: "nav_click_block", extra: { overlayAutoDismissed: false } }),
+      base({ id: "flag-truthy", kind: "nav_click_block", extra: { overlayAutoDismissed: 1 } }),
+    ]);
+    expect(stats).toEqual({ total: 2, pageSettle: 0, injectedOverlay: 0, blockedClick: 2 });
+  });
+
+  it("dedups a repeated id shared by nav_click_block and nav_blank_prompt (#562)", () => {
+    const stats = computeOverlayAutoDismissStats([
+      base({ id: "dup-block", kind: "nav_click_block", extra: { overlayAutoDismissed: true } }),
+      base({ id: "dup-block", kind: "nav_blank_prompt", extra: { overlayAutoDismissed: true } }),
+      base({ id: "dup-block", kind: "nav_click_block", extra: { overlayAutoDismissed: true } }),
+    ]);
+    expect(stats).toEqual({ total: 1, pageSettle: 0, injectedOverlay: 0, blockedClick: 1 });
+  });
+
   it("counts each non-empty id at most once across repeated records", () => {
     const stats = computeOverlayAutoDismissStats([
       base({ id: "dup", kind: "mutation_alert", reasons: ["overlay_detected"], extra: { overlayAutoDismissed: true } }),
@@ -650,7 +669,7 @@ describe("computeOverlayAutoDismissStats (#562)", () => {
       base({ id: "invalid-reason", kind: "mutation_alert", reasons: ["overlay_detected", 1], extra: { overlayAutoDismissed: true } }),
       base({ id: "ambiguous", kind: "mutation_alert", reasons: ["overlay_detected", "overlay_injected"], extra: { overlayAutoDismissed: true } }),
       base({ id: "irrelevant-reason", kind: "mutation_alert", reasons: ["overlay_cleanup_undo"], extra: { overlayAutoDismissed: true } }),
-      base({ id: "unrelated-kind", kind: "nav_click_block", extra: { overlayAutoDismissed: true } }),
+      base({ id: "unrelated-kind", kind: "nav_silent_allow", extra: { overlayAutoDismissed: true } }),
       base({ id: "no-reasons", kind: "mutation_alert", extra: { overlayAutoDismissed: true } }),
     ]);
     expect(stats).toEqual({ total: 0, pageSettle: 0, injectedOverlay: 0, blockedClick: 0 });
