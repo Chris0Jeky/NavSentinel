@@ -139,7 +139,23 @@ export class CdpPageClient {
   async waitFor(predicateSource: string, timeoutMs = 5000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      if (await this.evaluate<boolean>(`Boolean(${predicateSource})`).catch(() => false)) return;
+      let satisfied: boolean;
+      try {
+        satisfied = await this.evaluate<boolean>(`Boolean(${predicateSource})`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (this.closed || /DevTools socket closed/i.test(message)) {
+          throw new Error(`${this.label}: DevTools socket closed while waiting for ${predicateSource}: ${message}`, { cause: error });
+        }
+        if (message.includes(`${this.label} evaluate failed:`)) {
+          // The predicate threw in the page before render (for example a
+          // missing element without optional chaining); poll again as not-yet-true.
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          continue;
+        }
+        throw error;
+      }
+      if (satisfied) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error(`${this.label}: timed out waiting for ${predicateSource}`);
