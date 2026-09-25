@@ -185,3 +185,145 @@ export function targetsChildNavigable(target: string, view: ChildNavigableView):
   }
   return false;
 }
+
+/**
+ * Redirect (form-submit) allowance for the MAIN-world guard (#864).
+ *
+ * The isolated world decides every trusted click and, when it allows one,
+ * sends `ns-allow` over the bridge MessagePort. That message is delivered a
+ * task later, so a page that submits its own form synchronously or in a
+ * microtask from its click handler used to find no allowance, while the same
+ * submit deferred by one task passed. The MAIN world therefore arms the SAME
+ * allowance for the click's own task from a document-capture listener that runs
+ * after the isolated world's window-capture decision (a blocked click stops
+ * propagation there and never arms), and the isolated message stays the
+ * authority for everything after that task.
+ *
+ * Invariant: this never grants more than the one-task-deferred submit already
+ * got. The same-task arm has the isolated grant's scope (unrestricted in the
+ * top frame, the declared submit action in a child frame), expires with the
+ * task, and shares the per-gesture budget: the isolated follow-up for an armed
+ * click keeps the redirects already spent instead of resetting them. The
+ * follow-up is recognised by the click's `event.timeStamp`, which both worlds
+ * read from the same Event (measured identical on Chromium).
+ */
+export interface RedirectAllowanceState {
+  /** End of the window granted by the isolated world's `ns-allow`; 0 = none. */
+  until: number;
+  restrict: boolean;
+  target: string;
+  /** Same-task allowance armed by this world's trusted-click listener. */
+  sameTaskArmed: boolean;
+  sameTaskArmedAt: number;
+  sameTaskRestrict: boolean;
+  sameTaskTarget: string;
+  /** Redirects spent in the current gesture, shared by both allowances. */
+  count: number;
+  /** `event.timeStamp` of armed clicks whose isolated grant has not arrived. */
+  pendingFollowUps: number[];
+}
+
+export interface RedirectAllowanceLimits {
+  /** Lifetime of an isolated grant, and the outer bound of a same-task arm. */
+  ttlMs: number;
+  /** Redirects one gesture may spend across both allowances. */
+  maxPerGesture: number;
+  /** Bound on remembered same-task arms awaiting their follow-up. */
+  maxPendingFollowUps: number;
+}
+
+/** Where a redirect allowance may be spent. */
+export interface RedirectAllowanceScope {
+  /** When true, only `target` (an exact action URL) may be spent. */
+  restrict: boolean;
+  target: string;
+}
+
+export function createRedirectAllowance(): RedirectAllowanceState {
+  return {
+    until: 0,
+    restrict: false,
+    target: "",
+    sameTaskArmed: false,
+    sameTaskArmedAt: 0,
+    sameTaskRestrict: false,
+    sameTaskTarget: "",
+    count: 0,
+    pendingFollowUps: [],
+  };
+}
+
+/**
+ * Arm the allowance for the current task after a trusted click that the
+ * isolated world did not block. Starts the gesture's budget, as the isolated
+ * grant for the same click would one task later.
+ */
+export function armSameTaskRedirect(
+  state: RedirectAllowanceState,
+  now: number,
+  gestureTs: number,
+  scope: RedirectAllowanceScope,
+  limits: RedirectAllowanceLimits,
+): void {
+  state.count = 0;
+  state.sameTaskArmed = true;
+  state.sameTaskArmedAt = now;
+  state.sameTaskRestrict = scope.restrict;
+  state.sameTaskTarget = scope.target;
+  state.pendingFollowUps.push(gestureTs);
+  if (state.pendingFollowUps.length > limits.maxPendingFollowUps) state.pendingFollowUps.shift();
+}
+
+/** End the same-task arm; called from the next task. */
+export function endSameTaskRedirect(state: RedirectAllowanceState): void {
+  state.sameTaskArmed = false;
+}
+
+/**
+ * Apply an isolated-world `ns-allow` grant. When it carries the `gestureTs` of
+ * a click this world already armed, it is that click's follow-up and the
+ * gesture's spent redirects carry over; any grant without a matching click
+ * (a rollback grant, a click this world never saw) restarts the budget exactly
+ * as before #864. Grants arrive in click order over one port, so armed clicks
+ * older than the matched one never received a grant and are dropped.
+ */
+export function applyIsolatedRedirectAllowance(
+  state: RedirectAllowanceState,
+  now: number,
+  grant: RedirectAllowanceScope & { allowRedirect: boolean; gestureTs?: number },
+  limits: RedirectAllowanceLimits,
+): void {
+  const pending = state.pendingFollowUps;
+  const match = grant.gestureTs === undefined ? -1 : pending.indexOf(grant.gestureTs);
+  if (match >= 0) {
+    pending.splice(0, match + 1);
+  } else {
+    state.count = 0;
+  }
+  state.until = grant.allowRedirect ? now + limits.ttlMs : 0;
+  state.restrict = grant.restrict;
+  state.target = grant.target;
+}
+
+/**
+ * Spend one redirect for a submission to `actionUrl` if either allowance
+ * covers it and the gesture budget is not exhausted.
+ */
+export function consumeRedirect(
+  state: RedirectAllowanceState,
+  now: number,
+  actionUrl: string | undefined,
+  limits: RedirectAllowanceLimits,
+): boolean {
+  if (state.count >= limits.maxPerGesture) return false;
+  const inScope = (restrict: boolean, target: string) =>
+    !restrict || (actionUrl !== undefined && actionUrl !== "" && actionUrl === target);
+  const isolated = state.until > 0 && now <= state.until && inScope(state.restrict, state.target);
+  const sameTask =
+    state.sameTaskArmed &&
+    now - state.sameTaskArmedAt <= limits.ttlMs &&
+    inScope(state.sameTaskRestrict, state.sameTaskTarget);
+  if (!isolated && !sameTask) return false;
+  state.count += 1;
+  return true;
+}
