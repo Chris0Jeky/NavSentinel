@@ -624,17 +624,23 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
 /**
  * Check whether a form contains credential-type input fields.
  *
- * Looks for inputs with type="password" within the form. Future versions
- * may also check for email/username fields in sensitive contexts.
+ * Visible, non-disabled password controls count as credential fields even when
+ * they are unnamed because page code can still read them during submission.
+ * Inline-hidden controls count only when named: unlike passive page/beacon
+ * heuristics, this boundary must account for successful controls whose values
+ * the browser will serialize despite `display:none` or `visibility:hidden`.
+ * Disabled controls never count.
  *
  * @param form - The form element to inspect
- * @returns true if the form contains password inputs
+ * @returns true if the form can expose or submit password data
  *
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
   const inputs = queryPasswordInputs(form);
   for (let i = 0; i < inputs.length; i++) {
-    if (isVisiblePasswordField(inputs[i] as HTMLInputElement)) return true;
+    const input = inputs[i] as HTMLInputElement;
+    if (isVisiblePasswordField(input)) return true;
+    if (!input.disabled && input.name.length > 0) return true;
   }
   return false;
 }
