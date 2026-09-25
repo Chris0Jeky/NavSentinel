@@ -861,6 +861,80 @@ describe("content_analyzer - common-word brand suppression", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Common-word imgSignals word boundary (purchase-logo must not match chase)
+// ---------------------------------------------------------------------------
+
+describe("content_analyzer - common-word img boundary (#831)", () => {
+  it("does NOT flag 'chase' from img-only substring 'purchase-logo.png'", () => {
+    // Pre-fix the img channel matched by raw substring, so any mid-word
+    // occurrence minted an img-only (+15) brand signal.
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "purchase-logo.png",
+    });
+    const result = analyzeSnapshot(snap, "shop.com");
+    expect(result.brandMismatch).toBe(false);
+    expect(result.brandDetected).not.toBe("Chase");
+  });
+
+  it("does NOT flag 'apple' from img-only substring 'pineapple.png'", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "pineapple.png",
+    });
+    const result = analyzeSnapshot(snap, "fruit-store.com");
+    expect(result.brandMismatch).toBe(false);
+    expect(result.brandDetected).not.toBe("Apple");
+  });
+
+  it("DOES flag Chase img-only on word-boundary 'chase-logo.png'", () => {
+    // Inverted-condition guard: the boundary requirement must stay selective.
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "chase-logo.png",
+    });
+    const result = analyzeSnapshot(snap, "evil-chase.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Chase");
+    expect(result.score).toBe(15);
+  });
+
+  it("DOES flag Chase img-only on underscore-delimited 'chase_logo.svg'", () => {
+    // "_" is a JavaScript word character, so a \b boundary would miss the
+    // most common asset-name delimiter.
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "chase_logo.svg",
+    });
+    const result = analyzeSnapshot(snap, "evil-chase.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Chase");
+    expect(result.score).toBe(15);
+  });
+
+  it("DOES flag Apple img-only on underscore-delimited 'apple_logo.png'", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "apple_logo.png",
+    });
+    const result = analyzeSnapshot(snap, "evil-apple.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Apple");
+  });
+
+  it("DOES flag Apple img-only on word-boundary 'apple-icon.png'", () => {
+    const snap = loginSnapshot({
+      title: "Login",
+      imgSignals: "apple-icon.png",
+    });
+    const result = analyzeSnapshot(snap, "evil-apple.com");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("Apple");
+    expect(result.score).toBe(15);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Hidden-Input-Harvester narrowed
 // ---------------------------------------------------------------------------
 
