@@ -364,6 +364,53 @@ describe("suite storage and allowlist migration", () => {
     expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com"]);
   });
 
+  it("holds imported and added trusted domains to hostname syntax (#869)", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomainWithResult, getTrustedDomains, importAll } = await import(
+      "../extension/src/shared/storage"
+    );
+    const label63 = "a".repeat(63);
+    await importAll({
+      trustedDomains: [
+        "__proto__",
+        7,
+        "a".repeat(5000),
+        `${"b".repeat(64)}.com`,
+        "under_score.example",
+        "-leading-hyphen.com",
+        "Example.COM",
+        `${label63}.com`,
+        "localhost",
+        "127.0.0.1",
+        "[2001:db8::1]",
+        "bücher.de",
+      ],
+    });
+
+    const expected = ["127.0.0.1", "2001:db8::1", `${label63}.com`, "example.com", "localhost", "xn--bcher-kva.de"];
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(expected);
+
+    // The Options add control and the popup/credential trust actions share this
+    // rule: junk is refused rather than persisted.
+    expect(await addTrustedDomainWithResult("__proto__")).toBeNull();
+    expect(await addTrustedDomainWithResult("x".repeat(300))).toBeNull();
+    expect(await getTrustedDomains()).toEqual(expected);
+  });
+
+  it("drops junk trusted domains already in storage on the next read and write (#869)", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:trusted_domains_v1": ["__proto__", "a".repeat(5000), "example.com", 7],
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { addTrustedDomain, getTrustedDomains } = await import("../extension/src/shared/storage");
+    expect(await getTrustedDomains()).toEqual(["example.com"]);
+    await addTrustedDomain("example.org");
+    expect(store["sentinelsuite:trusted_domains_v1"]).toEqual(["example.com", "example.org"]);
+  });
+
   it("loads settings stored by a pre-RI-05 build without the retired dnrEnabled flag", async () => {
     // An installed profile still holds the retired DNR backstop flag. Loading must
     // keep working and must not surface the retired field to callers.
