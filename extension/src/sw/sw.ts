@@ -9,6 +9,7 @@ import {
   handleEventLogAppendMessage,
   handleEventLogControlMessage,
   handleSuiteImportMessage,
+  handleAllowlistMutationMessage,
   handleSuiteSettingsUpdateMessage,
   handlePromptOutcomeStorageMessage,
   isEventLogAppendMessage,
@@ -661,6 +662,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });
+    return true;
+  }
+
+  if ((message as { type?: unknown }).type === "ns-allowlist-mutate") {
+    void handleAllowlistMutationMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((error) => sendResponse?.({ ok: false, error: error instanceof Error ? error.message : String(error) }));
     return true;
   }
 
