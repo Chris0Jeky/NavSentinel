@@ -1,9 +1,11 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
   analyzeSnapshot,
   BRAND_DB,
   HTML_SNIPPET_MAX,
   KIT_FINGERPRINTS,
+  buildPageSnapshot,
   domainMatchesBrand,
   type PageSnapshot,
 } from "../extension/src/content/content_analyzer";
@@ -933,5 +935,27 @@ describe("content_analyzer - IPv6-literal page form actions (#208 R1)", () => {
     const result = analyzeSnapshot(snap, "::1");
     // Pre-fix the "https://::1" base threw -> "Form action URL could not be parsed".
     expect(result.reasons.join(" ")).not.toMatch(/could not be parsed/i);
+  });
+});
+
+describe("buildPageSnapshot password detection (#820)", () => {
+  it("marks hasPassword for a case-variant type the browser still masks", () => {
+    document.documentElement.innerHTML =
+      "<head></head><body>" +
+      '<form action="/login"><input type="PASSWORD"></form>' +
+      "</body>";
+    const snap = buildPageSnapshot(document);
+    expect(snap.hasPasswordField).toBe(true);
+    expect(snap.formActions).toEqual([{ action: "/login", hasPassword: true }]);
+  });
+
+  it("leaves hasPassword false when the form has no password field", () => {
+    document.documentElement.innerHTML =
+      "<head></head><body>" +
+      '<form action="/login"><input type="text"></form>' +
+      "</body>";
+    const snap = buildPageSnapshot(document);
+    expect(snap.hasPasswordField).toBe(false);
+    expect(snap.formActions).toEqual([{ action: "/login", hasPassword: false }]);
   });
 });

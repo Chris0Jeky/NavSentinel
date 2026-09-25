@@ -96,7 +96,7 @@ import {
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
-import { grantsTabNavigationAuthority } from "./nav_authority";
+import { findSubmitControl, grantsTabNavigationAuthority } from "./nav_authority";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
 const NS_SOURCE = "__navsentinel__";
@@ -1332,13 +1332,6 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
 }
 
 /**
- * Selector for a control whose default action submits a form: a `<button>`
- * whose type defaults to submit, or a submit/image input.
- */
-const SUBMIT_INTENT_SELECTOR =
-  "button:not([type=button]):not([type=reset]),input[type=submit],input[type=image]";
-
-/**
  * True when a click resolves to a navigation the clicking frame itself declared
  * through a form submit control. Paired with a cross-document anchor href, this
  * is the "in-frame navigation intent" that lets a child frame mint tab-wide
@@ -1354,7 +1347,7 @@ const SUBMIT_INTENT_SELECTOR =
  */
 function formSubmitIntentUrl(e: MouseEvent): string | null {
   const target = e.target instanceof Element ? e.target : null;
-  const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
+  const control = findSubmitControl(target);
   const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
   if (!form) return null;
   const submitterAction = control?.getAttribute("formaction");

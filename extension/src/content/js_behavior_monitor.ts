@@ -61,6 +61,7 @@ export interface JsCredentialReadSignal {
 }
 
 import type { JsBehaviorMonitorConfig } from "./js_behavior_monitor.types";
+import { queryPasswordInputs } from "./password_field";
 
 export type { JsBehaviorMonitorConfig };
 
@@ -277,7 +278,10 @@ let _xhrPatched = false;
 let _beaconPatched = false;
 
 function pageHasCredentialFields(): boolean {
-  return document.querySelector('input[type="password"]:not([disabled])') !== null;
+  // Attribute-presence disabled check, exactly like the `:not([disabled])`
+  // selector this replaces (NOT the `disabled` IDL, which would additionally
+  // exclude fieldset-disabled inputs). (#820)
+  return queryPasswordInputs(document).some((el) => !el.hasAttribute("disabled"));
 }
 
 function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | "beacon"): void {
@@ -510,7 +514,7 @@ function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
               const signal: JsCredentialReadSignal = {
                 ts: now,
                 isInsideSubmitHandler: false,
-                fieldCount: document.querySelectorAll('input[type="password"]').length,
+                fieldCount: queryPasswordInputs(document).length,
               };
               _config.postSignal(
                 "ns-js-credential-read",
@@ -583,7 +587,7 @@ export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
  *
  */
 export function formHasCredentialFields(form: HTMLFormElement): boolean {
-  return form.querySelector('input[type="password"]') !== null;
+  return queryPasswordInputs(form).length > 0;
 }
 
 /**
