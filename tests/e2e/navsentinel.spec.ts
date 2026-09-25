@@ -181,6 +181,9 @@ test("Cross-host child events retain the top-level page attribution #539 @regres
       const play = child.locator("#play");
       const box = await play.boundingBox();
       expect(box, "Expected the child-frame #play button to be visible").toBeTruthy();
+      // Enter the child frame before pressing: a direct click on this main-frame
+      // coordinate did not deliver pointer input to the child in branded Chrome.
+      await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
       await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
       await expect.poll(
