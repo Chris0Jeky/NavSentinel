@@ -8,7 +8,13 @@ import {
 } from "@navsentinel/js-behavior-monitor";
 import { OutboundQueue, isMainGuardAlertType, isFloodableAlertType } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import {
+  effectiveFormTarget,
+  enforceMapSizeCap,
+  pruneTimestampWindow,
+  shouldEmitRapidPushState,
+  targetsChildNavigable,
+} from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -591,6 +597,43 @@ function isFormSelfTarget(formTarget: string): boolean {
   return formTarget === window.name;
 }
 
+// Natives for the #865 child-frame lookup, captured before page script can
+// replace them: `name` and `length` are configurable own accessors on window,
+// and a page global can shadow `window[name]`. The named-properties object
+// (WindowProperties, immutable prototype) answers with the browser's own
+// child-name lookup without running any getter; indexed child access cannot be
+// shadowed at all.
+const nativeGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const nativeWindowNameGetter = nativeGetOwnPropertyDescriptor(window, "name")?.get;
+const nativeWindowLengthGetter = nativeGetOwnPropertyDescriptor(window, "length")?.get;
+const windowNamedProperties: object | null = (() => {
+  try {
+    return Object.getPrototypeOf(Window.prototype) as object | null;
+  } catch {
+    return null;
+  }
+})();
+
+/**
+ * True when this submission lands in a named child frame of this document
+ * (#865). Such a post cannot navigate the tab, so it passes without a notice
+ * and without pre-authorising a top-level navigation to its action URL.
+ */
+function formTargetsChildFrame(form: HTMLFormElement, submitter?: HTMLElement | null): boolean {
+  try {
+    const named = windowNamedProperties;
+    if (!named || !nativeWindowNameGetter || !nativeWindowLengthGetter) return false;
+    return targetsChildNavigable(effectiveFormTarget(form, submitter), {
+      selfName: String(nativeWindowNameGetter.call(window)),
+      namedObject: (name) => nativeGetOwnPropertyDescriptor(named, name)?.value,
+      childCount: Number(nativeWindowLengthGetter.call(window)) || 0,
+      child: (index) => (window as unknown as Record<number, unknown>)[index],
+    });
+  } catch {
+    return false;
+  }
+}
+
 function recordWindowOpen(): void {
   lastWindowOpenTs = nowMs();
   postToIsolated("ns-dblclick-window-open", { ts: lastWindowOpenTs });
@@ -735,6 +778,15 @@ function patchForms(): void {
       return;
     }
 
+    // #865: a post into this document's own named iframe never leaves the page.
+    // No notifyAllowedTarget: that would let the action URL later commit as a
+    // top-level navigation without the rollback check.
+    if (formTargetsChildFrame(this)) {
+      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+      nativeFormSubmit.call(this);
+      return;
+    }
+
     const allowance = consumeRedirectAllowance(actionUrl);
     if (allowance !== "none") {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
@@ -764,6 +816,15 @@ function patchForms(): void {
           ...(actionUrl !== undefined ? { url: actionUrl } : {})
         });
         notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this, submitter) });
+        nativeFormRequestSubmit.call(this, submitter);
+        return;
+      }
+
+      if (formTargetsChildFrame(this, submitter)) {
+        postAllowed({
+          kind: "form_request_submit",
+          ...(actionUrl !== undefined ? { url: actionUrl } : {})
+        });
         nativeFormRequestSubmit.call(this, submitter);
         return;
       }
