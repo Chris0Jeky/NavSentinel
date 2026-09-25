@@ -191,6 +191,22 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Math.max(min, Math.min(max, n));
 }
 
+const PROTECTION_MODES: readonly string[] = ["off", "smart", "strict"] satisfies Mode[];
+
+/**
+ * The single validation authority for the navigation and credential protection
+ * modes (#866). Matching is exact: enforcement compares against the lowercase
+ * literals, so a value such as `"OFF"` or `"bogus"` is not a mode at all and
+ * must not be displayed as one.
+ */
+export function isProtectionMode(value: unknown): value is Mode {
+  return typeof value === "string" && PROTECTION_MODES.includes(value);
+}
+
+function normalizeProtectionMode(value: unknown, fallback: Mode): Mode {
+  return isProtectionMode(value) ? value : fallback;
+}
+
 // RI-05 retired the test-only DNR backstop, but installed profiles still hold its
 // `dnrEnabled` flag inside the stored nav settings. Rebuild nav from known fields
 // only so the retired flag is dropped instead of being spread forward and
@@ -201,10 +217,17 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 // build) cannot survive a settings read and cannot re-enable JavaScript-behaviour
 // instrumentation. That capability is a build-time release-profile decision, so no
 // stored value participates in it at all.
+//
+// An unknown or non-string mode (a crafted backup, a corrupt store) keeps the
+// current mode, and every read and import merges onto DEFAULT_SUITE_SETTINGS,
+// so such a value reads as the default "smart" on every surface (#866).
 function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | undefined): NavSettings {
   const merged = { ...cur, ...(partial ?? {}) };
   return {
-    defaultMode: merged.defaultMode,
+    defaultMode: normalizeProtectionMode(
+      merged.defaultMode,
+      normalizeProtectionMode(cur.defaultMode, DEFAULT_SUITE_SETTINGS.nav.defaultMode),
+    ),
     debug: merged.debug,
     autoDismissOverlays: merged.autoDismissOverlays === true,
   };
@@ -222,6 +245,10 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
     }
   };
 
+  next.credential.mode = normalizeProtectionMode(
+    next.credential.mode,
+    normalizeProtectionMode(cur.credential.mode, DEFAULT_SUITE_SETTINGS.credential.mode),
+  );
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
   next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
   next.credential.mediumRiskThreshold = clampInt(
@@ -289,6 +316,19 @@ export function rebaseOptionsSettingsDraft(
   ) as unknown as SuiteSettings;
 }
 
+/**
+ * The settings every reader derives from a stored settings value: validated and
+ * merged over the defaults. Pages, content scripts and the service worker's
+ * synchronous mode cache all go through this, so they agree on the effective
+ * mode even when the stored value is hostile (#866).
+ */
+export function normalizeStoredSuiteSettings(stored: unknown): SuiteSettings {
+  return mergeSuiteSettings(
+    structuredClone(DEFAULT_SUITE_SETTINGS),
+    isRecord(stored) ? stored as SuiteSettingsPatch : {},
+  );
+}
+
 export async function getSuiteSettings(): Promise<SuiteSettings> {
   const res = await chrome.storage.local.get([SUITE_SETTINGS_KEY, LEGACY_SETTINGS_KEY]);
   const stored = res[SUITE_SETTINGS_KEY] as SuiteSettings | undefined;
@@ -302,7 +342,7 @@ export async function getSuiteSettings(): Promise<SuiteSettings> {
     }
     return structuredClone(DEFAULT_SUITE_SETTINGS);
   }
-  return mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), stored);
+  return normalizeStoredSuiteSettings(stored);
 }
 
 function createStorageWriteQueue(reportError?: (error: unknown) => void) {
@@ -376,7 +416,7 @@ function sanitizeSuiteSettingsFields(value: unknown, defaults: Record<string, un
       if (!sanitizeSuiteSettingsFields(candidate, defaultValue)) return null;
     } else if (typeof candidate !== typeof defaultValue ||
       (typeof candidate === "number" && !Number.isFinite(candidate)) ||
-      ((key === "defaultMode" || key === "mode") && !["off", "smart", "strict"].includes(candidate as string))) {
+      ((key === "defaultMode" || key === "mode") && !isProtectionMode(candidate))) {
       return null;
     }
   }
@@ -437,8 +477,7 @@ export function onSuiteSettingsChange(cb: (s: SuiteSettings) => void): void {
     if (areaName !== "local") return;
     const change = changes[SUITE_SETTINGS_KEY];
     if (!change) return;
-    const next = (change.newValue as SuiteSettings | undefined) ?? DEFAULT_SUITE_SETTINGS;
-    cb(mergeSuiteSettings(structuredClone(DEFAULT_SUITE_SETTINGS), next));
+    cb(normalizeStoredSuiteSettings(change.newValue));
   });
 }
 
