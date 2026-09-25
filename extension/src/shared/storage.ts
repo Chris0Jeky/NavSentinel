@@ -390,17 +390,25 @@ function updateSuiteSettingsDirect(
   partial: SuiteSettingsPatch,
   expected?: SuiteSettings,
 ): Promise<SuiteSettingsUpdateResponse> {
-  return queueSuiteSettingsWrite(async (): Promise<SuiteSettingsUpdateResponse> => {
-    const cur = await getSuiteSettings();
-    if (expected && !patchMatchesExpectedSettings(
-      cur as unknown as SettingsRecord,
-      expected as unknown as SettingsRecord,
-      partial as SettingsRecord,
-    )) return { ...cur, conflict: true };
-    const merged = mergeSuiteSettings(cur, partial);
-    await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
-    return merged;
-  });
+  // Same-worker import/patch ordering (#891): hold the bulk lane BEFORE reading
+  // settings so an import that enqueued first commits before this patch reads.
+  // The outer bulk lane preserves import/reset ordering while the inner settings
+  // queue still preserves patch-vs-patch ordering; the import's atomic core
+  // write is untouched. A patch that enqueued before a full settings import
+  // still loses to that replacement.
+  return queueBulkDataOperation(() =>
+    queueSuiteSettingsWrite(async (): Promise<SuiteSettingsUpdateResponse> => {
+      const cur = await getSuiteSettings();
+      if (expected && !patchMatchesExpectedSettings(
+        cur as unknown as SettingsRecord,
+        expected as unknown as SettingsRecord,
+        partial as SettingsRecord,
+      )) return { ...cur, conflict: true };
+      const merged = mergeSuiteSettings(cur, partial);
+      await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+      return merged;
+    }),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
