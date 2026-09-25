@@ -13,7 +13,7 @@
  * site). The swapped destination is `127.0.0.2`, which nothing serves, so the
  * test watches outgoing requests rather than page content.
  */
-import { chromium, expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,7 +31,7 @@ const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
 test.setTimeout(120_000);
 
 async function withAllowlistedPage(
-  run: (page: Page, approvedBase: string) => Promise<void>,
+  run: (page: Page, approvedBase: string, serviceWorker: Worker) => Promise<void>,
 ): Promise<void> {
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-submit-swap-"));
@@ -57,7 +57,7 @@ async function withAllowlistedPage(
     await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded" });
     await waitForNavSentinelBridge(page);
     const approvedBase = `http://localhost:${new URL(baseUrl).port}`;
-    await run(page, approvedBase);
+    await run(page, approvedBase, serviceWorker);
   } finally {
     await context?.close();
     if (gym) await gym.close();
@@ -92,6 +92,70 @@ test("an allowlisted blocked form.submit() still reaches its approved destinatio
         timeout: 10_000,
       })
       .toBe(true);
+  });
+});
+
+test("automatic form approval grants only its destination to the rollback worker (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase, serviceWorker) => {
+    await serviceWorker.evaluate(() => {
+      const scope = globalThis as typeof globalThis & { __formGrantMessages?: Array<{ type: string; url?: string }> };
+      scope.__formGrantMessages = [];
+      chrome.runtime.onMessage.addListener((message: unknown) => {
+        const grant = message as { type?: unknown; url?: unknown };
+        if (grant?.type === "ns-allow-nav" || grant?.type === "ns-allow-target-nav") {
+          scope.__formGrantMessages?.push({
+            type: grant.type,
+            ...(typeof grant.url === "string" ? { url: grant.url } : {}),
+          });
+        }
+      });
+    });
+    const approved = `${approvedBase}/level1-basic-opacity.html?submit=approved`;
+    await page.evaluate((action) => {
+      const form = document.createElement("form");
+      form.method = "get";
+      form.action = action;
+      document.body.appendChild(form);
+      form.submit();
+    }, approved);
+
+    await expect.poll(() => serviceWorker.evaluate(() => {
+      const scope = globalThis as typeof globalThis & { __formGrantMessages?: Array<{ type: string; url?: string }> };
+      return scope.__formGrantMessages ?? [];
+    })).toContainEqual({ type: "ns-allow-target-nav", url: approved });
+    const grants = await serviceWorker.evaluate(() => {
+      const scope = globalThis as typeof globalThis & { __formGrantMessages?: Array<{ type: string; url?: string }> };
+      return scope.__formGrantMessages ?? [];
+    });
+    expect(grants.filter((grant) => grant.type === "ns-allow-nav")).toEqual([]);
+  });
+});
+
+test("relative form actions use document base URI for automatic approval (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase) => {
+    const seen = recordNavigations(page);
+    await page.evaluate((baseHref) => {
+      const base = document.createElement("base");
+      base.href = baseHref;
+      document.head.appendChild(base);
+      const form = document.createElement("form");
+      form.method = "get";
+      form.action = "level1-basic-opacity.html";
+      const marker = document.createElement("input");
+      marker.type = "hidden";
+      marker.name = "marker";
+      marker.value = "base";
+      form.appendChild(marker);
+      document.body.appendChild(form);
+      form.submit();
+    }, `${approvedBase}/`);
+
+    await expect.poll(() => seen.some((url) => url.startsWith(`${approvedBase}/level1-basic-opacity.html?marker=base`)), {
+      message: "the relative action should follow document.baseURI to the allowlisted host",
+      timeout: 10_000,
+    }).toBe(true);
   });
 });
 
