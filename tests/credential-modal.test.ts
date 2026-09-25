@@ -43,6 +43,14 @@ function activateButton(btn: HTMLElement): boolean {
   return activateOwnedModalControl(getHost(), [btn]);
 }
 
+// Escape and backdrop dismissal accept only trusted input (#826). happy-dom
+// cannot produce trusted events, so dismissal tests mark the event instance
+// trusted explicitly; the #783/#826 rejection cases dispatch plain events.
+function trusted<T extends Event>(event: T): T {
+  Object.defineProperty(event, "isTrusted", { value: true, configurable: true });
+  return event;
+}
+
 function minimalSpec(overrides: Partial<ModalSpec> = {}): ModalSpec {
   return {
     title: "Test Warning",
@@ -269,7 +277,7 @@ describe("credential modal", () => {
       expect(getCard()).not.toBeNull();
       expect(getButtons()).toHaveLength(0);
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       expect(await promise).toBe("dismissed");
     });
   });
@@ -281,7 +289,7 @@ describe("credential modal", () => {
       );
       vi.runAllTimers();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
 
       expect(await promise).toBe("dismissed");
     });
@@ -292,7 +300,7 @@ describe("credential modal", () => {
       );
       vi.runAllTimers();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
 
       expect(await promise).toBe("cancel");
     });
@@ -301,7 +309,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
 
       expect(getOverlay()).toBeNull();
@@ -316,7 +324,7 @@ describe("credential modal", () => {
       vi.runAllTimers();
 
       const overlay = getOverlay()!;
-      overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      overlay.dispatchEvent(trusted(new MouseEvent("mousedown", { bubbles: true })));
 
       expect(await promise).toBe("outside_dismiss");
     });
@@ -326,7 +334,7 @@ describe("credential modal", () => {
       vi.runAllTimers();
 
       const overlay = getOverlay()!;
-      overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      overlay.dispatchEvent(trusted(new MouseEvent("mousedown", { bubbles: true })));
 
       expect(await promise).toBe("cancel");
     });
@@ -336,7 +344,7 @@ describe("credential modal", () => {
       vi.runAllTimers();
 
       const card = getCard()!;
-      card.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      card.dispatchEvent(trusted(new MouseEvent("mousedown", { bubbles: true })));
 
       let resolved = false;
       promise.then(() => { resolved = true; });
@@ -420,7 +428,7 @@ describe("credential modal", () => {
       expect(await p1).toBe("first_dismiss");
 
       // Escape should only resolve p2
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       expect(await p2).toBe("second_dismiss");
     });
 
@@ -471,7 +479,7 @@ describe("credential modal", () => {
       vi.runAllTimers();
 
       const removeSpy = vi.spyOn(window, "removeEventListener");
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
 
       expect(removeSpy).toHaveBeenCalledWith(
@@ -486,11 +494,11 @@ describe("credential modal", () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
 
       expect(() =>
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+        window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })))
       ).not.toThrow();
       expect(getOverlay()).toBeNull();
     });
@@ -568,7 +576,7 @@ describe("credential modal", () => {
       const card = getCard()!;
       expect(card.tabIndex).toBe(-1);
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
     });
 
@@ -676,7 +684,7 @@ describe("credential modal", () => {
       window.dispatchEvent(tabEvent);
       expect(preventSpy).toHaveBeenCalled();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
     });
 
@@ -706,7 +714,7 @@ describe("credential modal", () => {
         await promise;
       } finally {
         if (getOverlay()) {
-          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
           await promise;
         }
         outside.remove();
@@ -750,7 +758,7 @@ describe("credential modal", () => {
         await promise;
       } finally {
         if (getOverlay()) {
-          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
           await promise;
         }
         outside.remove();
@@ -799,7 +807,7 @@ describe("credential modal", () => {
         await promise;
       } finally {
         if (getOverlay()) {
-          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
           await promise;
         }
         outside.remove();
@@ -837,7 +845,7 @@ describe("credential modal", () => {
       } finally {
         window.removeEventListener("focusin", stopFocusIn, true);
         if (getOverlay()) {
-          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
           await promise;
         }
         outside.remove();
@@ -858,7 +866,7 @@ describe("credential modal", () => {
       expect(resolved).toBe(false);
       expect(getOverlay()).not.toBeNull();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       expect(await promise).toBe("cancel");
     });
 
@@ -874,7 +882,7 @@ describe("credential modal", () => {
       expect(resolved).toBe(false);
       expect(getOverlay()).not.toBeNull();
 
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       expect(await promise).toBe("cancel");
     });
 
