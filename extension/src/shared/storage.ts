@@ -472,7 +472,13 @@ function normalizeTrustedDomain(value: unknown): string {
   if (!host) return "";
   const normalized = normalizeHost(host);
   if (!normalized) return "";
-  return getRegistrableDomain(normalized);
+  const registrable = getRegistrableDomain(normalized);
+  // URL parsing accepts hosts no DNS name or IP literal can be, such as
+  // "__proto__" or a single 5,000-character label. Options adds, popup and
+  // credential-prompt trust, imports and reads all come through here, so hold
+  // them all to the event-log hostname grammar: LDH labels of at most 63
+  // characters, 253 in total, or a canonical IP literal (#869).
+  return normalizeEventPageSite(registrable) === registrable ? registrable : "";
 }
 
 function normalizeDomainList(list: unknown): string[] {
