@@ -54,8 +54,8 @@ function httpOrigin(url: string, baseUrl: string): string | null {
  * Returns true when the resource URL is cross-origin relative to the
  * current page, meaning SRI would be meaningful for it.
  */
-function isCrossOrigin(resourceUrl: string, pageOrigin: string, pageUrl: string): boolean {
-  const origin = httpOrigin(resourceUrl, pageUrl);
+function isCrossOrigin(resourceUrl: string, pageOrigin: string, baseUrl: string): boolean {
+  const origin = httpOrigin(resourceUrl, baseUrl);
   if (!origin) return false;
   return origin !== pageOrigin;
 }
@@ -64,19 +64,32 @@ function isCrossOrigin(resourceUrl: string, pageOrigin: string, pageUrl: string)
 // Main analysis
 // ---------------------------------------------------------------------------
 
+/**
+ * ASCII case-insensitive `rel` token match. `rel` keywords are enumerated per
+ * spec, so `rel="STYLESHEET"` loads as a stylesheet while a
+ * `[rel~="stylesheet"]` selector misses it. Programmatic on purpose — same
+ * rationale as the `type` matching in #820. (#822)
+ */
+function relTokenIncludes(el: Element, token: string): boolean {
+  const rel = el.getAttribute("rel") ?? "";
+  return rel.split(/[ \t\n\f\r]+/).some((word) => word.toLowerCase() === token);
+}
+
 function scanResources(
   doc: Document,
   selector: string,
   attrName: string,
   pageOrigin: string,
-  pageUrl: string,
+  baseUrl: string,
   result: SRIAnalysis,
+  accept?: (el: Element) => boolean,
 ): void {
   const elements = doc.querySelectorAll(selector);
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i] as HTMLElement;
+    if (accept && !accept(el)) continue;
     const url = el.getAttribute(attrName) ?? "";
-    if (!url || !isCrossOrigin(url, pageOrigin, pageUrl)) continue;
+    if (!url || !isCrossOrigin(url, pageOrigin, baseUrl)) continue;
 
     result.totalExternal++;
     if (el.hasAttribute("integrity") && (el.getAttribute("integrity") ?? "").trim().length > 0) {
@@ -112,8 +125,18 @@ export function checkSRI(
   // helper — see password_field.ts; #196).
   if (!hasVisiblePasswordField(doc)) return result;
 
-  scanResources(doc, "script[src]", "src", pageOrigin, pageUrl, result);
-  scanResources(doc, 'link[rel~="stylesheet"][href]', "href", pageOrigin, pageUrl, result);
+  // Resolve relatives against the effective base URL when a `<base href>`
+  // overrides it; resolving against the page URL then misclassifies
+  // relatives on based pages (the same corner as #818). Without a base
+  // element the base URL IS the page URL, so keep the caller's asserted
+  // value — it is also what makes parser-built test documents (whose own
+  // baseURI is unrelated to the asserted page URL) behave. (#822)
+  const baseUrl = doc.querySelector("base[href]") ? doc.baseURI || pageUrl : pageUrl;
+
+  scanResources(doc, "script[src]", "src", pageOrigin, baseUrl, result);
+  scanResources(doc, "link[href]", "href", pageOrigin, baseUrl, result, (el) =>
+    relTokenIncludes(el, "stylesheet"),
+  );
 
   // Scoring
   if (result.totalExternal === 0) {

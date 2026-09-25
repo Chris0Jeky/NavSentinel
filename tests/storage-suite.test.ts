@@ -505,6 +505,140 @@ describe("suite storage and allowlist migration", () => {
     expect(settings.credential.mode).toBe("strict");
   });
 
+  describe("protection-mode validation (#866)", () => {
+    const HOSTILE_MODES: unknown[] = ["bogus", "OFF", "Strict", "", 7, null, true, {}, ["off"]];
+
+    it.each(HOSTILE_MODES)("reads a stored mode of %j as the default smart on both axes", async (bad) => {
+      const { chrome } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: bad, debug: false }, credential: { mode: bad } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { getSuiteSettings, getNavSettings, getCredentialSettings } = await import("../extension/src/shared/storage");
+      const settings = await getSuiteSettings();
+      expect(settings.nav.defaultMode).toBe("smart");
+      expect(settings.credential.mode).toBe("smart");
+      // Content scripts read through these; they must agree with the popup/Options read.
+      expect((await getNavSettings()).defaultMode).toBe("smart");
+      expect((await getCredentialSettings()).mode).toBe("smart");
+    });
+
+    it.each(["off", "smart", "strict"] as const)("keeps a valid stored mode %s unchanged", async (mode) => {
+      const { chrome } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: mode }, credential: { mode } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { getSuiteSettings } = await import("../extension/src/shared/storage");
+      const settings = await getSuiteSettings();
+      expect(settings.nav.defaultMode).toBe(mode);
+      expect(settings.credential.mode).toBe(mode);
+    });
+
+    it("sanitizes hostile modes on import and round-trips the result through export", async () => {
+      const { chrome, store } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: "off" }, credential: { mode: "off" } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { exportAll, getSuiteSettings, importAll } = await import("../extension/src/shared/storage");
+      await importAll({ settings: { nav: { defaultMode: "bogus" }, credential: { mode: 7 }, logLimit: "9999999" } });
+
+      const persisted = store["sentinelsuite:settings_v1"] as { nav: { defaultMode: unknown }; credential: { mode: unknown }; logLimit: unknown };
+      // Pre-fix the import persisted "bogus" and 7 verbatim.
+      expect(persisted.nav.defaultMode).toBe("smart");
+      expect(persisted.credential.mode).toBe("smart");
+      expect(persisted.logLimit).toBe(300);
+
+      const exported = await exportAll();
+      expect(exported.settings.nav.defaultMode).toBe("smart");
+      expect(exported.settings.credential.mode).toBe("smart");
+      await importAll({ settings: exported.settings });
+      expect(await getSuiteSettings()).toEqual(exported.settings);
+    });
+
+    it("imports valid modes verbatim", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { importAll } = await import("../extension/src/shared/storage");
+      await importAll({ settings: { nav: { defaultMode: "off" }, credential: { mode: "strict" } } });
+
+      const persisted = store["sentinelsuite:settings_v1"] as { nav: { defaultMode: unknown }; credential: { mode: unknown } };
+      expect(persisted.nav.defaultMode).toBe("off");
+      expect(persisted.credential.mode).toBe("strict");
+    });
+
+    it("delivers a normalized mode to settings-change subscribers", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { onNavSettingsChange, onSuiteSettingsChange } = await import("../extension/src/shared/storage");
+      const suite: Array<{ nav: string; cred: string }> = [];
+      const nav: string[] = [];
+      onSuiteSettingsChange((s) => suite.push({ nav: s.nav.defaultMode, cred: s.credential.mode }));
+      onNavSettingsChange((s) => nav.push(s.defaultMode));
+
+      await chrome.storage.local.set({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: 7 }, credential: { mode: "nope" } },
+      });
+      await chrome.storage.local.set({ "sentinelsuite:settings_v1": "not-a-record" });
+
+      expect(suite).toEqual([{ nav: "smart", cred: "smart" }, { nav: "smart", cred: "smart" }]);
+      expect(nav).toEqual(["smart", "smart"]);
+    });
+
+    it("normalizeStoredSuiteSettings is the shared read authority for non-record values", async () => {
+      const { chrome } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { normalizeStoredSuiteSettings, isProtectionMode } = await import("../extension/src/shared/storage");
+      for (const stored of [undefined, null, 7, "x", []]) {
+        const normalized = normalizeStoredSuiteSettings(stored);
+        expect(normalized.nav.defaultMode).toBe("smart");
+        expect(normalized.credential.mode).toBe("smart");
+      }
+      expect(["off", "smart", "strict"].every(isProtectionMode)).toBe(true);
+      expect(HOSTILE_MODES.some(isProtectionMode)).toBe(false);
+    });
+
+    it("a direct write with a hostile mode keeps the current mode", async () => {
+      // Production pages go through the worker message path, which rejects the patch
+      // outright; the direct lane (worker-owned, and non-extension tests) must still
+      // never persist an invalid mode.
+      const { chrome, store } = createChromeMock({
+        "sentinelsuite:settings_v1": { nav: { defaultMode: "strict" }, credential: { mode: "off" } },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { updateSuiteSettings } = await import("../extension/src/shared/storage");
+      await updateSuiteSettings(JSON.parse('{"nav":{"defaultMode":"bogus"},"credential":{"mode":7}}'));
+
+      const persisted = store["sentinelsuite:settings_v1"] as { nav: { defaultMode: unknown }; credential: { mode: unknown } };
+      expect(persisted.nav.defaultMode).toBe("strict");
+      expect(persisted.credential.mode).toBe("off");
+    });
+
+    it("the worker message path rejects a hostile mode patch", async () => {
+      const { chrome, store } = createChromeMock();
+      Object.assign(chrome, {
+        runtime: {
+          id: "suite-test",
+          getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+        },
+      });
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { handleSuiteSettingsUpdateMessage } = await import("../extension/src/shared/storage");
+      const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+      for (const patch of [{ nav: { defaultMode: "bogus" } }, { credential: { mode: 7 } }, { nav: { defaultMode: "OFF" } }]) {
+        await expect(handleSuiteSettingsUpdateMessage({ type: "ns-suite-settings-update", patch }, options))
+          .rejects.toThrow("invalid");
+      }
+      expect(store["sentinelsuite:settings_v1"]).toBeUndefined();
+    });
+  });
+
   it("serializes popup and Options worker requests so non-overlapping patches survive (#558)", async () => {
     const { chrome } = createChromeMock();
     Object.assign(chrome, {

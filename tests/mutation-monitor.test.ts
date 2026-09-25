@@ -304,6 +304,27 @@ describe("mutation_monitor DOM integration", () => {
     stopMutationMonitor();
   });
 
+  it("detects a case-variant password input injected inside a wrapper (#820)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // The wrapper itself is not an input, so detection runs through the
+    // descendant scan — the path that used an exact `type="password"` selector.
+    const wrapper = document.createElement("div");
+    const input = document.createElement("input");
+    input.setAttribute("type", "PASSWORD");
+    wrapper.appendChild(input);
+    document.body.appendChild(wrapper);
+
+    await vi.advanceTimersByTimeAsync(150);
+
+    const passwordAlerts = alerts.filter((a) => a.type === "password_injected");
+    expect(passwordAlerts.length).toBeGreaterThanOrEqual(1);
+
+    wrapper.remove();
+    stopMutationMonitor();
+  });
+
   it("detects input type changed to password", async () => {
     const alerts: MutationAlert[] = [];
     const input = document.createElement("input");
@@ -434,6 +455,67 @@ describe("mutation_monitor DOM integration", () => {
     expect(actionAlerts.length).toBe(0);
 
     form.remove();
+    stopMutationMonitor();
+  });
+
+  it("classifies a base-redirected relative rewrite as HIGH (#843)", async () => {
+    const alerts: MutationAlert[] = [];
+    const base = document.createElement("base");
+    base.setAttribute("href", "https://cdn.evil.example/app/");
+    document.head.appendChild(base);
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // Baseline, then rewrite to a relative URL. The browser resolves it
+    // against document.baseURI (cdn.evil.example), not location.href.
+    form.setAttribute("action", "/login");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("action", "collect");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.severity).toBe("high");
+
+    form.remove();
+    base.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps a same-origin-base relative rewrite at MEDIUM (#843)", async () => {
+    const alerts: MutationAlert[] = [];
+    const base = document.createElement("base");
+    base.setAttribute("href", "http://localhost:3000/app/");
+    document.head.appendChild(base);
+
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    document.body.appendChild(form);
+
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    form.setAttribute("action", "/login");
+    await vi.advanceTimersByTimeAsync(150);
+
+    form.setAttribute("action", "collect");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // Inverted-condition guard: baseURI resolution must stay selective.
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    expect(actionAlerts[0]!.severity).toBe("medium");
+
+    form.remove();
+    base.remove();
     stopMutationMonitor();
   });
 
@@ -1205,6 +1287,83 @@ describe("mutation_monitor shadow DOM observation", () => {
   });
 });
 
+describe("mutation_monitor throwing callbacks (#770)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  function stubForegroundOverlay(): HTMLElement {
+    const overlay = document.createElement("a");
+    overlay.style.position = "fixed";
+    overlay.style.zIndex = "10000";
+    overlay.style.display = "block";
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  it("records the alert when onAlert throws on the scan path", () => {
+    const overlay = stubForegroundOverlay();
+    startMutationMonitor(document, () => {
+      throw new Error("alert boom");
+    });
+
+    expect(() => scanExistingForegroundOverlay(document)).not.toThrow();
+    expect(getMutationAlertCount()).toBe(1);
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+
+    overlay.remove();
+    stopMutationMonitor();
+  });
+
+  it("delivers the rest of the batch when one alert delivery throws", async () => {
+    const delivered: MutationAlert[] = [];
+    let calls = 0;
+    startMutationMonitor(document, (alert) => {
+      calls += 1;
+      if (calls === 1) throw new Error("first delivery boom");
+      delivered.push(alert);
+    });
+
+    const first = document.createElement("input");
+    first.type = "password";
+    const second = document.createElement("input");
+    second.type = "password";
+    document.body.append(first, second);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(getMutationAlertCount()).toBe(2);
+    expect(delivered).toHaveLength(1);
+
+    first.remove();
+    second.remove();
+    stopMutationMonitor();
+  });
+
+  it("still records the alert when the overlay-cleanup callback throws", () => {
+    const overlay = stubForegroundOverlay();
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: () => {
+        throw new Error("cleanup boom");
+      },
+    });
+
+    expect(() => scanExistingForegroundOverlay(document)).not.toThrow();
+    expect(getMutationAlertCount()).toBe(1);
+
+    overlay.remove();
+    stopMutationMonitor();
+  });
+});
+
 describe("mutation_monitor alert-cap cleanup (#409)", () => {
   beforeEach(() => {
     _resetMutationState();
@@ -1691,5 +1850,95 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
 
     for (const input of filler) input.remove();
     stopMutationMonitor();
+  });
+});
+
+describe("mutation_monitor batch robustness (#813)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  function childListRecord(node: Node, kind: "added" | "removed"): MutationRecord {
+    return {
+      type: "childList",
+      target: document.body,
+      addedNodes: (kind === "added" ? [node] : []) as unknown as NodeList,
+      removedNodes: (kind === "removed" ? [node] : []) as unknown as NodeList,
+    } as unknown as MutationRecord;
+  }
+
+  it("a throwing record does not skip later records in the same batch (#813)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // A hostile node whose querySelectorAll throws (e.g. a poisoned DOM API on
+    // a custom element). processAddedNode calls it for the password/iframe
+    // descendant scans, so the first record throws mid-processing.
+    const poisoned = document.createElement("div");
+    Object.defineProperty(poisoned, "querySelectorAll", {
+      value: () => {
+        throw new Error("poisoned querySelectorAll");
+      },
+      configurable: true,
+    });
+
+    const input = document.createElement("input");
+    input.type = "password";
+
+    // Pre-fix this feed threw out of processBatch and the password record was
+    // never processed. Post-fix the throw is contained to its own record.
+    _feedMutationRecordsForTesting([
+      childListRecord(poisoned, "added"),
+      childListRecord(input, "added"),
+    ]);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+
+    stopMutationMonitor();
+  });
+
+  it("registers and fully disconnects a deeply nested shadow tree without recursion (#813)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // 300 levels of nesting: deep enough to prove the registration and
+    // disconnect walks handle depth structurally (explicit worklists, no call
+    // stack growth), while staying fast under happy-dom.
+    const depth = 300;
+    const top = document.createElement("div");
+    let parent: Element = top;
+    let parentRoot = top.attachShadow({ mode: "open" });
+    for (let i = 1; i < depth; i++) {
+      const host = document.createElement("div");
+      parentRoot.appendChild(host);
+      parent = host;
+      parentRoot = host.attachShadow({ mode: "open" });
+    }
+    document.body.appendChild(top);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(_getShadowObserverCountForTesting()).toBe(depth);
+
+    // Detection into the deepest root must work through the worklist path.
+    const input = document.createElement("input");
+    input.type = "password";
+    parentRoot.appendChild(input);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+
+    // And removal must tear every nested observer down (no #401-style leak).
+    top.remove();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+
+    stopMutationMonitor();
+    expect(parent.isConnected).toBe(false);
   });
 });
