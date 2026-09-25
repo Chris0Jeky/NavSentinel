@@ -124,6 +124,51 @@ describe("isAllowlisted", () => {
   });
 });
 
+describe("prototype-named siteKeys (#807)", () => {
+  const PROTO_KEYS = ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"];
+
+  it("normalizeAllowlist stores __proto__ as an own property on a null-prototype map", () => {
+    // JSON.parse models a tampered/stored payload with an own __proto__ key.
+    // Pre-fix, `out["__proto__"] = hosts` invoked the prototype setter and
+    // replaced the result's prototype with the hosts array.
+    const result = normalizeAllowlist(JSON.parse('{"__proto__":["evil.com"]}'));
+    expect(Object.getPrototypeOf(result)).toBeNull();
+    expect(Object.hasOwn(result, "__proto__")).toBe(true);
+    expect(result["__proto__"]).toEqual(["evil.com"]);
+  });
+
+  it("isAllowlisted returns false (never throws) for proto-named keys on any list shape", () => {
+    // Pre-fix, `list[key] ?? []` resolved to the inherited member (truthy) and
+    // `.includes` threw TypeError — reachable from single-label intranet hosts
+    // like http://constructor/ via siteKeyFromLocation().
+    for (const key of PROTO_KEYS) {
+      expect(isAllowlisted({}, key, "anything.com")).toBe(false);
+      expect(isAllowlisted({ "site.com": ["dest.com"] }, key, "anything.com")).toBe(false);
+      expect(isAllowlisted(normalizeAllowlist({}), key, "anything.com")).toBe(false);
+    }
+  });
+
+  it("normalized lists match proto-named entries added through the API", async () => {
+    // Full round-trip through mocked storage (structuredClone): proto-named
+    // siteKeys are fully functional, not merely non-crashing.
+    for (const key of ["__proto__", "constructor"]) {
+      await addAllowlistEntry(key, "evil.com");
+      const list = await getAllowlist();
+      expect(isAllowlisted(list, key, "evil.com")).toBe(true);
+      expect(isAllowlisted(list, key, "other.com")).toBe(false);
+      await removeAllowlistEntry(key, "evil.com");
+      expect(isAllowlisted(await getAllowlist(), key, "evil.com")).toBe(false);
+    }
+  });
+
+  it("removeAllowlistEntry ignores proto-named keys that were never added", async () => {
+    for (const key of PROTO_KEYS) {
+      const list = await removeAllowlistEntry(key, "anything.com");
+      expect(isAllowlisted(list, key, "anything.com")).toBe(false);
+    }
+  });
+});
+
 describe("getAllowlist", () => {
   it("returns empty object when storage is empty", async () => {
     const result = await getAllowlist();

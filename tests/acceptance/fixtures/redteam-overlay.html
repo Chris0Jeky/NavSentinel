@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Red-team - overlay cleanup evasion (hostile page)</title>
+  <style>
+    .trap {
+      position: fixed; inset: 0; width: 100vw; height: 100vh;
+      background: rgba(255,0,0,0.5); z-index: 2147483000;
+    }
+    #target { position: fixed; left: 8px; top: 8px; z-index: 1; }
+  </style>
+</head>
+<body>
+  <h1>Overlay cleanup evasion (acceptance red-team)</h1>
+  <button id="target" onclick="window.__harm = (window.__harm||0)+1">underlying safe button</button>
+  <script>
+    // Baseline: one full-viewport high-z overlay. Auto-cleanup should hide it.
+    window.__spawnOne = () => {
+      const d = document.createElement("div");
+      d.className = "trap";
+      d.id = "trap-solo";
+      document.body.appendChild(d);
+      return d.id;
+    };
+
+    // Budget-exhaustion evasion: spawn many DISTINCT full-viewport overlays so
+    // the bounded cleanup ledger (MAX_ACTIVE_OVERLAY_SUPPRESSIONS) is exhausted.
+    window.__spawnMany = (n) => {
+      for (let i = 0; i < n; i++) {
+        const d = document.createElement("div");
+        d.className = "trap";
+        d.dataset.k = String(i);
+        document.body.appendChild(d);
+      }
+      return document.querySelectorAll(".trap").length;
+    };
+
+    // How many trap overlays are still VISIBLE (not hidden by cleanup)?
+    window.__visibleTraps = () => {
+      return Array.from(document.querySelectorAll(".trap")).filter((el) => {
+        const cs = getComputedStyle(el);
+        return cs.display !== "none" && cs.visibility !== "hidden";
+      }).length;
+    };
+
+    // Rebuild-every-frame evasion: continuously replace the trap under a fresh
+    // element for a while, so there is always a live full-viewport overlay.
+    window.__rebuildLoop = (ms) => {
+      const end = performance.now() + ms;
+      let last = null;
+      const tick = () => {
+        if (last && last.isConnected) last.remove();
+        const d = document.createElement("div");
+        d.className = "trap";
+        d.dataset.frame = "1";
+        document.body.appendChild(d);
+        last = d;
+        if (performance.now() < end) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      return "looping";
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Acceptance - Material-style state layer inside a labelled link</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    /* A labelled pill link with a real (hit-testable) state-layer child, the
+       way YouTube's "Watch on YouTube" and other Material 3 buttons render. */
+    .pill { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+            border-radius: 20px; background: #333; color: #fff; text-decoration: none; font-size: 18px; }
+    .state-layer { position: absolute; inset: 0; border-radius: inherit; background: #fff; opacity: 0;
+                   pointer-events: auto; transition: opacity 90ms linear; }
+    .pill:hover .state-layer { opacity: 0.08; }
+    .pill:active .state-layer { opacity: 0.12; }
+    iframe { border: 1px solid #999; width: 520px; height: 160px; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Material-style state layer</h1>
+  <p><a id="pill" class="pill" target="_blank">Watch on VideoSite<span class="state-layer"></span></a></p>
+  <p id="frame-slot"></p>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const other = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+    // Cross-site destination on the other loopback host, like youtube-nocookie -> youtube.
+    document.getElementById("pill").href = `http://${other}:${location.port}/acceptance/dest/state-layer/watch.html?v=abc`;
+    if (params.get("embed") === "1") {
+      // Host page: embed this same document cross-site, as a publisher embeds a player.
+      document.getElementById("pill").remove();
+      document.getElementById("title").textContent = "Publisher page embedding a cross-site player";
+      const frame = document.createElement("iframe");
+      frame.id = "player";
+      frame.src = `http://${other}:${location.port}/acceptance/fp-state-layer.html?embedded=1`;
+      document.getElementById("frame-slot").appendChild(frame);
+    }
+  </script>
+</body>
+</html>

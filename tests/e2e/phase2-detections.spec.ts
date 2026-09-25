@@ -351,12 +351,16 @@ test.describe("ClickFix", () => {
         8000
       );
 
-      // The visible toast and worker-owned event write complete independently.
-      // Require the durable event, rather than taking one premature snapshot.
-      await expect.poll(async () => {
-        const events = await extractEventLog(context);
-        return events.filter((event) => event.kind === "clickfix_detected").length;
-      }, { message: "Should have logged a clickfix_detected event" }).toBeGreaterThan(0);
+      // Verify event log contains clickfix_detected. The toast renders
+      // synchronously, but the content script delegates the event write to the
+      // service worker, so the entry can land after the toast is visible.
+      await expect.poll(
+        async () => {
+          const events = await extractEventLog(context);
+          return events.filter((e) => e.kind === "clickfix_detected").length;
+        },
+        { message: "Should have logged a clickfix_detected event", timeout: 5000 }
+      ).toBeGreaterThan(0);
     } finally {
       await cleanup();
     }

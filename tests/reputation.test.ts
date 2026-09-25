@@ -211,6 +211,24 @@ describe("bloom filter core", () => {
     expect(checkDomain(zeroK, "anything")).toBe(false);
   });
 
+  it("treats a directly-constructed filter with unusable k as inert (#805)", () => {
+    // Pre-fix, k <= 0 / NaN skipped the probe loop and fell through to `true`
+    // (every domain "known-bad"); k = Infinity never terminated the loop.
+    // loadFilter can only produce integers in [1, 30], so anything else is
+    // degenerate input that must score nothing. (Infinity is covered post-fix
+    // only — it hangs the pre-fix loop instead of failing fast.)
+    for (const badK of [-1, -100, NaN, Infinity, -Infinity, 2.5]) {
+      const f: BloomFilterState = { bits: new Uint8Array(128), m: 1024, k: badK };
+      expect(checkDomain(f, "anything.example")).toBe(false);
+    }
+    // insertDomain mirrors the guard: no bits may be set for unusable k.
+    for (const badK of [-1, NaN, Infinity, 2.5]) {
+      const f: BloomFilterState = { bits: new Uint8Array(128), m: 1024, k: badK };
+      insertDomain(f, "anything.example");
+      expect(f.bits.every((b) => b === 0)).toBe(true);
+    }
+  });
+
   it("skips empty domain on insert without error", () => {
     const f = createFilter(1024, 7);
     insertDomain(f, "");

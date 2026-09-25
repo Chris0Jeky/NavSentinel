@@ -187,3 +187,20 @@ describe("PSL-based getRegistrableDomain", () => {
     });
   });
 });
+
+describe("pslSuffixLength prototype-key resistance", () => {
+  // "__proto__" is valid inside a URL hostname, so the trie walk must use
+  // own-key lookups (same class classifyDomain already guards) and never
+  // detour onto Object.prototype. No PSL rule contains such a label, so these
+  // resolve by the ordinary suffix rules; the test locks that in.
+  it("treats __proto__ as an ordinary label", () => {
+    expect(getRegistrableDomain("__proto__.com")).toBe("__proto__.com");
+    expect(getRegistrableDomain("sub.__proto__.com")).toBe("__proto__.com");
+    expect(getRegistrableDomain("__proto__.co.uk")).toBe("__proto__.co.uk");
+  });
+
+  it("treats other Object.prototype keys as ordinary labels", () => {
+    expect(getRegistrableDomain("constructor.com")).toBe("constructor.com");
+    expect(getRegistrableDomain("hasownproperty.example.com")).toBe("example.com");
+  });
+});

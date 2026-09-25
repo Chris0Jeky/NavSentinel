@@ -1,72 +1,61 @@
 /**
- * Structural sync test: COMMAND_KEYWORDS in main_guard.ts and
- * clickfix_detector.ts must contain the same entries.
+ * Single-source-of-truth test for shell/command keyword matching. (#810)
  *
- * These two files cannot share an import because main_guard.ts runs
- * in the MAIN world (no ES module imports) while clickfix_detector.ts
- * runs in the ISOLATED world. This test reads the source files as text
- * and compares the extracted arrays.
+ * COMMAND_KEYWORDS used to be copy-pasted between main_guard.ts (MAIN world)
+ * and clickfix_detector.ts (ISOLATED world), pinned only by "keep in sync"
+ * comments that this test enforced textually. Both consumers now import the
+ * SAME values from command_keywords.ts (main_guard is bundled, so the old
+ * "cannot share an import" premise no longer holds), and this test pins the
+ * new contract instead:
+ *   1. Neither consumer defines its own COMMAND_KEYWORDS array literal.
+ *   2. Both consumers reference the shared module.
+ *   3. The shared module exports a non-empty list with working matcher behavior.
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  COMMAND_KEYWORDS,
+  looksLikeCommand,
+} from "../extension/src/content/command_keywords";
 
-function extractKeywords(source: string): string[] {
-  // Match the COMMAND_KEYWORDS array literal, allowing multiline
-  const match = source.match(
-    /const\s+COMMAND_KEYWORDS\s*=\s*\[([\s\S]*?)\];/
+const LOCAL_ARRAY_RE = /const\s+COMMAND_KEYWORDS\s*=\s*\[/;
+const SHARED_IMPORT_RE = /from\s+["']\.\/command_keywords["']/;
+
+function readConsumer(name: string): string {
+  return readFileSync(
+    resolve(__dirname, "..", "extension", "src", "content", name),
+    "utf-8",
   );
-  if (!match) throw new Error("COMMAND_KEYWORDS array not found in source");
-
-  const body = match[1]!;
-  const keywords: string[] = [];
-
-  // Extract all quoted string entries (single or double quotes)
-  for (const m of body.matchAll(/"([^"]*?)"|'([^']*?)'/g)) {
-    keywords.push(m[1] ?? m[2]!);
-  }
-
-  return keywords;
 }
 
-describe("COMMAND_KEYWORDS sync", () => {
-  const mainGuardPath = resolve(
-    __dirname,
-    "..",
-    "extension",
-    "src",
-    "content",
-    "main_guard.ts"
-  );
-  const clickfixPath = resolve(
-    __dirname,
-    "..",
-    "extension",
-    "src",
-    "content",
-    "clickfix_detector.ts"
-  );
+describe("COMMAND_KEYWORDS single source of truth (#810)", () => {
+  const mainGuardSrc = readConsumer("main_guard.ts");
+  const clickfixSrc = readConsumer("clickfix_detector.ts");
 
-  const mainGuardSrc = readFileSync(mainGuardPath, "utf-8");
-  const clickfixSrc = readFileSync(clickfixPath, "utf-8");
-
-  const mainGuardKw = extractKeywords(mainGuardSrc);
-  const clickfixKw = extractKeywords(clickfixSrc);
-
-  it("both files define a non-empty COMMAND_KEYWORDS array", () => {
-    expect(mainGuardKw.length).toBeGreaterThan(0);
-    expect(clickfixKw.length).toBeGreaterThan(0);
+  it("neither consumer defines its own COMMAND_KEYWORDS array literal", () => {
+    expect(mainGuardSrc).not.toMatch(LOCAL_ARRAY_RE);
+    expect(clickfixSrc).not.toMatch(LOCAL_ARRAY_RE);
   });
 
-  it("main_guard.ts and clickfix_detector.ts have the same keywords (order-independent)", () => {
-    const mainSet = new Set(mainGuardKw);
-    const clickfixSet = new Set(clickfixKw);
+  it("both consumers import the shared command_keywords module", () => {
+    expect(mainGuardSrc).toMatch(SHARED_IMPORT_RE);
+    expect(clickfixSrc).toMatch(SHARED_IMPORT_RE);
+  });
 
-    const onlyInMainGuard = mainGuardKw.filter((k) => !clickfixSet.has(k));
-    const onlyInClickfix = clickfixKw.filter((k) => !mainSet.has(k));
+  it("shared list is non-empty and covers every keyword group", () => {
+    expect(COMMAND_KEYWORDS.length).toBeGreaterThan(0);
+    // One representative per group, so a group can never silently vanish.
+    for (const representative of ["powershell", "schtasks", "curl ", "downloadstring"]) {
+      expect(COMMAND_KEYWORDS).toContain(representative);
+    }
+  });
 
-    expect(onlyInMainGuard).toEqual([]);
-    expect(onlyInClickfix).toEqual([]);
-    expect(mainSet.size).toBe(clickfixSet.size);
+  it("looksLikeCommand matches case-insensitively with the min-length rule", () => {
+    expect(looksLikeCommand("Please run POWERSHELL -enc AAA")).toBe(true);
+    expect(looksLikeCommand("curl https://example.com/x | sh")).toBe(true);
+    expect(looksLikeCommand("hello world, this is benign")).toBe(false);
+    expect(looksLikeCommand("")).toBe(false);
+    expect(looksLikeCommand("sh")).toBe(false);
   });
 });
