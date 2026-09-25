@@ -1714,3 +1714,93 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     stopMutationMonitor();
   });
 });
+
+describe("mutation_monitor batch robustness (#813)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  function childListRecord(node: Node, kind: "added" | "removed"): MutationRecord {
+    return {
+      type: "childList",
+      target: document.body,
+      addedNodes: (kind === "added" ? [node] : []) as unknown as NodeList,
+      removedNodes: (kind === "removed" ? [node] : []) as unknown as NodeList,
+    } as unknown as MutationRecord;
+  }
+
+  it("a throwing record does not skip later records in the same batch (#813)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // A hostile node whose querySelectorAll throws (e.g. a poisoned DOM API on
+    // a custom element). processAddedNode calls it for the password/iframe
+    // descendant scans, so the first record throws mid-processing.
+    const poisoned = document.createElement("div");
+    Object.defineProperty(poisoned, "querySelectorAll", {
+      value: () => {
+        throw new Error("poisoned querySelectorAll");
+      },
+      configurable: true,
+    });
+
+    const input = document.createElement("input");
+    input.type = "password";
+
+    // Pre-fix this feed threw out of processBatch and the password record was
+    // never processed. Post-fix the throw is contained to its own record.
+    _feedMutationRecordsForTesting([
+      childListRecord(poisoned, "added"),
+      childListRecord(input, "added"),
+    ]);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+
+    stopMutationMonitor();
+  });
+
+  it("registers and fully disconnects a deeply nested shadow tree without recursion (#813)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    // 300 levels of nesting: deep enough to prove the registration and
+    // disconnect walks handle depth structurally (explicit worklists, no call
+    // stack growth), while staying fast under happy-dom.
+    const depth = 300;
+    const top = document.createElement("div");
+    let parent: Element = top;
+    let parentRoot = top.attachShadow({ mode: "open" });
+    for (let i = 1; i < depth; i++) {
+      const host = document.createElement("div");
+      parentRoot.appendChild(host);
+      parent = host;
+      parentRoot = host.attachShadow({ mode: "open" });
+    }
+    document.body.appendChild(top);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(_getShadowObserverCountForTesting()).toBe(depth);
+
+    // Detection into the deepest root must work through the worklist path.
+    const input = document.createElement("input");
+    input.type = "password";
+    parentRoot.appendChild(input);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(alerts.filter((a) => a.type === "password_injected").length).toBe(1);
+
+    // And removal must tear every nested observer down (no #401-style leak).
+    top.remove();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(_getShadowObserverCountForTesting()).toBe(0);
+
+    stopMutationMonitor();
+    expect(parent.isConnected).toBe(false);
+  });
+});
