@@ -914,7 +914,7 @@ function normalizeEventLogResetCutoff(value: unknown): number {
 
 function hydrateEventLogResetCutoff(): Promise<void> {
   if (eventLogResetHydrate) return eventLogResetHydrate;
-  eventLogResetHydrate = (async () => {
+  const hydrate = (async () => {
     const session = getEventLogBarrierStorage();
     if (!session) return;
     try {
@@ -928,7 +928,14 @@ function hydrateEventLogResetCutoff(): Promise<void> {
       throw err;
     }
   })();
-  return eventLogResetHydrate;
+  eventLogResetHydrate = hydrate;
+  // As in the prompt-outcome lane: a rejected hydration fails only the
+  // operation that awaited it. Caching it would fail every later append, clear
+  // and import until the worker restarts, silently dropping events.
+  void hydrate.catch(() => {
+    if (eventLogResetHydrate === hydrate) eventLogResetHydrate = null;
+  });
+  return hydrate;
 }
 
 async function setEventLogResetCutoff(ts = Date.now()): Promise<void> {
@@ -2115,7 +2122,9 @@ async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<vo
 
 function promptOutcomeLogMatchesStored(value: unknown[], normalized: PromptOutcomeEntry[]): boolean {
   try {
-    return JSON.stringify(value) === JSON.stringify(normalized);
+    // chrome.storage returns object keys sorted; compare key-order-insensitively
+    // so an already-migrated log is not rewritten on every worker start.
+    return canonicalJson(value) === canonicalJson(normalized);
   } catch {
     return false;
   }
