@@ -15,8 +15,9 @@ provenance only. Detailed retired procedures moved to
 **2026-09-25, v0.5.0 integration ([`D-2026-09-25-Q`](docs/agentic/DECISIONS.md)):**
 Chris authorized browser-facing PRs to merge after automated gates (exact-head
 CI, one review, and the branded-Chrome realistic E2E and acceptance lanes). His
-manual checks become one AI-47 pass on the v0.5.0 release build, planned for
-publication as a GitHub pre-release. He also resolved #872: the same-tab rollback
+manual checks become one AI-47 pass on the v0.5.0 release build, published on
+2026-09-26 as a GitHub pre-release (tag `v0.5.0`, commit
+`15a81274b2b7db4d61a0be43a8f8149110add8e6`). He also resolved #872: the same-tab rollback
 notice keeps its trusted-input Proceed. #572 (SP-F-013) stays parked, and every
 AI-47 Human result stays **OPEN — not run**.
 
@@ -322,15 +323,18 @@ requires the same-tab rollback notice's Proceed. **Resolved 2026-09-25 by Chris
 (#872, D-2026-09-25-Q):** row 4 holds, and rows 2 and 5 now exempt that notice.
 
 **Release-build scope, 2026-09-25 (D-2026-09-25-Q):** Chris chose to run AI-47
-once, on the v0.5.0 release build, instead of per PR. Until the release commit
-moves them under `[0.5.0]`, the PRs merged under that decision are listed in
-the `[Unreleased]` section of `CHANGELOG.md`; run the pass only on the tagged
-`v0.5.0` build, whose changelog section is the authoritative scope. The
+once, on the v0.5.0 release build, instead of per PR. The PRs merged under that
+decision are listed in the `[0.5.0]` section of `CHANGELOG.md`; run the pass
+only on the tagged `v0.5.0` build (the release zip, or a build of tag
+`v0.5.0`), whose changelog section is the authoritative scope. The
 pass also covers the everyday flows this release targets: cross-site links whose
 text sits in a span or icon (DuckDuckGo results, GitHub tabs, YouTube "Watch
 on YouTube"), script-submitted sign-in forms (Stack Overflow "Log in with
 Google"), forms posted into a page's own iframe, and the credential prompt's
-buttons, Escape and backdrop with mouse and keyboard. Every Human result stays
+buttons, Escape and backdrop with mouse and keyboard. v0.5.0 still blocks the
+script-submitted and own-iframe form posts (#864, #865; the proposed #895 fix
+is not in this release), so for those two flows the pass confirms the
+documented limit rather than a fix. Every Human result stays
 **OPEN — not run** until Chris records it.
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
@@ -466,6 +470,7 @@ numbers (for example `ack 1-6`), or name a row to reopen it.
 | 6 | Follow-up issues filed during the release push rather than fixed in it: #877 (MAIN-world clock capture), #884 (popup readiness marker), #886 (#882's own-paint check), #887 (RW-01 onboarding-tab race), #890 (an approved blocked form submit re-reads a live, swappable action), #891 (lower-severity bug-hunt findings). | Issues | — |
 | 7 | A cross-vendor Muse bug hunt ran on the release candidate. Its fixable findings shipped (#889, #892, and the PRIVACY.md wording). It rated the known bridge-handshake weakness (#186) CRITICAL: a page that races the MAIN-world bridge handshake can switch the in-page guard off for itself. The service-worker rollback and the isolated-world detectors still run. The fix needs design, so v0.5.0 ships with #186 disclosed as open. | #186 | — |
 | 8 | The automated branded-Chrome and acceptance runs are evidence, not your Gate-3 result: every AI-47 row stays **OPEN — not run** until you record it. | AI-47 | — |
+| 9 | v0.5.0 was tagged with the acceptance lane red on exactly two false-positive tests, `fp-form-submit-patterns` and `fp-iframe-target-form`. They reproduce the open #864/#865 limits that the release notes disclose, and main's scheduled branded run shows the same two. Twelve of the fourteen steps of the final local verification at `cc904a91` passed. The other red step, the default E2E lane, had two first-attempt timing failures under machine load, RW-03 and the #593 `top-assign-100` rollback arm. Both passed on retry and in 14 isolated reruns with retries off; the observation is recorded on #593. | #864, #865, #593 | — |
 
 **BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** Keep #223
 blocked until #417 supplies valid methodology and a current slice provides focused
