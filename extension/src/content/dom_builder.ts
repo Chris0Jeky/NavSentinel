@@ -123,7 +123,13 @@ function composedParentElement(el: Element): Element | null {
 
 function effectiveOpacity(el: Element): number {
   let product = 1;
+  const seen = new Set<Element>();
   for (let current: Element | null = el; current; current = composedParentElement(current)) {
+    // Genuine composed trees are acyclic; a revisit means a spoofed
+    // assignedSlot, so fail closed (fully concealed) instead of hanging
+    // the synchronous click path (review rv-924-geom H2).
+    if (seen.has(current)) return 0;
+    seen.add(current);
     product *= ownOpacity(current);
   }
   return product;
@@ -132,7 +138,10 @@ function effectiveOpacity(el: Element): number {
 /** Product of the own opacities from `el` up to, but excluding, `control`. */
 function opacityWithin(el: Element, control: Element): number {
   let product = 1;
+  const seen = new Set<Element>();
   for (let e: Element | null = el; e && e !== control; e = composedParentElement(e)) {
+    if (seen.has(e)) return 0;
+    seen.add(e);
     product *= ownOpacity(e);
   }
   return product;
@@ -182,8 +191,14 @@ function directTextPaints(el: Element, x: number, y: number): boolean {
 
 /** The control paints a direct glyph at the point, or a visible background. */
 function paintsOwnContent(el: Element, x: number, y: number): boolean {
+  // Group opacity below the ceiling paints nothing visible: a transparent
+  // control must not absorb a concealed child (review rv-928-vis HIGH).
+  if (ownOpacity(el) < CONCEALED_OPACITY_CEILING) return false;
   if (directTextPaints(el, x, y)) return true;
-  return colorAlpha(window.getComputedStyle(el).backgroundColor) >= CONCEALED_OPACITY_CEILING;
+  const style = window.getComputedStyle(el);
+  // A hidden box's opaque background is not visible paint (review rv-928-vis M2).
+  if (style.visibility && style.visibility !== "visible") return false;
+  return colorAlpha(style.backgroundColor) >= CONCEALED_OPACITY_CEILING;
 }
 
 /**

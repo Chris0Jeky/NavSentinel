@@ -321,6 +321,55 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
   });
 
+  it("a hidden link background does not count as a visible affordance (#886 rv-928-vis M2)", () => {
+    const link = el("a", {
+      href: "https://evil.example/",
+      style: "background-color: rgb(51, 51, 51); visibility:hidden",
+    });
+    const leaf = el("span", { style: "opacity:0.01;visibility:visible" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
+  it("a transparent control cannot absorb a concealed child via its text (#886 rv-928-vis HIGH)", () => {
+    const link = el("a", { href: "https://evil.example/", style: "opacity:0" });
+    link.appendChild(document.createTextNode("Visible"));
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toEqual(
+      expect.arrayContaining(["invisible_but_clickable", "intent_mismatch_under_interactive"]),
+    );
+  });
+
+  it("a transparent control cannot absorb a concealed child via its background (#886)", () => {
+    const link = el("a", {
+      href: "https://evil.example/",
+      style: "opacity:0;background-color: rgb(51, 51, 51)",
+    });
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toEqual(
+      expect.arrayContaining(["invisible_but_clickable", "intent_mismatch_under_interactive"]),
+    );
+  });
+
+  it("a spoofed assignedSlot cycle fails closed instead of hanging (#886 rv-924-geom H2)", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    Object.defineProperty(leaf, "assignedSlot", { value: leaf });
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(ctx.top.opacity).toBe(0);
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
   it("an unnamed control keeps the previous leaf-based score", () => {
     const link = el("a", { href: "https://other.example/" });
     const child = el("div", {}, link);
