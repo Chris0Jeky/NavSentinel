@@ -409,6 +409,18 @@ function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "n
   return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
 }
 
+/**
+ * Claim a matching redirect allowance for a direct-child replay and exhaust the
+ * rest of that gesture before page-owned `formdata` callbacks run. A later
+ * isolated-world follow-up for the same click preserves the exhausted count, so
+ * neither a nested callback nor a second same-task form can redirect elsewhere.
+ */
+function exhaustMatchingRedirectAllowance(actionUrl: string): void {
+  if (consumeRedirectAllowance(actionUrl) === "none") return;
+  redirectAllowance.count = REDIRECT_LIMITS.maxPerGesture;
+  redirectAllowance.sameTaskArmed = false;
+}
+
 function makeId(): string {
   return `${Math.floor(nowMs())}-${Math.random().toString(16).slice(2)}`;
 }
@@ -687,6 +699,26 @@ interface ReplayableFormState {
   acceptCharset: string;
 }
 
+function isSameDirectChildTarget(
+  expected: DirectChildFormTarget,
+  actual: DirectChildFormTarget | null,
+): boolean {
+  return actual !== null && actual.name === expected.name && actual.child === expected.child;
+}
+
+function isSameReplayableFormState(
+  expected: ReplayableFormState,
+  actual: ReplayableFormState | null,
+): boolean {
+  return (
+    actual !== null &&
+    actual.actionUrl === expected.actionUrl &&
+    actual.method === expected.method &&
+    actual.enctype === expected.enctype &&
+    actual.acceptCharset === expected.acceptCharset
+  );
+}
+
 type LegacyChildReplayResult =
   | { status: "not-child" }
   | { status: "blocked"; actionUrl: string | undefined }
@@ -843,8 +875,14 @@ function replayFormDataToChild(
     // mutability boundary tracked in #896, so keep this exact identity/name
     // check adjacent to native submit: same-name child replacement and
     // top-window name theft both fail closed.
-    const confirmed = resolveDirectChildFormTarget(sourceForm);
-    if (!confirmed || confirmed.child !== target.child || confirmed.name !== target.name) return false;
+    const confirmedTarget = resolveDirectChildFormTarget(sourceForm);
+    const confirmedState = readReplayableFormState(sourceForm);
+    if (
+      !isSameDirectChildTarget(target, confirmedTarget) ||
+      !isSameReplayableFormState(state, confirmedState)
+    ) {
+      return false;
+    }
 
     nativeApply(nativeFormSubmit, replayForm, []);
     return replayFormDataSeen;
@@ -893,21 +931,30 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
     return { status: "blocked", actionUrl: initialState?.actionUrl ?? resolveFormAction(form) };
   }
 
+  // Reserve this exact child authority before constructing FormData, which
+  // dispatches page-controlled callbacks synchronously. Otherwise a callback
+  // can spend the click's still-live URL-only allowance on `_top`, `_blank`, or
+  // a second same-action form while this replay is still being validated.
+  exhaustMatchingRedirectAllowance(initialState.actionUrl);
+
   childReplayInProgress.add(form);
   try {
     const entries = snapshotFormData(form); // dispatches the page's one original formdata event
     const finalTarget = resolveDirectChildFormTarget(form);
     const finalState = readReplayableFormState(form);
-    if (!finalTarget || finalTarget.child !== initialTarget.child || !finalState) {
-      return { status: "blocked", actionUrl: finalState?.actionUrl ?? resolveFormAction(form) };
+    if (
+      !isSameDirectChildTarget(initialTarget, finalTarget) ||
+      !isSameReplayableFormState(initialState, finalState)
+    ) {
+      return { status: "blocked", actionUrl: initialState.actionUrl };
     }
 
-    if (!replayFormDataToChild(form, finalTarget, finalState, entries)) {
-      return { status: "blocked", actionUrl: finalState.actionUrl };
+    if (!replayFormDataToChild(form, initialTarget, initialState, entries)) {
+      return { status: "blocked", actionUrl: initialState.actionUrl };
     }
-    return { status: "replayed", actionUrl: finalState.actionUrl };
+    return { status: "replayed", actionUrl: initialState.actionUrl };
   } catch {
-    return { status: "blocked", actionUrl: resolveFormAction(form) };
+    return { status: "blocked", actionUrl: initialState.actionUrl };
   } finally {
     childReplayInProgress.delete(form);
   }
@@ -1050,21 +1097,18 @@ function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null
 function patchForms(): void {
   const patchedFormSubmit = function (this: HTMLFormElement): void {
     const actionUrl = resolveFormAction(this);
-    if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
+    if (isOff()) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
       nativeFormSubmit.call(this);
       return;
     }
 
-    const allowance = consumeRedirectAllowance(actionUrl);
-    if (allowance !== "none") {
-      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
-      notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
-      nativeFormSubmit.call(this);
-      return;
-    }
-
+    // Resolve an owned child target before any generic redirect allowance. The
+    // page's `formdata` callback is allowed to mutate payload entries, but it may
+    // not replace the child identity, target name, destination, method, encoding,
+    // or accepted character set and then spend a click-derived allowance on that
+    // different authority (#865/#688).
     const childReplay = tryReplayLegacySubmitToChild(this);
     if (childReplay.status === "replayed") {
       // Deliberately no notifyAllowedTarget: this authority belongs only to the
@@ -1072,6 +1116,23 @@ function patchForms(): void {
       // false-positive fix into a laundering path.
       postAllowed({ kind: "form_submit", url: childReplay.actionUrl });
       return;
+    }
+
+    if (childReplay.status === "not-child" && isSubframe() && isFormSelfTarget(this.target)) {
+      postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+      notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
+      nativeFormSubmit.call(this);
+      return;
+    }
+
+    if (childReplay.status === "not-child") {
+      const allowance = consumeRedirectAllowance(actionUrl);
+      if (allowance !== "none") {
+        postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
+        nativeFormSubmit.call(this);
+        return;
+      }
     }
 
     const blockedActionUrl = childReplay.status === "blocked" ? childReplay.actionUrl : actionUrl;
