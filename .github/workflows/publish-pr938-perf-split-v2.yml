@@ -1,0 +1,114 @@
+name: Publish PR 938 performance split v2
+
+on:
+  push:
+    branches:
+      - codex/publish-pr938-perf-split-v2-20260926
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TARGET_BRANCH: codex/812-form-mutation-telemetry-20260925
+      TARGET_SHA: a477af9190cd2ace5d2d36dd4a976224d8c3118e
+      PATCH_SHA256: 6deb90ff97076a7ea8b14179c5024a0a2df3fa09dda0cec7c0485f609ea9d274
+    steps:
+      - name: Checkout publisher provenance
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Extract and verify audited patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import os
+          import re
+          from pathlib import Path
+
+          source = Path('.github/workflows/publish-pr938-perf-split.yml').read_text(encoding='utf-8')
+          match = re.search(r"<<'PATCH_B64'\n(.*?)\n\s*PATCH_B64", source, re.DOTALL)
+          if match is None:
+              raise SystemExit('embedded patch payload not found')
+          payload = ''.join(match.group(1).split())
+          compressed = base64.b64decode(payload, validate=True)
+          patch = gzip.decompress(compressed)
+          actual = hashlib.sha256(patch).hexdigest()
+          expected = os.environ['PATCH_SHA256']
+          if actual != expected:
+              raise SystemExit(f'patch checksum mismatch: {actual} != {expected}')
+          Path('/tmp/nav938.patch').write_bytes(patch)
+          PY
+
+      - name: Create exact target worktree and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$TARGET_SHA^{commit}"
+          git worktree add --detach /tmp/nav938-work "$TARGET_SHA"
+          cd /tmp/nav938-work
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          git apply --check /tmp/nav938.patch
+          git apply /tmp/nav938.patch
+
+          expected=$(printf '%s\n' \
+            extension/src/content/form_authority_monitor.ts \
+            extension/src/content/mutation_monitor.ts \
+            scripts/check-perf-budget.mjs \
+            vite.config.ts | sort)
+          actual=$(git diff --name-only | sort)
+          test "$actual" = "$expected"
+
+          cat > /tmp/nav938-files.sha256 <<'HASHES'
+          8a045407a6794dfd17218fa2eff4abdc4decb729491abdf5581f85810109da75  extension/src/content/form_authority_monitor.ts
+          b69e1b294525e02cd6a711c8317eaf2d090b1eb8b385b989ccc85df8adea7cc5  extension/src/content/mutation_monitor.ts
+          925135f168a84f8ce94b896fddf0c4a11869fb8217f794cb51c95d6a97011563  scripts/check-perf-budget.mjs
+          d4e4c4091f771de94e011958c41adf43fbb8c30242689ba8f6c5be3f1bafae6a  vite.config.ts
+          HASHES
+          sha256sum --check --strict /tmp/nav938-files.sha256
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: /tmp/nav938-work/package-lock.json
+
+      - name: Install exact dependencies
+        working-directory: /tmp/nav938-work
+        run: npm ci
+
+      - name: Validate security boundary and production profiles
+        working-directory: /tmp/nav938-work
+        run: |
+          npm run lint
+          npm run typecheck
+          npm exec -- vitest run tests/mutation-monitor-form-authority.test.ts tests/mutation-monitor.test.ts tests/mutation-observer-delivery.test.ts
+          npm run build
+          npm run check:perf-budget
+          npm run build:research-reputation
+          npm run check:perf-budget
+
+      - name: Publish reviewed patch to PR branch
+        working-directory: /tmp/nav938-work
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "NavSentinel Security Automation"
+          git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
+          git add \
+            extension/src/content/form_authority_monitor.ts \
+            extension/src/content/mutation_monitor.ts \
+            scripts/check-perf-budget.mjs \
+            vite.config.ts
+          git diff --cached --check
+          git commit -m "refactor(telemetry): split form authority reconstruction"
+          git push origin "HEAD:$TARGET_BRANCH"
