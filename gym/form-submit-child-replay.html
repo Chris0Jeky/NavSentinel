@@ -30,7 +30,7 @@
       const request = document.getElementById("request");
       const sink = document.getElementById("sink");
       legacy.elements.case.value = mode;
-      if (mode === "safe-post-file") {
+      if (mode === "safe-post-file" || mode === "retarget-enctype") {
         legacy.method = "POST";
         legacy.enctype = "multipart/form-data";
       }
@@ -97,6 +97,17 @@
           replacement.name = "sink";
           replacement.title = "replacement named child sink";
           sink.replaceWith(replacement);
+        } else if (mode === "retarget-same-child-alias") {
+          sink.name = "alias";
+          legacy.target = "alias";
+        } else if (mode === "retarget-action") {
+          legacy.action = "form-submit-landing.html?authority=mutated";
+        } else if (mode === "retarget-method") {
+          legacy.method = "POST";
+        } else if (mode === "retarget-enctype") {
+          legacy.enctype = "application/x-www-form-urlencoded";
+        } else if (mode === "retarget-accept-charset") {
+          legacy.acceptCharset = "iso-8859-1";
         }
       });
 
