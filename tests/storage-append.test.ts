@@ -242,6 +242,134 @@ describe("appendEvent", () => {
     expect(log[0]!.url).toBe("data:");
   });
 
+  it("omits page-derived URLs from new mutation alert details", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    await appendEvent({
+      kind: "mutation_alert",
+      url: "https://shop.example/checkout?session=page-secret",
+      reasons: ["form_action_changed"],
+      extra: {
+        severity: "high",
+        details: 'Form action changed to cross-domain URL: "https://evil.example/collect?token=action-secret#fragment" (was "/pay?token=old-secret")',
+      },
+    });
+    await appendEvent({
+      kind: "mutation_alert",
+      reasons: ["suspicious_iframe"],
+      extra: {
+        severity: "medium",
+        details: "Suspicious iframe injected: display:none, cross-domain src: https://evil.example/frame?token=frame-secret",
+      },
+    });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ url?: string; reasons?: string[]; extra?: Record<string, unknown> }>;
+    expect(log[0]).toMatchObject({
+      url: "https://shop.example/checkout",
+      reasons: ["form_action_changed"],
+      extra: { severity: "high", details: "Form action changed (URL omitted from event log)" },
+    });
+    expect(log[1]).toMatchObject({
+      reasons: ["suspicious_iframe"],
+      extra: { severity: "medium", details: "Suspicious iframe injected: cross-domain src (URL omitted from event log)" },
+    });
+    expect(JSON.stringify(log)).not.toMatch(/action-secret|old-secret|frame-secret|page-secret/);
+  });
+
+  it("scrubs mutation details again at the delegated worker append boundary", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", { ...chrome, clients: {}, registration: {} } as unknown as typeof globalThis.chrome);
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await expect(handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: {
+        id: "delegated-mutation",
+        ts: Date.now(),
+        kind: "mutation_alert",
+        reasons: ["form_action_changed"],
+        extra: { details: 'Form action changed: "/pay?token=delegated-secret" (was "")', severity: "medium" },
+      },
+    })).resolves.toEqual({ ok: true });
+
+    const log = store[EVENT_LOG_KEY] as Array<{ extra?: Record<string, unknown> }>;
+    expect(log[0]?.extra).toEqual({
+      details: "Form action changed (URL omitted from event log)",
+      severity: "medium",
+    });
+    expect(JSON.stringify(log)).not.toContain("delegated-secret");
+  });
+
+  it("drops an oversized mutation detail before parsing its JSON snapshot", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendEvent } = await import("../extension/src/shared/storage");
+    const detail = `Form action changed to cross-domain URL: https://example.com/?token=${"X".repeat(1024 * 1024)}`;
+    const parse = vi.spyOn(JSON, "parse");
+
+    await appendEvent({
+      id: "oversized-mutation",
+      kind: "mutation_alert",
+      reasons: ["form_action_changed"],
+      extra: { severity: "high", details: detail },
+    });
+
+    expect(parse.mock.calls.some(([json]) => typeof json === "string" && json.includes(detail))).toBe(false);
+    const log = store[EVENT_LOG_KEY] as Array<{ id: string; extra?: unknown }>;
+    expect(log[0]).toMatchObject({ id: "oversized-mutation" });
+    expect(log[0]?.extra).toBeUndefined();
+  });
+
+  it("scrubs legacy mutation details during migration and before export", async () => {
+    const legacy = {
+      id: "legacy-mutation",
+      ts: 1,
+      kind: "mutation_alert",
+      reasons: ["form_action_changed"],
+      extra: { severity: "high", details: 'Submitter formaction changed: "https://evil.example/collect?token=legacy-secret" (was "")' },
+    };
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [legacy] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const exported = await storage.exportAll();
+    expect(exported.eventLog[0]?.extra?.details).toBe("Form action changed (URL omitted from event log)");
+    expect((store[EVENT_LOG_KEY] as unknown[])[0]).toEqual(legacy);
+
+    await storage.migrateStoredEventLogUrls();
+    const migrated = store[EVENT_LOG_KEY] as Array<{ extra?: Record<string, unknown> }>;
+    expect(migrated[0]?.extra?.details).toBe("Form action changed (URL omitted from event log)");
+    expect(JSON.stringify(migrated)).not.toContain("legacy-secret");
+
+    await storage.importAll({ eventLog: [legacy] });
+    const imported = store[EVENT_LOG_KEY] as Array<{ extra?: Record<string, unknown> }>;
+    expect(imported[0]?.extra?.details).toBe("Form action changed (URL omitted from event log)");
+  });
+
+  it("scrubs a legacy iframe source URL during export and migration", async () => {
+    const legacy = {
+      id: "legacy-iframe",
+      ts: 1,
+      kind: "mutation_alert",
+      reasons: ["suspicious_iframe"],
+      extra: { severity: "medium", details: "Suspicious iframe injected: cross-domain src: https://evil.example/frame?token=iframe-secret" },
+    };
+    const { chrome, store } = createChromeMock({ [EVENT_LOG_KEY]: [legacy] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const storage = await import("../extension/src/shared/storage");
+    const exported = await storage.exportAll();
+    expect(exported.eventLog[0]?.extra?.details).toBe("Suspicious iframe injected: cross-domain src (URL omitted from event log)");
+    expect(JSON.stringify(exported)).not.toContain("iframe-secret");
+
+    await storage.migrateStoredEventLogUrls();
+    const migrated = store[EVENT_LOG_KEY] as Array<{ extra?: Record<string, unknown> }>;
+    expect(migrated[0]?.extra?.details).toBe("Suspicious iframe injected: cross-domain src (URL omitted from event log)");
+    expect(JSON.stringify(migrated)).not.toContain("iframe-secret");
+  });
+
   it("migrates stored legacy URLs without losing a queued service-worker append", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [

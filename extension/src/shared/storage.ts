@@ -1170,20 +1170,40 @@ function capEventString(value: string): string {
 
 /**
  * Keep a journal `extra` payload only when it serializes within budget
- * (#299/#829). Oversized or unserializable (cyclic) extras are dropped
- * fail-closed; the entry itself persists. Shared by the live-append and
- * import paths.
+ * (#299/#829). Mutation details can contain page-owned form-action or iframe
+ * URLs, so replace those display strings before persisting or exporting (#902).
+ * The alert kind, reason, severity and top-level minimized URL remain available
+ * for diagnosis. Oversized or unserializable (cyclic) extras are dropped
+ * fail-closed; the entry itself persists. Shared by live append and import.
  */
-function sanitizeEventExtra(extra: Record<string, unknown>): Record<string, unknown> | undefined {
+function sanitizeEventExtra(
+  extra: Record<string, unknown>,
+  kind: EventKind,
+  reasons?: string[],
+): Record<string, unknown> | undefined {
   try {
     const json = JSON.stringify(extra);
-    // UTF-16 length is only an inexpensive lower bound on the encoded size.
-    if (typeof json !== "string" || json.length > MAX_EVENT_EXTRA_BYTES
-      || new TextEncoder().encode(json).byteLength > MAX_EVENT_EXTRA_BYTES) return undefined;
+    // Reject page-controlled bloat before parsing a second copy. The alert
+    // itself still persists without extra, as it did before #902.
+    if (typeof json !== "string" || json.length > MAX_EVENT_EXTRA_BYTES) return undefined;
     // Persist the admitted snapshot, not a caller-owned object that can grow
     // while the serialized write waits for storage or an earlier operation.
     const snapshot: unknown = JSON.parse(json);
-    return isRecord(snapshot) ? snapshot : undefined;
+    if (!isRecord(snapshot)) return undefined;
+    if (kind === "mutation_alert" && typeof snapshot.details === "string") {
+      const detail = snapshot.details;
+      if ((Array.isArray(reasons) && reasons.includes("form_action_changed")) ||
+        detail.startsWith("Form action changed") || detail.startsWith("Submitter formaction changed")) {
+        snapshot.details = "Form action changed (URL omitted from event log)";
+      } else if (detail.includes("cross-domain src:")) {
+        snapshot.details = "Suspicious iframe injected: cross-domain src (URL omitted from event log)";
+      }
+    }
+    const safeJson = JSON.stringify(snapshot);
+    // UTF-16 length is only an inexpensive lower bound on the encoded size.
+    if (safeJson.length > MAX_EVENT_EXTRA_BYTES
+      || new TextEncoder().encode(safeJson).byteLength > MAX_EVENT_EXTRA_BYTES) return undefined;
+    return snapshot;
   } catch {
     return undefined;
   }
@@ -1191,7 +1211,7 @@ function sanitizeEventExtra(extra: Record<string, unknown>): Record<string, unkn
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
-  const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra);
+  const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra, partial.kind, partial.reasons);
   return {
     id: capEventString(partial.id ?? makeId()),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
@@ -1602,7 +1622,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   if (reasons !== undefined) out.reasons = reasons;
   if (e.extra !== undefined) {
     // Drop the oversized extra (fail closed) — keep the entry, shed the bloat.
-    const extra = sanitizeEventExtra(e.extra);
+    const extra = sanitizeEventExtra(e.extra, e.kind, e.reasons);
     if (extra !== undefined) out.extra = extra;
   }
   return out;
@@ -2270,18 +2290,10 @@ export async function exportAll(): Promise<{
   const exportedAt = Date.now();
   const allowlist = await getAllowlist();
   const trustedDomains = await getTrustedDomains();
-  // Revalidate legacy rows at the export boundary, even before a worker has
-  // migrated them. A hostname-only page association must never export a URL,
-  // path or query that an older version accepted (#691). Do not mutate storage.
-  const eventLog = (await getEventLog()).map((entry) => {
-    const { pageSite: rawPageSite, url: rawUrl, ...rest } = entry;
-    const pageSite = normalizeEventPageSite(rawPageSite);
-    return {
-      ...rest,
-      ...(pageSite === undefined ? {} : { pageSite }),
-      ...(rawUrl === undefined ? {} : { url: minimizeEventUrl(rawUrl) }),
-    };
-  });
+  // Revalidate legacy rows at export even before the worker has migrated them.
+  // The shared import/migration sanitizer also removes page-owned mutation
+  // detail URLs (#902). Do not mutate storage while preparing an export.
+  const eventLog = (await getEventLog()).map(sanitizeImportedEventLogEntry);
   const promptOutcomes = await getPromptOutcomes();
   // A dormant or newly-started worker may not have completed legacy migration
   // yet. Export derives this cache from host-canonical outcomes instead of
