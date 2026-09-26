@@ -260,4 +260,59 @@ describe("Proving Ground fake sink", () => {
       await sink.close();
     }
   });
+
+  it("reports sink probe health without spending consequence authority", async () => {
+    const sink = await startProvingGroundFakeSink({
+      runId: "unit-probe-run",
+      scenarioId: "NS-ADV-UI-004",
+      allowedRoles: ["attack"],
+      allowedConsequences: ["wrong-target-navigation"],
+      targetAuthorities: [{
+        id: "unit-probe-harm",
+        role: "attack",
+        consequence: "wrong-target-navigation",
+        maxUses: 1,
+      }],
+    });
+    let closed = false;
+    try {
+      const first = await sink.probe();
+      expect(first).toEqual({
+        healthy: true,
+        healthSequence: 1,
+        receiptCount: 0,
+        invalidAttempts: 0,
+        observerErrors: 0,
+        targetUses: { "unit-probe-harm": 0 },
+      });
+
+      const second = await sink.probe();
+      expect(second.healthy).toBe(true);
+      expect(second.healthSequence).toBe(2);
+      expect(second.healthSequence).toBe(first.healthSequence + 1);
+      expect(second.receiptCount).toBe(0);
+      expect(second.targetUses).toEqual({ "unit-probe-harm": 0 });
+      expect(sink.snapshot()).toEqual({ receipts: [], invalidAttempts: [] });
+
+      const targetUrl = sink.urlFor("attack", "wrong-target-navigation", "unit-probe-harm");
+      const accepted = await fetch(targetUrl);
+      expect(accepted.status).toBe(200);
+
+      const third = await sink.probe();
+      expect(third.healthy).toBe(true);
+      expect(third.healthSequence).toBe(3);
+      expect(third.receiptCount).toBe(1);
+      expect(third.targetUses).toEqual({ "unit-probe-harm": 1 });
+
+      await sink.close();
+      closed = true;
+      const afterClose = await sink.probe();
+      expect(afterClose.healthy).toBe(false);
+      expect(afterClose.healthSequence).toBe(3);
+      expect(afterClose.receiptCount).toBe(1);
+      expect(afterClose.targetUses).toEqual({ "unit-probe-harm": 1 });
+    } finally {
+      if (!closed) await sink.close();
+    }
+  });
 });
