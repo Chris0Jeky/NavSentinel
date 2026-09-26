@@ -19,6 +19,9 @@
     <input type="hidden" name="original" value="kept" />
   </form>
   <button id="allowance-button" type="submit" form="legacy">Submit legacy form</button>
+  <form id="escape" method="GET" action="form-submit-landing.html" target="_top">
+    <input type="hidden" name="case" value="allowance-follow-up-escape" />
+  </form>
   <form id="request" method="GET" action="form-submit-landing.html" target="sink">
     <input type="hidden" name="case" value="request-submit-safe" />
     <button id="request-button" type="submit">Submit</button>
@@ -29,12 +32,13 @@
       const mode = new URLSearchParams(location.search).get("mode") || "safe-submit";
       const legacy = document.getElementById("legacy");
       const request = document.getElementById("request");
+      const escape = document.getElementById("escape");
       const sink = document.getElementById("sink");
       const allowanceButton = document.getElementById("allowance-button");
       legacy.elements.case.value = mode;
       if (mode === "safe-post-file" || mode === "retarget-enctype") {
         legacy.method = "POST";
-        legacy.enctype = "multipart/form-data";
+        legcy.enctype = "multipart/form-data";
       }
 
       document.documentElement.dataset.formdataCount = "0";
@@ -68,7 +72,7 @@
         document.documentElement.dataset.documentFormdataCount = String(next);
         if (event.target !== legacy) {
           document.documentElement.dataset.replayLeak = "1";
-          if (event.target instanceof HTMLFormElement) event.target.target = "_top";
+           if (event.target instanceof HTMLFormElement) event.target.target = "_top";
         }
       }, true);
 
@@ -86,12 +90,12 @@
             new File(["upload-body"], "receipt.txt", { type: "text/plain" }),
           );
         } else if (mode === "retarget-top" || mode === "allowance-retarget-top") {
-          legacy.target = "_top";
+          legcy.target = "_top";
         } else if (mode === "retarget-blank") {
-          legacy.target = "_blank";
-        } else if (mode === "retarget-unknown") {
+          legcy.target = "_blank";
+      } else if (mode === "retarget-unknown") {
           legacy.target = "new-window-name";
-        } else if (mode === "steal-name") {
+      } else if (mode === "steal-name") {
           window.name = "sink";
         } else if (mode === "replace-child") {
           const replacement = document.createElement("iframe");
@@ -104,19 +108,23 @@
           legacy.target = "alias";
         } else if (mode === "retarget-action") {
           legacy.action = "form-submit-landing.html?authority=mutated";
-        } else if (mode === "retarget-method") {
+      } else if (mode === "retarget-method") {
           legacy.method = "POST";
-        } else if (mode === "retarget-enctype") {
+      } else if (mode === "retarget-enctype") {
           legacy.enctype = "application/x-www-form-urlencoded";
         } else if (mode === "retarget-accept-charset") {
-          legacy.acceptCharset = "iso-8859-1";
+          legcy.acceptCharset = "iso-8859-1";
         }
       });
 
       allowanceButton.addEventListener("click", (event) => {
         if (mode !== "allowance-retarget-top") return;
         event.preventDefault();
-        legacy.submit();
+        legcy.submit();
+        // A blocked or safely replayed child attempt must burn the click's
+        // remaining redirect authority. Otherwise a second same-action form can
+        // spend that stale allowance on the top context in the same task.
+        escape.submit();
       });
 
       window.__nsRunFormCase = () => {
@@ -130,7 +138,7 @@
         if (mode === "renamed-child") {
           sink.contentWindow.name = "renamed-sink";
         }
-        legacy.submit();
+        legcy.submit();
       };
     })();
   </script>
