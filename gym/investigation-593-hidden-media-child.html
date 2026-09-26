@@ -47,8 +47,10 @@
         ["top-assign-1600", { primitive: "top-assign", delayMs: 1600 }],
         ["window-open-100", { primitive: "window-open", delayMs: 100 }],
         ["top-form-submit-100", { primitive: "top-form-submit", delayMs: 100 }],
+        ["top-form-submit-sync", { primitive: "top-form-submit", delayMs: 0 }],
         ["empty-formaction-submit-100", { primitive: "empty-formaction-submit", delayMs: 100 }],
         ["benign-declared-form-submit-100", { primitive: "declared-form-submit", delayMs: 100 }],
+        ["benign-declared-form-submit-sync", { primitive: "declared-form-submit", delayMs: 0 }],
         ["benign-declared-request-submit-100", { primitive: "declared-request-submit", delayMs: 100 }],
         ["benign-anchor-top-keyboard", { primitive: "anchor-top", delayMs: 0 }],
         ["benign-top-script-100", { primitive: "top-script", delayMs: 100 }],
@@ -144,7 +146,11 @@
           modifiers,
           sinkArmed: !!safeSink,
         });
-        window.setTimeout(execute, delayMs);
+        // A zero delay executes inside the click's own task (#864). The MAIN
+        // world arms no same-task allowance in a child frame, so these arms
+        // wait for the isolated grant bound to the declared action.
+        if (delayMs === 0) execute();
+        else window.setTimeout(execute, delayMs);
       }
 
       if (primitive === "declared-form-submit" || primitive === "declared-request-submit" || primitive === "empty-formaction-submit") {
