@@ -123,7 +123,13 @@ function composedParentElement(el: Element): Element | null {
 
 function effectiveOpacity(el: Element): number {
   let product = 1;
+  const seen = new Set<Element>();
   for (let current: Element | null = el; current; current = composedParentElement(current)) {
+    // Genuine composed trees are acyclic; a revisit means a spoofed
+    // assignedSlot, so fail closed (fully concealed) instead of hanging
+    // the synchronous click path (review rv-924-geom H2).
+    if (seen.has(current)) return 0;
+    seen.add(current);
     product *= ownOpacity(current);
   }
   return product;
@@ -132,25 +138,35 @@ function effectiveOpacity(el: Element): number {
 /** Product of the own opacities from `el` up to, but excluding, `control`. */
 function opacityWithin(el: Element, control: Element): number {
   let product = 1;
-  for (let e: Element | null = el; e && e !== control; e = composedParentElement(e)) {
+  for (let e: Element | null = el, hops = 0; e && e !== control; e = composedParentElement(e)) {
+    // The control is an ancestor a few hops up; 64 hops without reaching
+    // it means a spoofed cycle, so fail closed (also cheaper than a Set).
+    if (++hops > 64) return 0;
     product *= ownOpacity(e);
   }
   return product;
 }
 
-/** Alpha of a computed background colour; unknown formats count as unpainted. */
-function backgroundAlpha(el: Element): number {
-  const bg = window.getComputedStyle(el).backgroundColor.trim().toLowerCase();
-  if (!bg || bg === "transparent") return 0;
-  const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(bg);
-  if (slash) return Number.parseFloat(slash[1]!) / (slash[2] ? 100 : 1);
-  const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(bg);
-  if (rgba) return Number.parseFloat(rgba[1]!);
-  return bg.startsWith("rgb(") ? 1 : 0;
+/** Alpha of a computed colour; background and text use different unknown fallbacks. */
+function colorAlpha(value: string, unknownAlpha = 0): number {
+  // getComputedStyle serializes these CSS color tokens in lowercase.
+  const color = value;
+  if (!color || color === "transparent") return color ? 0 : unknownAlpha;
+  const slash = /\/\s*([\d.]+)(%?)\s*\)$/.exec(color);
+  if (slash) return +slash[1]! / (slash[2] ? 100 : 1);
+  const rgba = /^rgba\([^)]*,\s*([\d.]+)\s*\)$/.exec(color);
+  if (rgba) return +rgba[1]!;
+  return unknownAlpha || +color.startsWith("rgb(");
 }
 
 /** Test glyph runs rather than a whole text node, whose rect can include blank padding. */
 function directTextPaints(el: Element, x: number, y: number): boolean {
+  const style = window.getComputedStyle(el);
+  if ((style.visibility && style.visibility !== "visible") ||
+      colorAlpha(style.color, 1) < CONCEALED_OPACITY_CEILING ||
+      colorAlpha(style.getPropertyValue("-webkit-text-fill-color"), 1) < CONCEALED_OPACITY_CEILING) {
+    return false;
+  }
   let remainingRuns = 32;
   for (let i = 0; i < Math.min(el.childNodes.length, 32); i++) {
     const node = el.childNodes[i]!;
@@ -175,8 +191,15 @@ function directTextPaints(el: Element, x: number, y: number): boolean {
 
 /** The control paints a direct glyph at the point, or a visible background. */
 function paintsOwnContent(el: Element, x: number, y: number): boolean {
+  const style = window.getComputedStyle(el);
+  const own = Number.parseFloat(style.opacity);
+  // Group opacity below the ceiling paints nothing visible: a transparent
+  // control must not absorb a concealed child (review rv-928-vis HIGH).
+  if (Number.isFinite(own) && own < CONCEALED_OPACITY_CEILING) return false;
   if (directTextPaints(el, x, y)) return true;
-  return backgroundAlpha(el) >= CONCEALED_OPACITY_CEILING;
+  // A hidden box's opaque background is not visible paint (review rv-928-vis M2).
+  if (style.visibility && style.visibility !== "visible") return false;
+  return colorAlpha(style.backgroundColor) >= CONCEALED_OPACITY_CEILING;
 }
 
 /**
