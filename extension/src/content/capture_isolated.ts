@@ -99,7 +99,7 @@ import {
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
-import { findSubmitControl, grantsTabNavigationAuthority } from "./nav_authority";
+import { formSubmitIntentUrl, grantsTabNavigationAuthority } from "./nav_authority";
 import { isStaleDelivery } from "./rollback_staleness";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
@@ -512,7 +512,7 @@ function handleBridgeMessage(message: unknown): void {
     if (!url) return;
 
     if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-      allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      allowActionOnce(data.id, url, data.target || "_blank", data.features, { automatic: true });
       return;
     }
 
@@ -1366,36 +1366,6 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
   return null;
 }
 
-/**
- * True when a click resolves to a navigation the clicking frame itself declared
- * through a form submit control. Paired with a cross-document anchor href, this
- * is the "in-frame navigation intent" that lets a child frame mint tab-wide
- * navigation authority (#593); a bare element does not qualify.
- *
- * Deliberately conservative in BOTH directions. Missing an intent (a submit
- * control inside a shadow root, say) only costs a child frame the tab-wide
- * allowance, which downgrades the navigation to the existing rollback prompt.
- * Seeing one that the page never honours (a submit button whose handler calls
- * preventDefault and then scripts a navigation) is a known forgeable path: the
- * signal is page-declared markup, so it raises the cost of the #593 pattern
- * rather than making it impossible. See the PR and the evidence-map limitation.
- */
-function formSubmitIntentUrl(e: MouseEvent): string | null {
-  const target = e.target instanceof Element ? e.target : null;
-  const control = findSubmitControl(target);
-  const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
-  if (!form) return null;
-  const submitterAction = control?.getAttribute("formaction");
-  const formAction = form.getAttribute("action");
-  try {
-    // An explicitly empty submitter action overrides the form action and
-    // declares this document. Only a missing attribute inherits the form.
-    return new URL((submitterAction ?? formAction) || location.href, location.href).toString();
-  } catch {
-    return null;
-  }
-}
-
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   const path = e.composedPath?.() ?? [];
   for (const el of path) {
@@ -1428,9 +1398,18 @@ function allowOnce(url: string, target?: string, features?: string): void {
   }, 0);
 }
 
-function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
+function allowActionOnce(
+  actionId?: string | null,
+  url?: string,
+  target?: string,
+  features?: string,
+  options?: { automatic?: boolean }
+): void {
   if (actionId) {
-    notifyNavAllow();
+    // An allowlisted action needs authority for its approved URL, not a tab-wide
+    // rollback window. The MAIN-world release sends its own target grant too.
+    if (options?.automatic && url) notifyAllowedTarget(url);
+    else notifyNavAllow();
     postToMain("ns-allow-action", { id: actionId });
     return;
   }
@@ -2102,8 +2081,9 @@ window.addEventListener(
       // through unchallenged (#593), so a child frame now needs an in-frame
       // navigation intent — an anchor href or a form submit — to inherit that
       // authority. The MAIN-world form allowance below is separately bound to
-      // the declared action so it cannot authorize an unrelated form target.
-      const declaredFormAction = formSubmitIntentUrl(e);
+      // the declared action so it cannot authorize an unrelated form target;
+      // main_guard.ts arms a same-task allowance only in the top frame (#864).
+      const declaredFormAction = formSubmitIntentUrl(e.target, location.href);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
@@ -2126,7 +2106,10 @@ window.addEventListener(
           // allowance only on the action declared by the clicked submit
           // control. Top-frame and Off-mode behavior remain unrestricted.
           restrictRedirectTarget: !topFrame && mode !== "off",
-          ...(declaredFormAction ? { redirectTarget: declaredFormAction } : {})
+          ...(declaredFormAction ? { redirectTarget: declaredFormAction } : {}),
+          // Lets the MAIN world recognise this as the follow-up for the click it
+          // armed in the click's own task, so the gesture keeps one budget (#864).
+          gestureTs: e.timeStamp
         });
       }
 

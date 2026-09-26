@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Early inline clock replacement</title>
+    <script>
+      window.clockProbeMessages = [];
+      Date.now = () => 7;
+      const nativePostMessage = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function (message, ...rest) {
+        if (message?.source === "__navsentinel__" && message.type === "ns-nav-blocked") {
+          window.clockProbeMessages.push(message);
+        }
+        return nativePostMessage.call(this, message, ...rest);
+      };
+    </script>
+  </head>
+  <body>Early inline clock replacement fixture</body>
+</html>

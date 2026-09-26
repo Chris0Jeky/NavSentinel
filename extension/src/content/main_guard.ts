@@ -13,7 +13,17 @@ import {
   isFloodableAlertType,
 } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import {
+  applyIsolatedRedirectAllowance,
+  armSameTaskRedirect,
+  consumeRedirect,
+  createRedirectAllowance,
+  endSameTaskRedirect,
+  enforceMapSizeCap,
+  pruneTimestampWindow,
+  shouldEmitRapidPushState,
+  type RedirectAllowanceLimits,
+} from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -30,6 +40,11 @@ const REDIRECT_TTL_MS = 1500;
 const TARGET_NAV_TTL_MS = 10000;
 const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
+const REDIRECT_LIMITS: RedirectAllowanceLimits = {
+  ttlMs: REDIRECT_TTL_MS,
+  maxPerGesture: MAX_REDIRECTS_PER_GESTURE,
+  maxPendingFollowUps: 8,
+};
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 // Hard cap on live blockedActions entries. The TTL-only prune evicts nothing within a 5s
@@ -151,7 +166,6 @@ function syncJsBehaviorMonitor(): void {
 }
 
 let openCount = 0;
-let redirectCount = 0;
 let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 // URL the one-shot allowance is bound to. Without the binding, the first
@@ -159,9 +173,9 @@ let allowOnceUntil = 0;
 // destination, so a racing open can ride a user's Allow-once click (#851).
 let allowOnceUrl = "";
 let allowOpenUntil = 0;
-let allowRedirectUntil = 0;
-let restrictRedirectTarget = false;
-let allowedRedirectTarget = "";
+// Form-submit allowance: the isolated world's grant plus the same-task arm (#864).
+const redirectAllowance = createRedirectAllowance();
+let sameTaskRedirectTimer = 0;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
 
@@ -210,14 +224,22 @@ function markAllowance(params: {
   allowRedirect: boolean;
   restrictRedirectTarget?: boolean;
   redirectTarget?: string;
+  gestureTs?: number;
 }): void {
   const now = nowMs();
   openCount = 0;
-  redirectCount = 0;
   allowOpenUntil = params.allowOpen ? now + OPEN_TTL_MS : 0;
-  allowRedirectUntil = params.allowRedirect ? now + REDIRECT_TTL_MS : 0;
-  restrictRedirectTarget = params.restrictRedirectTarget === true;
-  allowedRedirectTarget = typeof params.redirectTarget === "string" ? params.redirectTarget : "";
+  applyIsolatedRedirectAllowance(
+    redirectAllowance,
+    now,
+    {
+      allowRedirect: params.allowRedirect,
+      restrict: params.restrictRedirectTarget === true,
+      target: typeof params.redirectTarget === "string" ? params.redirectTarget : "",
+      ...(params.gestureTs !== undefined ? { gestureTs: params.gestureTs } : {}),
+    },
+    REDIRECT_LIMITS,
+  );
 }
 
 function isOff(): boolean {
@@ -381,19 +403,7 @@ function maybeArmPopupIntent(
 }
 
 function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "none" {
-  const now = nowMs();
-  if (restrictRedirectTarget && (!actionUrl || actionUrl !== allowedRedirectTarget)) {
-    return "none";
-  }
-  if (
-    allowRedirectUntil > 0 &&
-    now <= allowRedirectUntil &&
-    redirectCount < MAX_REDIRECTS_PER_GESTURE
-  ) {
-    redirectCount += 1;
-    return "allowed";
-  }
-  return "none";
+  return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
 }
 
 function makeId(): string {
@@ -839,6 +849,7 @@ function handleBridgeMessage(message: unknown): void {
     restrictRedirectTarget?: boolean;
     redirectTarget?: string;
     url?: string;
+    gestureTs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
@@ -873,14 +884,18 @@ function handleBridgeMessage(message: unknown): void {
       allowOpen,
       allowRedirect,
       restrictRedirectTarget: data.restrictRedirectTarget === true,
-      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {})
+      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {}),
+      // Identifies the click this grant follows up (#864); anything else is ignored.
+      ...(typeof data.gestureTs === "number" && Number.isFinite(data.gestureTs)
+        ? { gestureTs: data.gestureTs }
+        : {})
     });
     if (debug) {
       console.debug("[NavSentinel] allowance", {
         allowOpen,
         allowRedirect,
         openUntil: allowOpenUntil,
-        redirectUntil: allowRedirectUntil
+        redirectUntil: redirectAllowance.until
       });
     }
     return;
@@ -940,6 +955,42 @@ window.addEventListener(
           action: () => callNativeOpen(window, href, "_blank")
         });
       }
+    }
+  },
+  true
+);
+
+// #864: arm the form-submit allowance for the trusted click's OWN task. The
+// isolated world's grant arrives over the MessagePort a task later, so a page
+// handler that submits synchronously or in a microtask (jQuery
+// `.trigger("submit")`, validation libraries, `<a onclick=form.submit()>`) was
+// blocked while the same submit one task later passed. This listener is on
+// `document` in the capture phase, so it runs AFTER every window-capture
+// listener, including the isolated world's click decision. Every trusted click
+// that world allows arms it, as the deferred grant always did; a click it stops
+// (interceptBlank/blockSameTab: stopImmediatePropagation) never reaches it. Only
+// trusted clicks arm: `click` cannot be produced trusted by page script, while
+// `change` and `submit` can (`checkbox.click()`, `requestSubmit()`), so they
+// arm nothing. See RedirectAllowanceState for the scope and budget invariant.
+//
+// Top frame only. A child frame's allowance is bound to the action its clicked
+// submit control declares (#593/#637), and only the isolated world's window-
+// capture read of that action is trustworthy: a page window-capture handler
+// runs between it and this document-capture listener and can rewrite `action`
+// or `formaction`, so an in-task arm would bind to an action the isolated world
+// never declared. Child frames therefore keep waiting for the isolated grant,
+// and a same-task child-frame submit stays gated as before #864.
+const nativeSetTimeout = window.setTimeout.bind(window);
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
+    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, { restrict: false, target: "" }, REDIRECT_LIMITS);
+    if (!sameTaskRedirectTimer) {
+      sameTaskRedirectTimer = nativeSetTimeout(() => {
+        sameTaskRedirectTimer = 0;
+        endSameTaskRedirect(redirectAllowance);
+      }, 0);
     }
   },
   true

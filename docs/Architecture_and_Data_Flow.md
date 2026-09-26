@@ -73,6 +73,46 @@ This is the main user-facing navigation decision surface.
 
 It captures blocked or replayable navigation attempts, clipboard write metadata, and opener-location-write signals, handing control back to the isolated-world logic.
 
+#### Form-submit gate
+
+`form.submit()` and `form.requestSubmit()` pass without a prompt in two cases:
+
+- **Off mode, or a subframe submitting to itself.**
+- **A redirect allowance.** The isolated world grants it after it allows a
+  trusted click (`ns-allow`, 1.5 s, two submissions per click; a child frame may
+  only spend it on the action its clicked submit control declares). That grant
+  crosses the MessagePort a task late, so in the top frame the MAIN world also
+  arms the same allowance for the click's own task (#864). It does so from a `document`
+  capture listener, which runs after the isolated world's `window` capture
+  decision:
+  - Every trusted click the isolated world allows arms it, as the deferred
+    grant always did.
+  - Only clicks the isolated world stops never reach the listener. These are
+    its `interceptBlank` and `blockSameTab` branches, which call
+    `stopImmediatePropagation`.
+
+  The in-task arm is unrestricted, like the top-frame grant, and shares the
+  grant's per-click budget. It is cleared by the next timer tick (`setTimeout(0)`). A delayed
+  timer can keep it alive longer, but never past the 1.5 s grant lifetime. The
+  grant carries the click's `event.timeStamp` so the MAIN world can recognise
+  its own follow-up. `change` and `submit` events arm nothing because page
+  script can make them trusted. A keyboard-only selection that auto-submits
+  therefore stays gated, as it was even one task later.
+
+  Child frames get no in-task arm. Their grant is bound to the action the
+  clicked submit control declares, and only the isolated world's `window`
+  capture read of it is trustworthy: a page `window` capture handler runs
+  between that read and a MAIN `document` capture listener and can rewrite
+  `action` or `formaction`. A child frame's same-task submit therefore stays
+  gated, as before #864, while the same submit one task later passes.
+
+A form posted into the page's own named iframe still needs an allowance (#865,
+open). An exemption that checks the target before the `submit` and `formdata`
+events is unsound. Handlers for those events run after the check and before the
+browser resolves the target. They can retarget the post to `_top`, or give the
+top window the child's name, and so navigate the tab without a prompt. The
+regression fixture `gym/form-submit-gesture-task.html` pins both variants.
+
 #### `location.assign` / `location.replace` are deliberately NOT patched (#458)
 
 Chromium implements `Location.assign` and `Location.replace` as
