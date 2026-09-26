@@ -18,6 +18,7 @@
     <input type="hidden" name="case" value="" />
     <input type="hidden" name="original" value="kept" />
   </form>
+  <button id="allowance-button" type="submit" form="legacy">Submit legacy form</button>
   <form id="request" method="GET" action="form-submit-landing.html" target="sink">
     <input type="hidden" name="case" value="request-submit-safe" />
     <button id="request-button" type="submit">Submit</button>
@@ -29,6 +30,7 @@
       const legacy = document.getElementById("legacy");
       const request = document.getElementById("request");
       const sink = document.getElementById("sink");
+      const allowanceButton = document.getElementById("allowance-button");
       legacy.elements.case.value = mode;
       if (mode === "safe-post-file" || mode === "retarget-enctype") {
         legacy.method = "POST";
@@ -83,7 +85,7 @@
             "upload",
             new File(["upload-body"], "receipt.txt", { type: "text/plain" }),
           );
-        } else if (mode === "retarget-top") {
+        } else if (mode === "retarget-top" || mode === "allowance-retarget-top") {
           legacy.target = "_top";
         } else if (mode === "retarget-blank") {
           legacy.target = "_blank";
@@ -109,6 +111,12 @@
         } else if (mode === "retarget-accept-charset") {
           legacy.acceptCharset = "iso-8859-1";
         }
+      });
+
+      allowanceButton.addEventListener("click", (event) => {
+        if (mode !== "allowance-retarget-top") return;
+        event.preventDefault();
+        legacy.submit();
       });
 
       window.__nsRunFormCase = () => {
