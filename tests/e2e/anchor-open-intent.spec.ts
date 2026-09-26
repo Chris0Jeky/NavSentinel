@@ -6,9 +6,11 @@
  * another destination, a `_top` target from a child frame, an open after the
  * short lifetime, an untrusted click, and a trusted click on something other
  * than the link. One click never yields two tabs: the page's open replaces the
- * link's own navigation, an open after that navigation is refused, an
- * own-property href getter cannot redirect the intent, and a page rewrite of
- * the link between the isolated decision and MAIN yields at most one tab.
+ * link's own navigation, an open after that navigation is refused, a passive
+ * listener (where preventDefault is ignored) and a replay of the saved event
+ * cannot add a second tab, an own-property href getter cannot redirect the
+ * intent, and a page rewrite of the link between the isolated decision and MAIN
+ * yields at most one tab.
  *
  * Fixture: gym/anchor-open-intent.html (the same file serves the top page on
  * 127.0.0.1 and the child frame on localhost).
@@ -168,6 +170,16 @@ test("a page-opened declared new-tab link opens its own destination once; other 
       expect(urls[0]).toMatch(/anchor-open-landing\.html\?case=async-no-prevent&where=top$/);
       await page.close();
     });
+
+    for (const mode of ["passive-no-prevent", "redispatch"]) {
+      await test.step(`one tab per click: ${mode} cannot add a second tab to the link's own navigation`, async () => {
+        const page = await openFixture(context, baseUrl);
+        const urls = await tabsOpenedDuring(context, () => clickLink(page, page, mode));
+        expect(urls, `only the link's own native tab: ${JSON.stringify(urls)}`).toHaveLength(1);
+        expect(urls[0]).toContain(`anchor-open-landing.html?case=${mode}&where=top`);
+        await page.close();
+      });
+    }
 
     await test.step("an own-property href getter cannot redirect the intent", async () => {
       const page = await openFixture(context, baseUrl);

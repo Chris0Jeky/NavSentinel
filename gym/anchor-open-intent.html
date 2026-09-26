@@ -24,7 +24,8 @@
       : location.origin.replace("localhost", "127.0.0.1");
     const where = inFrame ? "child" : "top";
     const modes = ["same", "same-path-query", "other-path", "top-target", "late", "untrusted",
-      "no-prevent-double", "async-no-prevent", "getter-spoof", "rewrite-restore"];
+      "no-prevent-double", "async-no-prevent", "getter-spoof", "rewrite-restore",
+      "passive-no-prevent", "redispatch"];
     const adUrl = `${other}/form-submit-landing.html?case=ad&where=${where}`;
     const container = document.getElementById("links");
     for (const mode of modes) {
@@ -39,8 +40,19 @@
         // An own-property getter that lies to MAIN-world code about the href.
         Object.defineProperty(a, "href", { get: () => adUrl, configurable: true });
       }
+      if (mode === "passive-no-prevent") {
+        // A passive listener: preventDefault() is ignored inside it, so the
+        // link's own navigation always proceeds.
+        a.addEventListener("click", (event) => {
+          document.documentElement.dataset.fixtureHandler = `${mode}:${event.isTrusted}`;
+          window.open(a.href);
+        }, { passive: true });
+        container.appendChild(a);
+        continue;
+      }
       a.addEventListener("click", (event) => {
-        const keepsNativeNavigation = mode === "no-prevent-double" || mode === "async-no-prevent" || mode === "rewrite-restore";
+        const keepsNativeNavigation = mode === "no-prevent-double" || mode === "async-no-prevent" ||
+          mode === "rewrite-restore" || mode === "redispatch";
         if (!keepsNativeNavigation) event.preventDefault();
         document.documentElement.dataset.fixtureHandler = `${mode}:${event.isTrusted}`;
         switch (mode) {
@@ -72,6 +84,15 @@
           case "rewrite-restore":
             window.open(adUrl);
             a.setAttribute("href", a.dataset.originalHref);
+            break;
+          case "redispatch":
+            // Let the native navigation happen, then replay the saved event on a
+            // detached element whose listener opens the link again.
+            setTimeout(() => {
+              const decoy = document.createElement("div");
+              decoy.addEventListener("click", () => window.open(a.href));
+              decoy.dispatchEvent(event);
+            }, 50);
             break;
         }
       });

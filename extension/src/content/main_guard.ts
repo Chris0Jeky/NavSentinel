@@ -385,19 +385,28 @@ function consumePopupIntentAllowance(target?: string, features?: string): boolea
 //
 // One tab per click: the page's open REPLACES the link's own navigation, never
 // adds to it. While the arming click is still dispatching, NavSentinel cancels
-// that navigation itself; once dispatch is over, the open is allowed only if the
-// navigation was already cancelled. Without this, a page could keep the native
-// navigation AND open a second tab (a popunder riding an ordinary link click).
-// Event state is read through getters captured at startup, so an own-property
-// spoof on the event cannot fake either condition.
+// that navigation itself; either way the open is allowed only if the click is
+// still the trusted original and its navigation is verifiably cancelled.
+// Without this, a page could keep the native navigation AND open a second tab (a
+// popunder riding an ordinary link click). eventPhase, defaultPrevented and
+// preventDefault are read through getters captured at startup, so an
+// own-property spoof on the event cannot fake them; other MAIN-world reads
+// (composedPath, instanceof) remain page-overridable (#896), but none of them
+// can buy a second tab.
 function consumeAnchorOpenIntent(url: string | undefined, target: string | undefined): boolean {
   if (mode !== "smart") return false;
   if (openCount >= MAX_OPENS_PER_GESTURE) return false;
   const event = anchorOpenIntentEvent;
   if (!event || !matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), url, target, location.href)) return false;
   try {
+    // isTrusted is an unforgeable own property, and re-dispatching the saved
+    // event with dispatchEvent() makes it false: a later replay cannot pose as
+    // the original click.
+    if (!event.isTrusted) return false;
     if (nativeEventPhase.call(event) !== 0) nativePreventDefault.call(event);
-    else if (!nativeDefaultPrevented.call(event)) return false;
+    // Whatever the phase, allow the open only once the link's own navigation is
+    // really cancelled. A passive listener silently ignores preventDefault().
+    if (!nativeDefaultPrevented.call(event)) return false;
   } catch {
     return false;
   }
