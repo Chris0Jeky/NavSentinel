@@ -184,7 +184,7 @@ describe("same-task arm (#864)", () => {
     expect(s.pendingFollowUps).toHaveLength(LIMITS.maxPendingFollowUps);
   });
 
-  it("keeps a child frame to the declared action, and a bare-element click to nothing", () => {
+  it("keeps a restricted (child-frame isolated grant) scope to the declared action, and an empty target to nothing", () => {
     const declared = createRedirectAllowance();
     click(declared, 0, { restrict: true, target: A });
     expect(spend(declared, 0, B)).toBe(0);
@@ -230,7 +230,7 @@ describe("same-task arm (#864)", () => {
   });
 });
 
-describe("formSubmitIntentUrl (shared by both worlds)", () => {
+describe("formSubmitIntentUrl (the isolated world's declared-action resolver)", () => {
   const base = "https://example.test/page";
   afterEach(() => {
     document.body.innerHTML = "";

@@ -126,8 +126,10 @@ export function gestureBranchEmissionBound(
  * stays the authority for everything after that task.
  *
  * Invariant: this never grants more than the one-task-deferred submit already
- * got. The same-task arm has the isolated grant's scope (unrestricted in the
- * top frame, the declared submit action in a child frame), is cleared by the
+ * got. The same-task arm is armed only in the top frame, where it matches the
+ * isolated grant's unrestricted scope (child frames wait for the isolated grant
+ * bound to the declared submit action). The helpers still accept a restricted
+ * scope because the isolated grant uses it. The arm is cleared by the
  * next timer tick and in any case within the grant TTL (a delayed timer cannot
  * stretch it further), and shares the per-gesture budget: the isolated follow-up for an armed
  * click keeps the redirects already spent instead of resetting them. The
