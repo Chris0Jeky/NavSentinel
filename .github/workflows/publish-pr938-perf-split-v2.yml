@@ -15,7 +15,7 @@ jobs:
     env:
       TARGET_BRANCH: codex/812-form-mutation-telemetry-20260925
       TARGET_SHA: a477af9190cd2ace5d2d36dd4a976224d8c3118e
-      PATCH_SHA256: e02c5f3b5635cd9b943587aca5b044614346ce01475408f94d03094f7577fa71
+      PATCH_SHA256: 9695fd18d154586d8b1c435ee35e64f6c77458121396149bde329301d96a465e
     steps:
       - name: Checkout publisher provenance
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -27,9 +27,10 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s  %s\n' \
-            e7fbe6a6ca7b92fe142b1d237e1143f76db1986d265b34630efc73ae1953eb2e .github/patches/nav938-perf-split-00.b64 \
-            b2088224024e28a94ea32affed1562c382980dd26f2bcd92ccbb404aee490e69 .github/patches/nav938-perf-split-01.b64 \
-            a154c18c7c58d1e9134ed3dbd347a6fbbb0ea9e45e68fc9aaa57e3319f6c96b5 .github/patches/nav938-perf-split-02.b64 \
+            81ebc86b496051f2152f09ce29a834ece850be53da947b62c3163851199cebeb .github/patches/nav938-perf-split-00.b64 \
+            a55f8886510c13a10cf43efac87f3877c763c709ab332015b2f64b6c9b7e276a .github/patches/nav938-perf-split-01.b64 \
+            32859cb2548aee3058b89a7ca88767d116bd478e5dfc7854c47577ce18738361 .github/patches/nav938-perf-split-02.b64 \
+            6a8fc9e2b65b67c5f850151dd33f511f2801f2d297623a00c10a692edf7f6a3c .github/patches/nav938-perf-split-03.b64 \
             | sha256sum --check --strict
           cat .github/patches/nav938-perf-split-*.b64 \
             | base64 --decode \
