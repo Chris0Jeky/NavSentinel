@@ -72,6 +72,38 @@ export function findSubmitControl(target: Element | null): Element | null {
   return null;
 }
 
+/**
+ * The action URL a click declares through a form submit control, or null when
+ * the click did not land on one. Paired with a cross-document anchor href, this
+ * is the "in-frame navigation intent" that lets a child frame mint tab-wide
+ * navigation authority (#593); a bare element does not qualify. The isolated
+ * world binds a child frame's redirect allowance to it (#637), and the MAIN
+ * world arms the same allowance for the click's own task (#864); both call
+ * this one resolver so the worlds cannot disagree about the declared action.
+ *
+ * Deliberately conservative in BOTH directions. Missing an intent (a submit
+ * control inside a shadow root, say) only costs a child frame the tab-wide
+ * allowance, which downgrades the navigation to the existing rollback prompt.
+ * Seeing one that the page never honours (a submit button whose handler calls
+ * preventDefault and then scripts a navigation) is a known forgeable path: the
+ * signal is page-declared markup, so it raises the cost of the #593 pattern
+ * rather than making it impossible. See the PR and the evidence-map limitation.
+ */
+export function formSubmitIntentUrl(target: EventTarget | null, baseHref: string): string | null {
+  const control = findSubmitControl(target instanceof Element ? target : null);
+  const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
+  if (!form) return null;
+  const submitterAction = control?.getAttribute("formaction");
+  const formAction = form.getAttribute("action");
+  try {
+    // An explicitly empty submitter action overrides the form action and
+    // declares this document. Only a missing attribute inherits the form.
+    return new URL((submitterAction ?? formAction) || baseHref, baseHref).toString();
+  } catch {
+    return null;
+  }
+}
+
 export function grantsTabNavigationAuthority(
   opts: TabNavigationAuthorityInputs
 ): boolean {

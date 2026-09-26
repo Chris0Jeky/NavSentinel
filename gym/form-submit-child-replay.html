@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Named-child form replay boundary (#865)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    iframe { width: 420px; height: 90px; border: 1px solid #999; }
+  </style>
+</head>
+<body>
+  <h1>Named-child form replay boundary (#865)</h1>
+  <p>A legacy <code>form.submit()</code> starts with a target owned by this page.
+     The mode may keep that target or retarget during <code>formdata</code>.</p>
+
+  <iframe id="sink" name="sink" title="named child sink"></iframe>
+  <form id="legacy" method="GET" action="form-submit-landing.html" target="sink">
+    <input type="hidden" name="case" value="" />
+    <input type="hidden" name="original" value="kept" />
+  </form>
+  <button id="allowance-button" type="submit" form="legacy">Submit legacy form</button>
+  <form id="escape" method="GET" action="form-submit-landing.html" target="_top">
+    <input type="hidden" name="case" value="allowance-follow-up-escape" />
+  </form>
+  <form id="request" method="GET" action="form-submit-landing.html" target="sink">
+    <input type="hidden" name="case" value="request-submit-safe" />
+    <button id="request-button" type="submit">Submit</button>
+  </form>
+
+  <script>
+    (() => {
+      const mode = new URLSearchParams(location.search).get("mode") || "safe-submit";
+      const legacy = document.getElementById("legacy");
+      const request = document.getElementById("request");
+      const escape = document.getElementById("escape");
+      const sink = document.getElementById("sink");
+      const allowanceButton = document.getElementById("allowance-button");
+      legacy.elements.case.value = mode;
+      if (mode === "safe-post-file" || mode === "retarget-enctype") {
+        legacy.method = "POST";
+        legacy.enctype = "multipart/form-data";
+      }
+
+      document.documentElement.dataset.formdataCount = "0";
+      document.documentElement.dataset.documentFormdataCount = "0";
+      document.documentElement.dataset.replayLeak = "0";
+      document.documentElement.dataset.targetReadCount = "0";
+      document.documentElement.dataset.runCount = "0";
+
+      if (mode === "prototype-target-name-theft") {
+        const nativeGetAttribute = Element.prototype.getAttribute;
+        Element.prototype.getAttribute = function (name) {
+          if (this === legacy && name === "target") {
+            const next = Number(document.documentElement.dataset.targetReadCount || "0") + 1;
+            document.documentElement.dataset.targetReadCount = String(next);
+            // A vulnerable resolver captures the top name before this getter,
+            // then trusts the stale value. On its final read, steal the child's
+            // name so the replay target would resolve to the top window.
+            if (next === 3) window.name = "sink";
+            return "sink";
+          }
+          return nativeGetAttribute.call(this, name);
+        };
+      }
+
+      // The original formdata event is visible here. The extension-owned replay
+      // form lives in a closed shadow root, and FormDataEvent is non-composed in
+      // Chromium, so this listener must never see a second event. If it does,
+      // turn that leak into a top-navigation attempt to make the failure loud.
+      document.addEventListener("formdata", (event) => {
+        const next = Number(document.documentElement.dataset.documentFormdataCount || "0") + 1;
+        document.documentElement.dataset.documentFormdataCount = String(next);
+        if (event.target !== legacy) {
+          document.documentElement.dataset.replayLeak = "1";
+           if (event.target instanceof HTMLFormElement) event.target.target = "_top";
+        }
+      }, true);
+
+      legacy.addEventListener("formdata", (event) => {
+        const next = Number(document.documentElement.dataset.formdataCount || "0") + 1;
+        document.documentElement.dataset.formdataCount = String(next);
+
+        if (mode === "safe-formdata") {
+          event.formData.set("case", mode);
+          event.formData.set("mutated", "yes");
+          event.formData.append("", "empty-name-preserved");
+        } else if (mode === "safe-post-file") {
+          event.formData.append(
+            "upload",
+            new File(["upload-body"], "receipt.txt", { type: "text/plain" }),
+          );
+        } else if (mode === "retarget-top" || mode === "allowance-retarget-top") {
+          legacy.target = "_top";
+          if (mode === "allowance-retarget-top") {
+            // The click-derived allowance must already be burned before the page's
+            // formdata callback runs. Otherwise this separate same-action form can
+            // spend it on the top context while the child replay is still resolving.
+            escape.submit();
+          }
+        } else if (mode === "retarget-blank") {
+          legacy.target = "_blank";
+        } else if (mode === "retarget-unknown") {
+          legacy.target = "new-window-name";
+        } else if (mode === "steal-name") {
+          window.name = "sink";
+        } else if (mode === "replace-child") {
+          const replacement = document.createElement("iframe");
+          replacement.id = "replacement-sink";
+          replacement.name = "sink";
+          replacement.title = "replacement named child sink";
+          sink.replaceWith(replacement);
+        } else if (mode === "retarget-same-child-alias") {
+          sink.name = "alias";
+          legacy.target = "alias";
+        } else if (mode === "retarget-action") {
+          legacy.action = "form-submit-landing.html?authority=mutated";
+        } else if (mode === "retarget-method") {
+          legacy.method = "POST";
+        } else if (mode === "retarget-enctype") {
+          legacy.enctype = "application/x-www-form-urlencoded";
+        } else if (mode === "retarget-accept-charset") {
+          legacy.acceptCharset = "iso-8859-1";
+        }
+      });
+
+      allowanceButton.addEventListener("click", (event) => {
+        if (mode !== "allowance-retarget-top") return;
+        event.preventDefault();
+        legacy.submit();
+      });
+
+      window.__nsRunFormCase = () => {
+        document.documentElement.dataset.runCount = String(
+          Number(document.documentElement.dataset.runCount || "0") + 1,
+        );
+        if (mode === "request-submit-safe") {
+          request.requestSubmit(document.getElementById("request-button"));
+          return;
+        }
+        if (mode === "renamed-child") {
+          sink.contentWindow.name = "renamed-sink";
+        }
+        legacy.submit();
+      };
+    })();
+  </script>
+</body>
+</html>

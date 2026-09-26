@@ -13,7 +13,20 @@ import {
   isFloodableAlertType,
 } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import { formSubmitIntentUrl } from "./nav_authority";
+import {
+  applyIsolatedRedirectAllowance,
+  armSameTaskRedirect,
+  consumeRedirect,
+  createRedirectAllowance,
+  endSameTaskRedirect,
+  enforceMapSizeCap,
+  pruneTimestampWindow,
+  resolveChildNavigable,
+  shouldEmitRapidPushState,
+  type ChildNavigableView,
+  type RedirectAllowanceLimits,
+} from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -30,6 +43,11 @@ const REDIRECT_TTL_MS = 1500;
 const TARGET_NAV_TTL_MS = 10000;
 const MAX_OPENS_PER_GESTURE = 1;
 const MAX_REDIRECTS_PER_GESTURE = 2;
+const REDIRECT_LIMITS: RedirectAllowanceLimits = {
+  ttlMs: REDIRECT_TTL_MS,
+  maxPerGesture: MAX_REDIRECTS_PER_GESTURE,
+  maxPendingFollowUps: 8,
+};
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 // Hard cap on live blockedActions entries. The TTL-only prune evicts nothing within a 5s
@@ -151,7 +169,6 @@ function syncJsBehaviorMonitor(): void {
 }
 
 let openCount = 0;
-let redirectCount = 0;
 let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 // URL the one-shot allowance is bound to. Without the binding, the first
@@ -159,9 +176,9 @@ let allowOnceUntil = 0;
 // destination, so a racing open can ride a user's Allow-once click (#851).
 let allowOnceUrl = "";
 let allowOpenUntil = 0;
-let allowRedirectUntil = 0;
-let restrictRedirectTarget = false;
-let allowedRedirectTarget = "";
+// Form-submit allowance: the isolated world's grant plus the same-task arm (#864).
+const redirectAllowance = createRedirectAllowance();
+let sameTaskRedirectTimer = 0;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
 
@@ -210,14 +227,22 @@ function markAllowance(params: {
   allowRedirect: boolean;
   restrictRedirectTarget?: boolean;
   redirectTarget?: string;
+  gestureTs?: number;
 }): void {
   const now = nowMs();
   openCount = 0;
-  redirectCount = 0;
   allowOpenUntil = params.allowOpen ? now + OPEN_TTL_MS : 0;
-  allowRedirectUntil = params.allowRedirect ? now + REDIRECT_TTL_MS : 0;
-  restrictRedirectTarget = params.restrictRedirectTarget === true;
-  allowedRedirectTarget = typeof params.redirectTarget === "string" ? params.redirectTarget : "";
+  applyIsolatedRedirectAllowance(
+    redirectAllowance,
+    now,
+    {
+      allowRedirect: params.allowRedirect,
+      restrict: params.restrictRedirectTarget === true,
+      target: typeof params.redirectTarget === "string" ? params.redirectTarget : "",
+      ...(params.gestureTs !== undefined ? { gestureTs: params.gestureTs } : {}),
+    },
+    REDIRECT_LIMITS,
+  );
 }
 
 function isOff(): boolean {
@@ -381,19 +406,19 @@ function maybeArmPopupIntent(
 }
 
 function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "none" {
-  const now = nowMs();
-  if (restrictRedirectTarget && (!actionUrl || actionUrl !== allowedRedirectTarget)) {
-    return "none";
-  }
-  if (
-    allowRedirectUntil > 0 &&
-    now <= allowRedirectUntil &&
-    redirectCount < MAX_REDIRECTS_PER_GESTURE
-  ) {
-    redirectCount += 1;
-    return "allowed";
-  }
-  return "none";
+  return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
+}
+
+/**
+ * Claim a matching redirect allowance for a direct-child replay and exhaust the
+ * rest of that gesture before page-owned `formdata` callbacks run. A later
+ * isolated-world follow-up for the same click preserves the exhausted count, so
+ * neither a nested callback nor a second same-task form can redirect elsewhere.
+ */
+function exhaustMatchingRedirectAllowance(actionUrl: string): void {
+  if (consumeRedirectAllowance(actionUrl) === "none") return;
+  redirectAllowance.count = REDIRECT_LIMITS.maxPerGesture;
+  redirectAllowance.sameTaskArmed = false;
 }
 
 function makeId(): string {
@@ -495,6 +520,70 @@ const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+const NativeFormData = FormData;
+const NativeURL = URL;
+const nativeFormDataForEach = FormData.prototype.forEach;
+const nativeFormDataDelete = FormData.prototype.delete;
+const nativeFormDataAppend = FormData.prototype.append as unknown as (
+  this: FormData,
+  name: string,
+  value: string | Blob,
+  filename?: string,
+) => void;
+const nativeGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const nativeGetPrototypeOf = Object.getPrototypeOf;
+const nativeApply = Reflect.apply;
+const nativeArrayPush = Array.prototype.push;
+const nativeStringToLowerCase = String.prototype.toLowerCase;
+const nativeElementGetAttribute = Element.prototype.getAttribute;
+const nativeDocumentQuerySelector = Document.prototype.querySelector;
+const nativeCreateElement = Document.prototype.createElement;
+const nativeAttachShadow = Element.prototype.attachShadow;
+const nativeAppendChild = Node.prototype.appendChild;
+const nativeRemoveChild = Node.prototype.removeChild;
+const nativeSetAttribute = Element.prototype.setAttribute;
+const nativeAddEventListener = EventTarget.prototype.addEventListener;
+const nativeFormDataEventDataGetter =
+  typeof FormDataEvent === "undefined"
+    ? undefined
+    : nativeGetOwnPropertyDescriptor(FormDataEvent.prototype, "formData")?.get;
+
+type NativeStringGetter<T> = (this: T) => string;
+type NativeBooleanGetter<T> = (this: T) => boolean;
+type NativeOwnerDocumentGetter = (this: Node) => Document | null;
+const nativeFormActionGetter = nativeGetOwnPropertyDescriptor(
+  HTMLFormElement.prototype,
+  "action",
+)?.get as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeFormMethodGetter = nativeGetOwnPropertyDescriptor(
+  HTMLFormElement.prototype,
+  "method",
+)?.get as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeFormEnctypeGetter = nativeGetOwnPropertyDescriptor(
+  HTMLFormElement.prototype,
+  "enctype",
+)?.get as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
+  HTMLFormElement.prototype,
+  "acceptCharset",
+)?.get as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
+  Node.prototype,
+  "isConnected",
+)?.get as NativeBooleanGetter<Node> | undefined;
+const nativeNodeOwnerDocumentGetter = nativeGetOwnPropertyDescriptor(
+  Node.prototype,
+  "ownerDocument",
+)?.get as NativeOwnerDocumentGetter | undefined;
+const nativeWindowNameGetter = nativeGetOwnPropertyDescriptor(window, "name")?.get;
+const nativeWindowLengthGetter = nativeGetOwnPropertyDescriptor(window, "length")?.get;
+const windowNamedProperties: object | null = (() => {
+  try {
+    return nativeGetPrototypeOf(Window.prototype) as object | null;
+  } catch {
+    return null;
+  }
+})();
 
 /**
  * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
@@ -596,6 +685,279 @@ function isFormSelfTarget(formTarget: string): boolean {
   if (t === "_self") return true;
   if (RESERVED_TARGETS.has(t)) return false;
   return formTarget === window.name;
+}
+
+interface DirectChildFormTarget {
+  name: string;
+  child: unknown;
+}
+
+interface ReplayableFormState {
+  actionUrl: string;
+  method: "get" | "post";
+  enctype: string;
+  acceptCharset: string;
+}
+
+function isSameDirectChildTarget(
+  expected: DirectChildFormTarget,
+  actual: DirectChildFormTarget | null,
+): boolean {
+  return actual !== null && actual.name === expected.name && actual.child === expected.child;
+}
+
+function isSameReplayableFormState(
+  expected: ReplayableFormState,
+  actual: ReplayableFormState | null,
+): boolean {
+  return (
+    actual !== null &&
+    actual.actionUrl === expected.actionUrl &&
+    actual.method === expected.method &&
+    actual.enctype === expected.enctype &&
+    actual.acceptCharset === expected.acceptCharset
+  );
+}
+
+type LegacyChildReplayResult =
+  | { status: "not-child" }
+  | { status: "blocked"; actionUrl: string | undefined }
+  | { status: "replayed"; actionUrl: string };
+
+const childReplayInProgress = new WeakSet<HTMLFormElement>();
+
+function childNavigableView(): ChildNavigableView | null {
+  try {
+    const named = windowNamedProperties;
+    if (!named || !nativeWindowNameGetter || !nativeWindowLengthGetter) return null;
+    return {
+      selfName: nativeApply(nativeWindowNameGetter, window, []) as string,
+      lowercaseTarget: (target) => nativeApply(nativeStringToLowerCase, target, []) as string,
+      namedObject: (name) => nativeGetOwnPropertyDescriptor(named, name)?.value,
+      childCount: nativeApply(nativeWindowLengthGetter, window, []) as number,
+      child: (index) => (window as unknown as Record<number, unknown>)[index],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the legacy form target with document-start-captured DOM methods. This
+ * closes the #896 prototype-tampering route for this new exemption without
+ * claiming to solve that issue's other existing MAIN-world reads.
+ */
+function readLegacyFormTarget(form: HTMLFormElement): string {
+  const fromForm = nativeApply(nativeElementGetAttribute, form, ["target"]) as string | null;
+  if (fromForm !== null) return fromForm;
+  const base = nativeApply(nativeDocumentQuerySelector, document, ["base[target]"]) as Element | null;
+  if (!base) return "";
+  return (nativeApply(nativeElementGetAttribute, base, ["target"]) as string | null) ?? "";
+}
+
+/** Resolve the effective target to the exact direct-child WindowProxy, if any. */
+function resolveDirectChildFormTarget(form: HTMLFormElement): DirectChildFormTarget | null {
+  try {
+    const view = childNavigableView();
+    if (!view) return null;
+    const name = readLegacyFormTarget(form);
+    const child = resolveChildNavigable(name, view);
+    return child === null ? null : { name, child };
+  } catch {
+    return null;
+  }
+}
+
+function readReplayableFormState(form: HTMLFormElement): ReplayableFormState | null {
+  try {
+    if (!nativeFormActionGetter || !nativeFormMethodGetter || !nativeFormEnctypeGetter) return null;
+    const actionUrl = nativeApply(nativeFormActionGetter, form, []) as string;
+    const protocol = new NativeURL(actionUrl).protocol;
+    // Keep the exemption to ordinary network form submissions. External-handler
+    // and script/data schemes do not have the same "stays in this child" safety
+    // property and retain the existing prompt.
+    if (protocol !== "http:" && protocol !== "https:") return null;
+
+    // HTMLFormElement.method already returns the normalized lowercase keyword.
+    const method = nativeApply(nativeFormMethodGetter, form, []) as string;
+    if (method !== "get" && method !== "post") return null;
+    return {
+      actionUrl,
+      method,
+      enctype: nativeApply(nativeFormEnctypeGetter, form, []) as string,
+      acceptCharset: nativeFormAcceptCharsetGetter
+        ? nativeApply(nativeFormAcceptCharsetGetter, form, []) as string
+        : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function snapshotFormData(form: HTMLFormElement): Array<readonly [string, FormDataEntryValue]> {
+  const data = new NativeFormData(form);
+  const entries: Array<readonly [string, FormDataEntryValue]> = [];
+  nativeApply(nativeFormDataForEach, data, [
+    (value: FormDataEntryValue, name: string) => {
+      nativeApply(nativeArrayPush, entries, [[name, value]]);
+    },
+  ]);
+  return entries;
+}
+
+function replaceFormData(
+  data: FormData,
+  entries: ReadonlyArray<readonly [string, FormDataEntryValue]>,
+): void {
+  const names: string[] = [];
+  nativeApply(nativeFormDataForEach, data, [
+    (_value: FormDataEntryValue, name: string) => {
+      nativeApply(nativeArrayPush, names, [name]);
+    },
+  ]);
+  for (let index = 0; index < names.length; index += 1) {
+    nativeApply(nativeFormDataDelete, data, [names[index]]);
+  }
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry) continue;
+    nativeApply(nativeFormDataAppend, data, [entry[0], entry[1]]);
+  }
+}
+
+/**
+ * Submit finalized entries through a form hidden inside a CLOSED shadow root.
+ * `formdata` is non-composed in Chromium, so page listeners see the original
+ * form's phase exactly once and cannot retarget the extension-owned replay.
+ */
+function replayFormDataToChild(
+  sourceForm: HTMLFormElement,
+  target: DirectChildFormTarget,
+  state: ReplayableFormState,
+  entries: ReadonlyArray<readonly [string, FormDataEntryValue]>,
+): boolean {
+  const parent = document.documentElement;
+  if (!parent) return false;
+
+  let host: HTMLElement | null = null;
+  let replayFormDataSeen = false;
+  try {
+    // Validate the captured append/delete path before a navigation can begin.
+    // The actual replay listener then performs the same deterministic writes.
+    replaceFormData(new NativeFormData(), entries);
+
+    if (!nativeFormDataEventDataGetter) return false;
+    host = nativeApply(nativeCreateElement, document, ["div"]) as HTMLDivElement;
+    nativeApply(nativeSetAttribute, host, ["hidden", ""]);
+    const shadow = nativeApply(nativeAttachShadow, host, [{ mode: "closed" }]) as ShadowRoot;
+    const replayForm = nativeApply(nativeCreateElement, document, ["form"]) as HTMLFormElement;
+    nativeApply(nativeSetAttribute, replayForm, ["action", state.actionUrl]);
+    nativeApply(nativeSetAttribute, replayForm, ["target", target.name]);
+    nativeApply(nativeSetAttribute, replayForm, ["method", state.method]);
+    nativeApply(nativeSetAttribute, replayForm, ["enctype", state.enctype]);
+    if (state.acceptCharset) {
+      nativeApply(nativeSetAttribute, replayForm, ["accept-charset", state.acceptCharset]);
+    }
+    nativeApply(nativeAddEventListener, replayForm, [
+      "formdata",
+      (event: Event) => {
+        const replayData = nativeApply(nativeFormDataEventDataGetter, event, []) as FormData;
+        replaceFormData(replayData, entries);
+        replayFormDataSeen = true;
+      },
+      { once: true },
+    ]);
+    nativeApply(nativeAppendChild, shadow, [replayForm]);
+    nativeApply(nativeAppendChild, parent, [host]);
+
+    // Captured DOM construction keeps the replay form itself outside page
+    // callbacks. Target re-resolution still shares the broader MAIN-world DOM
+    // mutability boundary tracked in #896, so keep this exact identity/name
+    // check adjacent to native submit: same-name child replacement and
+    // top-window name theft both fail closed.
+    const confirmedTarget = resolveDirectChildFormTarget(sourceForm);
+    const confirmedState = readReplayableFormState(sourceForm);
+    if (
+      !isSameDirectChildTarget(target, confirmedTarget) ||
+      !isSameReplayableFormState(state, confirmedState)
+    ) {
+      return false;
+    }
+
+    nativeApply(nativeFormSubmit, replayForm, []);
+    return replayFormDataSeen;
+  } catch {
+    return false;
+  } finally {
+    if (host) {
+      try {
+        nativeApply(nativeRemoveChild, parent, [host]);
+      } catch {
+        // The host may already have been detached after the navigation started.
+      }
+    }
+  }
+}
+
+/**
+ * Narrow #865 exemption for legacy `form.submit()` only.
+ *
+ * A call-time target check is unsafe because the page's `formdata` listener runs
+ * before Chromium resolves the browsing context. Construct FormData without
+ * navigating, require the target to resolve to the same direct child afterwards,
+ * then submit only the finalized entries through an extension-owned closed-shadow
+ * form. requestSubmit() remains on the existing gate because preserving its
+ * trusted submit-event/default-cancellation semantics needs a separate design.
+ */
+function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayResult {
+  try {
+    if (
+      !nativeNodeIsConnectedGetter ||
+      !nativeNodeOwnerDocumentGetter ||
+      !(nativeApply(nativeNodeIsConnectedGetter, form, []) as boolean) ||
+      nativeApply(nativeNodeOwnerDocumentGetter, form, []) !== document
+    ) {
+      return { status: "not-child" };
+    }
+  } catch {
+    return { status: "not-child" };
+  }
+
+  const initialTarget = resolveDirectChildFormTarget(form);
+  if (!initialTarget) return { status: "not-child" };
+
+  const initialState = readReplayableFormState(form);
+  if (!initialState || childReplayInProgress.has(form)) {
+    return { status: "blocked", actionUrl: initialState?.actionUrl ?? resolveFormAction(form) };
+  }
+
+  // Reserve this exact child authority before constructing FormData, which
+  // dispatches page-controlled callbacks synchronously. Otherwise a callback
+  // can spend the click's still-live URL-only allowance on `_top`, `_blank`, or
+  // a second same-action form while this replay is still being validated.
+  exhaustMatchingRedirectAllowance(initialState.actionUrl);
+
+  childReplayInProgress.add(form);
+  try {
+    const entries = snapshotFormData(form); // dispatches the page's one original formdata event
+    const finalTarget = resolveDirectChildFormTarget(form);
+    const finalState = readReplayableFormState(form);
+    if (
+      !isSameDirectChildTarget(initialTarget, finalTarget) ||
+      !isSameReplayableFormState(initialState, finalState)
+    ) {
+      return { status: "blocked", actionUrl: initialState.actionUrl };
+    }
+
+    if (!replayFormDataToChild(form, initialTarget, initialState, entries)) {
+      return { status: "blocked", actionUrl: initialState.actionUrl };
+    }
+    return { status: "replayed", actionUrl: initialState.actionUrl };
+  } catch {
+    return { status: "blocked", actionUrl: initialState.actionUrl };
+  } finally {
+    childReplayInProgress.delete(form);
+  }
 }
 
 function recordWindowOpen(): void {
@@ -735,29 +1097,53 @@ function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null
 function patchForms(): void {
   const patchedFormSubmit = function (this: HTMLFormElement): void {
     const actionUrl = resolveFormAction(this);
-    if (isOff() || (isSubframe() && isFormSelfTarget(this.target))) {
+    if (isOff()) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
       nativeFormSubmit.call(this);
       return;
     }
 
-    const allowance = consumeRedirectAllowance(actionUrl);
-    if (allowance !== "none") {
+    // Resolve an owned child target before any generic redirect allowance. The
+    // page's `formdata` callback is allowed to mutate payload entries, but it may
+    // not replace the child identity, target name, destination, method, encoding,
+    // or accepted character set and then spend a click-derived allowance on that
+    // different authority (#865/#688).
+    const childReplay = tryReplayLegacySubmitToChild(this);
+    if (childReplay.status === "replayed") {
+      // Deliberately no notifyAllowedTarget: this authority belongs only to the
+      // named child. Granting top-level rollback authority would turn the
+      // false-positive fix into a laundering path.
+      postAllowed({ kind: "form_submit", url: childReplay.actionUrl });
+      return;
+    }
+
+    if (childReplay.status === "not-child" && isSubframe() && isFormSelfTarget(this.target)) {
       postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
       notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
       nativeFormSubmit.call(this);
       return;
     }
 
+    if (childReplay.status === "not-child") {
+      const allowance = consumeRedirectAllowance(actionUrl);
+      if (allowance !== "none") {
+        postAllowed({ kind: "form_submit", ...(actionUrl !== undefined ? { url: actionUrl } : {}) });
+        notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(this) });
+        nativeFormSubmit.call(this);
+        return;
+      }
+    }
+
+    const blockedActionUrl = childReplay.status === "blocked" ? childReplay.actionUrl : actionUrl;
     registerBlockedAction({
       kind: "form_submit",
-      ...(actionUrl !== undefined ? { url: actionUrl } : {}),
-      // The approval covers `actionUrl` only. Page script can change `action`
+      ...(blockedActionUrl !== undefined ? { url: blockedActionUrl } : {}),
+      // The approval covers `blockedActionUrl` only. Page script can change `action`
       // while the action waits (an allowlisted destination is approved with no
       // click), so the live form must still resolve to it. (#890)
       action: () => {
-        if (resolveFormAction(this) !== actionUrl) return;
+        if (resolveFormAction(this) !== blockedActionUrl) return;
         nativeFormSubmit.call(this);
       }
     });
@@ -839,6 +1225,7 @@ function handleBridgeMessage(message: unknown): void {
     restrictRedirectTarget?: boolean;
     redirectTarget?: string;
     url?: string;
+    gestureTs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
@@ -873,14 +1260,18 @@ function handleBridgeMessage(message: unknown): void {
       allowOpen,
       allowRedirect,
       restrictRedirectTarget: data.restrictRedirectTarget === true,
-      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {})
+      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {}),
+      // Identifies the click this grant follows up (#864); anything else is ignored.
+      ...(typeof data.gestureTs === "number" && Number.isFinite(data.gestureTs)
+        ? { gestureTs: data.gestureTs }
+        : {})
     });
     if (debug) {
       console.debug("[NavSentinel] allowance", {
         allowOpen,
         allowRedirect,
         openUntil: allowOpenUntil,
-        redirectUntil: allowRedirectUntil
+        redirectUntil: redirectAllowance.until
       });
     }
     return;
@@ -940,6 +1331,46 @@ window.addEventListener(
           action: () => callNativeOpen(window, href, "_blank")
         });
       }
+    }
+  },
+  true
+);
+
+// #864: arm the form-submit allowance for the trusted click's OWN task. The
+// isolated world's grant arrives over the MessagePort a task later, so a page
+// handler that submits synchronously or in a microtask (jQuery
+// `.trigger("submit")`, validation libraries, `<a onclick=form.submit()>`) was
+// blocked while the same submit one task later passed. This listener is on
+// `document` in the capture phase, so it runs AFTER every window-capture
+// listener, including the isolated world's click decision. Every trusted click
+// that world allows arms it, as the deferred grant always did; a click it stops
+// (interceptBlank/blockSameTab: stopImmediatePropagation) never reaches it. Only
+// trusted clicks arm: `click` cannot be produced trusted by page script, while
+// `change` and `submit` can (`checkbox.click()`, `requestSubmit()`), so they
+// arm nothing. See RedirectAllowanceState for the scope and budget invariant.
+const nativeSetTimeout = window.setTimeout.bind(window);
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff()) return;
+    let scope = { restrict: false, target: "" };
+    if (isSubframe()) {
+      // Mirror the isolated grant: a child frame may only spend it on the
+      // action its clicked submit control declares (#593/#637).
+      let declared = "";
+      try {
+        declared = formSubmitIntentUrl(event.target, location.href) ?? "";
+      } catch {
+        // Unresolvable markup declares nothing; the scope stays restricted.
+      }
+      scope = { restrict: true, target: declared };
+    }
+    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, scope, REDIRECT_LIMITS);
+    if (!sameTaskRedirectTimer) {
+      sameTaskRedirectTimer = nativeSetTimeout(() => {
+        sameTaskRedirectTimer = 0;
+        endSameTaskRedirect(redirectAllowance);
+      }, 0);
     }
   },
   true
