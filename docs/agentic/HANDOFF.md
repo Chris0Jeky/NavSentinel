@@ -1,9 +1,126 @@
 # NavSentinel handoff
 
-Updated 2026-09-08. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-09-25 14:27 UTC. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
 required reading.
+
+## 2026-09-25 continuation checkpoint (14:27 UTC)
+
+The earlier 08:51 checkpoint below is retained as history. The last fetched
+`origin/main` here is `e5101fa526cffffbc5f5fd9ab9641d27daa23540`;
+reconcile GitHub again before acting.
+
+- #913 merged as `7348194afd67b301f845c5e1eb3b90305102bda9` after its
+  exact-head CI, review, and aging gate. The corrected hosted advisory run
+  [36137404423](https://github.com/Chris0Jeky/NavSentinel/actions/runs/36137404423)
+  used that exact head. Its full-history checkout, Node 24, build, and Chrome
+  153.0.8010.52 prerequisites worked. Realistic branded E2E passed 178 with
+  two skips. Non-live acceptance passed 22, failed three, and skipped one:
+  #864's same-task forms, #865's named-iframe form targets, and AI-47.5's
+  popup CDP socket close at Protection Center entry. These are separate
+  failures; the automated run is not AI-47 human signoff.
+- #915 merged as `1172813fab6f33efbe779e2b138d92ed2411d08a`. It pins the
+  portable evidence export boundary in unit tests; exact-head Build / Unit
+  and E2E passed, the connector review had no findings, and no late feedback
+  appeared at the next checkpoint.
+- #916 is a ready settings-import ordering fix for #891. A promise-gated test
+  failed before the fix and passed after it; the available local unit suite
+  passed 3,858/3,858. Its refreshed head `56f4c96f` merges #915, and hosted
+  CI passed Build / Unit and E2E at the refreshed head in run 36141882517.
+  An independent review found no merge blocker. Main has since gained #917
+  and #919; re-prove its base before any future merge. Because the change
+  affects browser settings, D-2026-09-25-Q still requires a passing integrated
+  branded E2E and acceptance gate; the known #864/#865 failures keep it open.
+- #917 merged as `81295cd4e9cff988efb2f8e7a1fb99cde54171ac` with a
+  test-only correction for AI-47.5's popup click race. It accepts CDP socket
+  closure only after the expected extension-owned evidence
+  tab loads, preserving other click failures. Its head `85e99791` passed the
+  full AI-47.5 procedure locally in installed realistic Chrome 153.0.8010.53
+  with clean product source; hosted advisory run
+  [36141673747](https://github.com/Chris0Jeky/NavSentinel/actions/runs/36141673747)
+  passed realistic branded E2E (178, two skips). Its exact-head AI-47.5 receipt
+  passed every step in Chrome 153.0.8010.52 with clean product source; the
+  overall acceptance lane remains red only on #864 and #865 (23 passed, two
+  failed, one skipped). Exact-head PR Build / Unit and E2E passed, with no
+  review findings or open threads. This is automated evidence, not AI-47
+  human signoff.
+- #874 closed after the open PR count fell below its target of 20. #919
+  merged as `e5101fa526cffffbc5f5fd9ab9641d27daa23540`, closing #918's
+  CDP `waitFor` diagnostic gap. Its connector found a real closed-socket send
+  hang; the guarded send and between-polls regression failed before and passed
+  after the fix, and the review thread was resolved. Exact-head Build / Unit
+  and E2E passed. The #917 + #919 integrated head passed the complete AI-47.5
+  procedure locally in realistic Chrome 153.0.8010.53, with clean product
+  source. #865 remains open: the measured `submit` / `formdata` retargeting
+  cases can escape a call-time named-child exemption into the top window or a
+  new tab, so that exemption stays out.
+
+The primary local `main` checkout still has the same four unrelated #650
+edits listed below. Isolated Muse worktrees with Defender-quarantined tracked
+files or ignored `node_modules` are preserved, not force-removed. No v0.5.0
+tag or GitHub release exists. `ACTION_ITEMS.md` still owns the open AI-47
+human run and deferred AI-19 name clearance.
+
+## 2026-09-25 Muse improvement swarm checkpoint (08:51 UTC)
+
+Chris asked to save the current wave and begin wrapping up. The active goal and
+its six daily heartbeat slots continue; this section is a restart point, not a
+release or browser acceptance claim. The last verified remote `main` head at
+this checkpoint was `8f0680346155e6976d8a25fbb1c1b44d1fa3ffe5`;
+re-read it before acting.
+
+- #901 merged release-document corrections as `fe9b190a2e69c8a22224d7f136ca274caad3050e`.
+  Package and manifest remain 0.4.0; no v0.5.0 tag or release was published.
+- #911 merged the daily/manual advisory branded-Chrome workflow as
+  `061cdc44217e53cd1752b66f4660b502b3fd26ca`; #870 closed. Its first
+  manual run [36111942896](https://github.com/Chris0Jeky/NavSentinel/actions/runs/36111942896)
+  used that exact head and failed. Build and browser identification succeeded
+  with Google Chrome 153.0.8010.52; realistic branded Chrome E2E passed 178
+  with two skips. Non-live acceptance failed 18, passed seven, and skipped one;
+  its failure artifact is `branded-chrome-advisory-36111942896-1` (ID
+  `10854715373`). Several ancestry prechecks failed because the checkout had
+  only one commit, and CDP-backed checks hit `WebSocket is not defined` on
+  Node 20. Other failures, including the known form acceptance baseline, need
+  separate classification after a corrected hosted run. This run is not a
+  full-acceptance or release gate pass.
+- #912 merged the focused Proving Ground sink-health contract test as
+  `8f0680346155e6976d8a25fbb1c1b44d1fa3ffe5`. Its exact head
+  `f4d097d4ad1d8488788ede76e75d4c04783fe9e1` passed focused Vitest 6/6,
+  typecheck, scoped lint, independent review, and hosted Build / Unit plus E2E.
+  There were no open review threads or issue closers. #449 remains open for
+  representative M0 proof work.
+- Ready #913 (`2e61391d84c7ca2912b9c5f039186001e88c6324`) changes only
+  the advisory workflow to fetch full Git history and use Node 24, plus a
+  failure-ledger receipt. Local prerequisite checks and independent review
+  passed; exact-head CI and a corrected manual hosted workflow run remain
+  pending. Its PR body was corrected so GitHub lists no closing issues.
+- #895 (`cd01c8d3`), #899 (`36430d81`), and #910 (`2a2af092`) remain open.
+  Their hosted CI was green, but the applicable branded-Chrome/full-acceptance
+  gates were not complete; #865's named-iframe false block is a known acceptance
+  failure. Recheck each exact head, base, reviews, and browser receipts before
+  any merge. #865 is in planned EV-1 and was not promoted by this checkpoint.
+- Read-only Muse scouts found a testable M1 #175 boundary: the bridge retries
+  before verification, but a verified same-document port has no periodic
+  ping/missing-pong recovery. A future fix needs a bounded live-port-death
+  oracle and must preserve challenge/session, queued-alert, and mode/debug
+  authority. #186 SW-vouched authentication remains a separate dependency.
+- Two integrity-clean Muse lenses on the Proving Ground fake sink found no
+  confirmed incorrect receipt acceptance. They identified possible unbounded
+  in-memory receipt/invalid-attempt retention and uncovered request paths;
+  those need a direct failing oracle before another #449 implementation slice.
+
+The primary local `main` checkout is behind remote `main` and holds four
+unrelated #650 edits in `capture_isolated.ts`, `form_action.ts`, `main_guard.ts`,
+and `tests/form-action.test.ts`. Preserve them; do not stash, reset, or clean the
+checkout for this wave. `ACTION_ITEMS.md` is the human queue: AI-47 rows 1-8
+remain **OPEN — not run**, and AI-19 name clearance is deferred to store
+submission. Next restart: reconcile #913's exact-head CI, review threads,
+mergeability, and three-minute aging floor. Merge only if its declared gate
+passes; then dispatch one corrected hosted advisory run and classify its
+acceptance failures from the actual receipt. Check #912 for late review
+feedback. The local ignored `artifacts/muse-swarm-20260925/` checkpoint has
+the detailed commands, heads, and review dispositions.
 
 ## 2026-09-08 issue wave (22:42 UTC snapshot)
 

@@ -6,6 +6,7 @@ import { getSegValue, initSegKeyboard, setSegValue } from "../shared/seg_control
 import {
   OptionsWriteCoordinator,
   computePromptOutcomeStats,
+  computeOverlayAutoDismissStats,
   acceptExternalSettings,
   findSettingsConflicts,
   describeJsBehaviorCapability,
@@ -485,8 +486,17 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
   }
 }
 
+function renderOverlayStats(log: EventLogEntry[]): void {
+  const stats = computeOverlayAutoDismissStats(log) as unknown as Record<string, unknown>;
+  document.querySelectorAll("#overlayStats [data-ov]").forEach((node) => {
+    const value = stats[(node as HTMLElement).dataset.ov ?? ""];
+    if (typeof value === "number") node.textContent = `${value}`;
+  });
+}
+
 async function refreshStats(): Promise<void> {
   renderStats(await getPromptOutcomes());
+  renderOverlayStats(await getEventLog());
 }
 
 function renderDomainProfiles(profiles: DomainProfile[]): void {
@@ -748,6 +758,7 @@ refreshLogBtn.addEventListener("click", async () => {
 clearLogBtn.addEventListener("click", async () => {
   await clearEventLog();
   await refreshEventLog();
+  renderOverlayStats(await getEventLog());
   flashStatus(statusEl, "Cleared.");
 });
 

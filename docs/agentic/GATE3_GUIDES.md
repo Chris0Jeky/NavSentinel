@@ -811,16 +811,44 @@ Only Chris can record this item complete.
 
 ## AI-37 — #523 bridge queue-pressure Gate-3
 
-**OPEN: AI-37 — Run the #523 successor bridge queue-pressure Gate-3 (GUIDE
-PREPARED; LIVE EXACT-HEAD PRECHECK REQUIRED).** This bounded browser-surface
+### AI-47 row 8 — #599 current-main clipboard pressure
+
+**OPEN — not run.** The queue policy was accepted in D-2026-09-25-R and #599
+merged as `d4b1acf5843605f519ffe1732050a2c1bb501ee1`. This is the owner
+Chrome check retained under AI-47; the branch-head and policy-decision steps
+in the historical AI-37 guide below no longer apply.
+
+1. An agent records the exact current `main` SHA, runs `npm ci`,
+   `npx vitest run tests/bridge-outbound.test.ts`, `npm run typecheck`,
+   `npm run build`, `npm run check:content-loader`, and
+   `npm run check:perf-budget`, and records the capture, bridge, and UI-guard
+   markers printed by that build. Stop if a check fails. Only Chris loads or
+   reloads that exact unpacked `extension/dist` in Chrome.
+2. Start the tracked Gym with `npm run gym:serve`. In a fresh unsigned-in Chrome
+   profile, Chris records the Chrome version, confirms that the service worker
+   registers without error, selects Smart mode, and confirms neither `localhost`
+   nor `127.0.0.1` is trusted or allowlisted.
+3. Chris performs steps 4–7 of the historical AI-37 guide immediately below,
+   on this release build. The benign CAPTCHA and mixed clipboard trials, event
+   log, and console observations all remain required. Do not run its branch
+   selection steps 1–3 or its old policy-decision reply step 8.
+4. Chris records `AI-47 row 8 passed on main at <40-character SHA>; Chrome
+   <version>` with the two trial outcomes and console observations, or
+   `AI-47 row 8 failed on main at <SHA>: <step and observed result>`. Keep AI-47
+   open until every other applicable row has a recorded human result. A CI run
+   or automated browser pass does not count as Chris's observation.
+
+### Historical AI-37 branch guide (retained for provenance)
+
+This bounded browser-surface
 guide checks that the queue-pressure repair preserves legitimate clipboard use
 and cannot suppress the next verified ClickFix signal. The hostile unverified
 retry and 64-write pressure oracle remain automated-only because they use the
 known page-visible same-session handshake weakness in #186. This guide does not
 complete C-04, prove general bridge identity, or establish OS paste or execution
-prevention. It also resolves the explicit queue-semantics owner decision still
-open in #523; browser success alone does not imply that decision. Only Chris can
-record this item complete.
+prevention. Its branch-head and queue-policy decision steps describe the
+pre-merge gate and must not be used as current-main instructions. Only Chris can
+record the retained browser result through AI-47 row 8 above.
 
 1. Resolve PR #599 and require its head branch to be
    `fix/issue523-unverified-clipboard-cap`. Record its 40-character
@@ -889,7 +917,7 @@ record this item complete.
 | AI-47 step 2 (former AI-39) | #601 extension-origin Proceed once | [above](#active-guide-ai-39--issue-601-extension-origin-proceed-once) |
 | AI-47 step 3 (former AI-40) | #609 stale redirect-chain boundary | [above](#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) |
 | AI-38 | #560 inert toast-control repair | [above](#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure) |
-| AI-37 | #523 bridge queue pressure | [above](#ai-37--523-bridge-queue-pressure-gate-3) |
+| AI-47 row 8 (former AI-37) | #523 bridge queue pressure, merged as #599 | [current-main subprocedure](#ai-47-row-8--599-current-main-clipboard-pressure) |
 | AI-36 | #558 popup/Options patch-save synchronization | [above](#ai-36--558-popupoptions-patch-save-synchronization-gate-3) |
 | AI-35 | #539 cross-host child-event attribution | [below](#ai-35--539-cross-host-child-event-attribution-gate-3) |
 
