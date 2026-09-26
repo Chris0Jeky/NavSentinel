@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Blocked-action identifier collision probe</title>
+    <script>
+      window.blockedActionIdProbe = [];
+      window.blockedActionIdDropSecond = false;
+      Date.now = () => 7;
+      Math.random = () => 0;
+      const nativePostMessage = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function (message, ...rest) {
+        if (
+          message?.source === "__navsentinel__" &&
+          message.type === "ns-nav-blocked" &&
+          typeof message.id === "string"
+        ) {
+          window.blockedActionIdProbe.push({
+            id: message.id,
+            url: message.url,
+            kind: message.kind,
+          });
+          if (window.blockedActionIdDropSecond && window.blockedActionIdProbe.length === 2) {
+            return;
+          }
+        }
+        return nativePostMessage.call(this, message, ...rest);
+      };
+    </script>
+  </head>
+  <body>Blocked-action identifier collision probe</body>
+</html>
