@@ -403,6 +403,25 @@ function updateSuiteSettingsDirect(
   });
 }
 
+/**
+ * Model-only per-section settings reset (#563 slice A). Restores exactly one
+ * section's leaves to DEFAULT_SUITE_SETTINGS through the worker-owned
+ * updateSuiteSettingsDirect lane. Only SUITE_SETTINGS_KEY is written; the
+ * event log, prompt outcomes, adaptive scores, allowlist and trusted domains
+ * are never touched.
+ */
+export async function resetSuiteSettingsSection(
+  section: "nav" | "credential",
+): Promise<SuiteSettingsUpdateResponse> {
+  // Run the normalized read first so legacy migration and hostile-value
+  // handling apply before the reset write; the patch itself is pure defaults.
+  await getSuiteSettings();
+  const patch: SuiteSettingsPatch = section === "nav"
+    ? { nav: structuredClone(DEFAULT_SUITE_SETTINGS.nav) }
+    : { credential: structuredClone(DEFAULT_SUITE_SETTINGS.credential) };
+  return updateSuiteSettingsDirect(patch);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
