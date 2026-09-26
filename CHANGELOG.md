@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-26
+
 The release channel for v0.5.0 is a GitHub pre-release for the owner and testers. The Chrome Web Store beta has not been submitted; it keeps its own gates and will ship later as a 0.5.x release. The packaged build uses the `interaction-only` profile: it contains no URL-reputation runtime or data, and JavaScript-behaviour instrumentation is off. The owner's manual browser checks for this release (ACTION_ITEMS.md, AI-47) are still open; the automated branded-Chrome and acceptance lanes are supporting evidence, not a substitute. The extension still makes no runtime network calls. This section summarizes notable changes merged to `main` since v0.4.0 (2026-05-03), including the v0.5.0 release push, and replaces the stale `[Unreleased]` notes.
 
 Known form-submit limits remain: page-handler submissions made synchronously or in a microtask can still be blocked (#864), and posts to page-owned named iframes are still blocked (#865). The proposed #895 fix is not part of this release.
