@@ -119,10 +119,6 @@ const statTrustRateEl = document.getElementById("statTrustRate") as HTMLDivEleme
 const statDismissRateEl = document.getElementById("statDismissRate") as HTMLDivElement;
 const statAvgScoreAllowEl = document.getElementById("statAvgScoreAllow") as HTMLDivElement;
 const statAvgScoreBlockEl = document.getElementById("statAvgScoreBlock") as HTMLDivElement;
-const statOverlayTotalEl = document.getElementById("statOverlayTotal") as HTMLDivElement;
-const statOverlayPageSettleEl = document.getElementById("statOverlayPageSettle") as HTMLDivElement;
-const statOverlayInjectedEl = document.getElementById("statOverlayInjected") as HTMLDivElement;
-const statOverlayBlockedClickEl = document.getElementById("statOverlayBlockedClick") as HTMLDivElement;
 const refreshStatsBtn = document.getElementById("refreshStats") as HTMLButtonElement;
 const clearStatsBtn = document.getElementById("clearStats") as HTMLButtonElement;
 const topDomainsEl = document.getElementById("topDomains") as HTMLDivElement;
@@ -491,20 +487,16 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
 }
 
 function renderOverlayStats(log: EventLogEntry[]): void {
-  const stats = computeOverlayAutoDismissStats(log);
-  statOverlayTotalEl.textContent = String(stats.total);
-  statOverlayPageSettleEl.textContent = String(stats.pageSettle);
-  statOverlayInjectedEl.textContent = String(stats.injectedOverlay);
-  statOverlayBlockedClickEl.textContent = String(stats.blockedClick);
-}
-
-async function refreshOverlayStats(): Promise<void> {
-  renderOverlayStats(await getEventLog());
+  const stats = computeOverlayAutoDismissStats(log) as unknown as Record<string, unknown>;
+  document.querySelectorAll("#overlayStats [data-ov]").forEach((node) => {
+    const value = stats[(node as HTMLElement).dataset.ov ?? ""];
+    if (typeof value === "number") node.textContent = `${value}`;
+  });
 }
 
 async function refreshStats(): Promise<void> {
   renderStats(await getPromptOutcomes());
-  await refreshOverlayStats();
+  renderOverlayStats(await getEventLog());
 }
 
 function renderDomainProfiles(profiles: DomainProfile[]): void {
@@ -766,7 +758,7 @@ refreshLogBtn.addEventListener("click", async () => {
 clearLogBtn.addEventListener("click", async () => {
   await clearEventLog();
   await refreshEventLog();
-  await refreshOverlayStats();
+  renderOverlayStats(await getEventLog());
   flashStatus(statusEl, "Cleared.");
 });
 
