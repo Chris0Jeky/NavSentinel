@@ -337,13 +337,14 @@ is not in this release), so for those two flows the pass confirms the
 documented limit rather than a fix. Every Human result stays
 **OPEN — not run** until Chris records it.
 
-
 **Agent pass on the v0.5.0 release build, 2026-09-26 (automated evidence only;
 every Human result above stays OPEN — not run):** Chris asked the agent to run as
 much of AI-47 as it could. On tag `v0.5.0` (`15a81274`, byte-identical to the
 published zip) in Chrome 153.0.8010.53 with realistic settings, all eight rows
 passed their acceptance specs. Row 8 now has its own spec,
-`ai47-8-clipboard-pressure`. The everyday-flow specs passed except the two known
+`ai47-8-clipboard-pressure`, but row 8's procedure cannot detect a #599
+regression: the benign prewrite alone warns (#947). The #599 oracle is the
+NS-ADV-SELF-005 e2e test, which passes. The everyday-flow specs passed except the two known
 limits #864 and #865. #864 is fixed on `main` after v0.5.0 by #895, whose
 wave passed `fp-form-submit-patterns`; #865 remains open. The live-web lane found one new false
 positive: the real YouTube embed's "Watch on YouTube" link still prompts (#943).

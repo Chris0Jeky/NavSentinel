@@ -2,11 +2,16 @@
  * AI-47 row 8 / former AI-37 — #599 clipboard pressure on a release build.
  * Mirrors docs/agentic/GATE3_GUIDES.md "AI-47 row 8" (historical AI-37 steps
  * 4-7) in a fresh branded Chrome profile. A benign copy-code page and its local
- * verification checkbox stay silent. A benign clipboard prewrite cannot
- * suppress the fake-verification warning on the ClickFix page that follows. The
- * event log records the mixed trial only, gains no bridge_buffer_overflow row,
- * and never shows a raw clipboard value. The hostile unverified retry stays
- * automated-only in tests/e2e/bridge-clipboard-pressure.spec.ts (#186).
+ * verification checkbox stay silent, the ClickFix page warns, the event log
+ * records the mixed trial only, gains no bridge_buffer_overflow row, and never
+ * shows a raw clipboard value.
+ *
+ * Limitation (#947): on clickfix-01 the benign prewrite ALONE already raises
+ * the warning and the clickfix_detected row, and the trial runs after the bridge
+ * is verified, so this procedure cannot fail on a #599 regression. The step
+ * records whether the prewrite warned by itself. The #599 regression oracle is
+ * tests/e2e/bridge-clipboard-pressure.spec.ts (NS-ADV-SELF-005), which also
+ * keeps the hostile unverified retry automated-only (#186).
  * Automated agent evidence, not the owner Gate-3 result.
  */
 import { execFileSync } from "node:child_process";
@@ -55,7 +60,7 @@ function mentionsLoopback(value: unknown): string[] {
   return LOOPBACK_HOSTS.filter((host) => text.includes(host));
 }
 
-test("AI-47.8 / former AI-37: a benign clipboard write cannot suppress the fake-verification warning, and benign copy stays silent", async ({}, testInfo) => {
+test("AI-47.8 / former AI-37: the owner procedure as written (benign copy stays silent, the mixed ClickFix trial warns; does not isolate #599, see #947)", async ({}, testInfo) => {
   const session = await AcceptanceSession.open(testInfo, "AI-47.8-former-AI-37-PR599");
   try {
     await session.step("1. tested head contains the PR #599 merge and has no product-source changes", async () => {
@@ -101,15 +106,16 @@ test("AI-47.8 / former AI-37: a benign clipboard write cannot suppress the fake-
       expect(kindCount(logAfterBenign, "clickfix_detected")).toBe(kindCount(logAtStart, "clickfix_detected"));
     }, { soft: true });
 
-    await session.step("5. mixed page: a benign prewrite, then a physical verify click, still shows the fake-verification warning", async () => {
+    await session.step("5. mixed page: after a benign prewrite and a physical verify click, the fake-verification warning is shown", async () => {
       const page = await session.newPage();
       const markers = await session.gotoReady(page, session.url("/clickfix-01-basic.html?ai37=mixed"));
       expect(markers.capture).toBe("1");
       expect(markers.bridge).toBe("1");
       await page.bringToFront();
-      // Timing oracle (as in phase2-detections' mixed test): the regression only
-      // exists when both writes complete inside one second, so a slower run is
-      // TEST_INVALID rather than a pass.
+      // Timing guard carried over from phase2-detections' mixed test: both
+      // writes must complete inside one second, or the run is TEST_INVALID. It
+      // keeps the guide's timing honest but, per #947, does not make the trial
+      // a #599 oracle.
       await page.evaluate(() => {
         const status = document.getElementById("status");
         if (!status) throw new Error("TEST_INVALID: ClickFix status oracle is missing");
@@ -126,6 +132,10 @@ test("AI-47.8 / former AI-37: a benign clipboard write cannot suppress the fake-
         await navigator.clipboard.writeText("847293");
         return performance.now();
       });
+      // #947: record whether the prewrite alone already warned. On this fixture
+      // it does, which is why the trial cannot isolate the attack write.
+      const prewriteToast = (await toastState(page).catch(() => null))?.text ?? null;
+      session.observe("prewrite alone warned (#947)", JSON.stringify(prewriteToast));
       await trustedClick(page, "#verify-btn");
       await expect(page.locator("#status")).toContainText("Clipboard write triggered", { timeout: 5000 });
       await page.waitForFunction(() => document.documentElement.dataset.clickfixAttackWriteCompletedAt !== undefined, null, { timeout: 5000 });
