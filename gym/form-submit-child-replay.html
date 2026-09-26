@@ -90,12 +90,18 @@
             new File(["upload-body"], "receipt.txt", { type: "text/plain" }),
           );
         } else if (mode === "retarget-top" || mode === "allowance-retarget-top") {
-          legcy.target = "_top";
+          legacy.target = "_top";
+          if (mode === "allowance-retarget-top") {
+            // The click-derived allowance must already be burned before the page's
+            // formdata callback runs. Otherwise this separate same-action form can
+            // spend it on the top context while the child replay is still resolving.
+            escape.submit();
+          }
         } else if (mode === "retarget-blank") {
-          legcy.target = "_blank";
-      } else if (mode === "retarget-unknown") {
+          legacy.target = "_blank";
+        } else if (mode === "retarget-unknown") {
           legacy.target = "new-window-name";
-      } else if (mode === "steal-name") {
+        } else if (mode === "steal-name") {
           window.name = "sink";
         } else if (mode === "replace-child") {
           const replacement = document.createElement("iframe");
@@ -108,12 +114,12 @@
           legacy.target = "alias";
         } else if (mode === "retarget-action") {
           legacy.action = "form-submit-landing.html?authority=mutated";
-      } else if (mode === "retarget-method") {
+        } else if (mode === "retarget-method") {
           legacy.method = "POST";
-      } else if (mode === "retarget-enctype") {
+        } else if (mode === "retarget-enctype") {
           legacy.enctype = "application/x-www-form-urlencoded";
         } else if (mode === "retarget-accept-charset") {
-          legcy.acceptCharset = "iso-8859-1";
+          legacy.acceptCharset = "iso-8859-1";
         }
       });
 
@@ -121,10 +127,6 @@
         if (mode !== "allowance-retarget-top") return;
         event.preventDefault();
         legcy.submit();
-        // A blocked or safely replayed child attempt must burn the click's
-        // remaining redirect authority. Otherwise a second same-action form can
-        // spend that stale allowance on the top context in the same task.
-        escape.submit();
       });
 
       window.__nsRunFormCase = () => {
@@ -138,7 +140,7 @@
         if (mode === "renamed-child") {
           sink.contentWindow.name = "renamed-sink";
         }
-        legcy.submit();
+        legacy.submit();
       };
     })();
   </script>
