@@ -53,7 +53,7 @@ jobs:
             extension/src/content/mutation_monitor.ts \
             scripts/check-perf-budget.mjs \
             vite.config.ts | sort)
-          actual=$(git diff --name-only | sort)
+          actual=$({ git diff --name-only; git ls-files --others --exclude-standard; } | sort)
           test "$actual" = "$expected"
 
           cat > /tmp/nav938-files.sha256 <<'HASHES'
