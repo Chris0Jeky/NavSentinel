@@ -512,7 +512,7 @@ function handleBridgeMessage(message: unknown): void {
     if (!url) return;
 
     if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-      allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      allowActionOnce(data.id, url, data.target || "_blank", data.features, { automatic: true });
       return;
     }
 
@@ -1428,9 +1428,18 @@ function allowOnce(url: string, target?: string, features?: string): void {
   }, 0);
 }
 
-function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
+function allowActionOnce(
+  actionId?: string | null,
+  url?: string,
+  target?: string,
+  features?: string,
+  options?: { automatic?: boolean }
+): void {
   if (actionId) {
-    notifyNavAllow();
+    // An allowlisted action needs authority for its approved URL, not a tab-wide
+    // rollback window. The MAIN-world release sends its own target grant too.
+    if (options?.automatic && url) notifyAllowedTarget(url);
+    else notifyNavAllow();
     postToMain("ns-allow-action", { id: actionId });
     return;
   }
