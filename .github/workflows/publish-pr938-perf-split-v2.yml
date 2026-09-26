@@ -31,14 +31,14 @@ jobs:
           import gzip
           import hashlib
           import os
-          import re
           from pathlib import Path
 
           source = Path('.github/workflows/publish-pr938-perf-split.yml').read_text(encoding='utf-8')
-          match = re.search(r"<<'PATCH_B64'\n(.*?)\n\s*PATCH_B64", source, re.DOTALL)
-          if match is None:
-              raise SystemExit('embedded patch payload not found')
-          payload = ''.join(match.group(1).split())
+          marker = "<<'PATCH_B64'\n"
+          if marker not in source:
+              raise SystemExit('embedded patch payload marker not found')
+          payload_line = source.split(marker, 1)[1].splitlines()[0]
+          payload = ''.join(payload_line.split())
           compressed = base64.b64decode(payload, validate=True)
           patch = gzip.decompress(compressed)
           actual = hashlib.sha256(patch).hexdigest()
