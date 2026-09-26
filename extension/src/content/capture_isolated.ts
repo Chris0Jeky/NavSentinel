@@ -2073,7 +2073,7 @@ window.addEventListener(
       // navigation intent — an anchor href or a form submit — to inherit that
       // authority. The MAIN-world form allowance below is separately bound to
       // the declared action so it cannot authorize an unrelated form target;
-      // main_guard.ts derives the same action for the click's own task (#864).
+      // main_guard.ts arms a same-task allowance only in the top frame (#864).
       const declaredFormAction = formSubmitIntentUrl(e.target, location.href);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,

@@ -13,7 +13,6 @@ import {
   isFloodableAlertType,
 } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { formSubmitIntentUrl } from "./nav_authority";
 import {
   applyIsolatedRedirectAllowance,
   armSameTaskRedirect,
@@ -973,24 +972,20 @@ window.addEventListener(
 // trusted clicks arm: `click` cannot be produced trusted by page script, while
 // `change` and `submit` can (`checkbox.click()`, `requestSubmit()`), so they
 // arm nothing. See RedirectAllowanceState for the scope and budget invariant.
+//
+// Top frame only. A child frame's allowance is bound to the action its clicked
+// submit control declares (#593/#637), and only the isolated world's window-
+// capture read of that action is trustworthy: a page window-capture handler
+// runs between it and this document-capture listener and can rewrite `action`
+// or `formaction`, so an in-task arm would bind to an action the isolated world
+// never declared. Child frames therefore keep waiting for the isolated grant,
+// and a same-task child-frame submit stays gated as before #864.
 const nativeSetTimeout = window.setTimeout.bind(window);
 document.addEventListener(
   "click",
   (event) => {
-    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff()) return;
-    let scope = { restrict: false, target: "" };
-    if (isSubframe()) {
-      // Mirror the isolated grant: a child frame may only spend it on the
-      // action its clicked submit control declares (#593/#637).
-      let declared = "";
-      try {
-        declared = formSubmitIntentUrl(event.target, location.href) ?? "";
-      } catch {
-        // Unresolvable markup declares nothing; the scope stays restricted.
-      }
-      scope = { restrict: true, target: declared };
-    }
-    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, scope, REDIRECT_LIMITS);
+    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
+    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, { restrict: false, target: "" }, REDIRECT_LIMITS);
     if (!sameTaskRedirectTimer) {
       sameTaskRedirectTimer = nativeSetTimeout(() => {
         sameTaskRedirectTimer = 0;

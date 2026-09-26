@@ -146,9 +146,9 @@
           modifiers,
           sinkArmed: !!safeSink,
         });
-        // A zero delay executes inside the click's own task (#864): the
-        // same-task allowance must still bind a child frame to its declared
-        // submit action, exactly like the deferred arms.
+        // A zero delay executes inside the click's own task (#864). The MAIN
+        // world arms no same-task allowance in a child frame, so these arms
+        // wait for the isolated grant bound to the declared action.
         if (delayMs === 0) execute();
         else window.setTimeout(execute, delayMs);
       }
