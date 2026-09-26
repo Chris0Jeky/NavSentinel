@@ -11,7 +11,7 @@ permissions:
 jobs:
   export-source:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       TARGET_SHA: a477af9190cd2ace5d2d36dd4a976224d8c3118e
     steps:
@@ -24,13 +24,27 @@ jobs:
       - name: Verify exact target
         run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
 
-      - name: Create source archive
-        run: git archive --format=zip --output=navsentinel-pr938-a477af9.zip HEAD
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
 
-      - name: Upload source archive
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Create source and toolchain archives
+        run: |
+          git archive --format=zip --output=navsentinel-pr938-a477af9.zip HEAD
+          tar -czf navsentinel-pr938-node-modules.tgz node_modules
+
+      - name: Upload source and toolchain
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: navsentinel-pr938-a477af9
-          path: navsentinel-pr938-a477af9.zip
+          name: navsentinel-pr938-toolchain
+          path: |
+            navsentinel-pr938-a477af9.zip
+            navsentinel-pr938-node-modules.tgz
           if-no-files-found: error
+          compression-level: 0
           retention-days: 1
