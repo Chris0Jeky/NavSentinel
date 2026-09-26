@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, type Worker } from "@playwright/test";
 import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
-import { CdpPageClient, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
+import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const extensionPath = process.env.EXTENSION_PATH
@@ -476,8 +476,17 @@ export class AcceptanceSession {
     const client = await CdpPageClient.attach(this.devToolsPort, (target) => target.url.startsWith(prefix), "popup");
     // popup.html ships "#site" as the placeholder "-"; refreshUi() replaces it
     // with a host label, so waiting for any other text means the popup has
-    // rendered its state and absence checks are meaningful (#873).
-    await client.waitFor("document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim())", 8000);
+    // rendered its state and absence checks are meaningful (#873). The
+    // pending-decision controller marks #pendingDecisions only after its first
+    // refresh settles, so a hidden host is then a rendered empty state rather
+    // than a not-yet-rendered one (#884).
+    // Baseline attribution deliberately loads older dist builds whose popup
+    // predates this marker. Preserve their original site-render wait.
+    const olderBuildBaseline = Boolean(process.env.EXTENSION_PATH && process.env.NAVSENTINEL_EXPECTED_GUARD);
+    const siteReady = "document.readyState === 'complete' && !['', '-'].includes((document.getElementById('site')?.textContent ?? '').trim())";
+    await client.waitFor(olderBuildBaseline ? siteReady : `${siteReady} && document.getElementById('pendingDecisions')?.dataset.pendingDecisionsReady === 'true'`, 8000);
+    // Chrome may need time to accept closing and reopening a toolbar popup in
+    // the next procedure step, independently of this page's DOM readiness.
     await new Promise((resolve) => setTimeout(resolve, 400));
     this.popupClient = client;
     return client;
@@ -485,9 +494,14 @@ export class AcceptanceSession {
 
   async closePopup(): Promise<void> {
     if (this.popupClient) {
+      const targetId = this.popupClient.targetId;
       this.popupConsole.push(...this.popupClient.console);
       await this.popupClient.close().catch(() => undefined);
       this.popupClient = null;
+      // Page.close acknowledges the command before Chrome finishes removing
+      // the toolbar target. Reopening while it still exists can make
+      // chrome.action.openPopup reject with "Failed to open popup".
+      await expect.poll(async () => (await listTargets(this.devToolsPort)).some((target) => target.id === targetId), { timeout: 3000 }).toBe(false);
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
