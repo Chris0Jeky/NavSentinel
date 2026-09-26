@@ -5,7 +5,10 @@
  * in the top frame and in a cross-site child frame. Everything else stays gated:
  * another destination, a `_top` target from a child frame, an open after the
  * short lifetime, an untrusted click, and a trusted click on something other
- * than the link.
+ * than the link. One click never yields two tabs: the page's open replaces the
+ * link's own navigation, an open after that navigation is refused, an
+ * own-property href getter cannot redirect the intent, and a page rewrite of
+ * the link between the isolated decision and MAIN yields at most one tab.
  *
  * Fixture: gym/anchor-open-intent.html (the same file serves the top page on
  * 127.0.0.1 and the child frame on localhost).
@@ -80,6 +83,26 @@ async function expectOpened(context: BrowserContext, action: () => Promise<void>
   await tab.close();
 }
 
+/** URLs of every tab the action opens within the window, closing them after. */
+async function tabsOpenedDuring(context: BrowserContext, action: () => Promise<void>, waitMs = 3_000): Promise<string[]> {
+  const opened: Page[] = [];
+  const onPage = (tab: Page): void => { opened.push(tab); };
+  context.on("page", onPage);
+  try {
+    await action();
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  } finally {
+    context.off("page", onPage);
+  }
+  const urls: string[] = [];
+  for (const tab of opened) {
+    await tab.waitForLoadState("domcontentloaded").catch(() => undefined);
+    urls.push(tab.url());
+    await tab.close().catch(() => undefined);
+  }
+  return urls;
+}
+
 async function expectNotOpened(context: BrowserContext, action: () => Promise<void>, waitMs = 3_000): Promise<void> {
   const before = context.pages().length;
   const popup = context.waitForEvent("page", { timeout: waitMs }).then((tab) => tab.url()).catch(() => null);
@@ -127,6 +150,36 @@ test("a page-opened declared new-tab link opens its own destination once; other 
       const box = await page.locator("#elsewhere").boundingBox();
       await expectNotOpened(context, () => page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2));
       expect(await handlerRan(page)).toBe("elsewhere:true");
+      await page.close();
+    });
+
+    await test.step("one tab per click: a handler that keeps the native navigation and also opens the link gets one tab", async () => {
+      const page = await openFixture(context, baseUrl);
+      const urls = await tabsOpenedDuring(context, () => clickLink(page, page, "no-prevent-double"));
+      expect(urls).toHaveLength(1);
+      expect(urls[0]).toMatch(/anchor-open-landing\.html\?case=no-prevent-double&where=top$/);
+      await page.close();
+    });
+
+    await test.step("one tab per click: an open after the native navigation is refused", async () => {
+      const page = await openFixture(context, baseUrl);
+      const urls = await tabsOpenedDuring(context, () => clickLink(page, page, "async-no-prevent"));
+      expect(urls, "only the link's own native tab").toHaveLength(1);
+      expect(urls[0]).toMatch(/anchor-open-landing\.html\?case=async-no-prevent&where=top$/);
+      await page.close();
+    });
+
+    await test.step("an own-property href getter cannot redirect the intent", async () => {
+      const page = await openFixture(context, baseUrl);
+      await expectNotOpened(context, () => clickLink(page, page, "getter-spoof"));
+      expect(await handlerRan(page)).toBe("getter-spoof:true");
+      await page.close();
+    });
+
+    await test.step("a page window-capture rewrite of the link yields at most one tab, never an extra ad tab", async () => {
+      const page = await openFixture(context, baseUrl);
+      const urls = await tabsOpenedDuring(context, () => clickLink(page, page, "rewrite-restore"));
+      expect(urls.length, `tabs opened: ${JSON.stringify(urls)}`).toBeLessThanOrEqual(1);
       await page.close();
     });
 

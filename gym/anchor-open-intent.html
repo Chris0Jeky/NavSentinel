@@ -23,7 +23,9 @@
       ? location.origin.replace("127.0.0.1", "localhost")
       : location.origin.replace("localhost", "127.0.0.1");
     const where = inFrame ? "child" : "top";
-    const modes = ["same", "same-path-query", "other-path", "top-target", "late", "untrusted"];
+    const modes = ["same", "same-path-query", "other-path", "top-target", "late", "untrusted",
+      "no-prevent-double", "async-no-prevent", "getter-spoof", "rewrite-restore"];
+    const adUrl = `${other}/form-submit-landing.html?case=ad&where=${where}`;
     const container = document.getElementById("links");
     for (const mode of modes) {
       const a = document.createElement("a");
@@ -33,8 +35,13 @@
       a.target = "_blank";
       a.rel = "noopener";
       a.textContent = `Open ${mode}`;
+      if (mode === "getter-spoof") {
+        // An own-property getter that lies to MAIN-world code about the href.
+        Object.defineProperty(a, "href", { get: () => adUrl, configurable: true });
+      }
       a.addEventListener("click", (event) => {
-        event.preventDefault();
+        const keepsNativeNavigation = mode === "no-prevent-double" || mode === "async-no-prevent" || mode === "rewrite-restore";
+        if (!keepsNativeNavigation) event.preventDefault();
         document.documentElement.dataset.fixtureHandler = `${mode}:${event.isTrusted}`;
         switch (mode) {
           case "same":
@@ -53,10 +60,31 @@
           case "late":
             setTimeout(() => window.open(a.href), 1500);
             break;
+          case "no-prevent-double":
+            window.open(a.href);
+            break;
+          case "async-no-prevent":
+            setTimeout(() => window.open(a.getAttribute("href")), 0);
+            break;
+          case "getter-spoof":
+            window.open(adUrl);
+            break;
+          case "rewrite-restore":
+            window.open(adUrl);
+            a.setAttribute("href", a.dataset.originalHref);
+            break;
         }
       });
       container.appendChild(a);
     }
+    // Page window-capture listener (runs after the isolated world's decision,
+    // before MAIN's document-capture listener): rewrite the link to an ad.
+    window.addEventListener("click", (event) => {
+      const link = event.target instanceof Element ? event.target.closest("#link-rewrite-restore") : null;
+      if (!link) return;
+      link.dataset.originalHref = link.getAttribute("href");
+      link.setAttribute("href", adUrl);
+    }, true);
     // Control: a trusted click on something that is not the link, whose
     // handler opens the link's destination. Only a click on the link arms.
     const elsewhere = document.createElement("span");

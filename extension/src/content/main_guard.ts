@@ -185,6 +185,7 @@ let sameTaskRedirectTimer = 0;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
 let anchorOpenIntent: AnchorOpenIntent | null = null;
+let anchorOpenIntentEvent: MouseEvent | null = null;
 
 // --- DoubleClickjacking detection state ---
 // Tracks the timestamp of the last window.open call from this page.
@@ -381,11 +382,27 @@ function consumePopupIntentAllowance(target?: string, features?: string): boolea
 
 // #943: one-shot, bound to the clicked link's origin and path, new-window
 // targets only. See AnchorOpenIntent in main_guard_helpers.ts.
+//
+// One tab per click: the page's open REPLACES the link's own navigation, never
+// adds to it. While the arming click is still dispatching, NavSentinel cancels
+// that navigation itself; once dispatch is over, the open is allowed only if the
+// navigation was already cancelled. Without this, a page could keep the native
+// navigation AND open a second tab (a popunder riding an ordinary link click).
+// Event state is read through getters captured at startup, so an own-property
+// spoof on the event cannot fake either condition.
 function consumeAnchorOpenIntent(url: string | undefined, target: string | undefined): boolean {
   if (mode !== "smart") return false;
   if (openCount >= MAX_OPENS_PER_GESTURE) return false;
-  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), url, target, location.href)) return false;
+  const event = anchorOpenIntentEvent;
+  if (!event || !matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), url, target, location.href)) return false;
+  try {
+    if (nativeEventPhase.call(event) !== 0) nativePreventDefault.call(event);
+    else if (!nativeDefaultPrevented.call(event)) return false;
+  } catch {
+    return false;
+  }
   anchorOpenIntent = null;
+  anchorOpenIntentEvent = null;
   openCount += 1;
   return true;
 }
@@ -522,6 +539,17 @@ function registerBlockedAction(params: {
 const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
+// #943: read link and click state through the platform getters, not through
+// properties a page can shadow on the element or event.
+function capturedGetter<T>(proto: object, prop: string, fallback: (self: never) => T): (this: unknown) => T {
+  const getter = Object.getOwnPropertyDescriptor(proto, prop)?.get;
+  return (getter ?? fallback) as (this: unknown) => T;
+}
+const nativeAnchorHref = capturedGetter<string>(HTMLAnchorElement.prototype, "href", () => "");
+const nativeAnchorTarget = capturedGetter<string>(HTMLAnchorElement.prototype, "target", () => "");
+const nativeEventPhase = capturedGetter<number>(Event.prototype, "eventPhase", () => 0);
+const nativeDefaultPrevented = capturedGetter<boolean>(Event.prototype, "defaultPrevented", () => false);
+const nativePreventDefault = Event.prototype.preventDefault;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 
 /**
@@ -675,13 +703,25 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
-  if (consumePopupIntentAllowance(target, features) || consumeAnchorOpenIntent(url, target)) {
+  if (consumePopupIntentAllowance(target, features)) {
     postAllowed({
       kind: "window_open",
       ...(url !== undefined ? { url: String(url) } : {}),
       ...(target !== undefined ? { target } : {})
     });
     notifyAllowedTarget(url);
+    recordWindowOpen();
+    return callNativeOpen(receiver, url, target, features);
+  }
+
+  // #943: no notifyAllowedTarget here. That entry exempts a later navigation of
+  // THIS (opener) tab from rollback, which a replaced link click never needs.
+  if (consumeAnchorOpenIntent(url, target)) {
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
     recordWindowOpen();
     return callNativeOpen(receiver, url, target, features);
   }
@@ -1027,11 +1067,19 @@ document.addEventListener(
   (event) => {
     if (!(event instanceof MouseEvent) || !event.isTrusted) return;
     anchorOpenIntent = null;
+    anchorOpenIntentEvent = null;
     if (mode !== "smart" || event.button !== 0) return;
     if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = findDeclaredNewTabAnchor(event);
     if (!anchor || !isSafePopupIntentSource(anchor)) return;
-    anchorOpenIntent = anchorOpenIntentFor(anchor.href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS);
+    let href: string;
+    try {
+      href = nativeAnchorHref.call(anchor);
+    } catch {
+      return;
+    }
+    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS);
+    anchorOpenIntentEvent = anchorOpenIntent ? event : null;
   },
   true
 );
@@ -1040,7 +1088,12 @@ function findDeclaredNewTabAnchor(event: MouseEvent): HTMLAnchorElement | null {
   for (const node of event.composedPath()) {
     if (!(node instanceof HTMLAnchorElement)) continue;
     // The nearest link owns the click; only a declared new-tab link qualifies.
-    return node.target.trim().toLowerCase() === "_blank" ? node : null;
+    // Read through the captured getter: an own-property spoof cannot fake it.
+    try {
+      return nativeAnchorTarget.call(node).trim().toLowerCase() === "_blank" ? node : null;
+    } catch {
+      return null;
+    }
   }
   return null;
 }
