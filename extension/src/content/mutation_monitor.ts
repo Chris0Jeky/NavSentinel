@@ -21,7 +21,10 @@
  * Runs in the ISOLATED content script world.
  */
 
-import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_provider";
+import {
+  matchProviderHostSrc,
+  type ProviderHostEntry,
+} from "../shared/iframe_provider";
 import { findClickFixOverlay } from "./clickfix_detector";
 import { queryPasswordInputs } from "./password_field";
 import { isExtensionOwnedOverlayElement } from "./extension_owned_overlay";
@@ -73,11 +76,13 @@ export function isHtmlElementLike(value: unknown): value is HTMLElement {
     style?: unknown;
     getBoundingClientRect?: unknown;
   } | null;
-  return candidate?.nodeType === 1 &&
+  return (
+    candidate?.nodeType === 1 &&
     typeof candidate.tagName === "string" &&
     candidate.style !== null &&
     typeof candidate.style === "object" &&
-    typeof candidate.getBoundingClientRect === "function";
+    typeof candidate.getBoundingClientRect === "function"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -223,13 +228,15 @@ const shadowObserversByHost = new Map<Element, MutationObserver>();
  */
 let scarceAlertedElements = new WeakSet<Element>();
 
-type FormMethod = "get" | "post";
+type FormMethod = "get" | "post" | "dialog";
 
 interface AttributeTransitionSnapshot {
   /** Attribute value immediately after this mutation, not the batch's final value. */
   currentValue: string | null;
   /** Submit-control type immediately after this mutation. */
   controlType: string | null;
+  /** Type immediately before a `type` mutation; null for other attributes. */
+  previousControlType: string | null;
   /** Owning form state immediately after this mutation. */
   ownerAction: string;
   ownerMethod: FormMethod;
@@ -249,7 +256,10 @@ let originalSubmitterMethods = new WeakMap<Element, FormMethod>();
  * The DOM may change again before the debounced batch runs, so consulting live
  * attributes there would erase transient hostile transitions. (#812/#857)
  */
-let attributeTransitionSnapshots = new WeakMap<MutationRecord, AttributeTransitionSnapshot>();
+let attributeTransitionSnapshots = new WeakMap<
+  MutationRecord,
+  AttributeTransitionSnapshot
+>();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -347,11 +357,13 @@ function pushAlert(alert: MutationAlert): boolean {
     // before the boundary has already supplied its security signal, so it cannot
     // later consume a tail slot by being re-added or re-mutated.
     if (!scarce) return false;
-    if (alertElements.some((element) => scarceAlertedElements.has(element))) return false;
+    if (alertElements.some((element) => scarceAlertedElements.has(element)))
+      return false;
   }
   // Track scarce elements even before the boundary. This does not suppress any
   // pre-boundary alert; it only protects future reserved capacity from reuse.
-  if (scarce) alertElements.forEach((element) => scarceAlertedElements.add(element));
+  if (scarce)
+    alertElements.forEach((element) => scarceAlertedElements.add(element));
   alerts.push(alert);
   try {
     alertCallback?.(alert);
@@ -386,10 +398,20 @@ const OBSERVE_CONFIG: MutationObserverInit = {
 function tryGetShadowRoot(el: Element): ShadowRoot | null {
   if (el.shadowRoot) return el.shadowRoot;
   try {
-    return (globalThis as Record<string, unknown> as {
-      chrome?: { dom?: { openOrClosedShadowRoot?: (e: Element) => ShadowRoot | null } }
-    }).chrome?.dom?.openOrClosedShadowRoot?.(el) ?? null;
-  } catch { return null; }
+    return (
+      (
+        globalThis as Record<string, unknown> as {
+          chrome?: {
+            dom?: {
+              openOrClosedShadowRoot?: (e: Element) => ShadowRoot | null;
+            };
+          };
+        }
+      ).chrome?.dom?.openOrClosedShadowRoot?.(el) ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 const SELF_HOST_PATTERN = /^__(?:navsentinel|sentinelsuite)_/;
@@ -512,7 +534,9 @@ function getBenignOverlayReason(el: Element): string | null {
  * and interaction-correlated cleanup. Returning metadata rather than mutating
  * the page keeps detection and the optional cleanup action separate.
  */
-export function classifyOverlayElement(el: Element): OverlayClassification | null {
+export function classifyOverlayElement(
+  el: Element,
+): OverlayClassification | null {
   // Only check elements that could plausibly be overlays
   if (!isHtmlElementLike(el) || isExtensionOwnedOverlayElement(el)) return null;
 
@@ -561,8 +585,9 @@ function emitOverlayCleanupCandidate(
   elements?: Element[],
 ): void {
   if (!isCleanupLaneActive() || classification.severity !== "high") return;
-  const eligible = (elements ?? [element])
-    .filter((candidate) => !restoredOverlayCleanupExclusions.has(candidate));
+  const eligible = (elements ?? [element]).filter(
+    (candidate) => !restoredOverlayCleanupExclusions.has(candidate),
+  );
   if (eligible.length === 0) return;
   try {
     overlayCleanupCallback?.({
@@ -685,10 +710,15 @@ function checkOverlay(el: Element): void {
 // ---------------------------------------------------------------------------
 
 function normalizeFormMethod(value: string | null): FormMethod {
-  return value !== null && value.toLowerCase() === "post" ? "post" : "get";
+  const normalized = value?.toLowerCase();
+  if (normalized === "post" || normalized === "dialog") return normalized;
+  return "get";
 }
 
-function isSubmitControlAt(element: Element, typeValue: string | null): boolean {
+function isSubmitControlAt(
+  element: Element,
+  typeValue: string | null,
+): boolean {
   const type = (typeValue ?? "").toLowerCase();
   if (element.tagName === "BUTTON") {
     // Missing and invalid button types use the Submit Button state.
@@ -705,7 +735,10 @@ function owningForm(element: Element): HTMLFormElement | null {
   return (element as HTMLButtonElement | HTMLInputElement).form;
 }
 
-function effectiveSubmitterAction(override: string | null, ownerAction: string): string {
+function effectiveSubmitterAction(
+  override: string | null,
+  ownerAction: string,
+): string {
   return override === null ? ownerAction : override;
 }
 
@@ -737,7 +770,10 @@ function snapshotFormActions(doc: Document | ShadowRoot): void {
       originalFormActions.set(form, form.getAttribute("action") ?? "");
     }
     if (!originalFormMethods.has(form)) {
-      originalFormMethods.set(form, normalizeFormMethod(form.getAttribute("method")));
+      originalFormMethods.set(
+        form,
+        normalizeFormMethod(form.getAttribute("method")),
+      );
     }
   }
 
@@ -751,17 +787,25 @@ function snapshotFormActions(doc: Document | ShadowRoot): void {
     if (!isSubmitControlAt(control, type)) continue;
     const owner = owningForm(control);
     const ownerAction = owner?.getAttribute("action") ?? "";
-    const ownerMethod = normalizeFormMethod(owner?.getAttribute("method") ?? null);
+    const ownerMethod = normalizeFormMethod(
+      owner?.getAttribute("method") ?? null,
+    );
     if (!originalSubmitterActions.has(control)) {
       originalSubmitterActions.set(
         control,
-        effectiveSubmitterAction(control.getAttribute("formaction"), ownerAction),
+        effectiveSubmitterAction(
+          control.getAttribute("formaction"),
+          ownerAction,
+        ),
       );
     }
     if (!originalSubmitterMethods.has(control)) {
       originalSubmitterMethods.set(
         control,
-        effectiveSubmitterMethod(control.getAttribute("formmethod"), ownerMethod),
+        effectiveSubmitterMethod(
+          control.getAttribute("formmethod"),
+          ownerMethod,
+        ),
       );
     }
   }
@@ -778,11 +822,37 @@ const FORM_AUTHORITY_ATTRIBUTES = [
 type FormAuthorityAttribute = (typeof FORM_AUTHORITY_ATTRIBUTES)[number];
 type AttributeState = Map<FormAuthorityAttribute, string | null>;
 
-function isFormAuthorityAttribute(value: string | null): value is FormAuthorityAttribute {
-  return value !== null && FORM_AUTHORITY_ATTRIBUTES.includes(value as FormAuthorityAttribute);
+function isFormAuthorityAttribute(
+  value: string | null,
+): value is FormAuthorityAttribute {
+  return (
+    value !== null &&
+    FORM_AUTHORITY_ATTRIBUTES.includes(value as FormAuthorityAttribute)
+  );
 }
 
-function captureAttributeTransitionSnapshots(records: MutationRecord[]): void {
+function withoutAttributeOldValue(record: MutationRecord): MutationRecord {
+  if (record.type !== "attributes" || record.oldValue === null) return record;
+  return {
+    type: record.type,
+    target: record.target,
+    addedNodes: record.addedNodes,
+    removedNodes: record.removedNodes,
+    previousSibling: record.previousSibling,
+    nextSibling: record.nextSibling,
+    attributeName: record.attributeName,
+    attributeNamespace: record.attributeNamespace,
+    oldValue: null,
+  } as MutationRecord;
+}
+
+/**
+ * Reconstruct each authority transition, then return queue-safe records that no
+ * longer retain arbitrary page-controlled `oldValue` strings through the debounce.
+ */
+function captureAttributeTransitionSnapshots(
+  records: MutationRecord[],
+): MutationRecord[] {
   const states = new WeakMap<Element, AttributeState>();
   const stateFor = (element: Element): AttributeState => {
     const existing = states.get(element);
@@ -815,22 +885,47 @@ function captureAttributeTransitionSnapshots(records: MutationRecord[]): void {
     attributeTransitionSnapshots.set(record, {
       currentValue: state.get(record.attributeName) ?? null,
       controlType: state.get("type") ?? null,
+      previousControlType:
+        record.attributeName === "type" && typeof record.oldValue === "string"
+          ? record.oldValue
+          : null,
       ownerAction: ownerState?.get("action") ?? "",
       ownerMethod: normalizeFormMethod(ownerState?.get("method") ?? null),
       submitterAction: state.get("formaction") ?? null,
       submitterMethod: state.get("formmethod") ?? null,
     });
-    state.set(record.attributeName, typeof record.oldValue === "string" ? record.oldValue : null);
+    state.set(
+      record.attributeName,
+      typeof record.oldValue === "string" ? record.oldValue : null,
+    );
   }
+
+  return records.map((record) => {
+    const queued = withoutAttributeOldValue(record);
+    if (queued !== record) {
+      const transition = attributeTransitionSnapshots.get(record);
+      if (transition) attributeTransitionSnapshots.set(queued, transition);
+    }
+    return queued;
+  });
 }
 
-function transitionFor(record: MutationRecord, target: Element): AttributeTransitionSnapshot {
+function transitionFor(
+  record: MutationRecord,
+  target: Element,
+): AttributeTransitionSnapshot {
   const captured = attributeTransitionSnapshots.get(record);
   if (captured) return captured;
   const owner = owningForm(target);
   return {
-    currentValue: record.attributeName ? target.getAttribute(record.attributeName) : null,
+    currentValue: record.attributeName
+      ? target.getAttribute(record.attributeName)
+      : null,
     controlType: target.getAttribute("type"),
+    previousControlType:
+      record.attributeName === "type" && typeof record.oldValue === "string"
+        ? record.oldValue
+        : null,
     ownerAction: owner?.getAttribute("action") ?? "",
     ownerMethod: normalizeFormMethod(owner?.getAttribute("method") ?? null),
     submitterAction: target.getAttribute("formaction"),
@@ -838,7 +933,10 @@ function transitionFor(record: MutationRecord, target: Element): AttributeTransi
   };
 }
 
-function checkFormActionChange(form: Element, transition: AttributeTransitionSnapshot): void {
+function checkFormActionChange(
+  form: Element,
+  transition: AttributeTransitionSnapshot,
+): void {
   if (form.tagName !== "FORM") return;
 
   const current = transition.currentValue ?? "";
@@ -872,7 +970,10 @@ function checkSubmitterActionChange(
 ): void {
   if (!isSubmitControlAt(control, transition.controlType)) return;
 
-  const current = effectiveSubmitterAction(transition.currentValue, transition.ownerAction);
+  const current = effectiveSubmitterAction(
+    transition.currentValue,
+    transition.ownerAction,
+  );
   const original = originalSubmitterActions.get(control);
   if (original === undefined) {
     // Dynamic controls retain the monitor's existing first-sight semantics.
@@ -915,7 +1016,10 @@ function checkFormMethodChange(
     }
   } else {
     if (!isSubmitControlAt(target, transition.controlType)) return;
-    current = effectiveSubmitterMethod(transition.currentValue, transition.ownerMethod);
+    current = effectiveSubmitterMethod(
+      transition.currentValue,
+      transition.ownerMethod,
+    );
     original = originalSubmitterMethods.get(target);
     if (original === undefined) {
       originalSubmitterMethods.set(target, current);
@@ -933,22 +1037,57 @@ function checkFormMethodChange(
   });
 }
 
-function seedSubmitterAuthorityAfterTypeChange(
+/**
+ * A page may stage inert overrides and make them authoritative only by changing
+ * the control to submit-capable. Compare that activation with the owner's safe
+ * authority rather than silently adopting the staged values as a new baseline.
+ */
+function checkSubmitterAuthorityAfterTypeChange(
   target: Element,
   transition: AttributeTransitionSnapshot,
 ): void {
   if (!isSubmitControlAt(target, transition.currentValue)) return;
-  if (!originalSubmitterActions.has(target)) {
-    originalSubmitterActions.set(
-      target,
-      effectiveSubmitterAction(transition.submitterAction, transition.ownerAction),
-    );
+  if (isSubmitControlAt(target, transition.previousControlType)) return;
+
+  const currentAction = effectiveSubmitterAction(
+    transition.submitterAction,
+    transition.ownerAction,
+  );
+  const originalAction =
+    originalSubmitterActions.get(target) ?? transition.ownerAction;
+  originalSubmitterActions.set(target, originalAction);
+  if (currentAction !== originalAction) {
+    const crossDomain = currentAction ? isCrossDomain(currentAction) : false;
+    const boundedCurrent = boundedDetailValue(currentAction);
+    const boundedOriginal = boundedDetailValue(originalAction);
+    const detail = crossDomain
+      ? `Submitter formaction changed to cross-domain URL: "${boundedCurrent}" (was "${boundedOriginal}")`
+      : `Submitter formaction changed: "${boundedCurrent}" (was "${boundedOriginal}")`;
+    pushAlert({
+      type: "form_action_changed",
+      severity: crossDomain ? "high" : "medium",
+      element: target,
+      details: detail,
+      timestamp: Date.now(),
+    });
   }
-  if (!originalSubmitterMethods.has(target)) {
-    originalSubmitterMethods.set(
-      target,
-      effectiveSubmitterMethod(transition.submitterMethod, transition.ownerMethod),
-    );
+
+  const currentMethod = effectiveSubmitterMethod(
+    transition.submitterMethod,
+    transition.ownerMethod,
+  );
+  const originalMethod =
+    originalSubmitterMethods.get(target) ?? transition.ownerMethod;
+  originalSubmitterMethods.set(target, originalMethod);
+  if (originalMethod === "post" && currentMethod === "get") {
+    pushAlert({
+      type: "form_method_changed",
+      severity: "medium",
+      element: target,
+      details:
+        "Form submission method downgraded from POST to GET after page load (type activation)",
+      timestamp: Date.now(),
+    });
   }
 }
 
@@ -1016,8 +1155,16 @@ function checkSuspiciousIframe(el: Element, includeLayoutChecks = true): void {
     if (cs.visibility === "hidden") reasons.push("visibility:hidden");
 
     const rect = iframe.getBoundingClientRect();
-    if (rect && rect.width < TINY_IFRAME_PX && rect.height < TINY_IFRAME_PX && rect.width >= 0 && rect.height >= 0) {
-      reasons.push(`tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`);
+    if (
+      rect &&
+      rect.width < TINY_IFRAME_PX &&
+      rect.height < TINY_IFRAME_PX &&
+      rect.width >= 0 &&
+      rect.height >= 0
+    ) {
+      reasons.push(
+        `tiny (${Math.round(rect.width)}x${Math.round(rect.height)})`,
+      );
     }
   }
 
@@ -1212,7 +1359,10 @@ function processRemovedNode(node: Node): void {
  *   comparisons), and `pushAlert` admits only its HIGH/cross-domain result into
  *   the reserve. (#413)
  */
-function processAttributeChange(record: MutationRecord, scarceOnly = false): void {
+function processAttributeChange(
+  record: MutationRecord,
+  scarceOnly = false,
+): void {
   const target = record.target;
   if (!(target instanceof Element)) return;
   const transition = transitionFor(record, target);
@@ -1225,13 +1375,19 @@ function processAttributeChange(record: MutationRecord, scarceOnly = false): voi
     checkSubmitterActionChange(target, transition);
   }
 
-  if (record.attributeName === "method" || record.attributeName === "formmethod") {
+  if (
+    record.attributeName === "method" ||
+    record.attributeName === "formmethod"
+  ) {
     checkFormMethodChange(target, record.attributeName, transition);
   }
 
   if (record.attributeName === "type") {
-    seedSubmitterAuthorityAfterTypeChange(target, transition);
-    if (target.tagName === "INPUT" && transition.currentValue?.toLowerCase() === "password") {
+    checkSubmitterAuthorityAfterTypeChange(target, transition);
+    if (
+      target.tagName === "INPUT" &&
+      transition.currentValue?.toLowerCase() === "password"
+    ) {
       pushAlert({
         type: "password_injected",
         severity: "high",
@@ -1253,7 +1409,10 @@ function processAttributeChange(record: MutationRecord, scarceOnly = false): voi
   // Style or class attribute changes on existing elements could create overlays.
   // An attacker can inject a benign element then toggle a class to reveal it
   // as a phishing overlay (e.g., el.classList.add("active")).
-  if (!scarceOnly && (record.attributeName === "style" || record.attributeName === "class")) {
+  if (
+    !scarceOnly &&
+    (record.attributeName === "style" || record.attributeName === "class")
+  ) {
     checkOverlay(target);
   }
 }
@@ -1302,7 +1461,8 @@ function processBatch(): void {
         }
       } else if (
         record.type === "attributes" &&
-        (record.attributeName === "style" || record.attributeName === "class") &&
+        (record.attributeName === "style" ||
+          record.attributeName === "class") &&
         record.target instanceof Element &&
         restoredOverlayAttributeBypass.has(record.target)
       ) {
@@ -1370,7 +1530,11 @@ function processOverlayCleanupRecords(records: MutationRecord[]): void {
   for (const record of records) {
     if (budget.remaining <= 0) break;
     if (record.type === "childList") {
-      for (let index = 0; index < record.addedNodes.length && budget.remaining > 0; index += 1) {
+      for (
+        let index = 0;
+        index < record.addedNodes.length && budget.remaining > 0;
+        index += 1
+      ) {
         inspectCleanupSubtree(record.addedNodes[index]!, budget);
       }
     } else if (
@@ -1430,15 +1594,19 @@ function bindOverlayCleanupSignals(doc: Document): void {
 function unbindOverlayCleanupSignals(): void {
   window.removeEventListener("scroll", onOverlayViewportSignal, true);
   window.removeEventListener("resize", onOverlayViewportSignal, true);
-  observedDocument?.removeEventListener("visibilitychange", onOverlayViewportSignal, true);
+  observedDocument?.removeEventListener(
+    "visibilitychange",
+    onOverlayViewportSignal,
+    true,
+  );
 }
 
 function onMutations(records: MutationRecord[]): void {
-  captureAttributeTransitionSnapshots(records);
+  const queuedRecords = captureAttributeTransitionSnapshots(records);
   processOverlayCleanupRecords(records);
   scheduleOverlayCleanupRescan();
-  for (const r of records) {
-    pendingMutations.push(r);
+  for (const record of queuedRecords) {
+    pendingMutations.push(record);
   }
   if (debounceTimer === null) {
     debounceTimer = setTimeout(processBatch, DEBOUNCE_MS);
@@ -1581,6 +1749,15 @@ export function _getPendingMutationCountForTesting(): number {
   return pendingMutations.length;
 }
 
+/** Exposed for testing only: queued attribute records must not retain raw old values. */
+export function _getPendingAttributeOldValuesForTesting(): Array<
+  string | null
+> {
+  return pendingMutations
+    .filter((record) => record.type === "attributes")
+    .map((record) => record.oldValue);
+}
+
 /**
  * Exposed for testing only: synchronously deliver records queued by the primary
  * observer through the same callback used in production. This avoids relying
@@ -1599,6 +1776,8 @@ export function _flushMutationObserverRecordsForTesting(): void {
  * spec-accurate single-record self-replace shape (host in BOTH addedNodes and
  * removedNodes while still connected) that the real-browser evasion relies on.
  */
-export function _feedMutationRecordsForTesting(records: MutationRecord[]): void {
+export function _feedMutationRecordsForTesting(
+  records: MutationRecord[],
+): void {
   onMutations(records);
 }

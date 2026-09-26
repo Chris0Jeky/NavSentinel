@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   _feedMutationRecordsForTesting,
+  _getPendingAttributeOldValuesForTesting,
   _getPendingMutationCountForTesting,
   _resetMutationState,
   getMutationAlerts,
@@ -19,6 +20,7 @@ function attributeRecord(
     type: "attributes",
     target,
     attributeName,
+    attributeNamespace: null,
     oldValue,
   } as unknown as MutationRecord;
 }
@@ -74,7 +76,12 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     for (const options of observedConfigs) {
       expect(options.attributeOldValue).toBe(true);
       expect(options.attributeFilter).toEqual(
-        expect.arrayContaining(["action", "formaction", "method", "formmethod"]),
+        expect.arrayContaining([
+          "action",
+          "formaction",
+          "method",
+          "formmethod",
+        ]),
       );
     }
   });
@@ -91,10 +98,14 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     startMutationMonitor(document, (alert) => alerts.push(alert));
 
     button.setAttribute("formaction", "https://evil.example/collect");
-    _feedMutationRecordsForTesting([attributeRecord(button, "formaction", null)]);
+    _feedMutationRecordsForTesting([
+      attributeRecord(button, "formaction", null),
+    ]);
     await drainQueuedMutations();
 
-    const actionAlerts = alerts.filter((alert) => alert.type === "form_action_changed");
+    const actionAlerts = alerts.filter(
+      (alert) => alert.type === "form_action_changed",
+    );
     expect(actionAlerts).toHaveLength(1);
     expect(actionAlerts[0]!.severity).toBe("high");
     expect(actionAlerts[0]!.details).toContain("evil.example/collect");
@@ -118,7 +129,9 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     ]);
     await drainQueuedMutations();
 
-    const actionAlerts = alerts.filter((alert) => alert.type === "form_action_changed");
+    const actionAlerts = alerts.filter(
+      (alert) => alert.type === "form_action_changed",
+    );
     expect(actionAlerts).toHaveLength(1);
     expect(actionAlerts[0]!.severity).toBe("high");
     expect(actionAlerts[0]!.details).toContain("evil.example/collect");
@@ -143,13 +156,16 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     ]);
     await drainQueuedMutations();
 
-    const actionAlerts = alerts.filter((alert) => alert.type === "form_action_changed");
+    const actionAlerts = alerts.filter(
+      (alert) => alert.type === "form_action_changed",
+    );
     expect(actionAlerts).toHaveLength(1);
     expect(actionAlerts[0]!.severity).toBe("high");
   });
 
-  it("does not reinterpret an inert override after a control becomes submit-capable", async () => {
+  it("detects a hostile override staged while inert and activated by type change", async () => {
     const form = document.createElement("form");
+    form.setAttribute("action", "/checkout");
     const button = document.createElement("button");
     button.type = "button";
     form.appendChild(button);
@@ -166,7 +182,35 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     ]);
     await drainQueuedMutations();
 
-    expect(alerts.filter((alert) => alert.type === "form_action_changed")).toHaveLength(0);
+    const actionAlerts = alerts.filter(
+      (alert) => alert.type === "form_action_changed",
+    );
+    expect(actionAlerts).toHaveLength(1);
+    expect(actionAlerts[0]!.severity).toBe("high");
+  });
+
+  it("detects a staged POST-to-GET downgrade when an inert control becomes a submitter", async () => {
+    const form = document.createElement("form");
+    form.method = "post";
+    const button = document.createElement("button");
+    button.type = "button";
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    button.setAttribute("formmethod", "get");
+    button.type = "submit";
+    _feedMutationRecordsForTesting([
+      attributeRecord(button, "formmethod", null),
+      attributeRecord(button, "type", "button"),
+    ]);
+    await drainQueuedMutations();
+
+    const methodAlerts = formMethodAlerts(alerts);
+    expect(methodAlerts).toHaveLength(1);
+    expect(methodAlerts[0]!.details).toContain("type activation");
   });
 
   it("inherits the owning form method when a submitter adds formmethod=get", async () => {
@@ -181,7 +225,9 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     startMutationMonitor(document, (alert) => alerts.push(alert));
 
     button.setAttribute("formmethod", "get");
-    _feedMutationRecordsForTesting([attributeRecord(button, "formmethod", null)]);
+    _feedMutationRecordsForTesting([
+      attributeRecord(button, "formmethod", null),
+    ]);
     await drainQueuedMutations();
 
     const methodAlerts = formMethodAlerts(alerts);
@@ -202,7 +248,9 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     startMutationMonitor(document, (alert) => alerts.push(alert));
 
     button.removeAttribute("formmethod");
-    _feedMutationRecordsForTesting([attributeRecord(button, "formmethod", "post")]);
+    _feedMutationRecordsForTesting([
+      attributeRecord(button, "formmethod", "post"),
+    ]);
     await drainQueuedMutations();
 
     expect(formMethodAlerts(alerts)).toHaveLength(0);
@@ -221,6 +269,41 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     await drainQueuedMutations();
 
     expect(formMethodAlerts(alerts)).toHaveLength(1);
+  });
+
+  it("does not describe the valid dialog method as a GET downgrade", async () => {
+    const form = document.createElement("form");
+    form.method = "post";
+    document.body.appendChild(form);
+
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    form.setAttribute("method", "dialog");
+    _feedMutationRecordsForTesting([attributeRecord(form, "method", "post")]);
+    await drainQueuedMutations();
+
+    expect(formMethodAlerts(alerts)).toHaveLength(0);
+  });
+
+  it("does not describe formmethod=dialog as a GET downgrade", async () => {
+    const form = document.createElement("form");
+    form.method = "post";
+    const button = document.createElement("button");
+    button.type = "submit";
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+
+    button.setAttribute("formmethod", "dialog");
+    _feedMutationRecordsForTesting([
+      attributeRecord(button, "formmethod", null),
+    ]);
+    await drainQueuedMutations();
+
+    expect(formMethodAlerts(alerts)).toHaveLength(0);
   });
 
   it("ignores formaction and formmethod churn on non-submit controls", async () => {
@@ -248,7 +331,9 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     ]);
     await drainQueuedMutations();
 
-    expect(alerts.filter((alert) => alert.type === "form_action_changed")).toHaveLength(0);
+    expect(
+      alerts.filter((alert) => alert.type === "form_action_changed"),
+    ).toHaveLength(0);
     expect(formMethodAlerts(alerts)).toHaveLength(0);
   });
 
@@ -274,7 +359,9 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     ]);
     await drainQueuedMutations();
 
-    const actionAlerts = alerts.filter((alert) => alert.type === "form_action_changed");
+    const actionAlerts = alerts.filter(
+      (alert) => alert.type === "form_action_changed",
+    );
     expect(actionAlerts).toHaveLength(2);
     for (const alert of actionAlerts) {
       expect(alert.details.length).toBeLessThan(600);
@@ -282,8 +369,27 @@ describe("mutation monitor form-authority telemetry (#812/#857)", () => {
     }
   });
 
+  it("does not retain raw page-controlled oldValue strings in the debounced queue", () => {
+    const form = document.createElement("form");
+    document.body.appendChild(form);
+    startMutationMonitor(document, () => {});
+
+    form.setAttribute("action", "/next");
+    _feedMutationRecordsForTesting([
+      attributeRecord(
+        form,
+        "action",
+        `https://evil.example/${"x".repeat(5000)}`,
+      ),
+    ]);
+
+    expect(_getPendingAttributeOldValuesForTesting()).toEqual([null]);
+  });
+
   it("registers a human-readable explanation for method downgrades", () => {
-    expect(explainReasonCode("form_method_changed")).not.toBe("form_method_changed");
+    expect(explainReasonCode("form_method_changed")).not.toBe(
+      "form_method_changed",
+    );
   });
 
   it("keeps the public alert snapshot bounded to monitor-owned records", () => {
