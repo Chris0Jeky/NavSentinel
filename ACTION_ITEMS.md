@@ -337,6 +337,21 @@ is not in this release), so for those two flows the pass confirms the
 documented limit rather than a fix. Every Human result stays
 **OPEN — not run** until Chris records it.
 
+
+**Agent pass on the v0.5.0 release build, 2026-09-26 (automated evidence only;
+every Human result above stays OPEN — not run):** Chris asked the agent to run as
+much of AI-47 as it could. On tag `v0.5.0` (`15a81274`, byte-identical to the
+published zip) in Chrome 153.0.8010.53 with realistic settings, all eight rows
+passed their acceptance specs. Row 8 now has its own spec,
+`ai47-8-clipboard-pressure`. The everyday-flow specs passed except the two known
+limits #864 and #865. #864 is fixed on `main` after v0.5.0 by #895, whose
+wave passed `fp-form-submit-patterns`; #865 remains open. The live-web lane found one new false
+positive: the real YouTube embed's "Watch on YouTube" link still prompts (#943).
+Details, and the parts automation cannot cover, are in
+[`docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md`](docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md).
+Chris can still record the rows directly, or close AI-47 by explicitly waiving the
+manual pass on this evidence; the agent must not infer either.
+
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
 Gate-3.** This is no longer a pre-merge gate. PR #589 merged on 2026-08-27 (head
 `ee75bf408e04f528b0ee08006471f318fba3ef96`, merge commit
@@ -458,19 +473,20 @@ needs named approval.
 
 Chris asked for decisions made on his behalf that need a look but no action to
 be listed in one place. Nothing here blocks v0.5.0. Reply `ack` with the row
-numbers (for example `ack 1-6`), or name a row to reopen it.
+numbers (for example `ack 1-6`), or name a row to reopen it. Chris acknowledged rows 1–9 on 2026-09-26
+(`ack 1-9`).
 
 | # | What was decided or done | Where | Ack |
 | --- | --- | --- | --- |
-| 1 | The total-dist size budget rose from 500 KB to 540 KB, and the popup script budget from 10.5 KB to 11.5 KB. Budgets for scripts injected into pages are unchanged. | #876, #885 | — |
-| 2 | Codex findings declined with a reason on the thread: #788 (a huge `<base href>` only slows the attacker's own page), #789 (the page author controls its own metas), #827 (redressing a trusted click is the known #601 residue), #814/#823 (process note covered by D-2026-09-25-Q). | PR threads | — |
-| 3 | PRs closed without merging. Superseded: #772 by #757, #767 by #761, #779 by #823. Not needed: #847/#848 (the listeners were already registered once), #815/#816 (`tabs.sendMessage` cannot come from another extension). | PR threads | — |
-| 4 | Parked, not in v0.5.0: #572 (SP-F-013), #842/#858 (open Codex findings), #791/#819/#860 (JavaScript-behaviour instrumentation is compiled out), #755 (overlaps #768), #698/#707/#709 (need a rebase and size work). | PR comments | — |
-| 5 | #882 (#863) deliberately leaves two false-positive shapes: a see-through state layer inside a link that paints nothing at the click point is still held, and an unnamed overlay link still scores as before. GitHub's pushState bursts still raise `pushstate_abuse`, but stay under the block threshold. | #882 | — |
-| 6 | Follow-up issues filed during the release push rather than fixed in it: #877 (MAIN-world clock capture), #884 (popup readiness marker), #886 (#882's own-paint check), #887 (RW-01 onboarding-tab race), #890 (an approved blocked form submit re-reads a live, swappable action), #891 (lower-severity bug-hunt findings). | Issues | — |
-| 7 | A cross-vendor Muse bug hunt ran on the release candidate. Its fixable findings shipped (#889, #892, and the PRIVACY.md wording). It rated the known bridge-handshake weakness (#186) CRITICAL: a page that races the MAIN-world bridge handshake can switch the in-page guard off for itself. The service-worker rollback and the isolated-world detectors still run. The fix needs design, so v0.5.0 ships with #186 disclosed as open. | #186 | — |
-| 8 | The automated branded-Chrome and acceptance runs are evidence, not your Gate-3 result: every AI-47 row stays **OPEN — not run** until you record it. | AI-47 | — |
-| 9 | v0.5.0 was tagged with the acceptance lane red on exactly two false-positive tests, `fp-form-submit-patterns` and `fp-iframe-target-form`. They reproduce the open #864/#865 limits that the release notes disclose, and main's scheduled branded run shows the same two. Twelve of the fourteen steps of the final local verification at `cc904a91` passed. The other red step, the default E2E lane, had two first-attempt timing failures under machine load, RW-03 and the #593 `top-assign-100` rollback arm. Both passed on retry and in 14 isolated reruns with retries off; the observation is recorded on #593. | #864, #865, #593 | — |
+| 1 | The total-dist size budget rose from 500 KB to 540 KB, and the popup script budget from 10.5 KB to 11.5 KB. Budgets for scripts injected into pages are unchanged. | #876, #885 | ack 2026-09-26 |
+| 2 | Codex findings declined with a reason on the thread: #788 (a huge `<base href>` only slows the attacker's own page), #789 (the page author controls its own metas), #827 (redressing a trusted click is the known #601 residue), #814/#823 (process note covered by D-2026-09-25-Q). | PR threads | ack 2026-09-26 |
+| 3 | PRs closed without merging. Superseded: #772 by #757, #767 by #761, #779 by #823. Not needed: #847/#848 (the listeners were already registered once), #815/#816 (`tabs.sendMessage` cannot come from another extension). | PR threads | ack 2026-09-26 |
+| 4 | Parked, not in v0.5.0: #572 (SP-F-013), #842/#858 (open Codex findings), #791/#819/#860 (JavaScript-behaviour instrumentation is compiled out), #755 (overlaps #768), #698/#707/#709 (need a rebase and size work). | PR comments | ack 2026-09-26 |
+| 5 | #882 (#863) deliberately leaves two false-positive shapes: a see-through state layer inside a link that paints nothing at the click point is still held, and an unnamed overlay link still scores as before. GitHub's pushState bursts still raise `pushstate_abuse`, but stay under the block threshold. | #882 | ack 2026-09-26 |
+| 6 | Follow-up issues filed during the release push rather than fixed in it: #877 (MAIN-world clock capture), #884 (popup readiness marker), #886 (#882's own-paint check), #887 (RW-01 onboarding-tab race), #890 (an approved blocked form submit re-reads a live, swappable action), #891 (lower-severity bug-hunt findings). | Issues | ack 2026-09-26 |
+| 7 | A cross-vendor Muse bug hunt ran on the release candidate. Its fixable findings shipped (#889, #892, and the PRIVACY.md wording). It rated the known bridge-handshake weakness (#186) CRITICAL: a page that races the MAIN-world bridge handshake can switch the in-page guard off for itself. The service-worker rollback and the isolated-world detectors still run. The fix needs design, so v0.5.0 ships with #186 disclosed as open. | #186 | ack 2026-09-26 |
+| 8 | The automated branded-Chrome and acceptance runs are evidence, not your Gate-3 result: every AI-47 row stays **OPEN — not run** until you record it. | AI-47 | ack 2026-09-26 |
+| 9 | v0.5.0 was tagged with the acceptance lane red on exactly two false-positive tests, `fp-form-submit-patterns` and `fp-iframe-target-form`. They reproduce the open #864/#865 limits that the release notes disclose, and main's scheduled branded run shows the same two. Twelve of the fourteen steps of the final local verification at `cc904a91` passed. The other red step, the default E2E lane, had two first-attempt timing failures under machine load, RW-03 and the #593 `top-assign-100` rollback arm. Both passed on retry and in 14 isolated reruns with retries off; the observation is recorded on #593. | #864, #865, #593 | ack 2026-09-26 |
 
 **BLOCKED: AI-14 — OAuth tradeoff measurement after closed PR #399.** Keep #223
 blocked until #417 supplies valid methodology and a current slice provides focused
