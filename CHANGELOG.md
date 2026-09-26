@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Script-submitted sign-in forms work in the top frame.** A page that submits its own declared form synchronously or in a microtask from its handler for a trusted click is no longer blocked. This covers Stack Overflow "Log in with Google" (jQuery `.trigger("submit")`), validation libraries, and `<a href=# onclick=form.submit()>`. The same submit one task later always passed (#864, #895).
+  - In a child frame, a same-task submit stays gated: a page handler could rewrite the declared action before NavSentinel reads it.
+  - A keyboard-only selection that auto-submits stays gated.
+  - Posts into the page's own named iframe are still blocked (#865).
+
+### Security
+
+- **Automatic approval of a blocked form submit is scoped to its URL.** For an allowlisted destination, the service worker now gets an allowance for that URL only, instead of a tab-wide rollback window (#920). Base-relative action resolution remains open (#900).
+- **The MAIN-world clock is captured before the guard's async import**, so an early inline page script can no longer replace `Date.now` first (#877, #921). Follow-ups are tracked in #942.
+
+### Changed
+
+- **Mutation alerts no longer store destination URLs.** Form-action and cross-domain iframe URLs are removed from `mutation_alert` details in new records, imports, migrated rows and exports. The reason and severity stay (#902, #910).
+
+### Tests and evidence
+
+- An acceptance spec now automates the AI-47 row 8 owner procedure, and the v0.5.0 agent pass is recorded (#944). That procedure cannot detect a #599 regression, because the benign prewrite alone warns (#947).
+- The popup acceptance helper waits for the pending-decision controller's first render (#884, #899).
+
 ## [0.5.0] - 2026-09-26
 
 The release channel for v0.5.0 is a GitHub pre-release for the owner and testers. The Chrome Web Store beta has not been submitted; it keeps its own gates and will ship later as a 0.5.x release. The packaged build uses the `interaction-only` profile: it contains no URL-reputation runtime or data, and JavaScript-behaviour instrumentation is off. The owner's manual browser checks for this release (ACTION_ITEMS.md, AI-47) are still open; the automated branded-Chrome and acceptance lanes are supporting evidence, not a substitute. The extension still makes no runtime network calls. This section summarizes notable changes merged to `main` since v0.4.0 (2026-05-03), including the v0.5.0 release push, and replaces the stale `[Unreleased]` notes.
