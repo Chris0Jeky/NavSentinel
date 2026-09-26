@@ -1,0 +1,36 @@
+name: Export PR 936 Source
+
+on:
+  push:
+    branches:
+      - codex/export-pr936-source-20260926
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET_SHA: c6c2dba2b1dbe563a2e0cc2a74dda3f5bddc5dcb
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: c6c2dba2b1dbe563a2e0cc2a74dda3f5bddc5dcb
+          fetch-depth: 0
+
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Create source archive
+        run: git archive --format=zip --output=navsentinel-pr936-current-source.zip HEAD
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: navsentinel-pr936-current-source
+          path: navsentinel-pr936-current-source.zip
+          if-no-files-found: error
+          retention-days: 1
