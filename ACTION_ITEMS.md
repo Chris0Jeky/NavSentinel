@@ -344,7 +344,8 @@ much of AI-47 as it could. On tag `v0.5.0` (`15a81274`, byte-identical to the
 published zip) in Chrome 153.0.8010.53 with realistic settings, all eight rows
 passed their acceptance specs. Row 8 now has its own spec,
 `ai47-8-clipboard-pressure`. The everyday-flow specs passed except the two known
-limits #864 (fix in #895) and #865. The live-web lane found one new false
+limits #864 and #865. #864 is fixed on `main` after v0.5.0 by #895, whose
+wave passed `fp-form-submit-patterns`; #865 remains open. The live-web lane found one new false
 positive: the real YouTube embed's "Watch on YouTube" link still prompts (#943).
 Details, and the parts automation cannot cover, are in
 [`docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md`](docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md).
