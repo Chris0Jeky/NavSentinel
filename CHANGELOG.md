@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - In a child frame, a same-task submit stays gated: a page handler could rewrite the declared action before NavSentinel reads it.
   - A keyboard-only selection that auto-submits stays gated.
   - Posts into the page's own named iframe are still blocked (#865).
+- **YouTube's embedded "Watch on YouTube" link opens.** The player cancels the click on its `target="_blank"` link and calls `window.open()` itself, and that open was blocked (#943).
+  - A trusted click on a visible, named new-tab link now lets the page open that link's own origin and path once, within one second, in a new window only.
+  - The page's open replaces the link's own navigation, so one click never produces two tabs (#946).
+  - Another destination, a `_top`/`_self`/`_parent` or named target, a late open, a replayed or untrusted click, and a click elsewhere all stay gated.
 
 ### Security
 
