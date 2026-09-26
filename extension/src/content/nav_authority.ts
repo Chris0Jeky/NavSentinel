@@ -77,9 +77,10 @@ export function findSubmitControl(target: Element | null): Element | null {
  * the click did not land on one. Paired with a cross-document anchor href, this
  * is the "in-frame navigation intent" that lets a child frame mint tab-wide
  * navigation authority (#593); a bare element does not qualify. The isolated
- * world binds a child frame's redirect allowance to it (#637), and the MAIN
- * world arms the same allowance for the click's own task (#864); both call
- * this one resolver so the worlds cannot disagree about the declared action.
+ * world binds a child frame's redirect allowance to it (#637). The MAIN world
+ * does not call it: its same-task arm (#864) is top-frame only, because a page
+ * window-capture handler could rewrite a child frame's action before a MAIN
+ * listener read it.
  *
  * Deliberately conservative in BOTH directions. Missing an intent (a submit
  * control inside a shadow root, say) only costs a child frame the tab-wide
