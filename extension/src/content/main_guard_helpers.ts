@@ -256,3 +256,51 @@ export function consumeRedirect(
   state.count += 1;
   return true;
 }
+
+/**
+ * #943: a declared new-tab link whose click the page cancels and replaces with
+ * its own `window.open()`. YouTube's embedded player does this for "Watch on
+ * YouTube", and so do many share and "open in new tab" widgets. The native
+ * click would have opened the link's own href in a new tab; the page's
+ * `window.open()` of that same destination adds no authority, so a trusted
+ * click on such a link arms a one-shot allowance bound to the link's origin and
+ * path. A different destination, a target that could navigate an existing
+ * browsing context (`_top`, `_self`, `_parent`, or a name), or an open after
+ * the short lifetime stays gated.
+ */
+export interface AnchorOpenIntent {
+  origin: string;
+  pathname: string;
+  until: number;
+}
+
+export function anchorOpenIntentFor(href: string, now: number, ttlMs: number): AnchorOpenIntent | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(href);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  return { origin: parsed.origin, pathname: parsed.pathname, until: now + ttlMs };
+}
+
+export function matchesAnchorOpenIntent(
+  intent: AnchorOpenIntent | null,
+  now: number,
+  url: string | undefined,
+  target: string | undefined,
+  baseHref: string,
+): boolean {
+  if (!intent || now > intent.until) return false;
+  const normalizedTarget = (target ?? "").trim().toLowerCase();
+  if (normalizedTarget !== "" && normalizedTarget !== "_blank") return false;
+  if (url === undefined || url.trim() === "") return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url, baseHref);
+  } catch {
+    return false;
+  }
+  return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
+}
