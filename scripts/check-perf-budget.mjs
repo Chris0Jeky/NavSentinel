@@ -80,7 +80,7 @@ const budgets = [
   },
   {
     label: "main_guard (MAIN world)",
-    glob: "assets/main_guard.ts-*.js",
+    glob: "assets/main_guard_entry.ts-*.js",
     maxKB: 20,
   },
   {
