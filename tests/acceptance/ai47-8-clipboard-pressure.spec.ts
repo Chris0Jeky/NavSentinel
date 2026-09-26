@@ -106,11 +106,35 @@ test("AI-47.8 / former AI-37: a benign clipboard write cannot suppress the fake-
       const markers = await session.gotoReady(page, session.url("/clickfix-01-basic.html?ai37=mixed"));
       expect(markers.capture).toBe("1");
       expect(markers.bridge).toBe("1");
-      // The guide's DevTools-console prewrite: page-world code with no user gesture.
-      await page.evaluate(async () => navigator.clipboard.writeText("847293"));
       await page.bringToFront();
+      // Timing oracle (as in phase2-detections' mixed test): the regression only
+      // exists when both writes complete inside one second, so a slower run is
+      // TEST_INVALID rather than a pass.
+      await page.evaluate(() => {
+        const status = document.getElementById("status");
+        if (!status) throw new Error("TEST_INVALID: ClickFix status oracle is missing");
+        const observer = new MutationObserver(() => {
+          if (status.textContent?.includes("Clipboard write triggered")) {
+            document.documentElement.dataset.clickfixAttackWriteCompletedAt = String(performance.now());
+            observer.disconnect();
+          }
+        });
+        observer.observe(status, { childList: true, characterData: true, subtree: true });
+      });
+      // The guide's DevTools-console prewrite: page-world code with no user gesture.
+      const benignCompletedAt = await page.evaluate(async () => {
+        await navigator.clipboard.writeText("847293");
+        return performance.now();
+      });
       await trustedClick(page, "#verify-btn");
       await expect(page.locator("#status")).toContainText("Clipboard write triggered", { timeout: 5000 });
+      await page.waitForFunction(() => document.documentElement.dataset.clickfixAttackWriteCompletedAt !== undefined, null, { timeout: 5000 });
+      const attackCompletedAt = await page.evaluate(() => Number(document.documentElement.dataset.clickfixAttackWriteCompletedAt));
+      session.note(`benign-to-attack write gap: ${Math.round(attackCompletedAt - benignCompletedAt)} ms`);
+      expect(
+        attackCompletedAt - benignCompletedAt,
+        "TEST_INVALID: benign and attack writes did not complete inside the one-second regression window",
+      ).toBeLessThan(1000);
       const warning = await waitForWarning(page, 8000);
       session.note(`mixed trial warning: ${JSON.stringify(warning)}`);
       await session.screenshot(page, "mixed-after-verify-click");
