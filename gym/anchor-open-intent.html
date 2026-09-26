@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Anchor open intent (#943)</title>
+  <style>
+    body { font-family: sans-serif; padding: 16px; }
+    a.open { display: inline-block; margin: 6px 8px 6px 0; padding: 8px 12px; background: #333; color: #fff; border-radius: 16px; text-decoration: none; }
+    iframe { width: 720px; height: 240px; border: 1px solid #999; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Declared new-tab links opened by page script</h1>
+  <p>Each link has <code>target="_blank"</code>. Its click handler cancels the
+     native navigation and calls <code>window.open()</code> itself, the way
+     YouTube's embedded "Watch on YouTube" does (#943).</p>
+  <div id="links"></div>
+  <div id="frame-slot"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const inFrame = params.get("frame") === "1";
+    const other = location.hostname === "127.0.0.1"
+      ? location.origin.replace("127.0.0.1", "localhost")
+      : location.origin.replace("localhost", "127.0.0.1");
+    const where = inFrame ? "child" : "top";
+    const modes = ["same", "same-path-query", "other-path", "top-target", "late", "untrusted"];
+    const container = document.getElementById("links");
+    for (const mode of modes) {
+      const a = document.createElement("a");
+      a.className = "open";
+      a.id = `link-${mode}`;
+      a.href = `${other}/anchor-open-landing.html?case=${mode}&where=${where}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = `Open ${mode}`;
+      a.addEventListener("click", (event) => {
+        event.preventDefault();
+        document.documentElement.dataset.fixtureHandler = `${mode}:${event.isTrusted}`;
+        switch (mode) {
+          case "same":
+          case "untrusted":
+            window.open(a.href);
+            break;
+          case "same-path-query":
+            window.open(`${a.href}&extra=1`, "_blank");
+            break;
+          case "other-path":
+            window.open(`${other}/form-submit-landing.html?case=other-path&where=${where}`);
+            break;
+          case "top-target":
+            window.open(a.href, "_top");
+            break;
+          case "late":
+            setTimeout(() => window.open(a.href), 1500);
+            break;
+        }
+      });
+      container.appendChild(a);
+    }
+    // Control: a trusted click on something that is not the link, whose
+    // handler opens the link's destination. Only a click on the link arms.
+    const elsewhere = document.createElement("span");
+    elsewhere.className = "open";
+    elsewhere.id = "elsewhere";
+    elsewhere.textContent = "Not a link";
+    elsewhere.addEventListener("click", () => {
+      document.documentElement.dataset.fixtureHandler = "elsewhere:" + String(true);
+      window.open(document.getElementById("link-same").href);
+    });
+    container.appendChild(elsewhere);
+    if (!inFrame) {
+      const frame = document.createElement("iframe");
+      frame.id = "child";
+      frame.title = "Cross-site embed";
+      frame.src = `${other}/anchor-open-intent.html?frame=1`;
+      document.getElementById("frame-slot").appendChild(frame);
+    }
+  </script>
+</body>
+</html>
