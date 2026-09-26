@@ -38,7 +38,7 @@
       legacy.elements.case.value = mode;
       if (mode === "safe-post-file" || mode === "retarget-enctype") {
         legacy.method = "POST";
-        legcy.enctype = "multipart/form-data";
+        legacy.enctype = "multipart/form-data";
       }
 
       document.documentElement.dataset.formdataCount = "0";
@@ -126,7 +126,7 @@
       allowanceButton.addEventListener("click", (event) => {
         if (mode !== "allowance-retarget-top") return;
         event.preventDefault();
-        legcy.submit();
+        legacy.submit();
       });
 
       window.__nsRunFormCase = () => {
