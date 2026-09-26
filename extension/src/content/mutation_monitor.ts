@@ -34,6 +34,7 @@ export type MutationAlertType =
   | "overlay_detected"
   | "overlay_injected"
   | "form_action_changed"
+  | "form_method_changed"
   | "password_injected"
   | "suspicious_iframe";
 
@@ -108,6 +109,8 @@ const RESERVED_SCARCE_ALERT_SLOTS = 5;
 const FLOODABLE_ALERT_CAP = MAX_ALERTS - RESERVED_SCARCE_ALERT_SLOTS;
 
 const DEBOUNCE_MS = 100;
+/** Maximum page-controlled value included in one telemetry detail field. */
+const MAX_DETAIL_VALUE_LENGTH = 200;
 const AUTO_DISCONNECT_MS = 5 * 60 * 1000; // 5 minutes
 const MIN_OVERLAY_COVERAGE = 0.25;
 const MIN_OVERLAY_ZINDEX = 100;
@@ -220,11 +223,33 @@ const shadowObserversByHost = new Map<Element, MutationObserver>();
  */
 let scarceAlertedElements = new WeakSet<Element>();
 
+type FormMethod = "get" | "post";
+
+interface AttributeTransitionSnapshot {
+  /** Attribute value immediately after this mutation, not the batch's final value. */
+  currentValue: string | null;
+  /** Submit-control type immediately after this mutation. */
+  controlType: string | null;
+  /** Owning form state immediately after this mutation. */
+  ownerAction: string;
+  ownerMethod: FormMethod;
+  /** Submitter override state immediately after this mutation. */
+  submitterAction: string | null;
+  submitterMethod: string | null;
+}
+
+/** Original effective form/submitter authority captured when monitoring starts. */
+let originalFormActions = new WeakMap<Element, string>();
+let originalFormMethods = new WeakMap<Element, FormMethod>();
+let originalSubmitterActions = new WeakMap<Element, string>();
+let originalSubmitterMethods = new WeakMap<Element, FormMethod>();
+
 /**
- * Tracks original `action` attribute values for forms observed at startup.
- * Key: the form Element, Value: the original action string (or "" if absent).
+ * Per-record bounded snapshots reconstructed at MutationObserver delivery time.
+ * The DOM may change again before the debounced batch runs, so consulting live
+ * attributes there would erase transient hostile transitions. (#812/#857)
  */
-const originalFormActions = new WeakMap<Element, string>();
+let attributeTransitionSnapshots = new WeakMap<MutationRecord, AttributeTransitionSnapshot>();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -344,7 +369,18 @@ const OBSERVE_CONFIG: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ["action", "type", "src", "srcdoc", "style", "class"],
+  attributeOldValue: true,
+  attributeFilter: [
+    "action",
+    "formaction",
+    "method",
+    "formmethod",
+    "type",
+    "src",
+    "srcdoc",
+    "style",
+    "class",
+  ],
 };
 
 function tryGetShadowRoot(el: Element): ShadowRoot | null {
@@ -648,6 +684,51 @@ function checkOverlay(el: Element): void {
 // Detection: form action changes
 // ---------------------------------------------------------------------------
 
+function normalizeFormMethod(value: string | null): FormMethod {
+  return value !== null && value.toLowerCase() === "post" ? "post" : "get";
+}
+
+function isSubmitControlAt(element: Element, typeValue: string | null): boolean {
+  const type = (typeValue ?? "").toLowerCase();
+  if (element.tagName === "BUTTON") {
+    // Missing and invalid button types use the Submit Button state.
+    return type !== "button" && type !== "reset";
+  }
+  if (element.tagName === "INPUT") {
+    return type === "submit" || type === "image";
+  }
+  return false;
+}
+
+function owningForm(element: Element): HTMLFormElement | null {
+  if (element.tagName !== "BUTTON" && element.tagName !== "INPUT") return null;
+  return (element as HTMLButtonElement | HTMLInputElement).form;
+}
+
+function effectiveSubmitterAction(override: string | null, ownerAction: string): string {
+  return override === null ? ownerAction : override;
+}
+
+function effectiveSubmitterMethod(
+  override: string | null,
+  ownerMethod: FormMethod,
+): FormMethod {
+  return override === null ? ownerMethod : normalizeFormMethod(override);
+}
+
+function boundedDetailValue(value: string): string {
+  if (value.length <= MAX_DETAIL_VALUE_LENGTH) return value;
+  return `${value.slice(0, MAX_DETAIL_VALUE_LENGTH)}…`;
+}
+
+function resetFormAuthorityState(): void {
+  originalFormActions = new WeakMap();
+  originalFormMethods = new WeakMap();
+  originalSubmitterActions = new WeakMap();
+  originalSubmitterMethods = new WeakMap();
+  attributeTransitionSnapshots = new WeakMap();
+}
+
 function snapshotFormActions(doc: Document | ShadowRoot): void {
   const forms = doc.querySelectorAll("form");
   for (let i = 0; i < forms.length; i++) {
@@ -655,26 +736,126 @@ function snapshotFormActions(doc: Document | ShadowRoot): void {
     if (!originalFormActions.has(form)) {
       originalFormActions.set(form, form.getAttribute("action") ?? "");
     }
+    if (!originalFormMethods.has(form)) {
+      originalFormMethods.set(form, normalizeFormMethod(form.getAttribute("method")));
+    }
+  }
+
+  // Capture every pre-existing submit-capable control, including one without an
+  // override. Otherwise the first hostile `formaction`/`formmethod` addition is
+  // misclassified as an unseen baseline and disappears. (#812)
+  const controls = doc.querySelectorAll("button, input");
+  for (let i = 0; i < controls.length; i++) {
+    const control = controls[i]!;
+    const type = control.getAttribute("type");
+    if (!isSubmitControlAt(control, type)) continue;
+    const owner = owningForm(control);
+    const ownerAction = owner?.getAttribute("action") ?? "";
+    const ownerMethod = normalizeFormMethod(owner?.getAttribute("method") ?? null);
+    if (!originalSubmitterActions.has(control)) {
+      originalSubmitterActions.set(
+        control,
+        effectiveSubmitterAction(control.getAttribute("formaction"), ownerAction),
+      );
+    }
+    if (!originalSubmitterMethods.has(control)) {
+      originalSubmitterMethods.set(
+        control,
+        effectiveSubmitterMethod(control.getAttribute("formmethod"), ownerMethod),
+      );
+    }
   }
 }
 
-function checkFormActionChange(form: Element): void {
+const FORM_AUTHORITY_ATTRIBUTES = [
+  "action",
+  "formaction",
+  "method",
+  "formmethod",
+  "type",
+] as const;
+
+type FormAuthorityAttribute = (typeof FORM_AUTHORITY_ATTRIBUTES)[number];
+type AttributeState = Map<FormAuthorityAttribute, string | null>;
+
+function isFormAuthorityAttribute(value: string | null): value is FormAuthorityAttribute {
+  return value !== null && FORM_AUTHORITY_ATTRIBUTES.includes(value as FormAuthorityAttribute);
+}
+
+function captureAttributeTransitionSnapshots(records: MutationRecord[]): void {
+  const states = new WeakMap<Element, AttributeState>();
+  const stateFor = (element: Element): AttributeState => {
+    const existing = states.get(element);
+    if (existing) return existing;
+    const state = new Map<FormAuthorityAttribute, string | null>();
+    for (const attribute of FORM_AUTHORITY_ATTRIBUTES) {
+      state.set(attribute, element.getAttribute(attribute));
+    }
+    states.set(element, state);
+    return state;
+  };
+
+  // Walk backwards from the DOM's delivered final state. The next record's
+  // oldValue is the prior record's new value, which preserves set-then-restore
+  // transitions that would otherwise disappear during the debounce window.
+  for (let i = records.length - 1; i >= 0; i--) {
+    const record = records[i]!;
+    if (
+      record.type !== "attributes" ||
+      !(record.target instanceof Element) ||
+      !isFormAuthorityAttribute(record.attributeName)
+    ) {
+      continue;
+    }
+
+    const target = record.target;
+    const state = stateFor(target);
+    const owner = owningForm(target);
+    const ownerState = owner ? stateFor(owner) : null;
+    attributeTransitionSnapshots.set(record, {
+      currentValue: state.get(record.attributeName) ?? null,
+      controlType: state.get("type") ?? null,
+      ownerAction: ownerState?.get("action") ?? "",
+      ownerMethod: normalizeFormMethod(ownerState?.get("method") ?? null),
+      submitterAction: state.get("formaction") ?? null,
+      submitterMethod: state.get("formmethod") ?? null,
+    });
+    state.set(record.attributeName, typeof record.oldValue === "string" ? record.oldValue : null);
+  }
+}
+
+function transitionFor(record: MutationRecord, target: Element): AttributeTransitionSnapshot {
+  const captured = attributeTransitionSnapshots.get(record);
+  if (captured) return captured;
+  const owner = owningForm(target);
+  return {
+    currentValue: record.attributeName ? target.getAttribute(record.attributeName) : null,
+    controlType: target.getAttribute("type"),
+    ownerAction: owner?.getAttribute("action") ?? "",
+    ownerMethod: normalizeFormMethod(owner?.getAttribute("method") ?? null),
+    submitterAction: target.getAttribute("formaction"),
+    submitterMethod: target.getAttribute("formmethod"),
+  };
+}
+
+function checkFormActionChange(form: Element, transition: AttributeTransitionSnapshot): void {
   if (form.tagName !== "FORM") return;
 
+  const current = transition.currentValue ?? "";
   const original = originalFormActions.get(form);
   if (original === undefined) {
-    // First time seeing this form -- record its action, don't alert
-    originalFormActions.set(form, (form as HTMLFormElement).getAttribute("action") ?? "");
+    // Preserve first-sight semantics for forms inserted after monitoring starts.
+    originalFormActions.set(form, current);
     return;
   }
-
-  const current = (form as HTMLFormElement).getAttribute("action") ?? "";
   if (current === original) return;
 
   const crossDomain = current ? isCrossDomain(current) : false;
+  const boundedCurrent = boundedDetailValue(current);
+  const boundedOriginal = boundedDetailValue(original);
   const detail = crossDomain
-    ? `Form action changed to cross-domain URL: "${current}" (was "${original}")`
-    : `Form action changed: "${current}" (was "${original}")`;
+    ? `Form action changed to cross-domain URL: "${boundedCurrent}" (was "${boundedOriginal}")`
+    : `Form action changed: "${boundedCurrent}" (was "${boundedOriginal}")`;
 
   pushAlert({
     type: "form_action_changed",
@@ -683,6 +864,92 @@ function checkFormActionChange(form: Element): void {
     details: detail,
     timestamp: Date.now(),
   });
+}
+
+function checkSubmitterActionChange(
+  control: Element,
+  transition: AttributeTransitionSnapshot,
+): void {
+  if (!isSubmitControlAt(control, transition.controlType)) return;
+
+  const current = effectiveSubmitterAction(transition.currentValue, transition.ownerAction);
+  const original = originalSubmitterActions.get(control);
+  if (original === undefined) {
+    // Dynamic controls retain the monitor's existing first-sight semantics.
+    originalSubmitterActions.set(control, current);
+    return;
+  }
+  if (current === original) return;
+
+  const crossDomain = current ? isCrossDomain(current) : false;
+  const boundedCurrent = boundedDetailValue(current);
+  const boundedOriginal = boundedDetailValue(original);
+  const detail = crossDomain
+    ? `Submitter formaction changed to cross-domain URL: "${boundedCurrent}" (was "${boundedOriginal}")`
+    : `Submitter formaction changed: "${boundedCurrent}" (was "${boundedOriginal}")`;
+
+  pushAlert({
+    type: "form_action_changed",
+    severity: crossDomain ? "high" : "medium",
+    element: control,
+    details: detail,
+    timestamp: Date.now(),
+  });
+}
+
+function checkFormMethodChange(
+  target: Element,
+  attributeName: "method" | "formmethod",
+  transition: AttributeTransitionSnapshot,
+): void {
+  let original: FormMethod | undefined;
+  let current: FormMethod;
+
+  if (attributeName === "method") {
+    if (target.tagName !== "FORM") return;
+    current = normalizeFormMethod(transition.currentValue);
+    original = originalFormMethods.get(target);
+    if (original === undefined) {
+      originalFormMethods.set(target, current);
+      return;
+    }
+  } else {
+    if (!isSubmitControlAt(target, transition.controlType)) return;
+    current = effectiveSubmitterMethod(transition.currentValue, transition.ownerMethod);
+    original = originalSubmitterMethods.get(target);
+    if (original === undefined) {
+      originalSubmitterMethods.set(target, current);
+      return;
+    }
+  }
+
+  if (original !== "post" || current !== "get") return;
+  pushAlert({
+    type: "form_method_changed",
+    severity: "medium",
+    element: target,
+    details: `Form submission method downgraded from POST to GET after page load (${attributeName})`,
+    timestamp: Date.now(),
+  });
+}
+
+function seedSubmitterAuthorityAfterTypeChange(
+  target: Element,
+  transition: AttributeTransitionSnapshot,
+): void {
+  if (!isSubmitControlAt(target, transition.currentValue)) return;
+  if (!originalSubmitterActions.has(target)) {
+    originalSubmitterActions.set(
+      target,
+      effectiveSubmitterAction(transition.submitterAction, transition.ownerAction),
+    );
+  }
+  if (!originalSubmitterMethods.has(target)) {
+    originalSubmitterMethods.set(
+      target,
+      effectiveSubmitterMethod(transition.submitterMethod, transition.ownerMethod),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -948,14 +1215,23 @@ function processRemovedNode(node: Node): void {
 function processAttributeChange(record: MutationRecord, scarceOnly = false): void {
   const target = record.target;
   if (!(target instanceof Element)) return;
+  const transition = transitionFor(record, target);
 
   if (record.attributeName === "action") {
-    checkFormActionChange(target);
+    checkFormActionChange(target, transition);
   }
 
-  if (record.attributeName === "type" && target.tagName === "INPUT") {
-    const input = target as HTMLInputElement;
-    if (input.type === "password") {
+  if (record.attributeName === "formaction") {
+    checkSubmitterActionChange(target, transition);
+  }
+
+  if (record.attributeName === "method" || record.attributeName === "formmethod") {
+    checkFormMethodChange(target, record.attributeName, transition);
+  }
+
+  if (record.attributeName === "type") {
+    seedSubmitterAuthorityAfterTypeChange(target, transition);
+    if (target.tagName === "INPUT" && transition.currentValue?.toLowerCase() === "password") {
       pushAlert({
         type: "password_injected",
         severity: "high",
@@ -1158,6 +1434,7 @@ function unbindOverlayCleanupSignals(): void {
 }
 
 function onMutations(records: MutationRecord[]): void {
+  captureAttributeTransitionSnapshots(records);
   processOverlayCleanupRecords(records);
   scheduleOverlayCleanupRescan();
   for (const r of records) {
@@ -1214,8 +1491,9 @@ export function startMutationMonitor(
   restoredOverlayAttributeBypass = new WeakSet();
   restoredOverlayCleanupExclusions = new WeakSet();
   initialOverlayAlerted = false;
+  resetFormAuthorityState();
 
-  // Snapshot current form actions so we can detect changes later
+  // Snapshot current form and submitter authority so later transitions can be reconstructed.
   snapshotFormActions(doc);
 
   observer = new MutationObserver(onMutations);
@@ -1290,6 +1568,7 @@ export function _resetMutationState(): void {
   restoredOverlayAttributeBypass = new WeakSet();
   restoredOverlayCleanupExclusions = new WeakSet();
   initialOverlayAlerted = false;
+  resetFormAuthorityState();
 }
 
 /** Exposed for testing only: number of live per-shadow-root observers. */
