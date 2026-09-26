@@ -1,0 +1,90 @@
+name: Publish PR 938 performance split
+
+on:
+  push:
+    branches:
+      - codex/publish-pr938-perf-split-20260926
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TARGET_BRANCH: codex/812-form-mutation-telemetry-20260925
+      TARGET_SHA: a477af9190cd2ace5d2d36dd4a976224d8c3118e
+      PATCH_SHA256: 6deb90ff97076a7ea8b14179c5024a0a2df3fa09dda0cec7c0485f609ea9d274
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact target
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Apply audited performance split
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/nav938.patch.gz.b64 <<'PATCH_B64'
+          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
+          PATCH_B64
+          base64 --decode /tmp/nav938.patch.gz.b64 > /tmp/nav938.patch.gz
+          gzip --decompress --stdout /tmp/nav938.patch.gz > /tmp/nav938.patch
+          echo "$PATCH_SHA256  /tmp/nav938.patch" | sha256sum --check --strict
+          git apply --check /tmp/nav938.patch
+          git apply /tmp/nav938.patch
+
+          expected=$(printf '%s\n' \
+            extension/src/content/form_authority_monitor.ts \
+            extension/src/content/mutation_monitor.ts \
+            scripts/check-perf-budget.mjs \
+            vite.config.ts | sort)
+          actual=$(git diff --name-only | sort)
+          test "$actual" = "$expected"
+
+          cat > /tmp/nav938-files.sha256 <<'HASHES'
+          8a045407a6794dfd17218fa2eff4abdc4decb729491abdf5581f85810109da75  extension/src/content/form_authority_monitor.ts
+          b69e1b294525e02cd6a711c8317eaf2d090b1eb8b385b989ccc85df8adea7cc5  extension/src/content/mutation_monitor.ts
+          925135f168a84f8ce94b896fddf0c4a11869fb8217f794cb51c95d6a97011563  scripts/check-perf-budget.mjs
+          d4e4c4091f771de94e011958c41adf43fbb8c30242689ba8f6c5be3f1bafae6a  vite.config.ts
+          HASHES
+          sha256sum --check --strict /tmp/nav938-files.sha256
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Validate security boundary and production profiles
+        run: |
+          npm run lint
+          npm run typecheck
+          npm exec -- vitest run tests/mutation-monitor-form-authority.test.ts tests/mutation-monitor.test.ts tests/mutation-observer-delivery.test.ts
+          npm run build
+          npm run check:perf-budget
+          npm run build:research-reputation
+          npm run check:perf-budget
+
+      - name: Publish reviewed patch to PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "NavSentinel Security Automation"
+          git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
+          git add \
+            extension/src/content/form_authority_monitor.ts \
+            extension/src/content/mutation_monitor.ts \
+            scripts/check-perf-budget.mjs \
+            vite.config.ts
+          git diff --cached --check
+          git commit -m "refactor(telemetry): split form authority reconstruction"
+          git push origin "HEAD:$TARGET_BRANCH"
