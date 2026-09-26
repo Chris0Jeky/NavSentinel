@@ -138,10 +138,10 @@ function effectiveOpacity(el: Element): number {
 /** Product of the own opacities from `el` up to, but excluding, `control`. */
 function opacityWithin(el: Element, control: Element): number {
   let product = 1;
-  const seen = new Set<Element>();
-  for (let e: Element | null = el; e && e !== control; e = composedParentElement(e)) {
-    if (seen.has(e)) return 0;
-    seen.add(e);
+  for (let e: Element | null = el, hops = 0; e && e !== control; e = composedParentElement(e)) {
+    // The control is an ancestor a few hops up; 64 hops without reaching
+    // it means a spoofed cycle, so fail closed (also cheaper than a Set).
+    if (++hops > 64) return 0;
     product *= ownOpacity(e);
   }
   return product;
@@ -191,11 +191,12 @@ function directTextPaints(el: Element, x: number, y: number): boolean {
 
 /** The control paints a direct glyph at the point, or a visible background. */
 function paintsOwnContent(el: Element, x: number, y: number): boolean {
+  const style = window.getComputedStyle(el);
+  const own = Number.parseFloat(style.opacity);
   // Group opacity below the ceiling paints nothing visible: a transparent
   // control must not absorb a concealed child (review rv-928-vis HIGH).
-  if (ownOpacity(el) < CONCEALED_OPACITY_CEILING) return false;
+  if (Number.isFinite(own) && own < CONCEALED_OPACITY_CEILING) return false;
   if (directTextPaints(el, x, y)) return true;
-  const style = window.getComputedStyle(el);
   // A hidden box's opaque background is not visible paint (review rv-928-vis M2).
   if (style.visibility && style.visibility !== "visible") return false;
   return colorAlpha(style.backgroundColor) >= CONCEALED_OPACITY_CEILING;
