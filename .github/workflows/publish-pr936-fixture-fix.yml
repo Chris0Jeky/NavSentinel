@@ -1,0 +1,93 @@
+name: Publish PR 936 browser fixture repair
+
+on:
+  push:
+    branches:
+      - codex/publish-pr936-fixture-fix-20260926
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_BRANCH: codex/865-formdata-child-replay-20260925
+      TARGET_SHA: c51bf66871495bb1ae6943597930d02789e2c3de
+    steps:
+      - name: Checkout exact integrated PR head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact target and apply bounded fixture repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          python - <<'PY'
+          from pathlib import Path
+
+          replay = Path('gym/form-submit-child-replay.html')
+          text = replay.read_text(encoding='utf-8')
+          if text.count('legcy') != 2:
+              raise SystemExit('unexpected legacy-form fixture baseline')
+          replay.write_text(text.replace('legcy', 'legacy'), encoding='utf-8')
+
+          proto = Path('gym/proto-wrap-05.html')
+          text = proto.read_text(encoding='utf-8')
+          old = '<form id="submitForm" action="about:blank" method="get" target="protoSubmitFrame">'
+          new = '<form id="submitForm" action="form-submit-landing.html" method="get" target="protoSubmitFrame">'
+          if text.count(old) != 1:
+              raise SystemExit('unexpected proto-wrap form baseline')
+          proto.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+          expected=$(printf '%s\n' gym/form-submit-child-replay.html gym/proto-wrap-05.html | sort)
+          actual=$(git diff --name-only | sort)
+          test "$actual" = "$expected"
+          printf '%s  %s\n' \
+            6e62bc0fd1f6f9f0b35978b0725e9edf3f0af39c602933543fb985ba8dbf74fc gym/form-submit-child-replay.html \
+            bf439012e28a69fc86dce22bff993603f59dab6e4757af09a774ea188a16ea49 gym/proto-wrap-05.html \
+            | sha256sum --check --strict
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Build and verify budgets
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run build
+          npm run check:content-loader
+          npm run check:perf-budget
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run affected browser contracts
+        run: >-
+          xvfb-run -a npm exec -- playwright test
+          tests/e2e/form-submit-child-authority.spec.ts
+          tests/e2e/form-submit-child-replay.spec.ts
+          tests/e2e/spa-router-pushstate.spec.ts
+          --project=regression --workers=1
+
+      - name: Publish verified fixture repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "NavSentinel Security Automation"
+          git config user.email "59696583+Chris0Jeky@users.noreply.github.com"
+          git add gym/form-submit-child-replay.html gym/proto-wrap-05.html
+          git diff --cached --check
+          git commit -m "test(e2e): repair child replay fixtures"
+          git push origin "HEAD:$TARGET_BRANCH"
