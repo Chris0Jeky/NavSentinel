@@ -77,7 +77,7 @@ export function assertUiGuardRevision(content) {
 // realm (the property already exists) must not throw and kill the loader before
 // the guard import.
 export const EARLY_MAIN_CLOCK =
-  "const earlyNow=Date.now.bind(Date);try{Object.defineProperty(globalThis,'__navsentinelMainDateNow',{value:earlyNow,writable:false,configurable:false})}catch(_){}";
+  "try{const earlyNow=Date.now.bind(Date);Object.defineProperty(globalThis,'__navsentinelMainDateNow',{value:earlyNow,writable:false,configurable:false})}catch(_){}";
 
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";

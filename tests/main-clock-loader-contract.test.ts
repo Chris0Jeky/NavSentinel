@@ -39,7 +39,7 @@ describe("MAIN-world early clock capture (#877, #942)", () => {
     // The loader runs the capture inside its IIFE, so each evaluation has its
     // own function scope; only the global property is shared.
     const loaderPrefix = `(function(){'use strict';${EARLY_MAIN_CLOCK}})();`;
-    const context = vm.createContext({ Date });
+    const context = vm.createContext({});
     vm.runInContext(loaderPrefix, context);
     const first = vm.runInContext("globalThis.__navsentinelMainDateNow", context);
     expect(() => vm.runInContext(loaderPrefix, context)).not.toThrow();
@@ -48,9 +48,21 @@ describe("MAIN-world early clock capture (#877, #942)", () => {
     expect(descriptor).toMatchObject({ writable: false, configurable: false });
   });
 
+  it("does not throw on a second evaluation after the page broke Date.now", () => {
+    const loaderPrefix = `(function(){'use strict';${EARLY_MAIN_CLOCK}})();`;
+    const context = vm.createContext({});
+    vm.runInContext(loaderPrefix, context);
+    const first = vm.runInContext("globalThis.__navsentinelMainDateNow", context);
+    vm.runInContext("Object.defineProperty(Date, 'now', { get() { throw new Error('page trap'); }, configurable: true })", context);
+    expect(() => vm.runInContext(loaderPrefix, context)).not.toThrow();
+    vm.runInContext("Object.defineProperty(Date, 'now', { value: 42, configurable: true, writable: true })", context);
+    expect(() => vm.runInContext(loaderPrefix, context)).not.toThrow();
+    expect(vm.runInContext("globalThis.__navsentinelMainDateNow", context)).toBe(first);
+  });
+
   it("contrast: the unguarded capture it replaced throws on a second evaluation", () => {
     const unguarded = "(function(){'use strict';const earlyNow=Date.now.bind(Date);Object.defineProperty(globalThis,'__navsentinelMainDateNow',{value:earlyNow,writable:false,configurable:false});})();";
-    const context = vm.createContext({ Date });
+    const context = vm.createContext({});
     vm.runInContext(unguarded, context);
     expect(() => vm.runInContext(unguarded, context)).toThrow(/redefine/);
   });
