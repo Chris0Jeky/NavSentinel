@@ -84,7 +84,9 @@ jobs:
           cat test-results/branded-run.txt
 
       - name: Record Git reachability before browser run
-        run: node scripts/record-git-reachability.mjs --phase before-e2e
+        run: |
+          node scripts/record-git-reachability.mjs --phase before-e2e
+          test -s test-results/git-reachability-before-e2e.txt
 
       - name: Run realistic branded Chrome E2E
         id: e2e
@@ -93,7 +95,9 @@ jobs:
 
       - name: Record Git reachability after browser run
         if: ${{ always() }}
-        run: node scripts/record-git-reachability.mjs --phase after-e2e
+        run: |
+          node scripts/record-git-reachability.mjs --phase after-e2e
+          test -s test-results/git-reachability-after-e2e.txt
 
       - name: Run non-live acceptance procedures
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' && steps.chrome.outcome == 'success' }}
