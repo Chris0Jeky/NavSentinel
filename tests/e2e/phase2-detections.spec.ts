@@ -24,6 +24,7 @@ import {
   getGymBaseUrl,
   getServiceWorker,
   updateNavigationSettings,
+  waitForCredentialModal,
   waitForNavSentinelBridge,
   waitForToastMatch,
 } from "./extension_test_utils";
@@ -1085,9 +1086,7 @@ test.describe("Content Fingerprinting", () => {
 
       // The credential guard should prompt because the page references
       // "Google" in the title but is served from localhost
-      await expect(
-        page.locator("text=Credential submit blocked")
-      ).toBeVisible({ timeout: 6000 });
+      await waitForCredentialModal(page, 6000);
     } finally {
       await cleanup();
     }
@@ -1103,9 +1102,7 @@ test.describe("Content Fingerprinting", () => {
       // Content fingerprinting should boost the credential guard score.
       await page.click('button[type="submit"]');
 
-      await expect(
-        page.locator("text=Credential submit blocked")
-      ).toBeVisible({ timeout: 6000 });
+      await waitForCredentialModal(page, 6000);
     } finally {
       await cleanup();
     }

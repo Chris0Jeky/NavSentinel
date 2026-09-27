@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { expect, type Download, type Page } from "@playwright/test";
 import type { AcceptanceSession } from "./acceptance_harness";
 import type { CdpPageClient } from "./cdp_page_client";
+import { evaluateInCredentialModal } from "../e2e/extension_test_utils";
 
 export const OPTIONS_PAGE = "src/options/options.html";
 export const EVIDENCE_PAGE = "src/evidence/evidence.html";
@@ -94,9 +95,12 @@ export async function allowProceedControls(page: Page): Promise<string[]> {
   });
 }
 
-/** Centre of a visible button, by exact label, inside any open shadow root on the page. */
+/**
+ * Centre of a visible button, by exact label, inside any open shadow root on
+ * the page or inside the credential prompt, whose root is closed (#894).
+ */
 export async function shadowButtonPoint(page: Page, label: string): Promise<{ x: number; y: number } | null> {
-  return page.evaluate((expected) => {
+  const open = await page.evaluate((expected) => {
     const visit = (root: Document | ShadowRoot): { x: number; y: number } | null => {
       for (const host of Array.from(root.querySelectorAll("*"))) {
         const shadow = (host as HTMLElement).shadowRoot;
@@ -113,6 +117,17 @@ export async function shadowButtonPoint(page: Page, label: string): Promise<{ x:
     };
     return visit(document);
   }, label);
+  if (open) return open;
+  return evaluateInCredentialModal(
+    page,
+    function (this: ShadowRoot, expected: string) {
+      const button = Array.from(this.querySelectorAll("button")).find((candidate) => candidate.textContent?.trim() === expected);
+      if (!button) return null;
+      const rect = button.getBoundingClientRect();
+      return rect.width && rect.height ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null;
+    },
+    label,
+  ).catch(() => null);
 }
 
 // ------------------------------------------------------------ colour/contrast

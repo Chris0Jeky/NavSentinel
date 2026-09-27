@@ -2,7 +2,9 @@
  * Synthetic-activation rejection for extension-owned decision controls (#783).
  *
  * A hostile page shares the DOM with NavSentinel's content scripts and can
- * reach the open shadow roots of the credential modal and the notice toasts.
+ * reach the open shadow roots of the notice toasts. The credential modal's
+ * root is closed (#894), so the modal case drives its synthetic click through
+ * the DevTools protocol, modelling an attacker who could still reach it.
  * These cases prove that page-synthesized `.click()` input cannot activate
  * those controls (no self-approval, no self-dismiss), while real trusted
  * input still activates them (positive controls).
@@ -17,7 +19,10 @@ import {
   attemptSyntheticToastClick,
   clickModalButton,
   clickToastButton,
+  CREDENTIAL_MODAL_HOST_ID,
   getGymBaseUrl,
+  readCredentialModal,
+  waitForCredentialModal,
   waitForNavSentinelBridge,
   waitForToastText,
 } from "./extension_test_utils";
@@ -69,10 +74,7 @@ async function setupSyntheticTest(pathname: string): Promise<{
 }
 
 async function modalVisible(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const host = document.querySelector("#__sentinelsuite_cred_modal_host__");
-    return !!host?.shadowRoot?.querySelector(".overlay");
-  });
+  return (await readCredentialModal(page)) !== null;
 }
 
 async function fullCardCount(page: Page): Promise<number> {
@@ -87,10 +89,10 @@ test("a synthesized modal approval does not resume the submit; a trusted one doe
   const { page, cleanup } = await setupSyntheticTest("level11-credential-guard.html");
   try {
     await page.click("#submitBtn");
-    await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
+    await waitForCredentialModal(page);
 
-    // Hostile-page script: find the Proceed button in the open shadow root and
-    // click it without any user gesture. The prompt must not resolve.
+    // Synthetic click on Proceed once with no user gesture. The prompt must
+    // not resolve.
     await attemptSyntheticModalClick(page, "Proceed once");
     await page.waitForTimeout(500);
     expect(await modalVisible(page), "synthetic approval must not dismiss the prompt").toBe(true);
@@ -99,6 +101,46 @@ test("a synthesized modal approval does not resume the submit; a trusted one doe
     // Positive control: the same button driven by real input resumes the submit.
     await clickModalButton(page, "Proceed once");
     await expect(page).not.toHaveURL(/level11-credential-guard\.html/, { timeout: 10_000 });
+  } finally {
+    await cleanup();
+  }
+});
+
+test("page script cannot reach the credential prompt; real Tab still moves between its actions (#894) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const { page, cleanup } = await setupSyntheticTest("level11-credential-guard.html");
+  const focused = async () => (await readCredentialModal(page))?.focused ?? null;
+  try {
+    await page.click("#submitBtn");
+    const prompt = await waitForCredentialModal(page);
+    expect(prompt.buttons.slice(0, 2)).toEqual(["Cancel", "Proceed once"]);
+    await expect.poll(focused).toBe("Cancel");
+
+    // With an open root, page script could focus Proceed once just before the
+    // user's next real Enter. The closed root gives it nothing to focus.
+    const reach = await page.evaluate((id) => {
+      const host = document.getElementById(id);
+      return {
+        host: host !== null,
+        shadowRoot: (host?.shadowRoot ?? null) !== null,
+        activeIsHost: document.activeElement === host,
+      };
+    }, CREDENTIAL_MODAL_HOST_ID);
+    expect(reach).toEqual({ host: true, shadowRoot: false, activeIsHost: true });
+
+    // Real Tab moves to the next action, and the focus trap leaves it there.
+    await page.keyboard.press("Tab");
+    await expect.poll(focused).toBe("Proceed once");
+    await page.waitForTimeout(200);
+    expect(await focused()).toBe("Proceed once");
+
+    await page.keyboard.press("Shift+Tab");
+    await expect.poll(focused).toBe("Cancel");
+
+    // Real Enter on Cancel closes the prompt without submitting.
+    await page.keyboard.press("Enter");
+    await expect.poll(() => modalVisible(page)).toBe(false);
+    await expect(page).toHaveURL(/level11-credential-guard\.html/);
   } finally {
     await cleanup();
   }
