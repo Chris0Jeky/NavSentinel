@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getGymBaseUrl, waitForNavSentinelBridge } from "./extension_test_utils";
+import { getGymBaseUrl, waitForNavSentinelBridge, waitForToastMatch } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -172,5 +172,104 @@ test("an approved blocked requestSubmit() does not follow a formaction swapped a
     await page.waitForTimeout(3_000);
     expect(seen.filter((url) => url.includes("127.0.0.2"))).toEqual([]);
     expect(page.url()).toBe(originalUrl);
+  });
+});
+
+// #900: the browser resolves a relative action or window.open URL against the
+// document's base URL. These pages point `<base href>` at another origin.
+function setBase(page: Page, href: string): Promise<void> {
+  return page.evaluate((value) => {
+    let base = document.querySelector("base");
+    if (!base) {
+      base = document.createElement("base");
+      document.head.appendChild(base);
+    }
+    base.href = value;
+  }, href);
+}
+
+test("a base-relative blocked form.submit() is judged by the URL the browser submits to (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase) => {
+    const seen = recordNavigations(page);
+    // Resolved against location.href this is a 127.0.0.1 URL, which is not
+    // allowlisted; the browser sends it to the allowlisted localhost base.
+    await setBase(page, `${approvedBase}/`);
+    await page.evaluate(() => {
+      const form = document.createElement("form");
+      form.method = "get";
+      form.setAttribute("action", "level1-basic-opacity.html?submit=base-relative");
+      document.body.appendChild(form);
+      form.submit();
+    });
+
+    // A GET submit replaces the action's query with the form data, so match the path.
+    await expect
+      .poll(() => seen.some((url) => url.startsWith(`${approvedBase}/level1-basic-opacity.html`)), {
+        timeout: 10_000,
+      })
+      .toBe(true);
+  });
+});
+
+test("the blocked-submit prompt names the base-resolved destination, not the page's own origin (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page) => {
+    const seen = recordNavigations(page);
+    const originalUrl = page.url();
+    await setBase(page, "http://127.0.0.2:9/");
+    await page.evaluate(() => {
+      const form = document.createElement("form");
+      form.method = "get";
+      form.setAttribute("action", "login");
+      document.body.appendChild(form);
+      form.submit();
+    });
+
+    const text = await waitForToastMatch(page, /Blocked form submit/, 6_000);
+    expect(text).toContain("127.0.0.2");
+    expect(seen.filter((url) => url.includes("127.0.0.2"))).toEqual([]);
+    expect(page.url()).toBe(originalUrl);
+  });
+});
+
+test("an approved blocked form.submit() does not follow a <base href> moved after the block (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase) => {
+    const seen = recordNavigations(page);
+    const originalUrl = page.url();
+    await setBase(page, `${approvedBase}/`);
+    await page.evaluate(() => {
+      const form = document.createElement("form");
+      form.method = "get";
+      form.setAttribute("action", "level1-basic-opacity.html?submit=approved");
+      document.body.appendChild(form);
+      form.submit(); // blocked, then auto-approved for the allowlisted host
+      document.querySelector("base")!.href = "http://127.0.0.2:9/";
+    });
+
+    await page.waitForTimeout(3_000);
+    expect(seen.filter((url) => url.includes("127.0.0.2"))).toEqual([]);
+    expect(page.url()).toBe(originalUrl);
+  });
+});
+
+test("an approved blocked window.open() opens the URL resolved when it was blocked (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase) => {
+    const context = page.context();
+    const popups: Page[] = [];
+    context.on("page", (opened) => popups.push(opened));
+    await setBase(page, `${approvedBase}/`);
+    await page.evaluate(() => {
+      // No user gesture: blocked, then auto-approved for the allowlisted host.
+      window.open("level1-basic-opacity.html?open=approved", "_blank");
+      document.querySelector("base")!.href = "http://127.0.0.2:9/";
+    });
+
+    await expect.poll(() => popups.map((opened) => opened.url()), { timeout: 10_000 }).toContainEqual(
+      `${approvedBase}/level1-basic-opacity.html?open=approved`,
+    );
+    expect(popups.map((opened) => opened.url()).filter((url) => url.includes("127.0.0.2"))).toEqual([]);
   });
 });
