@@ -1,12 +1,12 @@
-# NavSentinel product strategy
+# Heedline product strategy
 
 **Status:** pre-alpha, development and controlled dogfooding only  
 **Last reconciled:** 15 September 2026  
-**Name:** `NavSentinel` remains a working name pending clearance
+**Name:** `Heedline` (formerly `NavSentinel`), chosen 2026-09-27; formal trademark clearance is pending before any store submission
 
 ## Strategic verdict
 
-NavSentinel should become a narrow, honest browser interaction guard before it becomes anything broader.
+Heedline should become a narrow, honest browser interaction guard before it becomes anything broader.
 
 The current repository contains substantial protection logic, operator surfaces, deterministic Gym coverage, adversarial fixtures, release tooling, and a growing evidence architecture. That is not the same as a validated product. The correct path remains:
 
@@ -33,11 +33,11 @@ The initial user is a technically comfortable person who wants another check at 
 - a fake CAPTCHA writes a command and asks the user to paste it;
 - a script attempts a popup, submission, or cross-domain transition outside the visible intent.
 
-Built-in browser protections remain essential. NavSentinel’s opportunity is the local, cross-event interaction context around those moments: what the user touched, what changed, where the action was going, and whether the page’s effective destination or geometry shifted before commitment.
+Built-in browser protections remain essential. Heedline’s opportunity is the local, cross-event interaction context around those moments: what the user touched, what changed, where the action was going, and whether the page’s effective destination or geometry shifted before commitment.
 
 ## What the product is
 
-NavSentinel has two cooperating planes with different authority.
+Heedline has two cooperating planes with different authority.
 
 ### Guard plane
 
@@ -173,7 +173,7 @@ The first beta should be deliberately small—roughly ten participants is enough
 
 ### Questions to answer
 
-- Did NavSentinel catch anything the browser/user would otherwise have missed?
+- Did Heedline catch anything the browser/user would otherwise have missed?
 - How often did it interrupt legitimate work?
 - Did users understand what changed and what the prompt was asking?
 - Could they recover safely without disabling the product?

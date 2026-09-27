@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **NavSentinel is now Heedline.** The new name appears everywhere users see the product:
+  - the extension name, and the popup, Options, onboarding and Protection Center;
+  - notices and prompts;
+  - export filenames (`heedline-evidence-*.json`, `heedline-suite-export-*.json`);
+  - the release zip (`heedline-v<version>.zip`).
+
+  Internal identifiers keep the former name, so an existing install keeps its settings and history, and older exports still import. Formal trademark clearance is still pending before any store submission (AI-19).
 - **Mutation alerts no longer store destination URLs.** Form-action and cross-domain iframe URLs are removed from `mutation_alert` details in new records, imports, migrated rows and exports. The reason and severity stay (#902, #910).
 
 ### Tests and evidence
