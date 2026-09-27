@@ -6,6 +6,22 @@
  */
 
 /**
+ * Create a guard-local blocked-action ID allocator (#933). The returned closure
+ * owns an unbounded BigInt sequence, so every ID in one document/guard lifetime
+ * is unique without consulting page-overridable clocks or entropy. IDs are
+ * intentionally predictable: the authenticated bridge and one-use Map entry are
+ * the authority boundary; uniqueness prevents one prompt from naming a closure
+ * that a later blocked action silently replaced.
+ */
+export function createBlockedActionIdAllocator(initialSequence = 0n): () => string {
+  let sequence = initialSequence;
+  return () => {
+    sequence += 1n;
+    return `blocked-action-${sequence}`;
+  };
+}
+
+/**
  * Evict the oldest entries from `map` until its size is at most `maxSize`.
  * Map iteration is insertion-ordered, so the first key is the oldest. Returns
  * the number of entries evicted.
