@@ -20,7 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Automatic approval of a blocked form submit is scoped to its URL.** For an allowlisted destination, the service worker now gets an allowance for that URL only, instead of a tab-wide rollback window (#920). Base-relative action resolution remains open (#900).
+- **Automatic approval of a blocked form submit is scoped to its URL.** For an allowlisted destination, the service worker now gets an allowance for that URL only, instead of a tab-wide rollback window (#920).
+- **Blocked submits and popups are judged by the URL the browser will use.** A relative form action, `window.open()` URL or link now resolves against the page's base URL. Before, a `<base href>` pointing at another origin could make a prompt name the page's own site while the submit went elsewhere (#900).
+  - A blocked popup's URL is fixed when it is blocked, so moving `<base href>` while the prompt waits cannot change where an approval opens.
+  - A `<base href>` moved after an automatic approval is caught by the destination re-check from #890.
 - **The MAIN-world clock is captured before the guard's async import**, so an early inline page script can no longer replace `Date.now` first (#877, #921). Follow-ups are tracked in #942.
 
 ### Changed
