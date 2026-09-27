@@ -270,6 +270,9 @@ describe("state-authority launcher replay boundary", () => {
         env: environment,
         encoding: "utf8",
         maxBuffer: 128 * 1024 * 1024,
+        // spawnSync blocks the event loop, so vitest's 60s cap cannot fire
+        // while the child runs; bound the child itself below that cap.
+        timeout: 55_000,
       },
     );
     const output = `${result.stdout}\n${result.stderr}`;
@@ -330,6 +333,9 @@ describe("state-authority launcher replay boundary", () => {
         env: environment,
         encoding: "utf8",
         maxBuffer: 128 * 1024 * 1024,
+        // spawnSync blocks the event loop, so vitest's 60s cap cannot fire
+        // while the child runs; bound the child itself below that cap.
+        timeout: 55_000,
       },
     );
     const output = `${result.stdout}\n${result.stderr}`;
