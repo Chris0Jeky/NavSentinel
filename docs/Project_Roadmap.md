@@ -108,7 +108,9 @@ and external gates remain open until directly evidenced.
 Owner directive #499 retires the repository-local agent harness (tier, project
 hooks, lifecycle scripts, vendored floor, validation commands, and Harness CI).
 That infrastructure-only change does not alter extension runtime behavior or
-the product release gates below.
+the product release gates below. On 2026-09-27 an owner decision restored the
+tier declaration alone (`.agent-harness/tier.json`, T2, push and merge free);
+the rest of the harness stays retired.
 The legacy browser-surface PR queue is **cleared** as of 2026-07-25; this table is retained for merge provenance:
 
 | PR | Current state |

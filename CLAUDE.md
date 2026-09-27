@@ -12,9 +12,11 @@ their data and older exports still import: storage keys, DOM ids and
 console-log prefix, `NAVSENTINEL_*` environment variables and the repository name.
 
 Owner decision #499 (2026-07-31) retired the repository-local agent harness.
-There is no project tier, lifecycle hook, command floor, agent-validation
-script, or Harness CI job. Do not recreate those surfaces without a new
-explicit owner decision. User- or runtime-level settings outside this
+There is no lifecycle hook, command floor, agent-validation script, or Harness
+CI job. Do not recreate those surfaces without a new explicit owner decision.
+The tier declaration alone was restored on 2026-09-27 by owner decision:
+`.agent-harness/tier.json` declares T2 with push and merge free. It adds no
+hook or check. User- or runtime-level settings outside this
 repository are separate and are not described or verified here. `.mcp.json`
 contains optional credential-free tooling, not an enforcement layer.
 
