@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { looksLikeCommand, matchesCaptchaPattern, matchesInstructionPattern } from "../extension/src/content/clickfix_detector";
+import { MAX_PENDING_OUTBOUND } from "../extension/src/content/main_guard_constants";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const gymRoot = path.join(repositoryRoot, "gym");
@@ -165,5 +167,48 @@ describe("clipboard time-bomb Gym fixture contract", () => {
     expect(spec).toContain('evidenceValidity: "UNVERIFIED"');
     expect(spec).toContain('promotionCeiling: "MODELLED"');
     expect(spec).toContain("provenanceBound: false");
+  });
+});
+
+describe("clipboard-pressure Gym fixture contract (#947)", () => {
+  const file = "clickfix-06-clipboard-pressure.html";
+  const source = fs.readFileSync(path.join(gymRoot, file), "utf8");
+  const headEnd = source.indexOf("</head>");
+  const bodyStart = source.indexOf("<body>", headEnd);
+
+  it("stays local and writes only inert values", () => {
+    expect(source).not.toMatch(/https?:\/\//u);
+    expect(source).not.toMatch(/\b(?:powershell|pwsh)(?:\.exe)?\s+(?:-|\/)\w/iu);
+    expect(source).not.toMatch(/\bcmd(?:\.exe)?\s+\/[ck]\b/iu);
+    expect(source).toContain('const INERT_COMMAND_LIKE = "NAVSENTINEL_SENTINEL_DO_NOT_RUN base64";');
+    expect(source).toContain('const FLOOD_PREFIX = "CF06-FLOOD-";');
+    // The attack value must be command-like to the product's own classifier and
+    // the flood values must not be, or the arms stop isolating the queue policy.
+    expect(looksLikeCommand("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64")).toBe(true);
+    expect(looksLikeCommand("CF06-FLOOD-1000")).toBe(false);
+    expect(looksLikeCommand("CF06-FLOOD-1039")).toBe(false);
+  });
+
+  it("floods more receipts than the pre-handshake queue holds", () => {
+    const floodWrites = Number(source.match(/const FLOOD_WRITES = (\d+);/u)?.[1]);
+    // Without #599's coalescing, one more receipt than the cap is what drops the
+    // command-like receipt and surfaces a bridge_buffer_overflow row.
+    expect(floodWrites).toBeGreaterThan(MAX_PENDING_OUTBOUND);
+  });
+
+  it("gives the detector no page-text signal, so a benign write alone cannot warn", () => {
+    expect(headEnd).toBeGreaterThan(0);
+    expect(bodyStart).toBeGreaterThan(headEnd);
+    const body = source.slice(bodyStart);
+    // body.textContent is what the detector scans; keep scripts and styles out of it.
+    expect(body).not.toMatch(/<script|<style/iu);
+    const bodyText = body.replace(/<[^>]+>/gu, " ");
+    expect(matchesCaptchaPattern(bodyText)).toBe(false);
+    expect(matchesInstructionPattern(bodyText)).toBe(false);
+    // The self-check labels and reasons live in the head script and are rendered
+    // into the overlay at runtime, so they must stay pattern-free as well.
+    const head = source.slice(0, headEnd);
+    expect(matchesCaptchaPattern(head)).toBe(false);
+    expect(matchesInstructionPattern(head)).toBe(false);
   });
 });
