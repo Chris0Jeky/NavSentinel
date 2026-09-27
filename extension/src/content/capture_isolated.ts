@@ -52,7 +52,7 @@ import {
   capturePointerDown,
   type DownCapture
 } from "./dom_builder";
-import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
+import type { DebugInfo } from "./debug_overlay";
 import { scanForClickFix } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { OutboundQueue } from "./bridge_outbound";
@@ -254,15 +254,35 @@ function markMainGuardReady(): void {
   refreshDebug();
 }
 
+// The debug panel is opt-in developer UI, so it loads lazily and stays out of
+// the always-on capture chunk (perf budget). Nothing loads until debug is on.
+let debugEnabled = false;
+let debugOverlay: Promise<typeof import("./debug_overlay")> | null = null;
+
+function setDebugEnabled(value: boolean): void {
+  debugEnabled = value;
+  if (!value && !debugOverlay) return;
+  // Start the import inside a promise callback: Vite's preload helper touches
+  // document.head synchronously and would otherwise throw out of initSettings
+  // (and skip the protection setup after it) on a page with no <head>.
+  debugOverlay ??= Promise.resolve().then(() => import("./debug_overlay"));
+  void debugOverlay.then((overlay) => {
+    // Apply the latest value, not this call's: toggles may resolve out of order.
+    overlay.setDebugEnabled(debugEnabled);
+    if (debugEnabled) refreshDebug();
+  }).catch((err) => { console.warn("[NavSentinel] debug overlay failed to load:", err); });
+}
+
 function refreshDebug(): void {
-  if (!lastDebug) return;
-  updateDebugOverlay({
+  if (!lastDebug || !debugEnabled || !debugOverlay) return;
+  const info: DebugInfo = {
     ...lastDebug,
     mainGuard,
     mutationAlerts: getMutationAlertCount(),
     ...(lastNav ? { lastNav } : {}),
     ...(cachedCSPAnalysis ? { cspInfo: cachedCSPAnalysis } : {}),
-  });
+  };
+  void debugOverlay.then((overlay) => overlay.updateDebugOverlay(info)).catch(() => {});
 }
 
 /** Safe top-frame check that won't throw in sandboxed iframes without allow-same-origin. */
