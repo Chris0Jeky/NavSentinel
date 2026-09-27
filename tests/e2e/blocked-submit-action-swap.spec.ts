@@ -286,3 +286,51 @@ test("an approved blocked window.open() opens the URL resolved when it was block
     expect(popups.map((opened) => opened.url()).filter((url) => url.includes("127.0.0.2"))).toEqual([]);
   });
 });
+
+test("an early page script that fakes Node.prototype.baseURI cannot steer a relative submit (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase) => {
+    // The fixture's inline <head> script runs while the guard is still being
+    // imported: its getter claims the allowlisted localhost base, while the
+    // real <base> points relative URLs at 127.0.0.2.
+    await page.goto(`${new URL(page.url()).origin}/base-uri-tamper.html`, { waitUntil: "domcontentloaded" });
+    await waitForNavSentinelBridge(page);
+    expect(await page.evaluate(() => document.baseURI), "TEST_INVALID: the page's getter must lie").toBe(`${approvedBase}/`);
+    const seen = recordNavigations(page);
+    const originalUrl = page.url();
+    await page.evaluate(() => {
+      const form = document.createElement("form");
+      form.method = "get";
+      form.setAttribute("action", "level1-basic-opacity.html?submit=tampered");
+      document.body.appendChild(form);
+      form.submit();
+    });
+
+    // The guard used the platform getter the loader captured first, so it
+    // names 127.0.0.2 and does not auto-approve the "allowlisted" base.
+    const text = await waitForToastMatch(page, /Blocked form submit/, 6_000);
+    expect(text).toContain("127.0.0.2");
+    await page.waitForTimeout(1_500);
+    expect(seen.filter((url) => url.includes("submit=tampered"))).toEqual([]);
+    expect(page.url()).toBe(originalUrl);
+  });
+});
+
+test("a blocked popup whose relative URL cannot be resolved stays blocked with nothing to approve (#900) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withAllowlistedPage(async (page, approvedBase) => {
+    const popups: Page[] = [];
+    page.context().on("page", (opened) => popups.push(opened));
+    await setBase(page, "data:text/plain,base");
+    expect(await page.evaluate(() => document.baseURI), "TEST_INVALID: Chrome must accept the data: base").toMatch(/^data:/);
+    await page.evaluate((allowlisted) => {
+      // No gesture: blocked. A relative URL cannot resolve against a data: base.
+      window.open("level1-basic-opacity.html?open=unresolvable", "_blank");
+      // Moving the base to the allowlisted host must not revive it.
+      document.querySelector("base")!.href = allowlisted;
+    }, `${approvedBase}/`);
+
+    await page.waitForTimeout(3_000);
+    expect(popups.map((opened) => opened.url()).filter((url) => url.includes("open=unresolvable"))).toEqual([]);
+  });
+});

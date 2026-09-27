@@ -300,6 +300,27 @@ describe.each([
   });
 });
 
+describe("resolveFormActionUrl without a captured base URL (#900)", () => {
+  // The MAIN world gets its base URL only from the loader's early getter
+  // capture. Without it a relative action has no trustworthy base.
+  const documentUrl = "https://site.test/app/page";
+
+  it("still resolves an absolute action and an empty one", () => {
+    expect(resolveFormActionUrl("https://abs.test/x", documentUrl, null)).toBe("https://abs.test/x");
+    expect(resolveFormActionUrl("", documentUrl, null)).toBe(documentUrl);
+    expect(resolveFormActionUrl(" ", documentUrl, null)).toBe(documentUrl);
+  });
+
+  it("leaves a relative action unresolved instead of guessing a base", () => {
+    expect(resolveFormActionUrl("login", documentUrl, null)).toBeNull();
+    expect(resolveFormActionUrl("/login", documentUrl, null)).toBeNull();
+  });
+
+  it("leaves a relative action unresolved against a non-hierarchical base", () => {
+    expect(resolveFormActionUrl("login", documentUrl, "data:text/plain,base")).toBeNull();
+  });
+});
+
 describe("formSubmitIntentUrl agrees with the MAIN-world resolver under <base> (#900)", () => {
   const documentUrl = "https://site.test/app/page";
   const baseUrl = "https://site.test/app/sub/";
