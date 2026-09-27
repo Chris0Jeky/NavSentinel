@@ -107,7 +107,7 @@ describe("Branded Chrome browser-gate trigger", () => {
     expect(source).not.toContain('\n            "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
   });
 
-  it("records Git reachability before and after branded E2E without weakening acceptance", () => {
+  it("records Git reachability before, between and after branded E2E projects without weakening acceptance", () => {
     const source = fs.readFileSync(
       path.join(workflowDirectory, "branded-chrome-advisory.yml"),
       "utf8",
@@ -116,6 +116,13 @@ describe("Branded Chrome browser-gate trigger", () => {
     expect(source).toContain("name: Record Git reachability before browser run");
     expect(source).toContain(
       "node scripts/record-git-reachability.mjs --phase before-e2e",
+    );
+    expect(source).toContain("for project in smoke regression phase2; do");
+    expect(source).toContain(
+      'npx playwright test -c playwright.branded.config.ts --project="$project"',
+    );
+    expect(source).toContain(
+      'node scripts/record-git-reachability.mjs --phase "after-$project"',
     );
     expect(source).toContain("name: Record Git reachability after browser run");
     expect(source).toContain(
