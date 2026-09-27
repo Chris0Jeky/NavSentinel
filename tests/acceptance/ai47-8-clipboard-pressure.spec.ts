@@ -6,10 +6,12 @@
  * inside NavSentinel's pre-handshake window (#947).
  *
  * Why this can fail on a #599 regression. The fixture fires its burst as soon
- * as the MAIN-world clipboard hook is installed and before the public
- * bridge-ready marker appears, so the receipts wait in the unverified
- * OutboundQueue that #599 coalesces. Its overlay carries no verification or
- * paste wording, so a benign write alone scores nothing; only the command-like
+ * as the MAIN-world clipboard hook is installed and before the MAIN bridge
+ * becomes verified, so the receipts wait in the unverified
+ * OutboundQueue that #599 coalesces. The fixture observes MAIN's outgoing
+ * `ns-bridge-ready` post synchronously; the later public DOM marker is diagnostic
+ * only, so the old one-hop ambiguity cannot produce a valid run (#954). Its
+ * overlay carries no verification or paste wording, so a benign write alone scores nothing; only the command-like
  * receipt (written after 40 benign ones) can raise the warning. With #599 the
  * queue keeps the latest other receipt and the latest command-like one: the
  * benign arm is silent, the attack arm warns, and no bridge_buffer_overflow row
@@ -29,7 +31,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { AcceptanceSession, extensionPath, repoRoot, toastState, trustedClick } from "./acceptance_harness";
+import { AcceptanceSession, extensionPath, redactUrl, repoRoot, toastState, trustedClick } from "./acceptance_harness";
 import { OPTIONS_PAGE, TRUSTED_DOMAINS_KEY } from "./extension_ui_helpers";
 import { optionsEventRows, showOptionsEventLog } from "./attribution_helpers";
 import { REGRESSED_BUNDLE_MARKER } from "./pr599-regressed-bundle";
@@ -40,7 +42,8 @@ const CLICKFIX_WARNING = /ClickFix|clipboard|fake.*verification|Do NOT paste/i;
 const RAW_CLIPBOARD_VALUES = ["847293", "NAVSENTINEL_SENTINEL_DO_NOT_RUN", "CF06-FLOOD-"];
 const LOOPBACK_HOSTS = ["localhost", "127.0.0.1"];
 const CONSOLE_NOISE = [/favicon\.ico/];
-const PRESSURE_FIXTURE = "/clickfix-06-clipboard-pressure.html";
+const PRESSURE_FIXTURE_ALIAS = "/acceptance/clickfix-06";
+const PRESSURE_RUN_NONCE = `${process.pid}-${Date.now().toString(36)}`;
 const PRESSURE_ATTEMPTS = 3;
 const FLOOD_WRITES = 40;
 
@@ -52,7 +55,12 @@ type SelfCheck = {
   attempted: number;
   resolved: number;
   refused: number;
+  beforeVerified: number;
   beforeReady: number;
+  verifiedSequence: number;
+  readySequence: number;
+  burstSpreadMs: number | null;
+  markerGapMs: number | null;
 };
 
 /** Every distinct toast text seen on the page during the window. */
@@ -81,6 +89,18 @@ function kindCount(log: Array<Record<string, unknown>>, kind: string): number {
   return log.filter((entry) => entry.kind === kind).length;
 }
 
+function pressureRunPath(arm: "benign" | "attack", attempt: number): string {
+  return `${PRESSURE_FIXTURE_ALIAS}/${arm}-${PRESSURE_RUN_NONCE}-${attempt}`;
+}
+
+function eventRowsForUrl(
+  log: Array<Record<string, unknown>>,
+  kind: string,
+  eventUrl: string,
+): Array<Record<string, unknown>> {
+  return log.filter((entry) => entry.kind === kind && entry.url === eventUrl);
+}
+
 function mentionsLoopback(value: unknown): string[] {
   const text = JSON.stringify(value ?? null).toLowerCase();
   return LOOPBACK_HOSTS.filter((host) => text.includes(host));
@@ -89,13 +109,23 @@ function mentionsLoopback(value: unknown): string[] {
 async function readSelfCheck(page: Page): Promise<SelfCheck> {
   return page.evaluate(() => {
     const data = document.documentElement.dataset;
+    const optionalNumber = (value: string | undefined): number | null => {
+      if (value === undefined || value === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
     return {
       state: data.pressureState ?? "",
       reason: data.pressureReason ?? "",
       attempted: Number(data.pressureAttempted ?? "0"),
       resolved: Number(data.pressureResolved ?? "0"),
       refused: Number(data.pressureRefused ?? "0"),
+      beforeVerified: Number(data.pressureBeforeVerified ?? "0"),
       beforeReady: Number(data.pressureBeforeReady ?? "0"),
+      verifiedSequence: Number(data.pressureVerifiedSequence ?? "0"),
+      readySequence: Number(data.pressureReadySequence ?? "0"),
+      burstSpreadMs: optionalNumber(data.pressureBurstSpreadMs),
+      markerGapMs: optionalNumber(data.pressureMarkerGapMs),
     };
   });
 }
@@ -124,50 +154,55 @@ async function allowClipboardForSite(session: AcceptanceSession, origin: string)
 }
 
 /**
- * Load one fixture arm until its self-check reads VALID (the whole burst
- * finished before the bridge-ready marker), reloading like the owner's F5 on a
- * RETRY. Returns the page and the event log captured just before the valid load.
+ * Load one fixture arm until its self-check reads VALID. Every attempt uses a
+ * unique pathname because persisted event URLs intentionally drop queries; a
+ * late row from a discarded retry therefore cannot be mistaken for the final
+ * valid load (#954).
  */
 async function loadValidPressureArm(
   session: AcceptanceSession,
   arm: "benign" | "attack",
-): Promise<{ page: Page; check: SelfCheck; logBefore: Array<Record<string, unknown>> }> {
+): Promise<{ page: Page; check: SelfCheck; eventUrl: string }> {
   const page = await session.newPage();
   await page.bringToFront();
-  const url = session.url(`${PRESSURE_FIXTURE}?mode=${arm}`, "localhost");
   let check: SelfCheck | null = null;
-  let logBefore: Array<Record<string, unknown>> = [];
+  let eventUrl = "";
   for (let attempt = 1; attempt <= PRESSURE_ATTEMPTS; attempt++) {
-    logBefore = await session.eventLog();
-    if (attempt === 1) await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
-    else await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    const url = session.url(`${pressureRunPath(arm, attempt)}?mode=${arm}`, "localhost");
+    eventUrl = redactUrl(url);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await page.waitForFunction(
       () => ["valid", "retry", "failed", "idle"].includes(document.documentElement.dataset.pressureState ?? ""),
       null,
       { timeout: 20_000 },
     );
     check = await readSelfCheck(page);
-    session.observe(`${arm} arm load ${attempt} self-check`, JSON.stringify(check));
+    session.observe(`${arm} arm load ${attempt} self-check`, JSON.stringify({ ...check, eventUrl }));
     if (check.state !== "retry") break;
-    // Let any receipts from the discarded load land before the next baseline.
+    // Let the discarded document finish writing its independently attributed
+    // row. Correctness no longer depends on this delay.
     await page.waitForTimeout(1000);
   }
   if (!check) throw new Error("TEST_INVALID: the pressure fixture never reported a self-check");
   const expectedWrites = FLOOD_WRITES + (arm === "attack" ? 1 : 0);
   // "retry" after every attempt means the window was never exercised (TEST_INVALID);
   // "failed" means the bridge never reported ready, which is a product failure.
-  const label = check.state === "failed" ? "FAIL: the bridge-ready marker never appeared" : "TEST_INVALID: the pre-handshake window was not exercised";
+  const label = check.state === "failed" ? "FAIL: the bridge never reported ready" : "TEST_INVALID: the pre-verification queue was not exercised";
   expect(check, `${label} (${arm} arm: ${check.state}, ${check.reason})`).toMatchObject({
     state: "valid",
     attempted: expectedWrites,
     resolved: expectedWrites,
     refused: 0,
+    beforeVerified: expectedWrites,
     beforeReady: expectedWrites,
   });
+  expect(check.verifiedSequence, "the exact MAIN ready post was observed").toBeGreaterThan(0);
+  expect(check.readySequence, "the public marker followed the MAIN ready post").toBeGreaterThan(check.verifiedSequence);
+  expect(check.markerGapMs, "the one-hop marker gap is measured").not.toBeNull();
   const markers = await session.requireReady(page);
   expect(markers.capture).toBe("1");
   expect(markers.bridge).toBe("1");
-  return { page, check, logBefore };
+  return { page, check, eventUrl };
 }
 
 test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboard flood keeps the command-like receipt (#599, #947)", async ({}, testInfo) => {
@@ -229,7 +264,7 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
       session.observe("clipboard permission set through", `${route} for ${pressureOrigin}`);
     });
 
-    const benign = await session.step("6. pressure page, benign arm: the self-check reads VALID (40 writes finished before the bridge-ready marker)", async () =>
+    const benign = await session.step("6. pressure page, benign arm: the self-check reads VALID (40 writes finished before exact MAIN verification)", async () =>
       loadValidPressureArm(session, "benign"));
     if (!benign) throw new Error("TEST_INVALID: the benign arm did not load");
 
@@ -239,16 +274,17 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
       await session.screenshot(benign.page, "pressure-benign-arm");
       const log = await session.eventLog("event log after the benign arm");
       session.observe("benign arm log delta", JSON.stringify({
-        clickfix_detected: kindCount(log, "clickfix_detected") - kindCount(benign.logBefore, "clickfix_detected"),
+        clickfix_detected_for_valid_load: eventRowsForUrl(log, "clickfix_detected", benign.eventUrl).length,
         bridge_buffer_overflow: kindCount(log, "bridge_buffer_overflow"),
+        eventUrl: benign.eventUrl,
       }));
       expect(toasts.filter((text) => CLICKFIX_WARNING.test(text)), "a benign flood alone must not warn").toEqual([]);
-      expect(kindCount(log, "clickfix_detected")).toBe(kindCount(benign.logBefore, "clickfix_detected"));
+      expect(eventRowsForUrl(log, "clickfix_detected", benign.eventUrl)).toEqual([]);
       expect(kindCount(log, "bridge_buffer_overflow"), "the benign flood must not overflow the pre-handshake queue").toBe(0);
     }, { soft: true });
     await benign.page.close();
 
-    const attack = await session.step("8. pressure page, attack arm: the self-check reads VALID (40 benign writes then the command-like one, all before the marker)", async () =>
+    const attack = await session.step("8. pressure page, attack arm: the self-check reads VALID (40 benign writes then the command-like one, all before exact MAIN verification)", async () =>
       loadValidPressureArm(session, "attack"));
     if (!attack) throw new Error("TEST_INVALID: the attack arm did not load");
 
@@ -260,9 +296,12 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
     }, { soft: true });
 
     await session.step("10. the event log has the attack arm's clickfix_detected, no bridge_buffer_overflow, and no raw clipboard value", async () => {
-      await expect.poll(async () => kindCount(await session.eventLog(), "clickfix_detected"), { timeout: 5000 })
-        .toBe(kindCount(attack.logBefore, "clickfix_detected") + 1);
+      await expect.poll(
+        async () => eventRowsForUrl(await session.eventLog(), "clickfix_detected", attack.eventUrl).length,
+        { timeout: 5000 },
+      ).toBe(1);
       const log = await session.eventLog("event log after the attack arm");
+      expect(eventRowsForUrl(log, "clickfix_detected", attack.eventUrl)).toHaveLength(1);
       expect(kindCount(log, "bridge_buffer_overflow")).toBe(0);
       const stored = JSON.stringify(log);
       expect(RAW_CLIPBOARD_VALUES.filter((value) => stored.includes(value)), "stored rows").toEqual([]);

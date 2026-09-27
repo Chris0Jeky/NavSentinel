@@ -416,9 +416,11 @@ does not interdict the clipboard itself, the protected outcome is `WARNED`, not 
 `clickfix-06` is the one exception to the exact-sentinel rule. Its attack value is
 `NAVSENTINEL_SENTINEL_DO_NOT_RUN base64`: it still starts with the sentinel and is still not
 runnable, but it carries one detector keyword so that the receipt is classified as command-like. That
-fixture fires its flood as soon as NavSentinel's MAIN-world clipboard hook is installed and while the
-bridge-ready marker is still absent, so the receipts pass through the unverified queue that #599
-coalesces. Its overlay has no page-text signals, so only a surviving command-like receipt can warn.
+fixture fires its flood as soon as NavSentinel's MAIN-world clipboard hook is installed. It faithfully
+wraps MAIN's outgoing `ns-bridge-ready` post and gives that exact verification boundary and each
+successful write callback a monotonic sequence number; the later public DOM marker is measured only
+as a diagnostic hop (#954). Its overlay has no page-text signals, so only a surviving command-like
+receipt can warn.
 `tests/acceptance/ai47-8-clipboard-pressure.spec.ts` drives it. The spec must fail against the
 regressed copy built by `tests/acceptance/pr599-regressed-bundle.ts`.
 

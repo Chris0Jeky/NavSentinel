@@ -830,6 +830,10 @@ the bridge was verified, so #599's queue was never used. The steps below use
   MAIN-world clipboard hook is installed and before the bridge verifies its
   isolated peer. During that window, receipts wait in the queue that #599
   coalesces to the latest command-like receipt and the latest other receipt.
+- The page faithfully wraps MAIN's `MessagePort.prototype.postMessage` and
+  records the outgoing `ns-bridge-ready` call in the same execution sequence as
+  each successful clipboard write. That is the exact queue boundary. The later
+  public DOM marker is retained only to measure the one-hop delay (#954).
 - Its overlay has no verification or paste wording, so a benign write alone
   scores nothing. Only the command-like receipt can raise the warning, and the
   page writes it after 40 benign ones.
@@ -875,8 +879,8 @@ evidence only.
    `http://localhost:5173/clickfix-06-clipboard-pressure.html?mode=benign` and
    press Enter. Do not click anything on the page yet. Read the **Fixture
    self-check** box on the page:
-   - **VALID** with `40/40` writes finished before the bridge-ready marker: the
-     load counts.
+   - **VALID** with `40/40` writes finished before exact MAIN verification, and
+     a non-negative public-marker hop measurement: the load counts.
    - **RETRY**: click once inside the page and press F5. The box explains why.
      "Refused" or "never finished" means that step 4 did not take effect or that
      the page did not have focus.
@@ -919,10 +923,13 @@ evidence only.
   (`tests/e2e/bridge-clipboard-pressure.spec.ts`, #186). So does the proof that
   this procedure fails on a regressed build, which uses a patched copy that is
   never loaded in the owner's profile.
-- The self-check is a page-side proxy. The page can see only NavSentinel's
-  public bridge-ready marker, which appears one message hop after the bridge
-  verifies. A write that finished inside that last hop would skip the queue. The
-  paired regressed-copy runs are the evidence that the proxy holds in practice.
+- The self-check remains page-side evidence, not a security boundary. For this
+  fixture it no longer infers queue admission from the delayed public marker:
+  it observes MAIN's outgoing `ns-bridge-ready` post synchronously and orders
+  that call against every successful write callback with monotonic sequence
+  numbers. The public marker is diagnostic and its one-hop delay is printed. A
+  page can already observe or interfere with this best-effort bridge (#186), so
+  this instrumentation does not claim general bridge identity.
 - The agent loads the page with the tab already focused. Whether typing the
   address and pressing Enter gives the new page focus in time was not tested by
   automation; the self-check reports it if not.

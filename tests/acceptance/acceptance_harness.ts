@@ -583,6 +583,7 @@ export class AcceptanceSession {
 
 const ACCEPTANCE_FIXTURE_ROOT = path.join(repoRoot, "tests", "acceptance", "fixtures");
 const LOOPBACK_REDIRECT_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const PRESSURE_FIXTURE_ALIAS_PREFIX = "/acceptance/clickfix-06/";
 
 /**
  * Loopback static server for the Gym plus acceptance-only fixtures under
@@ -616,12 +617,20 @@ export async function startAcceptanceServer(): Promise<{ baseUrl: string; close:
       return;
     }
     const rawPath = decodeURIComponent(requestUrl.pathname);
+    // Each discarded clickfix-06 retry gets a unique persisted path. Event-log
+    // URLs intentionally drop queries, so a pathname alias is the only stable
+    // way to attribute a late row to the exact load that produced it (#954).
+    const pressureFixtureAlias =
+      rawPath.startsWith(PRESSURE_FIXTURE_ALIAS_PREFIX) &&
+      /^\/acceptance\/clickfix-06\/(?:benign|attack)-[A-Za-z0-9-]+$/u.test(rawPath);
     // Any `/acceptance/dest/<marker path>` serves the shared destination page,
     // so procedures can put a unique marker in the destination path itself.
     const decoded = rawPath.startsWith("/acceptance/dest/") ? "/acceptance/destination.html" : rawPath;
-    const [root, relative] = decoded.startsWith("/acceptance/")
-      ? [ACCEPTANCE_FIXTURE_ROOT, decoded.slice("/acceptance".length)]
-      : [gymRoot, decoded === "/" ? "/index.html" : decoded];
+    const [root, relative] = pressureFixtureAlias
+      ? [gymRoot, "/clickfix-06-clipboard-pressure.html"]
+      : decoded.startsWith("/acceptance/")
+        ? [ACCEPTANCE_FIXTURE_ROOT, decoded.slice("/acceptance".length)]
+        : [gymRoot, decoded === "/" ? "/index.html" : decoded];
     const resolved = path.resolve(root, `.${relative}`);
     const inside = path.relative(root, resolved);
     if (inside.startsWith("..") || path.isAbsolute(inside) || !fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {

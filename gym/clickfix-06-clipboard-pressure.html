@@ -64,7 +64,13 @@
       const HOOK_TIMEOUT_MS = 5000;
       const SETTLE_TIMEOUT_MS = 3000;
       const READY_TIMEOUT_MS = 5000;
+      const NS_SOURCE = "__navsentinel__";
       const now = () => Math.round(performance.now() * 10) / 10;
+      let sequence = 0;
+      const nextSequence = () => {
+        sequence += 1;
+        return sequence;
+      };
 
       const check = {
         mode: MODE,
@@ -72,7 +78,11 @@
         reason: "",
         hookAt: null,
         burstAt: null,
+        verifiedAt: null,
+        verifiedSequence: null,
         readyAt: null,
+        readySequence: null,
+        bridgeProbeError: null,
         writes: [],
       };
       window.__cf06SelfCheck = check;
@@ -80,14 +90,32 @@
       const summary = () => {
         const resolved = check.writes.filter((write) => write.resolvedAt !== null);
         const refused = check.writes.filter((write) => write.error !== null);
-        const beforeReady = resolved.filter((write) => check.readyAt === null || write.resolvedAt < check.readyAt);
+        const beforeVerified = check.verifiedSequence === null
+          ? []
+          : resolved.filter((write) => write.resolvedSequence < check.verifiedSequence);
+        const beforeReady = check.readySequence === null
+          ? []
+          : resolved.filter((write) => write.resolvedSequence < check.readySequence);
+        const firstResolvedAt = resolved.reduce(
+          (min, write) => Math.min(min, write.resolvedAt),
+          Number.POSITIVE_INFINITY,
+        );
+        const lastResolvedAt = resolved.reduce((max, write) => Math.max(max, write.resolvedAt), 0);
         return {
           attempted: check.writes.length,
           resolved: resolved.length,
           refused: refused.length,
           pending: check.writes.length - resolved.length - refused.length,
+          beforeVerified: beforeVerified.length,
           beforeReady: beforeReady.length,
-          lastResolvedAt: resolved.reduce((max, write) => Math.max(max, write.resolvedAt), 0) || null,
+          firstResolvedAt: Number.isFinite(firstResolvedAt) ? firstResolvedAt : null,
+          lastResolvedAt: lastResolvedAt || null,
+          burstSpreadMs: Number.isFinite(firstResolvedAt) && lastResolvedAt
+            ? Math.round((lastResolvedAt - firstResolvedAt) * 10) / 10
+            : null,
+          markerGapMs: check.verifiedAt !== null && check.readyAt !== null
+            ? Math.round((check.readyAt - check.verifiedAt) * 10) / 10
+            : null,
           firstError: refused[0]?.error ?? null,
         };
       };
@@ -100,7 +128,12 @@
         root.dataset.pressureAttempted = String(s.attempted);
         root.dataset.pressureResolved = String(s.resolved);
         root.dataset.pressureRefused = String(s.refused);
+        root.dataset.pressureBeforeVerified = String(s.beforeVerified);
         root.dataset.pressureBeforeReady = String(s.beforeReady);
+        root.dataset.pressureVerifiedSequence = String(check.verifiedSequence ?? 0);
+        root.dataset.pressureReadySequence = String(check.readySequence ?? 0);
+        root.dataset.pressureBurstSpreadMs = s.burstSpreadMs === null ? "" : String(s.burstSpreadMs);
+        root.dataset.pressureMarkerGapMs = s.markerGapMs === null ? "" : String(s.markerGapMs);
         const panel = document.getElementById("self-check");
         const state = document.getElementById("self-check-state");
         const detail = document.getElementById("self-check-detail");
@@ -112,16 +145,17 @@
           idle: "IDLE: add ?mode=benign or ?mode=attack to the address and reload.",
           waiting: "Waiting for Heedline's clipboard hook...",
           writing: "Clipboard burst in progress...",
-          valid: "VALID: the whole burst finished before Heedline's bridge-ready marker.",
-          retry: "RETRY: this load did not exercise the pre-handshake window.",
+          valid: "VALID: the whole burst finished before Heedline's MAIN bridge became verified.",
+          retry: "RETRY: this load did not exercise the pre-verification queue.",
           failed: "FAILED: Heedline's bridge never reported ready.",
         }[check.state];
         state.textContent = `${label} ${check.reason}`.trim();
         detail.textContent = [
           `arm: ${check.mode}`,
           `writes: ${s.resolved}/${s.attempted} finished, ${s.refused} refused, ${s.pending} pending`,
-          `finished before the bridge-ready marker: ${s.beforeReady}/${s.attempted}`,
-          `hook seen: ${check.hookAt === null ? "-" : `${check.hookAt} ms`}; burst: ${check.burstAt === null ? "-" : `${check.burstAt} ms`}; last write: ${s.lastResolvedAt === null ? "-" : `${s.lastResolvedAt} ms`}; bridge-ready marker: ${check.readyAt === null ? "-" : `${check.readyAt} ms`}`,
+          `finished before exact MAIN verification: ${s.beforeVerified}/${s.attempted}; before public marker: ${s.beforeReady}/${s.attempted}`,
+          `hook: ${check.hookAt === null ? "-" : `${check.hookAt} ms`}; burst: ${check.burstAt === null ? "-" : `${check.burstAt} ms`}; first/last write: ${s.firstResolvedAt === null ? "-" : `${s.firstResolvedAt}/${s.lastResolvedAt} ms`}; spread: ${s.burstSpreadMs === null ? "-" : `${s.burstSpreadMs} ms`}`,
+          `exact ready post: ${check.verifiedAt === null ? "-" : `${check.verifiedAt} ms (#${check.verifiedSequence})`}; public marker: ${check.readyAt === null ? "-" : `${check.readyAt} ms (#${check.readySequence})`}; marker hop: ${s.markerGapMs === null ? "-" : `${s.markerGapMs} ms`}`,
         ].join("\n");
       };
 
@@ -131,9 +165,38 @@
         render();
       };
 
+      // The public DOM marker is set by the isolated world one MessagePort hop
+      // after MAIN flips bridgeVerified. Observe MAIN's outgoing ready message
+      // synchronously and preserve the native call exactly. Sequence numbers are
+      // the authority for this fixture: unlike rounded clocks, they prove whether
+      // each successful write callback ran before or after the queue closed.
+      const nativePortPostMessage = MessagePort.prototype.postMessage;
+      try {
+        MessagePort.prototype.postMessage = function (...args) {
+          const message = args[0];
+          if (
+            message &&
+            typeof message === "object" &&
+            message.source === NS_SOURCE &&
+            message.type === "ns-bridge-ready" &&
+            check.verifiedSequence === null
+          ) {
+            check.verifiedAt = now();
+            check.verifiedSequence = nextSequence();
+            render();
+          }
+          return Reflect.apply(nativePortPostMessage, this, args);
+        };
+      } catch (error) {
+        check.bridgeProbeError = error && error.name
+          ? `${error.name}: ${error.message}`
+          : String(error);
+      }
+
       const markReady = () => {
         if (check.readyAt === null && root.getAttribute("data-navsentinel-bridge-ready") === "1") {
           check.readyAt = now();
+          check.readySequence = nextSequence();
           render();
         }
       };
@@ -149,6 +212,10 @@
         finish("retry", "The async clipboard is unavailable: open this page on localhost.");
         return;
       }
+      if (check.bridgeProbeError !== null) {
+        finish("retry", `The exact bridge-boundary probe could not be installed (${check.bridgeProbeError}).`);
+        return;
+      }
       const nativeWriteText = Clipboard.prototype.writeText;
 
       const evaluate = () => {
@@ -161,15 +228,25 @@
           finish("retry", `${s.pending} clipboard write(s) never finished. Allow Clipboard for this site in Chrome's Site settings, click inside the page, then reload.`);
           return;
         }
-        if (check.readyAt === null) {
-          finish("failed", `No bridge-ready marker within ${READY_TIMEOUT_MS / 1000} s of the burst.`);
+        if (check.verifiedSequence === null) {
+          finish(check.readyAt === null ? "failed" : "retry", check.readyAt === null
+            ? `No exact MAIN bridge-ready post within ${READY_TIMEOUT_MS / 1000} s of the burst.`
+            : "The public ready marker appeared but the exact MAIN ready post was not observed.");
           return;
         }
-        if (s.beforeReady < s.attempted) {
-          finish("retry", `${s.attempted - s.beforeReady} write(s) finished after the bridge-ready marker; reload to try again.`);
+        if (check.readyAt === null || check.readySequence === null) {
+          finish("failed", `No public bridge-ready marker within ${READY_TIMEOUT_MS / 1000} s of the burst.`);
           return;
         }
-        finish("valid", `${s.attempted}/${s.attempted} writes finished before it.`);
+        if (check.readySequence <= check.verifiedSequence) {
+          finish("retry", "The public marker did not follow the exact MAIN ready post in sequence.");
+          return;
+        }
+        if (s.beforeVerified < s.attempted) {
+          finish("retry", `${s.attempted - s.beforeVerified} write(s) finished after MAIN verification; reload to try again.`);
+          return;
+        }
+        finish("valid", `${s.attempted}/${s.attempted} writes finished before exact verification; the public marker followed ${s.markerGapMs} ms later.`);
       };
 
       const burst = () => {
@@ -179,10 +256,13 @@
         for (let index = 0; index < FLOOD_WRITES; index++) values.push(`${FLOOD_PREFIX}${1000 + index}`);
         if (MODE === "attack") values.push(INERT_COMMAND_LIKE);
         const settled = values.map((value, index) => {
-          const write = { index, resolvedAt: null, error: null };
+          const write = { index, resolvedAt: null, resolvedSequence: null, error: null };
           check.writes.push(write);
           return navigator.clipboard.writeText(value).then(
-            () => { write.resolvedAt = now(); },
+            () => {
+              write.resolvedAt = now();
+              write.resolvedSequence = nextSequence();
+            },
             (error) => { write.error = error && error.name ? `${error.name}: ${error.message}` : String(error); },
           );
         });
@@ -213,8 +293,8 @@
         const overlayParsed = document.getElementById("pressure-overlay") !== null;
         if (hooked && overlayParsed) {
           check.hookAt = now();
-          if (check.readyAt !== null) {
-            finish("retry", "The bridge-ready marker appeared before the burst could start; reload to try again.");
+          if (check.verifiedSequence !== null || check.readyAt !== null) {
+            finish("retry", "The bridge became ready before the burst could start; reload to try again.");
             return;
           }
           burst();
