@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   contentAddressedLoaderPath,
   finalizeUiGuardLoader,
+  installEarlyMainClockText,
   UI_GUARD_REVISION_PLACEHOLDER,
 } from "./content-loader-contract.mjs";
 import { compactKnownOptionsHtml } from "./packaged-html.mjs";
@@ -127,12 +128,7 @@ function installEarlyMainClock() {
   if (!loaderScript) throw new Error("MAIN-world guard content-script loader is missing");
   const loaderPath = path.join(dist, loaderScript);
   const generated = fs.readFileSync(loaderPath, "utf8");
-  const strictMarker = "'use strict';";
-  if (generated.split(strictMarker).length !== 2 || !generated.includes("await import(")) {
-    throw new Error("MAIN-world guard loader shape changed; early clock capture was not installed");
-  }
-  const earlyClock = "const earlyNow=Date.now.bind(Date);Object.defineProperty(globalThis,'__navsentinelMainDateNow',{value:earlyNow,writable:false,configurable:false});";
-  const finalLoader = generated.replace(strictMarker, `${strictMarker}\n  ${earlyClock}`);
+  const finalLoader = installEarlyMainClockText(generated);
   const finalScript = contentAddressedLoaderPath(loaderScript, finalLoader);
   const finalPath = path.join(dist, finalScript);
   fs.writeFileSync(finalPath, finalLoader, "utf8");

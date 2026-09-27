@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertContentAddressedLoader,
+  assertEarlyMainClock,
   assertUiGuardRevision,
 } from "./content-loader-contract.mjs";
 
@@ -39,9 +40,7 @@ const mainPath = path.join(dist, mainScript);
 if (!fs.existsSync(mainPath)) throw new Error(`Manifest MAIN-world guard loader does not exist: ${mainScript}`);
 const mainLoader = fs.readFileSync(mainPath, "utf8");
 assertContentAddressedLoader(mainScript, mainLoader);
-if (!mainLoader.includes("Object.defineProperty(globalThis,'__navsentinelMainDateNow'")) {
-  throw new Error("MAIN-world guard loader is missing early clock capture");
-}
+assertEarlyMainClock(mainLoader);
 
 console.log(
   `[content-loader] final isolated capture loader identity OK; revision=` +
