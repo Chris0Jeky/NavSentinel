@@ -299,7 +299,7 @@ revision printed by the build, then run this consolidated sequence:
    full-URL sanitization, legacy popup fallback, and canonical IP-site
    association remain correct without leaking an event to an unrelated
    top-level page.
-8. **Bridge queue pressure ([#599 / former AI-37](docs/agentic/GATE3_GUIDES.md#ai-47-row-8--599-current-main-clipboard-pressure)):** complete the current-`main` subprocedure. A benign clipboard write must not suppress the trusted fake-verification warning; the benign CAPTCHA page must remain usable without a warning. Record the two event-log outcomes and console observations. The queue policy was accepted, but this browser result remains **OPEN — not run**.
+8. **Bridge queue pressure ([#599 / former AI-37](docs/agentic/GATE3_GUIDES.md#ai-47-row-8--599-current-main-clipboard-pressure)):** complete the current-`main` subprocedure, which #947 replaced on 2026-09-27 with the `clickfix-06` pressure page. The page needs Clipboard set to Allow for `localhost:5173`. The benign copy page must remain usable without a warning. A benign clipboard flood in NavSentinel's pre-handshake window must stay silent. The attack arm's command-like write must still raise the fake-verification warning, and neither arm may add a `bridge_buffer_overflow` row. Record both self-check lines, the event-log outcome and console observations. The queue policy was accepted, but this browser result remains **OPEN — not run**.
 
 Inspect page, popup, Options, Protection Center, and service-worker consoles for
 new errors during the relevant steps. Only after Chris has explicitly recorded

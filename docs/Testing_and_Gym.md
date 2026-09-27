@@ -396,6 +396,7 @@ Current pages:
 - `gym/clickfix-03-legit-captcha.html` (local verification control + OTP copy, false positive check)
 - `gym/clickfix-04-winr.html` (Win+R instruction variant with an inert sentinel)
 - `gym/clickfix-05-delayed-rewrite.html` (manual benign copy followed by delayed inert clipboard replacement, typed sink, benign OTP, and mixed controls)
+- `gym/clickfix-06-clipboard-pressure.html` (`?mode=benign` / `?mode=attack`: a 40-write clipboard flood, plus one inert command-like write in the attack arm, fired inside NavSentinel's pre-handshake window; needs the site's Clipboard permission set to Allow; AI-47 row 8, #947)
 - `gym/doubleclick-01-basic.html` (+ `doubleclick-01-target.html`) -- basic DoubleClickjacking attack simulation
 - `gym/doubleclick-02-oauth.html` (+ `doubleclick-02-consent.html`) -- OAuth consent DoubleClickjacking variant
 - `gym/doubleclick-03-legit.html` -- legitimate double-click interaction (false-positive check)
@@ -412,6 +413,14 @@ verification control and synthetic OTP; real-provider matching remains unit-only
 `clickfix-05` adds the first typed browser-only paste consequence for this family. Its four arms
 separate reachable harm, product warning, benign usability, and mixed behavior; because the extension
 does not interdict the clipboard itself, the protected outcome is `WARNED`, not `BLOCKED_PRE_HARM`.
+`clickfix-06` is the one exception to the exact-sentinel rule. Its attack value is
+`NAVSENTINEL_SENTINEL_DO_NOT_RUN base64`: it still starts with the sentinel and is still not
+runnable, but it carries one detector keyword so that the receipt is classified as command-like. That
+fixture fires its flood as soon as NavSentinel's MAIN-world clipboard hook is installed and while the
+bridge-ready marker is still absent, so the receipts pass through the unverified queue that #599
+coalesces. Its overlay has no page-text signals, so only a surviving command-like receipt can warn.
+`tests/acceptance/ai47-8-clipboard-pressure.spec.ts` drives it. The spec must fail against the
+regressed copy built by `tests/acceptance/pr599-regressed-bundle.ts`.
 
 ### Evasion red-team lane
 
