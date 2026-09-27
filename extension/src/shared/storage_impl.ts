@@ -389,6 +389,7 @@ function patchMatchesExpectedSettings(
 function updateSuiteSettingsDirect(
   partial: SuiteSettingsPatch,
   expected?: SuiteSettings,
+  options?: { recomputeAdaptiveScoresOnModeChange?: boolean },
 ): Promise<SuiteSettingsUpdateResponse> {
   // Same-worker import/patch ordering (#891): hold the bulk lane BEFORE reading
   // settings so an import that enqueued first commits before this patch reads.
@@ -405,7 +406,10 @@ function updateSuiteSettingsDirect(
         partial as SettingsRecord,
       )) return { ...cur, conflict: true };
       const merged = mergeSuiteSettings(cur, partial);
-      if (cur.nav.defaultMode !== merged.nav.defaultMode) {
+      if (
+  options?.recomputeAdaptiveScoresOnModeChange !== false &&
+  cur.nav.defaultMode !== merged.nav.defaultMode
+) {
         // Mode is an input to the adaptive derivative (#891). Join the prompt
         // lane before reading outcomes, and commit both keys together: an
         // earlier append must finish first, and a later one must see this mode.
@@ -443,7 +447,10 @@ export async function resetSuiteSettingsSection(
   const patch: SuiteSettingsPatch = section === "nav"
     ? { nav: structuredClone(DEFAULT_SUITE_SETTINGS.nav) }
     : { credential: structuredClone(DEFAULT_SUITE_SETTINGS.credential) };
-  return updateSuiteSettingsDirect(patch);
+  return updateSuiteSettingsDirect(patch, undefined, {
+  // A section reset changes settings only; every behavioural-data lane stays byte-identical (#563).
+  recomputeAdaptiveScoresOnModeChange: false,
+});
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
