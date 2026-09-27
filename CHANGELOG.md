@@ -20,7 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Automatic approval of a blocked form submit is scoped to its URL.** For an allowlisted destination, the service worker now gets an allowance for that URL only, instead of a tab-wide rollback window (#920). Base-relative action resolution remains open (#900).
+- **Automatic approval of a blocked form submit is scoped to its URL.** For an allowlisted destination, the service worker now gets an allowance for that URL only, instead of a tab-wide rollback window (#920).
+- **Blocked submits and popups resolve relative URLs the way Chrome does.** A relative form action, `window.open()` URL or link now resolves against the page's base URL. An empty or whitespace-only action still means the page itself. Before, a `<base href>` pointing at another origin could make a prompt name the page's own site while the submit went elsewhere (#900).
+  - A blocked popup's URL is fixed when it is blocked, so moving `<base href>` while the prompt waits cannot change where an approval opens.
+  - For a blocked submit, a `<base href>` moved between the block and its approval is caught by the destination re-check from #890.
+  - Page `submit`/`formdata` listeners can still change the destination after the check; that gap is #898.
 - **The MAIN-world clock is captured before the guard's async import**, so an early inline page script can no longer replace `Date.now` first (#877, #921). Follow-ups are tracked in #942.
 - **Page script can no longer reach the credential prompt's buttons.** The prompt now sits in a closed shadow root, so a page cannot move focus onto Trust or Proceed once just before the user's next Enter or Space (#894). Keyboard use is unchanged, and the prompt stays in the accessibility tree that screen readers read; no screen reader was run. The notice toasts still use an open root (#601).
 

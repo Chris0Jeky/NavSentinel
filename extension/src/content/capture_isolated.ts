@@ -1279,7 +1279,9 @@ function handleRollback(url: string, prevUrl?: string): void {
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
   if (!rawUrl) return { href: null, host: null };
   try {
-    const u = new URL(rawUrl, location.href);
+    // The browser resolves a relative URL against the base URL, which
+    // `<base href>` can point at another origin (#900).
+    const u = new URL(rawUrl, document.baseURI || location.href);
     return { href: u.toString(), host: u.hostname.toLowerCase() };
   } catch {
     return { href: null, host: null };
@@ -2083,7 +2085,7 @@ window.addEventListener(
       // authority. The MAIN-world form allowance below is separately bound to
       // the declared action so it cannot authorize an unrelated form target;
       // main_guard.ts arms a same-task allowance only in the top frame (#864).
-      const declaredFormAction = formSubmitIntentUrl(e.target, location.href);
+      const declaredFormAction = formSubmitIntentUrl(e.target, location.href, document.baseURI || location.href);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
