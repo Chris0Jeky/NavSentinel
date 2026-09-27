@@ -196,6 +196,38 @@ describe("clipboard-pressure Gym fixture contract (#947)", () => {
     expect(floodWrites).toBeGreaterThan(MAX_PENDING_OUTBOUND);
   });
 
+  it("uses the exact MAIN bridge-ready post as the queue boundary (#954)", () => {
+    // The public DOM marker is delivered one MessagePort hop after MAIN flips
+    // bridgeVerified. The fixture must observe the outgoing ready message in
+    // the page realm and compare execution sequence numbers, not timestamps or
+    // the delayed DOM marker.
+    expect(source).toContain("const nativePortPostMessage = MessagePort.prototype.postMessage;");
+    expect(source).toContain('message.type === "ns-bridge-ready"');
+    expect(source).toContain("check.verifiedSequence = nextSequence();");
+    expect(source).toContain("write.resolvedSequence = nextSequence();");
+    expect(source).toContain("write.resolvedSequence < check.verifiedSequence");
+    expect(source).toContain("root.dataset.pressureBeforeVerified");
+    expect(source).not.toContain("s.beforeReady < s.attempted");
+  });
+
+  it("keeps retry attribution on a unique persisted path (#954)", () => {
+    const acceptanceSource = fs.readFileSync(
+      path.join(repositoryRoot, "tests", "acceptance", "ai47-8-clipboard-pressure.spec.ts"),
+      "utf8",
+    );
+    const harnessSource = fs.readFileSync(
+      path.join(repositoryRoot, "tests", "acceptance", "acceptance_harness.ts"),
+      "utf8",
+    );
+
+    expect(harnessSource).toContain('const PRESSURE_FIXTURE_ALIAS_PREFIX = "/acceptance/clickfix-06/";');
+    expect(harnessSource).toContain('[gymRoot, "/clickfix-06-clipboard-pressure.html"]');
+    expect(acceptanceSource).toContain("function pressureRunPath(");
+    expect(acceptanceSource).toContain("eventRowsForUrl(");
+    expect(acceptanceSource).toContain("eventUrl = redactUrl(url);");
+    expect(acceptanceSource).not.toContain("logBefore");
+  });
+
   it("gives the detector no page-text signal, so a benign write alone cannot warn", () => {
     expect(headEnd).toBeGreaterThan(0);
     expect(bodyStart).toBeGreaterThan(headEnd);
