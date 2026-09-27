@@ -91,7 +91,20 @@ jobs:
       - name: Run realistic branded Chrome E2E
         id: e2e
         timeout-minutes: 45
-        run: xvfb-run -a npm run test:e2e:branded
+        run: |
+          set -euo pipefail
+          # Preserve the existing smoke -> regression -> phase2 ordering and
+          # fail-fast result while recording which project makes the full
+          # checkout shallow on pull_request runners (#948).
+          for project in smoke regression phase2; do
+            status=0
+            xvfb-run -a npx playwright test -c playwright.branded.config.ts --project="$project" || status=$?
+            node scripts/record-git-reachability.mjs --phase "after-$project"
+            test -s "test-results/git-reachability-after-$project.txt"
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+          done
 
       - name: Record Git reachability after browser run
         if: ${{ always() }}
