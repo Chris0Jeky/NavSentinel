@@ -313,17 +313,21 @@ const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
  * Any other action resolves against the document's base URL, which
  * `<base href>` can point at another origin. Null when it does not parse.
  *
- * The MAIN-world gate and the isolated world's declared-action binding both
- * use this, so a child frame's click grant matches the submit it declared.
+ * The MAIN-world gate uses this; the isolated world's declared-action binding
+ * keeps an identical copy (nav_authority.ts), so a child frame's click grant
+ * matches the submit it declared. A null base URL (the loader's early capture
+ * is missing) leaves an absolute action usable and a relative one unresolved.
  */
 export function resolveFormActionUrl(
   rawAction: string | null | undefined,
   documentUrl: string,
-  baseUrl: string
+  baseUrl: string | null
 ): string | null {
   const action = (rawAction ?? "").replace(HTML_WHITESPACE_EDGES, "");
   try {
-    return action ? new URL(action, baseUrl).toString() : new URL(documentUrl).toString();
+    if (!action) return new URL(documentUrl).toString();
+    if (baseUrl === null) return new URL(action).toString();
+    return new URL(action, baseUrl).toString();
   } catch {
     return null;
   }
