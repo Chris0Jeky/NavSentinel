@@ -447,9 +447,13 @@ obtain professional advice before a commercial or public launch. A rename must
 coordinate product, store, asset, and repository names. Reply `AI-19 done:
 <decision>` when complete. **2026-09-25:** Chris chose to decide later; the
 GitHub pre-release keeps the working name, and AI-19 still gates the store
-submission. **2026-09-27 (D-2026-09-27-S):** Chris chose the rename route and
-asked for a researched shortlist based on the product's direction. The choice
-stays Chris's.
+submission. **2026-09-27 (D-2026-09-27-S, D-2026-09-27-T):** Chris chose the rename route
+and then the name **Heedline**. The screen is in
+[`docs/agentic/NAMING_SCREEN_2026-09-27.md`](docs/agentic/NAMING_SCREEN_2026-09-27.md).
+User-facing surfaces are renamed; internal identifiers keep the former name.
+Still open before the store submission: a formal trademark search (US and EU,
+classes 9/42), professional advice, the repository name, and the store
+listing and handles.
 
 **OPEN: AI-24 — Optional post-merge real-Chrome confirmation.** Build current
 `main`, load `extension/dist` unpacked in a fresh temporary Chrome profile, and
