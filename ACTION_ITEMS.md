@@ -72,7 +72,7 @@ waiver. Its Back/Forward Cache Chrome work is now a current-`main` AI-47
 subprocedure, not a branch-held item or a human-test pass.
 
 **Guided resolution cursor:** `AI-19` (`Resume at: AI-19`). Current ready order:
-AI-19 (choose a name from the researched shortlist) → optional AI-24. AI-47 was
+AI-19 (Heedline chosen; formal clearance, repository name and store listing remain) → optional AI-24. AI-47 was
 waived on agent evidence on 2026-09-27 (D-2026-09-27-S), including its attached
 #649 child-form, #655 imported-log-limit and #658 conditional-write checks.
 AI-23 was resolved on 2026-09-25.

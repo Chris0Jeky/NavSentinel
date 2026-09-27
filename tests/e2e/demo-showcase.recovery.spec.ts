@@ -64,7 +64,7 @@ test("guided recovery showcase for redirects and one-time recovery @demo @demo-r
       summary:
         rollbackReturnedToOrigin
           ? "Heedline rolled the delayed redirect back to the original page and required an explicit proceed decision before continuing."
-          : "NavSentinel surfaced a rollback-style recovery prompt on the delayed redirect instead of letting the later navigation blend into the original click.",
+          : "Heedline surfaced a rollback-style recovery prompt on the delayed redirect instead of letting the later navigation blend into the original click.",
       expectation: "inspect"
     });
     await demoPause(page1, 2200);

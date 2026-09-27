@@ -85,7 +85,7 @@ npm run package:ext
 Artifact output:
 
 ```text
-artifacts/navsentinel-v<version>.zip
+artifacts/heedline-v<version>.zip
 ```
 
 ## Effective Investigation Pattern
