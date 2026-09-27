@@ -235,7 +235,15 @@ test("the blocked-submit prompt names the base-resolved destination, not the pag
 
 test("an approved blocked form.submit() does not follow a <base href> moved after the block (#900) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
-  await withAllowlistedPage(async (page, approvedBase) => {
+  await withAllowlistedPage(async (page, approvedBase, serviceWorker) => {
+    await serviceWorker.evaluate(() => {
+      const scope = globalThis as typeof globalThis & { __baseGrants?: string[] };
+      scope.__baseGrants = [];
+      chrome.runtime.onMessage.addListener((message: unknown) => {
+        const grant = message as { type?: unknown; url?: unknown };
+        if (grant?.type === "ns-allow-target-nav" && typeof grant.url === "string") scope.__baseGrants?.push(grant.url);
+      });
+    });
     const seen = recordNavigations(page);
     const originalUrl = page.url();
     await setBase(page, `${approvedBase}/`);
@@ -248,6 +256,11 @@ test("an approved blocked form.submit() does not follow a <base href> moved afte
       document.querySelector("base")!.href = "http://127.0.0.2:9/";
     });
 
+    // Control: the approval did happen, for the URL resolved at block time.
+    // Without it, the checks below would pass because nothing was approved.
+    await expect.poll(() => serviceWorker.evaluate(() =>
+      (globalThis as typeof globalThis & { __baseGrants?: string[] }).__baseGrants ?? [],
+    )).toContain(`${approvedBase}/level1-basic-opacity.html?submit=approved`);
     await page.waitForTimeout(3_000);
     expect(seen.filter((url) => url.includes("127.0.0.2"))).toEqual([]);
     expect(page.url()).toBe(originalUrl);
