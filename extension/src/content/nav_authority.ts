@@ -1,4 +1,5 @@
 import type { Mode } from "../shared/types";
+import { resolveFormActionUrl } from "./main_guard_helpers";
 
 /**
  * Tab-wide navigation authority (#593).
@@ -90,19 +91,20 @@ export function findSubmitControl(target: Element | null): Element | null {
  * signal is page-declared markup, so it raises the cost of the #593 pattern
  * rather than making it impossible. See the PR and the evidence-map limitation.
  */
-export function formSubmitIntentUrl(target: EventTarget | null, baseHref: string): string | null {
+export function formSubmitIntentUrl(
+  target: EventTarget | null,
+  documentUrl: string,
+  baseUrl: string = documentUrl
+): string | null {
   const control = findSubmitControl(target instanceof Element ? target : null);
   const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
   if (!form) return null;
   const submitterAction = control?.getAttribute("formaction");
   const formAction = form.getAttribute("action");
-  try {
-    // An explicitly empty submitter action overrides the form action and
-    // declares this document. Only a missing attribute inherits the form.
-    return new URL((submitterAction ?? formAction) || baseHref, baseHref).toString();
-  } catch {
-    return null;
-  }
+  // An explicitly empty submitter action overrides the form action and
+  // declares this document. Only a missing attribute inherits the form. The
+  // MAIN-world gate resolves the same way, so the click grant matches (#900).
+  return resolveFormActionUrl(submitterAction ?? formAction, documentUrl, baseUrl);
 }
 
 export function grantsTabNavigationAuthority(

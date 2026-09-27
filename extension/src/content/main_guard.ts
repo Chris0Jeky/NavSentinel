@@ -23,6 +23,7 @@ import {
   enforceMapSizeCap,
   matchesAnchorOpenIntent,
   pruneTimestampWindow,
+  resolveFormActionUrl,
   shouldEmitRapidPushState,
   type AnchorOpenIntent,
   type RedirectAllowanceLimits,
@@ -776,13 +777,7 @@ function patchedOpen(
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
   const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
-  // An empty action submits to the document's own URL, not its base URL.
-  if (!raw) return location.href;
-  try {
-    return new URL(raw, documentBaseUrl()).toString();
-  } catch {
-    return undefined;
-  }
+  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
 }
 
 /**

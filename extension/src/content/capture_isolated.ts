@@ -2085,7 +2085,7 @@ window.addEventListener(
       // authority. The MAIN-world form allowance below is separately bound to
       // the declared action so it cannot authorize an unrelated form target;
       // main_guard.ts arms a same-task allowance only in the top frame (#864).
-      const declaredFormAction = formSubmitIntentUrl(e.target, location.href);
+      const declaredFormAction = formSubmitIntentUrl(e.target, location.href, document.baseURI || location.href);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,

@@ -304,3 +304,27 @@ export function matchesAnchorOpenIntent(
   }
   return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
 }
+
+const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
+
+/**
+ * The URL a form submission goes to, as Chromium computes it (#900). An action
+ * that is missing, empty or only HTML whitespace means the document's own URL.
+ * Any other action resolves against the document's base URL, which
+ * `<base href>` can point at another origin. Null when it does not parse.
+ *
+ * The MAIN-world gate and the isolated world's declared-action binding both
+ * use this, so a child frame's click grant matches the submit it declared.
+ */
+export function resolveFormActionUrl(
+  rawAction: string | null | undefined,
+  documentUrl: string,
+  baseUrl: string
+): string | null {
+  const action = (rawAction ?? "").replace(HTML_WHITESPACE_EDGES, "");
+  try {
+    return action ? new URL(action, baseUrl).toString() : new URL(documentUrl).toString();
+  } catch {
+    return null;
+  }
+}
