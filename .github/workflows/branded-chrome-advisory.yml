@@ -83,10 +83,17 @@ jobs:
             "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
           cat test-results/branded-run.txt
 
+      - name: Record Git reachability before browser run
+        run: node scripts/record-git-reachability.mjs --phase before-e2e
+
       - name: Run realistic branded Chrome E2E
         id: e2e
         timeout-minutes: 45
         run: xvfb-run -a npm run test:e2e:branded
+
+      - name: Record Git reachability after browser run
+        if: ${{ always() }}
+        run: node scripts/record-git-reachability.mjs --phase after-e2e
 
       - name: Run non-live acceptance procedures
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' && steps.chrome.outcome == 'success' }}
