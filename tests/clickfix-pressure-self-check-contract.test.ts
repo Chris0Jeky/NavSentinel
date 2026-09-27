@@ -24,7 +24,7 @@ describe("ClickFix clipboard-pressure self-check hardening (#954)", () => {
     expect(fixture).toContain("data.pressureBurstSpreadMs");
     expect(fixture).toContain("data.pressureReadyGapMs");
     expect(fixture).toMatch(
-      /readyGapMs\s*===\s*null\s*\|\|\s*readyGapMs\s*<\s*MIN_READY_GAP_MS/u,
+      /s\.readyGapMs\s*===\s*null\s*\|\|\s*s\.readyGapMs\s*<\s*MIN_READY_GAP_MS/u,
     );
     expect(fixture).toContain("The bridge-ready marker followed the last write by only");
   });
