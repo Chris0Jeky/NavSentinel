@@ -1,5 +1,27 @@
 import type { Mode } from "../shared/types";
-import { resolveFormActionUrl } from "./main_guard_helpers";
+
+const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
+
+/**
+ * The isolated world's copy of `resolveFormActionUrl` in main_guard_helpers.ts
+ * (#900): a missing, empty or whitespace-only action means the document URL,
+ * anything else resolves against the base URL. Deliberately duplicated:
+ * importing that module here makes the bundler split it into a chunk shared
+ * with the MAIN-world guard, which then loads one module later at document
+ * start. tests/main-guard-redirect-allowance.test.ts pins that both agree.
+ */
+export function resolveDeclaredFormActionUrl(
+  rawAction: string | null | undefined,
+  documentUrl: string,
+  baseUrl: string
+): string | null {
+  const action = (rawAction ?? "").replace(HTML_WHITESPACE_EDGES, "");
+  try {
+    return action ? new URL(action, baseUrl).toString() : new URL(documentUrl).toString();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Tab-wide navigation authority (#593).
@@ -104,7 +126,7 @@ export function formSubmitIntentUrl(
   // An explicitly empty submitter action overrides the form action and
   // declares this document. Only a missing attribute inherits the form. The
   // MAIN-world gate resolves the same way, so the click grant matches (#900).
-  return resolveFormActionUrl(submitterAction ?? formAction, documentUrl, baseUrl);
+  return resolveDeclaredFormActionUrl(submitterAction ?? formAction, documentUrl, baseUrl);
 }
 
 export function grantsTabNavigationAuthority(

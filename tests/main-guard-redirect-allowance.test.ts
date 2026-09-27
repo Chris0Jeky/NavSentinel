@@ -10,7 +10,7 @@ import {
   type RedirectAllowanceLimits,
   type RedirectAllowanceState,
 } from "../extension/src/content/main_guard_helpers";
-import { formSubmitIntentUrl } from "../extension/src/content/nav_authority";
+import { formSubmitIntentUrl, resolveDeclaredFormActionUrl } from "../extension/src/content/nav_authority";
 
 // #864: the MAIN world arms the form-submit allowance for a trusted click's own
 // task; the isolated world's `ns-allow` grant stays the authority afterwards.
@@ -270,28 +270,33 @@ describe("formSubmitIntentUrl (the isolated world's declared-action resolver)", 
 // #900: Chromium submits a relative action to the document's base URL, and an
 // action that is missing, empty or only HTML whitespace to the document's own
 // URL (measured in Chromium with a cross-origin <base href>).
-describe("resolveFormActionUrl (#900)", () => {
+// Both copies run every case: the isolated world keeps its own copy so the
+// MAIN-world guard does not load a shared chunk (see nav_authority.ts).
+describe.each([
+  ["resolveFormActionUrl (MAIN)", resolveFormActionUrl],
+  ["resolveDeclaredFormActionUrl (isolated)", resolveDeclaredFormActionUrl],
+])("%s (#900)", (_name, resolve) => {
   const documentUrl = "https://site.test/app/page?q=1";
   const baseUrl = "https://other.test/base/";
 
   it("resolves a relative action against the base URL", () => {
-    expect(resolveFormActionUrl("login", documentUrl, baseUrl)).toBe("https://other.test/base/login");
-    expect(resolveFormActionUrl("/login", documentUrl, baseUrl)).toBe("https://other.test/login");
-    expect(resolveFormActionUrl("https://abs.test/x", documentUrl, baseUrl)).toBe("https://abs.test/x");
+    expect(resolve("login", documentUrl, baseUrl)).toBe("https://other.test/base/login");
+    expect(resolve("/login", documentUrl, baseUrl)).toBe("https://other.test/login");
+    expect(resolve("https://abs.test/x", documentUrl, baseUrl)).toBe("https://abs.test/x");
   });
 
   it("sends a missing, empty or whitespace-only action to the document URL, not the base", () => {
     for (const action of [null, undefined, "", " ", "\t\n ", "\f\r"]) {
-      expect(resolveFormActionUrl(action, documentUrl, baseUrl)).toBe(documentUrl);
+      expect(resolve(action, documentUrl, baseUrl)).toBe(documentUrl);
     }
   });
 
   it("strips HTML whitespace around a non-empty action", () => {
-    expect(resolveFormActionUrl("  login\n", documentUrl, baseUrl)).toBe("https://other.test/base/login");
+    expect(resolve("  login\n", documentUrl, baseUrl)).toBe("https://other.test/base/login");
   });
 
   it("returns null for an action that does not parse", () => {
-    expect(resolveFormActionUrl("http://[", documentUrl, baseUrl)).toBeNull();
+    expect(resolve("http://[", documentUrl, baseUrl)).toBeNull();
   });
 });
 
