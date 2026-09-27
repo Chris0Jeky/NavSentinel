@@ -813,7 +813,8 @@ Only Chris can record this item complete.
 
 ### AI-47 row 8 — #599 current-main clipboard pressure
 
-**OPEN — not run.** The queue policy was accepted in D-2026-09-25-R and #599
+**Waived on agent evidence (D-2026-09-27-S); these steps are for an optional
+later human pass.** The queue policy was accepted in D-2026-09-25-R and #599
 merged as `d4b1acf5843605f519ffe1732050a2c1bb501ee1`. This is the owner
 Chrome check retained under AI-47; the branch-head and policy-decision steps
 in the historical AI-37 guide below no longer apply.
@@ -842,7 +843,8 @@ Chrome lets a page write the clipboard without a click only when the site's
 Clipboard permission is **Allow**, so step 4 sets it. The agent's acceptance
 spec `tests/acceptance/ai47-8-clipboard-pressure.spec.ts` follows these steps.
 Run on a copy of the build with #599's coalescing removed
-(`node tests/acceptance/pr599-regressed-bundle.ts`, then
+(`node tests/acceptance/pr599-regressed-bundle.ts` on Node 22.18+ or 24, which
+run TypeScript files directly; on older Node use `npx tsx`. Then set
 `EXTENSION_PATH=<printed path>`), it fails the checks in steps 5–7 below: the
 benign arm logs an overflow row, and the attack arm shows no warning and logs no
 `clickfix_detected` row. Run on the real build, it passes. That is automated
@@ -907,9 +909,9 @@ evidence only.
    <version>` with both self-check lines, the event-log outcome and any console
    observations. Otherwise Chris records `AI-47 row 8 failed on main at <SHA>:
    <step and observed result>`, or `AI-47 row 8 TEST_INVALID on main at <SHA>:
-   <self-check text>`. Keep AI-47 open until every other applicable row has a
-   recorded human result. A CI run or automated browser pass does not count as
-   Chris's observation.
+   <self-check text>`. AI-47 itself was waived on 2026-09-27, so a recorded
+   result updates this row's evidence rather than reopening AI-47. A CI run or
+   automated browser pass does not count as Chris's observation.
 
 **What stays automated-only, and the limits of this check.**
 

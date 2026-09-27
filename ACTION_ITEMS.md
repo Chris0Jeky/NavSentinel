@@ -360,7 +360,7 @@ published zip) in Chrome 153.0.8010.53 with realistic settings, all eight rows
 passed their acceptance specs. Row 8 now has its own spec,
 `ai47-8-clipboard-pressure`. Row 8's original procedure could not detect a #599
 regression because the benign prewrite alone warned (#947); the redesigned
-`clickfix-06` procedure and spec fail on a build with #599 removed and pass on
+`clickfix-06` procedure's acceptance spec fails on a build with #599 removed and passes on
 the real one. The #599 oracle is the
 NS-ADV-SELF-005 e2e test, which passes. The everyday-flow specs passed except the two known
 limits #864 and #865. #864 is fixed on `main` after v0.5.0 by #895, whose
