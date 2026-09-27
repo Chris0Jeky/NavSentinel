@@ -40,7 +40,7 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
 
   // Overlay cleanup lifecycle (content/capture_isolated.ts)
   overlay_cleanup_setting_off: "Hidden overlays were restored because overlay cleanup was turned off",
-  overlay_cleanup_undo: "You restored an overlay that NavSentinel had hidden",
+  overlay_cleanup_undo: "You restored an overlay that Heedline had hidden",
 
   // Child-frame destination check (content/capture_isolated.ts, research profile only)
   late_async_child_frame: "An embedded frame's destination was later matched to a known malicious domain",

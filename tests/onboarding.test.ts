@@ -14,7 +14,7 @@ describe("onboarding page", () => {
   });
 
   it("contains the welcome hero section", () => {
-    expect(html).toContain("NavSentinel");
+    expect(html).toContain("Heedline");
     expect(html).toContain("local interaction guard");
     expect(html).toContain("complementing built-in browser protection");
     expect(html).toContain("hero");

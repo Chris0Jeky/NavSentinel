@@ -92,6 +92,6 @@ describe("evidence UTF-8 byte limit and immutable snapshot (#689)", () => {
     expect(snapshot.bytes).toBe(new Blob([reviewed]).size);
     expect(JSON.parse(reviewed).events.map((row: { sourceSite: string }) => row.sourceSite)).toEqual(["early.test", "late.test"]);
     expect(reviewed).not.toContain("private-id");
-    expect(snapshot.filename).toBe("navsentinel-evidence-1970-01-01.json");
+    expect(snapshot.filename).toBe("heedline-evidence-1970-01-01.json");
   });
 });

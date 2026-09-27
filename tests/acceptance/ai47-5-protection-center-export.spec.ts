@@ -114,7 +114,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await trustedClick(options, "a.nav-btn[href$='evidence/evidence.html']");
       await options.waitForURL(`**/${EVIDENCE_PAGE}`, { timeout: 10_000 });
       expect(options.url()).toBe(session.extensionUrl(EVIDENCE_PAGE));
-      await expect(options).toHaveTitle("Protection Center · NavSentinel");
+      await expect(options).toHaveTitle("Protection Center · Heedline");
       await waitForSnapshot(options);
       const body = await options.locator("body").innerText();
       expect(safeClaims(body), "Protection Center must not describe history as a safety verdict").toEqual([]);
@@ -281,7 +281,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       if (click.status === "rejected" && !(popup.closed && String(click.reason).includes("popup DevTools socket closed"))) {
         throw click.reason;
       }
-      await expect(pc).toHaveTitle("Protection Center · NavSentinel");
+      await expect(pc).toHaveTitle("Protection Center · Heedline");
       await waitForSnapshot(pc);
       const total = Number(await pc.locator("#total").textContent());
       expect(total, "retained observations are shown").toBeGreaterThanOrEqual(4);
@@ -471,7 +471,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await clickInView(pc, "#downloadExport");
       const download = await pending;
       const bytes = await readDownload(download);
-      expect(download.suggestedFilename()).toMatch(/^navsentinel-evidence-\d{4}-\d{2}-\d{2}\.json$/);
+      expect(download.suggestedFilename()).toMatch(/^heedline-evidence-\d{4}-\d{2}-\d{2}\.json$/);
       expect(bytes.equals(Buffer.from(previewText, "utf8")), "downloaded bytes are identical to the reviewed preview").toBe(true);
       const saved = path.join(exportsDir, `filtered-${download.suggestedFilename()}`);
       await download.saveAs(saved);

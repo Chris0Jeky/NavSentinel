@@ -940,7 +940,7 @@ function handleClickFixScan(): void {
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
@@ -1066,7 +1066,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   if (isOverlayAlert && alert.severity === "high") {
     sendIconUpdate("yellow");
     showToast({
-      message: "NavSentinel detected a suspicious overlay.",
+      message: "Heedline detected a suspicious overlay.",
       timeoutMs: 0,
     });
   }
@@ -1195,7 +1195,7 @@ function showRollbackPrompt(url: string): void {
   sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
-    message: `NavSentinel rolled back a suspicious redirect to ${host}`,
+    message: `Heedline rolled back a suspicious redirect to ${host}`,
     actions: [
       {
         label: "Proceed",
@@ -1393,7 +1393,7 @@ function allowOnce(url: string, target?: string, features?: string): void {
     try {
       window.open(url, target ?? "_blank", features);
     } catch {
-      showToast({ message: "NavSentinel could not open the allowed navigation." });
+      showToast({ message: "Heedline could not open the allowed navigation." });
     }
   }, 0);
 }
@@ -1992,7 +1992,7 @@ window.addEventListener(
                   showPendingBlankNavigationPrompt(prompt),
                 )
                 .catch(() => {
-                  showToast({ message: "NavSentinel blocked a suspicious new tab." });
+                  showToast({ message: "Heedline blocked a suspicious new tab." });
                 });
             } else {
               showAllowPrompt(prompt);
@@ -2001,8 +2001,8 @@ window.addEventListener(
             if (hasClickfix) clickFixAlertedAt = Date.now();
           } else {
             const prefix = hasClickfix
-              ? "NavSentinel blocked a new tab with fake dialog detected"
-              : "NavSentinel blocked a suspicious new tab";
+              ? "Heedline blocked a new tab with fake dialog detected"
+              : "Heedline blocked a suspicious new tab";
             showToast({
               message: buildPlainMessage(
                 overlaySuppression ? `${prefix} and hid its overlay` : prefix,
@@ -2031,8 +2031,8 @@ window.addEventListener(
             ...navFeatures
           });
           const blockPrefix = hasClickfix
-            ? "NavSentinel blocked a deceptive click with fake dialog"
-            : "NavSentinel blocked a deceptive click";
+            ? "Heedline blocked a deceptive click with fake dialog"
+            : "Heedline blocked a deceptive click";
           showToast({
             message: buildPlainMessage(
               overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
@@ -2205,7 +2205,7 @@ window.addEventListener(
             reasons: ["late_async_child_frame"],
           });
           showToast({
-            message: `NavSentinel warning: ${host} is a known malicious domain`,
+            message: `Heedline warning: ${host} is a known malicious domain`,
             timeoutMs: 8000,
           });
         } catch {
