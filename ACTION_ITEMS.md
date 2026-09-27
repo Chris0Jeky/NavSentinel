@@ -41,8 +41,9 @@ under "Owner acknowledgement list" below.
 authorized the named browser-gated candidates to merge before manual Chrome
 testing under [`D-2026-09-12-P`](docs/agentic/DECISIONS.md), provided every
 non-human gate still passes. The retained browser work is consolidated as AI-47
-below. Every AI-47 Human result is **OPEN — not run**: a merge, CI, or automated
-Chromium result is not a human-test result. Browser merge receipts cover #600,
+below. A merge, CI, or automated Chromium result is not a human-test result;
+every AI-47 Human result was **OPEN — not run** until Chris waived the pass on
+agent evidence on 2026-09-27 (D-2026-09-27-S). Browser merge receipts cover #600,
 #609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658. PR #658
 merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result was
 waived with AI-47 on 2026-09-27 (D-2026-09-27-S). PR #599 stayed outside until AI-37 was accepted on
@@ -95,7 +96,7 @@ redirect guard may remain visibly present but inert; this is a fail-closed UX an
 accessibility regression, not an established navigation bypass, and is tracked
 with the complete evidence boundary and repair oracle in #560. The historical
 attempt records below are retained as at-the-time evidence and do not reopen the
-completed gate. This PR-specific completion does not change today's AI-47
+completed gate. This PR-specific completion does not change today's AI-19
 guided cursor.
 
 **Earlier human result (2026-08-27, PR #557 at
@@ -234,7 +235,7 @@ This row records integration state, not a human-test result:
 
 | PR | Scope | Head at refresh | State | Merge SHA |
 | --- | --- | --- | --- | --- |
-| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | MERGED; Human result remains **OPEN — not run** | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
+| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | MERGED; Human result waived with AI-47 (D-2026-09-27-S) | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
 
 ### Merged browser work retained under AI-47
 
@@ -517,7 +518,8 @@ headed-measurement result and does not waive future methodology.
   `chore/deny-floor-v1.6.3` and `fix/cooldown-map-cap`. Both commits are
   preserved on `origin` (D-2026-09-25-R).
 - AI-37 (policy half) — resolved 2026-09-25: Chris accepted #599's
-  unverified-window clipboard coalescing. The Chrome check stays open under AI-47.
+  unverified-window clipboard coalescing. Its Chrome check joined AI-47, which was
+  waived on agent evidence on 2026-09-27 (D-2026-09-27-S).
 - AI-29 - resolved 2026-08-28: Chris accepted PR #557's exact `ee804fa` overlay
   behavior and authorized merge; the PR merged as
   `d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555, #559, and #568. #560

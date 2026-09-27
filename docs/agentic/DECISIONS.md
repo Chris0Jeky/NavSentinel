@@ -20,7 +20,7 @@ When a decision changes, edit it in place and date the change.
 
 **Decision:** after using the v0.5.0 build, Chris asked the agent to run as much
 of the AI-47 owner check as it could. In answer to four explicit questions on
-2026-09-27 Chris chose:
+2026-09-27 Chris chose the following; item 5 came with the v0.5.1 answer:
 
 1. **AI-47: waived on agent evidence.** The manual Chrome pass is waived on the
    agent run recorded in
@@ -42,7 +42,8 @@ of the AI-47 owner check as it could. In answer to four explicit questions on
    names, based on the product's direction. The final choice is Chris's.
 
 **Why:** Chris did not want to spend time on the manual pass, and the automated
-acceptance lane covers every row on the exact artifact. The acceptance rule
+acceptance lane covers every row on the exact artifact (row 8 only weakly, see
+#947). The acceptance rule
 keeps an unrelated, tracked red from freezing unrelated fixes, without letting a
 new failure through.
 
