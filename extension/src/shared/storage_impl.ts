@@ -405,7 +405,23 @@ function updateSuiteSettingsDirect(
         partial as SettingsRecord,
       )) return { ...cur, conflict: true };
       const merged = mergeSuiteSettings(cur, partial);
-      await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+      if (cur.nav.defaultMode !== merged.nav.defaultMode) {
+        // Mode is an input to the adaptive derivative (#891). Join the prompt
+        // lane before reading outcomes, and commit both keys together: an
+        // earlier append must finish first, and a later one must see this mode.
+        // Unrelated/same-mode patches preserve an explicitly cleared cache.
+        await queuePromptOutcomeWrite(async () => {
+          const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+          const outcomes = boundPromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
+          const threshold = merged.nav.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+          await chrome.storage.local.set({
+            [SUITE_SETTINGS_KEY]: merged,
+            [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, threshold),
+          });
+        });
+      } else {
+        await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+      }
       return merged;
     }),
   );
