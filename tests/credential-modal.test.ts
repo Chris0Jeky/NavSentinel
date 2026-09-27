@@ -3,24 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
 import type { ModalSpec } from "../extension/src/content/credential_modal";
 import type { activateOwnedModalControl as ActivateOwnedModalControlType } from "../extension/src/content/credential_modal";
+import type { credentialModalRoot as CredentialModalRootType } from "../extension/src/content/credential_modal";
 
 const HOST_ID = "__sentinelsuite_cred_modal_host__";
 
 let showCredentialModal: typeof ShowCredentialModalType;
 let activateOwnedModalControl: typeof ActivateOwnedModalControlType;
+let credentialModalRoot: typeof CredentialModalRootType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/credential_modal");
   showCredentialModal = mod.showCredentialModal;
   activateOwnedModalControl = mod.activateOwnedModalControl;
+  credentialModalRoot = mod.credentialModalRoot;
 }
 
 function getHost(): HTMLElement | null {
   return document.getElementById(HOST_ID);
 }
 
+// The root is closed (#894): host.shadowRoot is null, so read the module's own reference.
 function getShadow(): ShadowRoot | null {
-  return getHost()?.shadowRoot ?? null;
+  return getHost() ? credentialModalRoot() : null;
 }
 
 function getOverlay(): HTMLElement | null {
@@ -595,6 +599,46 @@ describe("credential modal", () => {
       expect(document.body.contains(focusTarget)).toBe(true);
 
       document.body.removeChild(focusTarget);
+    });
+  });
+
+  describe("closed shadow root (#894)", () => {
+    it("gives page script no reference to the prompt's controls", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      const host = getHost()!;
+      expect(host.shadowRoot).toBeNull();
+      expect(host.querySelector("button")).toBeNull();
+      expect(document.querySelectorAll("button")).toHaveLength(0);
+      expect(getButtons()).toHaveLength(2);
+
+      activateButton(getButtons()[0]!);
+      await promise;
+    });
+
+    it("keeps focus that re-enters on a second action instead of pulling it back to the first", async () => {
+      const promise = showCredentialModal(minimalSpec());
+      vi.runAllTimers();
+
+      const buttons = getButtons();
+      buttons[1]!.focus();
+      expect(getShadow()!.activeElement).toBe(buttons[1]);
+
+      // Focus re-entering the card from outside (window refocus, assistive
+      // technology) reaches the window listener with the closed root hidden
+      // from composedPath(): Chrome reports only the host and its ancestors.
+      // happy-dom does not truncate the path, so model that here.
+      const host = getHost()!;
+      const reentry = new FocusEvent("focusin");
+      Object.defineProperty(reentry, "composedPath", {
+        value: () => [host, document.documentElement, document, window],
+      });
+      window.dispatchEvent(reentry);
+      expect(getShadow()!.activeElement).toBe(buttons[1]);
+
+      activateButton(buttons[0]!);
+      await promise;
     });
   });
 

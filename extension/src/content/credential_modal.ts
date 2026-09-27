@@ -25,6 +25,7 @@ const FOCUS_TRAP_STATE_KEY = "__sentinelsuite_cred_modal_focus_trap_state__";
 
 type FocusTrapState = {
   card: HTMLElement | null;
+  cardRoot: ShadowRoot | null;
   getFallback: (() => HTMLElement) | null;
   installed: boolean;
 };
@@ -38,6 +39,7 @@ function getFocusTrapState(): FocusTrapState {
   const target = window as FocusTrapWindow;
   target[FOCUS_TRAP_STATE_KEY] ??= {
     card: null,
+    cardRoot: null,
     getFallback: null,
     installed: false
   };
@@ -45,11 +47,17 @@ function getFocusTrapState(): FocusTrapState {
 }
 
 function onGlobalFocusIn(e: FocusEvent): void {
-  const { card, getFallback } = getFocusTrapState();
+  const { card, cardRoot, getFallback } = getFocusTrapState();
   if (!card || !getFallback || !card.isConnected) return;
 
+  // The card lives in a closed shadow root (#894), so a window listener's
+  // composedPath() stops at the host. The root's own activeElement still says
+  // where focus landed.
+  const focused = cardRoot?.activeElement ?? null;
   const path = e.composedPath();
-  const isInsideCard = path.some((node) => node instanceof Node && card.contains(node));
+  const isInsideCard =
+    (focused !== null && card.contains(focused)) ||
+    path.some((node) => node instanceof Node && card.contains(node));
   if (!isInsideCard) {
     getFallback().focus();
   }
@@ -62,9 +70,14 @@ function installGlobalFocusTrap(): void {
   state.installed = true;
 }
 
-function activateFocusTrap(card: HTMLElement, getFallback: () => HTMLElement): void {
+function activateFocusTrap(
+  card: HTMLElement,
+  cardRoot: ShadowRoot,
+  getFallback: () => HTMLElement
+): void {
   const state = getFocusTrapState();
   state.card = card;
+  state.cardRoot = cardRoot;
   state.getFallback = getFallback;
 }
 
@@ -72,6 +85,7 @@ function clearFocusTrap(card: HTMLElement): void {
   const state = getFocusTrapState();
   if (state.card !== card) return;
   state.card = null;
+  state.cardRoot = null;
   state.getFallback = null;
 }
 
@@ -105,6 +119,15 @@ export function activateOwnedModalControl(
   return false;
 }
 
+/**
+ * The prompt's shadow root. It is closed (#894), so `host.shadowRoot` is null
+ * for page script and for every other caller; this module reference is the
+ * only way in. Unit tests use it to read the prompt.
+ */
+export function credentialModalRoot(): ShadowRoot | null {
+  return root;
+}
+
 installGlobalFocusTrap();
 
 function listFocusable(rootNode: ParentNode): HTMLElement[] {
@@ -128,7 +151,13 @@ function ensureHost(): void {
   host.style.zIndex = "2147483647";
   host.style.pointerEvents = "none";
 
-  root = host.attachShadow({ mode: "open" });
+  // Closed: with an open root, page script could reach the action buttons and
+  // call focus() on a security-lowering one (Trust, Proceed once) just before
+  // the user's next real Enter or Space, which then activates it. Focus
+  // provenance cannot tell that apart from a screen reader moving focus, so
+  // the page loses the reference instead. Assistive technology reads closed
+  // roots normally. (#894)
+  root = host.attachShadow({ mode: "closed" });
   const style = document.createElement("style");
   style.textContent = `
     :host, * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif; }
@@ -530,7 +559,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     card.appendChild(footer);
     overlay.appendChild(card);
     activeRoot.appendChild(overlay);
-    activateFocusTrap(card, focusFallback);
+    activateFocusTrap(card, activeRoot, focusFallback);
 
     window.setTimeout(() => {
       const firstFocusable = listFocusable(card)[0];

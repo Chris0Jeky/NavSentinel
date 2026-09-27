@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { AcceptanceSession, EVENT_LOG_KEY, SETTINGS_KEY, acceptanceRunDirectory, toastState, trustedClick } from "./acceptance_harness";
+import { readCredentialModal } from "../e2e/extension_test_utils";
 import {
   EVIDENCE_PAGE,
   OPTIONS_PAGE,
@@ -203,7 +204,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await page.evaluate(({ dest, pw }) => (window as unknown as { armLogin: (m: string, p: string) => void }).armLogin(dest, pw), { dest: markers.loginDest, pw: markers.password });
       await trustedClick(page, "#submit");
       await expect.poll(async () => shadowButtonPoint(page, "Cancel"), { timeout: 8000 }).not.toBeNull();
-      const modalButtons = await page.evaluate(() => Array.from(document.getElementById("__sentinelsuite_cred_modal_host__")?.shadowRoot?.querySelectorAll("button") ?? []).map((button) => button.textContent?.trim() ?? ""));
+      const modalButtons = (await readCredentialModal(page))?.buttons ?? [];
       session.observe("credential modal controls (pre-existing credential flow, not an evidence surface)", modalButtons.join(" | "));
       await session.screenshot(page, "setup-d-credential-modal");
       const cancel = (await shadowButtonPoint(page, "Cancel"))!;

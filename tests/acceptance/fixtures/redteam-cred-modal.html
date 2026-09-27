@@ -35,8 +35,16 @@
       return action;
     };
 
-    // Report the extension-owned credential modal's live buttons (open shadow
-    // root, so a hostile page can read and reach into it).
+    // How far this page can reach into the extension-owned credential modal:
+    // "no-host", "closed-root" (the host exists but its shadow root is hidden
+    // from page script, #894) or "open".
+    window.__modalReach = () => {
+      const host = document.getElementById("__sentinelsuite_cred_modal_host__");
+      if (!host) return "no-host";
+      return host.shadowRoot ? "open" : "closed-root";
+    };
+
+    // Report the credential modal's live buttons, when this page can see them.
     window.__modalButtons = () => {
       const host = document.getElementById("__sentinelsuite_cred_modal_host__");
       if (!host || !host.shadowRoot) return null;
@@ -46,7 +54,8 @@
     // Attacker capability: an UNTRUSTED synthetic click on a named modal control.
     window.__synthClickModal = (label) => {
       const host = document.getElementById("__sentinelsuite_cred_modal_host__");
-      if (!host || !host.shadowRoot) return "no-host";
+      if (!host) return "no-host";
+      if (!host.shadowRoot) return "closed-root";
       const btn = Array.from(host.shadowRoot.querySelectorAll("button"))
         .find((b) => b.textContent.trim() === label);
       if (!btn) return "no-button";

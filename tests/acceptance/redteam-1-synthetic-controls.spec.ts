@@ -13,22 +13,38 @@
  * The victim contributes at most ONE lured trusted click (Playwright mouse).
  * Assertions state the SECURE outcome: on main da3db0b6 A1b/A2/A3 are red
  * (harm reached); on the #784 and #827 heads they are green (2026-09-24).
+ * Since #894 the credential modal's shadow root is closed, so the page's own
+ * reach into it is asserted to fail; A1b/A2 then click it synthetically through
+ * the DevTools protocol, a stronger attacker than a page, to keep the #783
+ * trusted-input gate behind the closed root covered.
  * Automated agent evidence, never an owner Gate-3 result.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { AcceptanceSession, toastState, trustedClick } from "./acceptance_harness";
+import { attemptSyntheticModalClick, readCredentialModal } from "../e2e/extension_test_utils";
 import { uniqueMarker, type Attempt } from "./redteam_helpers";
 
+/** The modal's buttons as the harness sees them (through CDP; the root is closed, #894). */
 async function waitForModalButtons(page: Page, timeout = 9000): Promise<string[] | null> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const buttons = await page
-      .evaluate(() => (window as unknown as { __modalButtons: () => string[] | null }).__modalButtons())
-      .catch(() => null);
+    const buttons = (await readCredentialModal(page).catch(() => null))?.buttons;
     if (buttons && buttons.length > 0) return buttons;
     await page.waitForTimeout(200);
   }
   return null;
+}
+
+/**
+ * The page's own attack first (it must not even reach the closed root, #894),
+ * then the same untrusted click delivered through CDP, which models an attacker
+ * who could reach it and exercises the button's trusted-input gate (#783).
+ */
+async function synthClickModalBothWays(page: Page, label: string): Promise<{ reach: string; pageClick: string }> {
+  const reach = await ev<string>(page, "__modalReach");
+  const pageClick = await ev<string>(page, "__synthClickModal", label);
+  await attemptSyntheticModalClick(page, label);
+  return { reach, pageClick };
 }
 
 const ev = <T = unknown>(page: Page, name: string, arg?: unknown) =>
@@ -110,15 +126,16 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
       const before = page.url();
       const navigated = page.waitForURL((url) => url.href.includes(`/dest/${marker}/`), { timeout: 8000 })
         .then(() => true, () => false);
-      const clicked = await ev<string>(page, "__synthClickModal", "Proceed once");
-      session.note(`A1b synthetic 'Proceed once' -> ${clicked}`);
+      const clicked = await synthClickModalBothWays(page, "Proceed once");
+      session.note(`A1b synthetic 'Proceed once' -> ${JSON.stringify(clicked)}`);
+      expect(clicked.reach, "page script must not reach the credential modal's controls (#894)").toBe("closed-root");
       const reached = await navigated;
       const finalUrl = page.url();
       session.note(`A1b before=${before} final=${finalUrl} reachedHarm=${reached}`);
       const crossSite = reached && new URL(finalUrl).hostname !== new URL(before).hostname;
       attempts.push({
         id: "A1b",
-        technique: "one trusted submit click -> untrusted .click() on credential modal 'Proceed once'",
+        technique: "one trusted submit click -> untrusted .click() on credential modal 'Proceed once' (page script, then CDP past the closed root)",
         fixture: "redteam-cred-modal.html",
         expected: "modal blocks the credential submit until the user's own trusted decision",
         observed: reached ? "REACHED-HARM" : "BLOCKED",
@@ -153,8 +170,9 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
         return;
       }
       const before = (await session.eventLog()).length;
-      const clicked = await ev<string>(page, "__synthClickModal", trustLabel);
-      session.note(`A2 synthetic Trust click (${trustLabel}) -> ${clicked}`);
+      const clicked = await synthClickModalBothWays(page, trustLabel);
+      session.note(`A2 synthetic Trust click (${trustLabel}) -> ${JSON.stringify(clicked)}`);
+      expect(clicked.reach, "page script must not reach the credential modal's controls (#894)").toBe("closed-root");
       let trustEvent = false;
       await expect.poll(async () => {
         trustEvent = (await session.eventLog()).slice(before).some((row) => String(row.kind) === "cred_trust_domain");
@@ -162,7 +180,7 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
       }, { timeout: 6000 }).toBe(true).catch(() => undefined);
       session.note(`A2 cred_trust_domain observed: ${trustEvent}`);
       attempts.push({
-        id: "A2", technique: "untrusted .click() on modal 'Trust <site>'", fixture: "redteam-cred-modal.html",
+        id: "A2", technique: "untrusted .click() on modal 'Trust <site>' (page script, then CDP past the closed root)", fixture: "redteam-cred-modal.html",
         expected: "trust persists only on a trusted user decision", observed: trustEvent ? "REACHED-HARM" : "BLOCKED",
         finding: trustEvent ? "NEW" : "KNOWN",
         detail: trustEvent ? "domain trust recorded from a synthetic click" : "no trust write",

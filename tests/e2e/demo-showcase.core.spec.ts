@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import {
   assertNoToastFor,
   clickToastButton,
+  waitForCredentialModal,
   waitForNavSentinelBridge,
   waitForToastText
 } from "./extension_test_utils";
@@ -164,7 +165,7 @@ test("guided core showcase of merged NavSentinel capabilities @demo @demo-core",
     });
     await demoPause(page, 1700);
     await page.click("#submitBtn");
-    await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
+    await waitForCredentialModal(page);
     await showDemoOverlay(page, {
       step: 7,
       total: totalSteps,
