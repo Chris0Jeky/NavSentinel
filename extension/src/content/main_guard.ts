@@ -400,7 +400,8 @@ function consumeAnchorOpenIntent(url: string | undefined, target: string | undef
   const event = anchorOpenIntentEvent;
   // Resolve first: the match then compares absolute URLs, and an unresolvable
   // URL never matches.
-  const resolved = url === undefined ? null : resolveAgainstBase(url);
+  // An empty URL (about:blank) never matched a link's destination; keep it so.
+  const resolved = url === undefined || url.trim() === "" ? null : resolveAgainstBase(url);
   if (!event || resolved === null) return false;
   if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved)) return false;
   try {
