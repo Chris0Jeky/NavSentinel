@@ -1,10 +1,15 @@
-# NavSentinel repository guide
+# Heedline repository guide
 
-NavSentinel is a local-first Chrome MV3 extension built with TypeScript, Vite,
-Vitest, and Playwright. It protects abuse-heavy browser surfaces including
+Heedline (formerly NavSentinel) is a local-first Chrome MV3 extension built with
+TypeScript, Vite, Vitest, and Playwright. It protects abuse-heavy browser surfaces including
 deceptive navigation, risky credential submits, DoubleClickjacking, and
 ClickFix/fake-CAPTCHA overlays. The project is a pre-release private alpha and
 has zero runtime network calls by design.
+
+Internal identifiers keep the former name on purpose, so existing installs keep
+their data and older exports still import: storage keys, DOM ids and
+`data-navsentinel-*` markers, export format identifiers, the `[NavSentinel]`
+console-log prefix, `NAVSENTINEL_*` environment variables and the repository name.
 
 Owner decision #499 (2026-07-31) retired the repository-local agent harness.
 There is no project tier, lifecycle hook, command floor, agent-validation

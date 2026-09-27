@@ -25,7 +25,7 @@ export function prepareEvidenceExport(events: readonly EvidenceEvent[], now = ne
   const bytes = measureEvidenceExport(text);
   return Object.freeze({
     text,
-    filename: `navsentinel-evidence-${payload.exportedAt.slice(0, 10)}.json`,
+    filename: `heedline-evidence-${payload.exportedAt.slice(0, 10)}.json`,
     count: payload.events.length,
     bytes,
     exportedAt: payload.exportedAt,

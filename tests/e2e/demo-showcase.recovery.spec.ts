@@ -55,7 +55,7 @@ test("guided recovery showcase for redirects and one-time recovery @demo @demo-r
     });
     await demoPause(page1, 1700);
     await page1.click("#delayed");
-    await waitForToastText(page1, "NavSentinel rolled back a redirect", 10_000);
+    await waitForToastText(page1, "Heedline rolled back a", 10_000);
     const rollbackReturnedToOrigin = /level10-redirects-and-forms\.html/.test(page1.url());
     await showDemoOverlay(page1, {
       step: 2,
@@ -63,8 +63,8 @@ test("guided recovery showcase for redirects and one-time recovery @demo @demo-r
       title: "What just happened",
       summary:
         rollbackReturnedToOrigin
-          ? "NavSentinel rolled the delayed redirect back to the original page and required an explicit proceed decision before continuing."
-          : "NavSentinel surfaced a rollback-style recovery prompt on the delayed redirect instead of letting the later navigation blend into the original click.",
+          ? "Heedline rolled the delayed redirect back to the original page and required an explicit proceed decision before continuing."
+          : "Heedline surfaced a rollback-style recovery prompt on the delayed redirect instead of letting the later navigation blend into the original click.",
       expectation: "inspect"
     });
     await demoPause(page1, 2200);

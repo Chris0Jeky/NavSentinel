@@ -183,7 +183,7 @@ function renderFullCard(opts: ToastOptions): void {
   if (opts.briefRecovery) {
     wrap.setAttribute("aria-live", "polite");
     wrap.setAttribute("aria-atomic", "true");
-    wrap.setAttribute("aria-label", `NavSentinel: ${opts.message}`);
+    wrap.setAttribute("aria-label", `Heedline: ${opts.message}`);
   }
   if (opts.persistent) wrap.dataset.persistent = "true";
 
@@ -193,7 +193,7 @@ function renderFullCard(opts: ToastOptions): void {
   dot.className = "head-dot";
   const label = document.createElement("span");
   label.className = "head-label";
-  label.textContent = "NavSentinel";
+  label.textContent = "Heedline";
   head.appendChild(dot);
   head.appendChild(label);
 
@@ -357,7 +357,7 @@ function showOrUpdatePill(): void {
     const dot = document.createElement("span");
     dot.className = "head-dot";
     const text = document.createElement("span");
-    text.append("NavSentinel blocked ");
+    text.append("Heedline blocked ");
     pillCountEl = document.createElement("span");
     pillCountEl.className = "pill-count";
     text.appendChild(pillCountEl);
@@ -382,7 +382,7 @@ function showOrUpdatePill(): void {
   }
 
   if (pillCountEl) pillCountEl.textContent = pluralNavigations(burstCount);
-  pill.setAttribute("aria-label", `NavSentinel blocked ${pluralNavigations(burstCount)}. Activate for details.`);
+  pill.setAttribute("aria-label", `Heedline blocked ${pluralNavigations(burstCount)}. Activate for details.`);
   schedulePillIdleDismiss();
 }
 

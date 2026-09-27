@@ -14,3 +14,6 @@ export function finalizeUiGuardLoader(loaderTemplate: string): {
   revision: string;
 };
 export function assertUiGuardRevision(content: string | Uint8Array): string;
+export const EARLY_MAIN_CLOCK: string;
+export function installEarlyMainClockText(generated: string): string;
+export function assertEarlyMainClock(loader: string): void;
