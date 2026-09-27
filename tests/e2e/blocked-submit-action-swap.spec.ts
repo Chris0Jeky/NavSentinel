@@ -321,10 +321,12 @@ test("a blocked popup whose relative URL cannot be resolved stays blocked with n
   await withAllowlistedPage(async (page, approvedBase) => {
     const popups: Page[] = [];
     page.context().on("page", (opened) => popups.push(opened));
-    await setBase(page, "data:text/plain,base");
-    expect(await page.evaluate(() => document.baseURI), "TEST_INVALID: Chrome must accept the data: base").toMatch(/^data:/);
+    // Chrome ignores a data: or javascript: base but accepts mailto:, about:blank,
+    // tel: and urn:, against which a relative URL does not resolve (measured).
+    await setBase(page, "mailto:base@example.test");
+    expect(await page.evaluate(() => document.baseURI), "TEST_INVALID: Chrome must accept the mailto: base").toMatch(/^mailto:/);
     await page.evaluate((allowlisted) => {
-      // No gesture: blocked. A relative URL cannot resolve against a data: base.
+      // No gesture: blocked. A relative URL cannot resolve against a mailto: base.
       window.open("level1-basic-opacity.html?open=unresolvable", "_blank");
       // Moving the base to the allowlisted host must not revive it.
       document.querySelector("base")!.href = allowlisted;

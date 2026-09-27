@@ -781,9 +781,10 @@ function patchedOpen(
   // and an approval opens the same absolute URL even if the page moves
   // `<base href>` while the prompt waits. An empty URL keeps meaning about:blank.
   const blockedUrl = url === undefined || url === "" ? url : resolveAgainstBase(url);
-  // An unresolvable URL (a `data:` base, or no captured base) stays blocked
-  // with nothing to approve: the raw relative string must never reach a later
-  // native open, where it would resolve against whatever base exists then.
+  // An unresolvable URL (a non-hierarchical base such as `mailto:`, or no
+  // captured base) stays blocked with nothing to approve: the raw relative
+  // string must never reach a later native open, where it would resolve
+  // against whatever base exists then.
   if (blockedUrl === null) return null;
   registerBlockedAction({
     kind: "window_open",
