@@ -397,7 +397,7 @@ function consumeAnchorOpenIntent(url: string | undefined, target: string | undef
   if (mode !== "smart") return false;
   if (openCount >= MAX_OPENS_PER_GESTURE) return false;
   const event = anchorOpenIntentEvent;
-  if (!event || !matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), url, target, location.href)) return false;
+  if (!event || !matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), url, target, documentBaseUrl())) return false;
   try {
     // isTrusted is an unforgeable own property, and re-dispatching the saved
     // event with dispatchEvent() makes it false: a later replay cannot pose as
@@ -500,7 +500,7 @@ function postAllowed(params: { kind: string; url?: string; target?: string }): v
 function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQueryPrefix?: boolean }): void {
   if (url === undefined || String(url) === "") return;
   try {
-    const href = new URL(String(url), location.href).toString();
+    const href = new URL(String(url), documentBaseUrl()).toString();
     if (!href.startsWith("http:") && !href.startsWith("https:")) return;
     postToIsolated("ns-allow-target-nav", {
       url: href,
@@ -560,6 +560,27 @@ const nativeEventPhase = capturedGetter<number>(Event.prototype, "eventPhase", (
 const nativeDefaultPrevented = capturedGetter<boolean>(Event.prototype, "defaultPrevented", () => false);
 const nativePreventDefault = Event.prototype.preventDefault;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+// #900: the browser resolves a relative form action, window.open URL or link
+// against the document's base URL, and `<base href>` can move that to another
+// origin. Read it through the platform getter, not a property the page can
+// shadow on `document`.
+const nativeBaseURI = capturedGetter<string>(Node.prototype, "baseURI", () => "");
+
+function documentBaseUrl(): string {
+  try {
+    return nativeBaseURI.call(document) || location.href;
+  } catch {
+    return location.href;
+  }
+}
+
+function resolveAgainstBase(url: string): string {
+  try {
+    return new URL(url, documentBaseUrl()).toString();
+  } catch {
+    return url;
+  }
+}
 
 /**
  * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
@@ -735,14 +756,18 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
+  // #900: resolve once, against the base URL in force now, so the prompt shows
+  // and an approval opens the same absolute URL even if the page moves
+  // `<base href>` while the prompt waits. An empty URL keeps meaning about:blank.
+  const blockedUrl = url === undefined || url === "" ? url : resolveAgainstBase(url);
   registerBlockedAction({
     kind: "window_open",
-    ...(url !== undefined ? { url: String(url) } : {}),
+    ...(blockedUrl !== undefined ? { url: blockedUrl } : {}),
     ...(target !== undefined ? { target } : {}),
     ...(features !== undefined ? { features } : {}),
     action: () => {
       recordWindowOpen();
-      callNativeOpen(receiver, url, target, features);
+      callNativeOpen(receiver, blockedUrl, target, features);
     }
   });
 
@@ -751,9 +776,10 @@ function patchedOpen(
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
   const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
+  // An empty action submits to the document's own URL, not its base URL.
   if (!raw) return location.href;
   try {
-    return new URL(raw, location.href).toString();
+    return new URL(raw, documentBaseUrl()).toString();
   } catch {
     return undefined;
   }
