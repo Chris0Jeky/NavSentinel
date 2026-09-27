@@ -95,7 +95,15 @@ describe("Branded Chrome browser-gate trigger", () => {
     expect(source).toContain(
       "PULL_REQUEST_HEAD: ${{ github.event.pull_request.head.sha || '' }}",
     );
-    expect(source).toContain("checkout_head=%s");
-    expect(source).toContain('"$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
+    expect(source).toContain(
+      "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+    );
+    expect(source).toContain(
+      "EXPECTED_CHECKOUT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+    );
+    expect(source).toContain('checkout_head=$(git rev-parse HEAD)');
+    expect(source).toContain("checkout_head=%s\nevent_sha=%s");
+    expect(source).toContain('"$checkout_head" "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
+    expect(source).not.toContain('\n            "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
   });
 });
