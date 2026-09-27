@@ -243,7 +243,11 @@ export type CredentialModalState = {
   focused: string | null;
 };
 
-/** The open credential prompt, or null when none is rendered. */
+/**
+ * The open credential prompt, or null when none is rendered. A failed read
+ * throws rather than reading as "no prompt", so a check that the prompt went
+ * away cannot pass on an error.
+ */
 export async function readCredentialModal(page: Page): Promise<CredentialModalState | null> {
   return evaluateInCredentialModal(page, function (this: ShadowRoot) {
     const overlay = this.querySelector(".overlay");
@@ -257,7 +261,7 @@ export async function readCredentialModal(page: Page): Promise<CredentialModalSt
       ),
       focused: this.activeElement?.textContent?.trim() ?? null
     };
-  }).catch(() => null);
+  });
 }
 
 /** Waits for the credential prompt ("Credential submit blocked") to render. */
@@ -267,10 +271,20 @@ export async function waitForCredentialModal(
 ): Promise<CredentialModalState> {
   const deadline = Date.now() + timeout;
   for (;;) {
-    const state = await readCredentialModal(page);
+    let state: CredentialModalState | null = null;
+    let failure: unknown = null;
+    try {
+      state = await readCredentialModal(page);
+    } catch (error) {
+      // A navigation can destroy the context mid-read; keep waiting.
+      failure = error;
+    }
     if (state?.title === "Credential submit blocked") return state;
     if (Date.now() >= deadline) {
-      throw new Error(`Credential prompt did not appear within ${timeout} ms (last: ${JSON.stringify(state)})`);
+      throw new Error(
+        `Credential prompt did not appear within ${timeout} ms (last: ${JSON.stringify(state)}` +
+          `${failure ? `, last read error: ${String(failure)}` : ""})`
+      );
     }
     await page.waitForTimeout(100);
   }

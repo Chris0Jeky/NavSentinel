@@ -28,7 +28,7 @@ import { uniqueMarker, type Attempt } from "./redteam_helpers";
 async function waitForModalButtons(page: Page, timeout = 9000): Promise<string[] | null> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const buttons = (await readCredentialModal(page))?.buttons;
+    const buttons = (await readCredentialModal(page).catch(() => null))?.buttons;
     if (buttons && buttons.length > 0) return buttons;
     await page.waitForTimeout(200);
   }

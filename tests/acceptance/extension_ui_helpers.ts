@@ -127,7 +127,7 @@ export async function shadowButtonPoint(page: Page, label: string): Promise<{ x:
       return rect.width && rect.height ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } : null;
     },
     label,
-  ).catch(() => null);
+  );
 }
 
 // ------------------------------------------------------------ colour/contrast

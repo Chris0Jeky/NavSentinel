@@ -140,6 +140,11 @@ test("page script cannot reach the credential prompt; real Tab still moves betwe
       expect.arrayContaining(["dialog:Credential submit blocked", "button:Cancel", "button:Proceed once"]),
     );
 
+    // window.find() can select the prompt's text, but it must not move focus.
+    const found = await page.evaluate(() => (window as unknown as { find: (text: string) => boolean }).find("Proceed once"));
+    expect(found).toBe(true);
+    expect(await focused()).toBe("Cancel");
+
     // Real Tab moves to the next action and stays there.
     await page.keyboard.press("Tab");
     await expect.poll(focused).toBe("Proceed once");

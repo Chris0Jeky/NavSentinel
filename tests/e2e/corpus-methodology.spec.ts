@@ -47,9 +47,10 @@ async function startHarness(): Promise<CorpusReplayHarness> {
 }
 
 // The credential prompt's root is closed (#894), so Playwright selectors
-// cannot see into it; read it through CDP.
+// cannot see into it; read it through CDP. A failed read counts as not
+// visible, as the former isVisible() check did.
 async function credentialModalVisible(page: Page): Promise<boolean> {
-  return (await readCredentialModal(page)) !== null;
+  return (await readCredentialModal(page).catch(() => null)) !== null;
 }
 
 test.beforeAll(() => {
