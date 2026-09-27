@@ -880,7 +880,7 @@ evidence only.
    - **RETRY**: click once inside the page and press F5. The box explains why.
      "Refused" or "never finished" means that step 4 did not take effect or that
      the page did not have focus.
-   - **FAILED**: NavSentinel's bridge never reported ready. Record it as a
+   - **FAILED**: Heedline's bridge never reported ready. Record it as a
      product failure.
 
    If three loads in a row read **RETRY**, stop and record `TEST_INVALID` with

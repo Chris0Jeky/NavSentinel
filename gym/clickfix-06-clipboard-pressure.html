@@ -110,11 +110,11 @@
             : check.state === "failed" ? "failed" : "";
         const label = {
           idle: "IDLE: add ?mode=benign or ?mode=attack to the address and reload.",
-          waiting: "Waiting for NavSentinel's clipboard hook...",
+          waiting: "Waiting for Heedline's clipboard hook...",
           writing: "Clipboard burst in progress...",
-          valid: "VALID: the whole burst finished before NavSentinel's bridge-ready marker.",
+          valid: "VALID: the whole burst finished before Heedline's bridge-ready marker.",
           retry: "RETRY: this load did not exercise the pre-handshake window.",
-          failed: "FAILED: NavSentinel's bridge never reported ready.",
+          failed: "FAILED: Heedline's bridge never reported ready.",
         }[check.state];
         state.textContent = `${label} ${check.reason}`.trim();
         detail.textContent = [
@@ -223,7 +223,7 @@
         if (now() - startedAt > HOOK_TIMEOUT_MS) {
           finish("retry", hooked
             ? "The page overlay never appeared."
-            : "NavSentinel's clipboard hook never appeared. Is the extension loaded and enabled?");
+            : "Heedline's clipboard hook never appeared. Is the extension loaded and enabled?");
           return;
         }
         poll.port2.postMessage(0);
@@ -235,7 +235,7 @@
 <body>
   <h1>ClickFix 06 - Clipboard pressure before the bridge handshake</h1>
   <div class="description">
-    <strong>Scenario:</strong> a page floods the clipboard while NavSentinel is still starting up. As
+    <strong>Scenario:</strong> a page floods the clipboard while Heedline is still starting up. As
     soon as the MAIN-world clipboard hook is installed, and before the bridge reports ready, it writes
     40 harmless labels. The attack arm then writes one inert command-like value last.
     <br><br>
