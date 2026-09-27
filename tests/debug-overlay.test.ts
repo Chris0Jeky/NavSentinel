@@ -109,7 +109,7 @@ describe("debug_overlay", () => {
       setDebugEnabled(true);
       const panel = getPanel();
       expect(panel).not.toBeNull();
-      expect(panel!.textContent).toBe("NavSentinel debug enabled...");
+      expect(panel!.textContent).toBe("Heedline debug enabled...");
     });
 
     it("removes host when disabled", () => {
@@ -159,7 +159,7 @@ describe("debug_overlay", () => {
       setDebugEnabled(true);
       updateDebugOverlay(defaultInfo());
       const panel = getPanel()!;
-      expect(panel.textContent).toContain("NavSentinel Debug");
+      expect(panel.textContent).toContain("Heedline Debug");
     });
 
     it("displays mode", () => {
@@ -491,7 +491,7 @@ describe("debug_overlay", () => {
       setDebugEnabled(true);
       updateDebugOverlay(defaultInfo());
       expect(getHost()).not.toBeNull();
-      expect(getPanel()!.textContent).toContain("NavSentinel Debug");
+      expect(getPanel()!.textContent).toContain("Heedline Debug");
     });
 
     it("displays mode: off", () => {
@@ -569,7 +569,7 @@ describe("debug_overlay", () => {
           },
         }),
       );
-      expect(getPanel()!.textContent).toContain("NavSentinel Debug");
+      expect(getPanel()!.textContent).toContain("Heedline Debug");
     });
 
     it("renders non-empty cspInfo.reasons without breaking overlay", () => {
@@ -626,7 +626,7 @@ describe("debug_overlay", () => {
       );
       const lines = getPanel()!.textContent!.split("\n");
       expect(lines).toHaveLength(17);
-      expect(lines[0]).toBe("NavSentinel Debug");
+      expect(lines[0]).toBe("Heedline Debug");
       expect(lines[1]).toMatch(/^Mode:/);
       expect(lines[2]).toMatch(/^MainGuard:/);
       expect(lines[3]).toMatch(/^Decision:/);

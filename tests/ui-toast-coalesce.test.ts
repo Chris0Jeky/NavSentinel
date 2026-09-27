@@ -58,7 +58,7 @@ describe("ui_toast burst coalescing", () => {
   function countText(): string {
     return pill()?.querySelector(".pill-count")?.textContent ?? "";
   }
-  function block(message = "NavSentinel blocked a suspicious new tab"): void {
+  function block(message = "Heedline blocked a suspicious new tab"): void {
     showToast({ message, coalesce: true });
   }
 

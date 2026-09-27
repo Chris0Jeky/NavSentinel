@@ -16,6 +16,27 @@ When a decision changes, edit it in place and date the change.
 
 ## 2026-09-27 — After the v0.5.0 pre-release
 
+### D-2026-09-27-T — The product is renamed Heedline (user-facing surfaces only)
+
+**Decision:** Chris asked for the name to be thought through against the
+product's direction, then chose **Heedline** from the researched shortlist in
+[`NAMING_SCREEN_2026-09-27.md`](NAMING_SCREEN_2026-09-27.md). Of the 18 names
+screened, it had the fewest conflicts and the best fit. The rename covers
+user-facing surfaces only:
+- the extension name, UI, notices and prompts;
+- export filenames and the release zip;
+- the main docs.
+
+Internal identifiers keep the former name, so existing installs keep their data
+and older exports still import: storage keys, DOM ids and `data-navsentinel-*`
+markers, export format identifiers, the `[NavSentinel]` log prefix,
+`NAVSENTINEL_*` environment variables and the repository name. AI-19 stays
+open for formal trademark clearance, the repository name and the store listing.
+
+**Why:** "NavSentinel" collides with a GNSS anti-spoofing product, and "Nav" no
+longer covers what the extension guards. "Heedline" says careful attention at
+the line a click is about to cross, in a calm, non-alarmist voice.
+
 ### D-2026-09-27-S — AI-47 waived on agent evidence; known acceptance reds do not block; row 8 redesigned; v0.5.1 waits; AI-19 goes the rename route
 
 **Decision:** after using the v0.5.0 build, Chris asked the agent to run as much

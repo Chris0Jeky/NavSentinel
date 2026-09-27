@@ -429,7 +429,7 @@ export default function showPendingBlankNavigationPrompt(
     (created) => {
       showToast({
         message: created
-          ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open NavSentinel to review.`
+          ? `${request.title}${request.overlayHidden ? " (overlay hidden)" : ""}: ${destinationHost}. Open Heedline to review.`
           : `${request.title}: ${destinationHost}. Navigation remains blocked.`,
         coalesce: !request.overlayHidden,
         onDismiss: () => recordOutcome("dismiss"),

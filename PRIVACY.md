@@ -1,6 +1,6 @@
 # Privacy
 
-NavSentinel is designed to be local-first.
+Heedline is designed to be local-first.
 
 Local handling still counts as user-data handling under current Chrome Web
 Store policy. The current development build starts content scripts at
@@ -12,7 +12,7 @@ installation and before handling, the extension must remain passive until
 in-product disclosure and explicit activation. Revocation/reset must also be
 available and tested.
 
-NavSentinel's use of information received through Chrome APIs adheres to the
+Heedline's use of information received through Chrome APIs adheres to the
 Chrome Web Store User Data Policy, including the Limited Use requirements. Data
 is used only to provide or improve the disclosed local security purpose; it is
 not transferred for advertising, credit, data-broker, or unrelated purposes.

@@ -768,7 +768,7 @@ exportBtn.addEventListener("click", async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `navsentinel-suite-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  a.download = `heedline-suite-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();

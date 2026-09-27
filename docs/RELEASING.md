@@ -84,7 +84,7 @@ zipped by this command; rebuild with `npm run build` first.
 Expected artifact:
 
 ```text
-artifacts/navsentinel-v<version>.zip
+artifacts/heedline-v<version>.zip
 ```
 
 ## When Not To Release
