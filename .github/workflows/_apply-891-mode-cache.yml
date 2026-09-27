@@ -1,0 +1,61 @@
+name: Apply #891 adaptive mode/cache repair
+
+on:
+  push:
+    branches: [fix/891-mode-adaptive-cache-v2]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply, verify and self-remove
+        env:
+          EXPECTED_PARENT: 78ee0cf156795ea808b1df656ec1c979ad4964a0
+          BASE_MAIN: 9c54854d519463a2475801d0f3a003ac74923069
+          EXPECTED_SOURCE_BLOB: 161ceb98aa46d586ec00c0c387c5ca00f9858209
+          EXPECTED_PATCHED_BLOB: a82fcc7eca1a3f503114c7fc6d740c0307a1edc2
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "fix/891-mode-adaptive-cache-v2"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+
+          expected_temp=$'.github/workflows/_apply-891-mode-cache.yml\ntmp/apply-891-mode-cache.patch'
+          actual_temp=$(git diff --name-only "$EXPECTED_PARENT" HEAD | sort)
+          test "$actual_temp" = "$expected_temp"
+          test "$(git hash-object extension/src/shared/storage_impl.ts)" = "$EXPECTED_SOURCE_BLOB"
+
+          npm ci
+          git apply --check tmp/apply-891-mode-cache.patch
+          git apply tmp/apply-891-mode-cache.patch
+          test "$(git hash-object extension/src/shared/storage_impl.ts)" = "$EXPECTED_PATCHED_BLOB"
+          npx vitest run tests/storage-mode-adaptive.test.ts
+
+          rm .github/workflows/_apply-891-mode-cache.yml tmp/apply-891-mode-cache.patch
+          rmdir tmp
+          git diff --check
+
+          expected_final=$'extension/src/shared/storage_impl.ts\ntests/e2e/adaptive-mode-settings.spec.ts\ntests/storage-mode-adaptive.test.ts'
+          actual_final=$(git diff --name-only "$BASE_MAIN" | sort)
+          test "$actual_final" = "$expected_final"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(storage): recompute adaptive scores on mode changes"
+          git push origin HEAD:fix/891-mode-adaptive-cache-v2
