@@ -12,6 +12,15 @@ provenance only. Detailed retired procedures moved to
 
 ## Current snapshot
 
+**2026-09-27 ([`D-2026-09-27-S`](docs/agentic/DECISIONS.md)):** Chris waived the
+AI-47 manual Chrome pass on the agent evidence in
+[`docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md`](docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md).
+It is recorded as "manual gate waived on agent evidence", not "Gate-3 passed".
+A browser-facing PR now passes the acceptance lane if it adds no new failures
+relative to `main` and each known red has an open issue (#865 today). Row 8 is
+being redesigned (#947), v0.5.1 waits for more fixes, and AI-19 takes the rename
+route.
+
 **2026-09-25, v0.5.0 integration ([`D-2026-09-25-Q`](docs/agentic/DECISIONS.md)):**
 Chris authorized browser-facing PRs to merge after automated gates (exact-head
 CI, one review, and the branded-Chrome realistic E2E and acceptance lanes). His
@@ -32,11 +41,12 @@ under "Owner acknowledgement list" below.
 authorized the named browser-gated candidates to merge before manual Chrome
 testing under [`D-2026-09-12-P`](docs/agentic/DECISIONS.md), provided every
 non-human gate still passes. The retained browser work is consolidated as AI-47
-below. Every AI-47 Human result is **OPEN — not run**: a merge, CI, or automated
-Chromium result is not a human-test result. Browser merge receipts cover #600,
+below. A merge, CI, or automated Chromium result is not a human-test result;
+every AI-47 Human result was **OPEN — not run** until Chris waived the pass on
+agent evidence on 2026-09-27 (D-2026-09-27-S). Browser merge receipts cover #600,
 #609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658. PR #658
-merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result remains
-**OPEN — not run**. PR #599 stayed outside until AI-37 was accepted on
+merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result was
+waived with AI-47 on 2026-09-27 (D-2026-09-27-S). PR #599 stayed outside until AI-37 was accepted on
 2026-09-25 (D-2026-09-25-R), and PR #572 remains parked outside on SP-F-013. PR #687
 merged as `63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, but remains a test-only
 delayed-clipboard lane: its evidence is `MODELLED`/`UNVERIFIED`, not owner
@@ -61,10 +71,11 @@ PR #609 merged as `e35f5430660767d4998c8f4d727b38444f3f9b14` under the same
 waiver. Its Back/Forward Cache Chrome work is now a current-`main` AI-47
 subprocedure, not a branch-held item or a human-test pass.
 
-**Guided resolution cursor:** `AI-47` (`Resume at: AI-47`). Current ready order:
-AI-47 on the v0.5.0 build → optional AI-24 → AI-19 before the store submission
-(deferred by Chris on 2026-09-25). AI-23 was resolved on 2026-09-25. The #649 child-form, #655 imported-log-limit, and #658 conditional-write
-checks are attached to AI-47 after their merges, but remain **OPEN — not run**.
+**Guided resolution cursor:** `AI-19` (`Resume at: AI-19`). Current ready order:
+AI-19 (choose a name from the researched shortlist) → optional AI-24. AI-47 was
+waived on agent evidence on 2026-09-27 (D-2026-09-27-S), including its attached
+#649 child-form, #655 imported-log-limit and #658 conditional-write checks.
+AI-23 was resolved on 2026-09-25.
 The four older post-merge checks (AI-30, AI-33, AI-35,
 AI-36) are unordered additions to that queue.
 
@@ -85,7 +96,7 @@ redirect guard may remain visibly present but inert; this is a fail-closed UX an
 accessibility regression, not an established navigation bypass, and is tracked
 with the complete evidence boundary and repair oracle in #560. The historical
 attempt records below are retained as at-the-time evidence and do not reopen the
-completed gate. This PR-specific completion does not change today's AI-47
+completed gate. This PR-specific completion does not change today's AI-19
 guided cursor.
 
 **Earlier human result (2026-08-27, PR #557 at
@@ -224,27 +235,31 @@ This row records integration state, not a human-test result:
 
 | PR | Scope | Head at refresh | State | Merge SHA |
 | --- | --- | --- | --- | --- |
-| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | MERGED; Human result remains **OPEN — not run** | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
+| #658 | Conditional same-field Options writes | `0dc62f62e722de651169d3646669c0faf06fbd24` | MERGED; Human result waived with AI-47 (D-2026-09-27-S) | `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` |
 
 ### Merged browser work retained under AI-47
 
-The following candidates are now on `main`; their owner checks remain open and
-are consolidated in AI-47. A merge commit is an integration fact, not a human
+The following candidates are now on `main`; their owner checks were consolidated
+in AI-47 and waived on agent evidence on 2026-09-27 (D-2026-09-27-S). A merge commit is an integration fact, not a human
 Chrome result. Only Chris may perform and record observations; agents may only
 preserve Chris's explicit observation.
 
 | AI-47 row | Current scope and merge receipt | Exact local procedure | Human result |
 | --- | --- | --- | --- |
-| 1 | Toast controls #600 — `c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2` | [#600 owned-controls subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure) | OPEN — not run |
-| 2 | Extension-origin Proceed #608 — `595903af89ff3bfb526e71de68f71f8c9459e6d1` | [#608 former-AI-39 procedure](docs/agentic/GATE3_GUIDES.md#active-guide-ai-39--issue-601-extension-origin-proceed-once) | OPEN — not run |
-| 3 | Redirect freshness #609 — `e35f5430660767d4998c8f4d727b38444f3f9b14` | [#609 former-AI-40 procedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) | OPEN — not run |
-| 4 | Child-frame navigation #636 — `d91d11f546a925cfc45f721856e1c8b0378ff23d`; form targets #649 — `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` | [#636 former-AI-41 procedure](docs/agentic/GATE3_GUIDES.md#retained-guide-ai-41---issue-593-child-frame-navigation-authority); [#649 former-AI-46 procedure](docs/agentic/AI-46-issue637-child-form-target.md) | OPEN — not run |
-| 5 | Protection Center #640 — `a49cbc3e37f8ade547a97266588d894db1c3c33f`; evidence preview #641 — `7548954701f99377fed149c3be20135e39fe0b44` | [#640 acceptance procedure](docs/vision-overhaul/BROWSER_ACCEPTANCE.md); [#641 export procedure](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45) | OPEN — not run |
-| 6 | Settings #643 — `9524a8a7c38f972e66ef49b0f4cc991fb751e67f`; imported log limit #655 — `9b7ce93652b08c0e7f124f3ef132e46c6ab39909`; conditional writes #658 — `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` | [#643/#655/#658 current-main procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) | OPEN — not run |
-| 7 | Event association #644 — `7184e9d0a3bca699cae5e05426137258c836850e`; canonical IP sites #657 — `c760bb086023c4b83c8ef65693b5adf475414fda` | [#644/#657 association procedure](docs/agentic/ISSUE_585_GATE3.md) | OPEN — not run |
-| 8 | Bridge queue pressure #599 — `d4b1acf5843605f519ffe1732050a2c1bb501ee1`; AI-37 policy accepted (D-2026-09-25-R) | [#599 current-main subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-row-8--599-current-main-clipboard-pressure) | OPEN — not run |
+| 1 | Toast controls #600 — `c8b1a70bef3c92600fdf7af3fb9fdc5e73b236f2` | [#600 owned-controls subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-former-ai-38-pr-600-current-main-toast-control-subprocedure) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 2 | Extension-origin Proceed #608 — `595903af89ff3bfb526e71de68f71f8c9459e6d1` | [#608 former-AI-39 procedure](docs/agentic/GATE3_GUIDES.md#active-guide-ai-39--issue-601-extension-origin-proceed-once) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 3 | Redirect freshness #609 — `e35f5430660767d4998c8f4d727b38444f3f9b14` | [#609 former-AI-40 procedure](docs/agentic/GATE3_GUIDES.md#ai-47-subprocedure-former-ai-40---609-stale-redirect-chain-boundary) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 4 | Child-frame navigation #636 — `d91d11f546a925cfc45f721856e1c8b0378ff23d`; form targets #649 — `c78ba99da5d3357833a5fcd3f4f09bdb255db7a6` | [#636 former-AI-41 procedure](docs/agentic/GATE3_GUIDES.md#retained-guide-ai-41---issue-593-child-frame-navigation-authority); [#649 former-AI-46 procedure](docs/agentic/AI-46-issue637-child-form-target.md) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 5 | Protection Center #640 — `a49cbc3e37f8ade547a97266588d894db1c3c33f`; evidence preview #641 — `7548954701f99377fed149c3be20135e39fe0b44` | [#640 acceptance procedure](docs/vision-overhaul/BROWSER_ACCEPTANCE.md); [#641 export procedure](docs/vision-overhaul/EXPORT_REVIEW.md#human-chrome-check--ai-45) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 6 | Settings #643 — `9524a8a7c38f972e66ef49b0f4cc991fb751e67f`; imported log limit #655 — `9b7ce93652b08c0e7f124f3ef132e46c6ab39909`; conditional writes #658 — `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf` | [#643/#655/#658 current-main procedure](docs/agentic/GATE3_558_SETTINGS_AUTOSAVE.md) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 7 | Event association #644 — `7184e9d0a3bca699cae5e05426137258c836850e`; canonical IP sites #657 — `c760bb086023c4b83c8ef65693b5adf475414fda` | [#644/#657 association procedure](docs/agentic/ISSUE_585_GATE3.md) | WAIVED — agent evidence (D-2026-09-27-S) |
+| 8 | Bridge queue pressure #599 — `d4b1acf5843605f519ffe1732050a2c1bb501ee1`; AI-37 policy accepted (D-2026-09-25-R) | [#599 current-main subprocedure](docs/agentic/GATE3_GUIDES.md#ai-47-row-8--599-current-main-clipboard-pressure) | WAIVED — agent evidence (D-2026-09-27-S) |
 
-**OPEN: AI-47 — September browser-queue consolidated post-merge Chrome check.**
+**WAIVED 2026-09-27: AI-47 — September browser-queue consolidated post-merge Chrome check.**
+Chris waived the manual pass on the agent evidence of 2026-09-26
+(D-2026-09-27-S). Record it as "manual gate waived on agent evidence", never
+"Gate-3 passed". The procedure below is kept for reference and for any later
+human pass.
 On 2026-09-12 Chris explicitly directed the agent to merge the open PRs gated
 behind human testing and retain the testing as one human TODO. The one-time
 scope and exclusions are recorded in
@@ -255,8 +270,9 @@ stack ordering; record their merge commits here in the closeout sync. **This is
 an index, not a shortened replacement procedure:** every step and evidence field
 in each applicable current-`main` AI-47 subprocedure and branch-held exact guide
 remains required. Record a sub-result for each former AI item before reporting
-AI-47 as passed; one omitted sub-result keeps AI-47 open. Every Human result in
-the table above starts **OPEN — not run**. Only Chris may perform and record a
+AI-47 as passed; one omitted sub-result keeps AI-47 open. (Superseded 2026-09-27:
+AI-47 is waived, so this procedure is only for an optional later human pass.)
+Every Human result in the table above started **OPEN — not run**. Only Chris may perform and record a
 browser observation; a merge, CI run, or agent assertion must not change it.
 
 Build the then-current `main`, record its 40-character SHA, and have Chris load
@@ -304,11 +320,11 @@ revision printed by the build, then run this consolidated sequence:
 Inspect page, popup, Options, Protection Center, and service-worker consoles for
 new errors during the relevant steps. Only after Chris has explicitly recorded
 every applicable row may Chris report `AI-47 done; consolidated Gate-3 passed on
-main at <40-character SHA>; Chrome <version>`. #658 keeps row 6 and AI-47 open
-until Chris records its observation. On a mismatch, Chris records
+main at <40-character SHA>; Chrome <version>`. Before the 2026-09-27 waiver, #658 kept row 6 and
+AI-47 open until Chris recorded its observation. On a mismatch, Chris records
 `AI-47 failed on main at <SHA>: <numbered step and observed result>`. A failure
 reopens the smallest affected issue/PR slice; it does not invalidate unrelated
-checks. The general guided cursor is AI-47; AI-19 remains deferred until store submission.
+checks. The general guided cursor is AI-19 (D-2026-09-27-S).
 
 **Agent pre-check, 2026-09-24 (automated evidence only; every Human result above
 stays OPEN — not run):** each AI-47 row and AI-24/30/33/35/36 now has an
@@ -350,8 +366,7 @@ wave passed `fp-form-submit-patterns`; #865 remains open. The live-web lane foun
 positive: the real YouTube embed's "Watch on YouTube" link still prompts (#943).
 Details, and the parts automation cannot cover, are in
 [`docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md`](docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md).
-Chris can still record the rows directly, or close AI-47 by explicitly waiving the
-manual pass on this evidence; the agent must not infer either.
+On 2026-09-27 Chris waived the manual pass on this evidence (D-2026-09-27-S).
 
 **OPEN: AI-36 — #558 popup/Options patch-save synchronization post-merge
 Gate-3.** This is no longer a pre-merge gate. PR #589 merged on 2026-08-27 (head
@@ -370,7 +385,7 @@ warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
 The AI-36 guide carries a matching post-merge banner. Reply `AI-36 done; Gate-3
 passed on main at <40-character SHA>; Chrome <version>` or `AI-36 failed on main
 at <SHA>: <step and observed>`.
-The general guided resolution cursor is AI-47; AI-36 is an additional
+The general guided resolution cursor is AI-19; AI-36 is an additional
 branch-specific gate.
 
 **OPEN: AI-35 — #539 cross-host child-event attribution post-merge Gate-3.**
@@ -388,7 +403,7 @@ consoles. Only Chris can complete this human Gate-3. The AI-35 guide carries a
 matching post-merge banner. Reply `AI-35 done; Gate-3 passed on main at
 <40-character SHA>; Chrome <version>` or `AI-35 failed on main at <SHA>: <step
 and observed>`. The general guided
-resolution cursor is AI-47; AI-35 is an additional branch-specific gate.
+resolution cursor is AI-19; AI-35 is an additional branch-specific gate.
 
 **OPEN: AI-33 — Issue #530 popup trust-pill contrast post-merge Gate-3.** This
 is no longer a pre-merge gate. PR #582 merged on 2026-08-27 (head
@@ -403,7 +418,7 @@ chips, unclipped, keyboard-operable, and free of new popup-console errors. Only
 Chris can record this complete. Reply `AI-33 done; Gate-3 passed on main at
 <40-character SHA>; Chrome <version>` or `AI-33 failed on main at <SHA>:
 <step and observed>`. This PR-specific gate does not move the general guided-
-resolution cursor from AI-47.
+resolution cursor from AI-19.
 
 **OPEN: AI-30 - #567 Back/Forward history-integrity post-merge Gate-3.** This is
 no longer a pre-merge gate. PR #570 merged on 2026-08-27 (head
@@ -420,7 +435,7 @@ prompt. Also confirm the existing delayed page-initiated redirect still rolls
 back. Only Chris can record this complete. Reply `AI-30 done; Gate-3 passed on
 main at <40-character SHA>; Chrome <version>` or `AI-30 failed on main at
 <SHA>: <step and observed>`. This PR-specific gate does not move the general
-guided-resolution cursor from AI-47.
+guided-resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
@@ -432,7 +447,9 @@ obtain professional advice before a commercial or public launch. A rename must
 coordinate product, store, asset, and repository names. Reply `AI-19 done:
 <decision>` when complete. **2026-09-25:** Chris chose to decide later; the
 GitHub pre-release keeps the working name, and AI-19 still gates the store
-submission.
+submission. **2026-09-27 (D-2026-09-27-S):** Chris chose the rename route and
+asked for a researched shortlist based on the product's direction. The choice
+stays Chris's.
 
 **OPEN: AI-24 — Optional post-merge real-Chrome confirmation.** Build current
 `main`, load `extension/dist` unpacked in a fresh temporary Chrome profile, and
@@ -501,7 +518,8 @@ headed-measurement result and does not waive future methodology.
   `chore/deny-floor-v1.6.3` and `fix/cooldown-map-cap`. Both commits are
   preserved on `origin` (D-2026-09-25-R).
 - AI-37 (policy half) — resolved 2026-09-25: Chris accepted #599's
-  unverified-window clipboard coalescing. The Chrome check stays open under AI-47.
+  unverified-window clipboard coalescing. Its Chrome check joined AI-47, which was
+  waived on agent evidence on 2026-09-27 (D-2026-09-27-S).
 - AI-29 - resolved 2026-08-28: Chris accepted PR #557's exact `ee804fa` overlay
   behavior and authorized merge; the PR merged as
   `d132eace0d2b7e905d5d6eb5ad4c831236f925b2`, closing #555, #559, and #568. #560
