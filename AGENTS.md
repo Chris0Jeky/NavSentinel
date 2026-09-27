@@ -1,4 +1,4 @@
-# NavSentinel Codex notes
+# Heedline Codex notes
 
 Read `CLAUDE.md` for the product invariants, code map, focused checks, and the
 browser-surface release boundary. This file contains only Codex-specific facts.
@@ -7,7 +7,7 @@ browser-surface release boundary. This file contains only Codex-specific facts.
 
 Owner decision #499 (2026-07-31) removed `.codex/hooks.json`, the tier
 declaration, vendored floor, lifecycle scripts, agent validation, and Harness
-CI. A fresh NavSentinel Codex session therefore has no project `PreToolUse`
+CI. A fresh Heedline Codex session therefore has no project `PreToolUse`
 floor or lifecycle hooks. Do not install, trust, pin, or recreate one without a
 new explicit owner request. A session started before the removal may retain its
 already-loaded hook definition until restart; that is not fresh-session proof.

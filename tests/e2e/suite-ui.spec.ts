@@ -743,3 +743,93 @@ test("options import and export preserve normalized trusted-domain and allowlist
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test("Options auto-dismiss analytics shows retained local breakdown and clears with event log @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-overlay-analytics-"));
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    });
+    try {
+      const worker = await getServiceWorker(context);
+      await worker.evaluate(async ({ key, events }) => {
+        await chrome.storage.local.set({ [key]: events });
+      }, {
+        key: EVENT_LOG_KEY,
+        events: [
+          {
+            id: "settle-1",
+            ts: 1_710_000_000_000,
+            kind: "mutation_alert",
+            site: "seeded-secret.example",
+            url: "https://seeded-secret.example/page",
+            reasons: ["overlay_detected"],
+            extra: { overlayAutoDismissed: true },
+          },
+          {
+            id: "injected-1",
+            ts: 1_710_000_000_001,
+            kind: "mutation_alert",
+            site: "seeded-secret.example",
+            url: "https://seeded-secret.example/other",
+            reasons: ["overlay_injected"],
+            extra: { overlayAutoDismissed: true },
+          },
+          {
+            id: "blocked-1",
+            ts: 1_710_000_000_002,
+            kind: "nav_blank_prompt",
+            site: "seeded-secret.example",
+            url: "https://seeded-secret.example/popup",
+            extra: { overlayAutoDismissed: true },
+          },
+          {
+            id: "settle-1",
+            ts: 1_710_000_000_003,
+            kind: "nav_blank_prompt",
+            site: "seeded-secret.example",
+            extra: { overlayAutoDismissed: true },
+          },
+          {
+            id: "legacy-1",
+            ts: 1_710_000_000_004,
+            kind: "mutation_alert",
+            site: "seeded-secret.example",
+            reasons: ["overlay_detected"],
+          },
+        ],
+      });
+
+      const extensionId = await getExtensionId(context);
+      const options = await context.newPage();
+      await options.goto(`chrome-extension://${extensionId}/src/options/options.html`, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await options.locator('.nav-btn[data-section="analytics"]').click();
+      await expect(options.locator("#statOverlayTotal")).toHaveText("3");
+      await expect(options.locator("#statOverlayPageSettle")).toHaveText("1");
+      await expect(options.locator("#statOverlayInjected")).toHaveText("1");
+      await expect(options.locator("#statOverlayBlockedClick")).toHaveText("1");
+      await expect(options.locator("#overlayStats")).toContainText("Retained local history");
+      await expect(options.locator("#overlayStats")).not.toContainText("seeded-secret.example");
+
+      await options.locator('.nav-btn[data-section="log"]').click();
+      await options.locator("#clearLog").click();
+      await expect(options.locator("#eventLog")).toContainText("No events yet.");
+
+      await options.locator('.nav-btn[data-section="analytics"]').click();
+      await expect(options.locator("#statOverlayTotal")).toHaveText("0");
+      await expect(options.locator("#statOverlayPageSettle")).toHaveText("0");
+      await expect(options.locator("#statOverlayInjected")).toHaveText("0");
+      await expect(options.locator("#statOverlayBlockedClick")).toHaveText("0");
+    } finally {
+      await context.close();
+    }
+  } finally {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});

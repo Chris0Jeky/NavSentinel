@@ -99,7 +99,7 @@ import {
   silentNavThrottleAllows,
   type SilentNavThrottleState,
 } from "./silent_decision";
-import { findSubmitControl, grantsTabNavigationAuthority } from "./nav_authority";
+import { formSubmitIntentUrl, grantsTabNavigationAuthority } from "./nav_authority";
 import { isStaleDelivery } from "./rollback_staleness";
 
 const CDS_SMART_BLOCK_THRESHOLD = 70;
@@ -512,7 +512,7 @@ function handleBridgeMessage(message: unknown): void {
     if (!url) return;
 
     if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-      allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      allowActionOnce(data.id, url, data.target || "_blank", data.features, { automatic: true });
       return;
     }
 
@@ -940,7 +940,7 @@ function handleClickFixScan(): void {
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
@@ -1066,7 +1066,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   if (isOverlayAlert && alert.severity === "high") {
     sendIconUpdate("yellow");
     showToast({
-      message: "NavSentinel detected a suspicious overlay.",
+      message: "Heedline detected a suspicious overlay.",
       timeoutMs: 0,
     });
   }
@@ -1195,7 +1195,7 @@ function showRollbackPrompt(url: string): void {
   sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
-    message: `NavSentinel rolled back a suspicious redirect to ${host}`,
+    message: `Heedline rolled back a suspicious redirect to ${host}`,
     actions: [
       {
         label: "Proceed",
@@ -1279,7 +1279,9 @@ function handleRollback(url: string, prevUrl?: string): void {
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
   if (!rawUrl) return { href: null, host: null };
   try {
-    const u = new URL(rawUrl, location.href);
+    // The browser resolves a relative URL against the base URL, which
+    // `<base href>` can point at another origin (#900).
+    const u = new URL(rawUrl, document.baseURI || location.href);
     return { href: u.toString(), host: u.hostname.toLowerCase() };
   } catch {
     return { href: null, host: null };
@@ -1366,36 +1368,6 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
   return null;
 }
 
-/**
- * True when a click resolves to a navigation the clicking frame itself declared
- * through a form submit control. Paired with a cross-document anchor href, this
- * is the "in-frame navigation intent" that lets a child frame mint tab-wide
- * navigation authority (#593); a bare element does not qualify.
- *
- * Deliberately conservative in BOTH directions. Missing an intent (a submit
- * control inside a shadow root, say) only costs a child frame the tab-wide
- * allowance, which downgrades the navigation to the existing rollback prompt.
- * Seeing one that the page never honours (a submit button whose handler calls
- * preventDefault and then scripts a navigation) is a known forgeable path: the
- * signal is page-declared markup, so it raises the cost of the #593 pattern
- * rather than making it impossible. See the PR and the evidence-map limitation.
- */
-function formSubmitIntentUrl(e: MouseEvent): string | null {
-  const target = e.target instanceof Element ? e.target : null;
-  const control = findSubmitControl(target);
-  const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
-  if (!form) return null;
-  const submitterAction = control?.getAttribute("formaction");
-  const formAction = form.getAttribute("action");
-  try {
-    // An explicitly empty submitter action overrides the form action and
-    // declares this document. Only a missing attribute inherits the form.
-    return new URL((submitterAction ?? formAction) || location.href, location.href).toString();
-  } catch {
-    return null;
-  }
-}
-
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {
   const path = e.composedPath?.() ?? [];
   for (const el of path) {
@@ -1423,14 +1395,23 @@ function allowOnce(url: string, target?: string, features?: string): void {
     try {
       window.open(url, target ?? "_blank", features);
     } catch {
-      showToast({ message: "NavSentinel could not open the allowed navigation." });
+      showToast({ message: "Heedline could not open the allowed navigation." });
     }
   }, 0);
 }
 
-function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
+function allowActionOnce(
+  actionId?: string | null,
+  url?: string,
+  target?: string,
+  features?: string,
+  options?: { automatic?: boolean }
+): void {
   if (actionId) {
-    notifyNavAllow();
+    // An allowlisted action needs authority for its approved URL, not a tab-wide
+    // rollback window. The MAIN-world release sends its own target grant too.
+    if (options?.automatic && url) notifyAllowedTarget(url);
+    else notifyNavAllow();
     postToMain("ns-allow-action", { id: actionId });
     return;
   }
@@ -2013,7 +1994,7 @@ window.addEventListener(
                   showPendingBlankNavigationPrompt(prompt),
                 )
                 .catch(() => {
-                  showToast({ message: "NavSentinel blocked a suspicious new tab." });
+                  showToast({ message: "Heedline blocked a suspicious new tab." });
                 });
             } else {
               showAllowPrompt(prompt);
@@ -2022,8 +2003,8 @@ window.addEventListener(
             if (hasClickfix) clickFixAlertedAt = Date.now();
           } else {
             const prefix = hasClickfix
-              ? "NavSentinel blocked a new tab with fake dialog detected"
-              : "NavSentinel blocked a suspicious new tab";
+              ? "Heedline blocked a new tab with fake dialog detected"
+              : "Heedline blocked a suspicious new tab";
             showToast({
               message: buildPlainMessage(
                 overlaySuppression ? `${prefix} and hid its overlay` : prefix,
@@ -2052,8 +2033,8 @@ window.addEventListener(
             ...navFeatures
           });
           const blockPrefix = hasClickfix
-            ? "NavSentinel blocked a deceptive click with fake dialog"
-            : "NavSentinel blocked a deceptive click";
+            ? "Heedline blocked a deceptive click with fake dialog"
+            : "Heedline blocked a deceptive click";
           showToast({
             message: buildPlainMessage(
               overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
@@ -2102,8 +2083,9 @@ window.addEventListener(
       // through unchallenged (#593), so a child frame now needs an in-frame
       // navigation intent — an anchor href or a form submit — to inherit that
       // authority. The MAIN-world form allowance below is separately bound to
-      // the declared action so it cannot authorize an unrelated form target.
-      const declaredFormAction = formSubmitIntentUrl(e);
+      // the declared action so it cannot authorize an unrelated form target;
+      // main_guard.ts arms a same-task allowance only in the top frame (#864).
+      const declaredFormAction = formSubmitIntentUrl(e.target, location.href, document.baseURI || location.href);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
@@ -2126,7 +2108,10 @@ window.addEventListener(
           // allowance only on the action declared by the clicked submit
           // control. Top-frame and Off-mode behavior remain unrestricted.
           restrictRedirectTarget: !topFrame && mode !== "off",
-          ...(declaredFormAction ? { redirectTarget: declaredFormAction } : {})
+          ...(declaredFormAction ? { redirectTarget: declaredFormAction } : {}),
+          // Lets the MAIN world recognise this as the follow-up for the click it
+          // armed in the click's own task, so the gesture keeps one budget (#864).
+          gestureTs: e.timeStamp
         });
       }
 
@@ -2222,7 +2207,7 @@ window.addEventListener(
             reasons: ["late_async_child_frame"],
           });
           showToast({
-            message: `NavSentinel warning: ${host} is a known malicious domain`,
+            message: `Heedline warning: ${host} is a known malicious domain`,
             timeoutMs: 8000,
           });
         } catch {

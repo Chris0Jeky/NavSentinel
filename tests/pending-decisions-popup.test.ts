@@ -142,4 +142,27 @@ describe("PendingDecisionsPopupController", () => {
     expect(harness.host.hidden).toBe(false);
     expect(harness.host.textContent).toContain("Navigation remains blocked.");
   });
+
+  it("marks readiness only after the first refresh settles an empty state", async () => {
+    document.body.innerHTML = '<section id="pending"></section>';
+    const host = document.getElementById("pending")!;
+    let resolveList!: (value: unknown) => void;
+    const gated = new Promise<unknown>((resolve) => {
+      resolveList = resolve;
+    });
+    const dependencies: PendingDecisionsPopupDependencies = {
+      sendMessage: () => gated,
+      now: () => 1_000,
+      setInterval: () => 0,
+      clearInterval: () => undefined,
+    };
+    const controller = new PendingDecisionsPopupController(host, dependencies);
+    const pending = controller.refresh();
+    await Promise.resolve();
+    expect(host.dataset.pendingDecisionsReady).toBeUndefined();
+    resolveList({ ok: true, operation: "list", status: "missing", decisions: [] });
+    await pending;
+    expect(host.hidden).toBe(true);
+    expect(host.dataset.pendingDecisionsReady).toBe("true");
+  });
 });

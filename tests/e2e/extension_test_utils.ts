@@ -189,35 +189,143 @@ export async function attemptSyntheticToastClick(page: Page, label: string): Pro
   }, label);
 }
 
+export const CREDENTIAL_MODAL_HOST_ID = "__sentinelsuite_cred_modal_host__";
+
+/**
+ * Runs `fn` with the credential prompt's shadow root as `this` and returns its
+ * JSON result, or null while no prompt host exists. The root is closed (#894),
+ * so neither page script nor Playwright's selectors can reach it; the DevTools
+ * protocol can. `fn` runs in the page's main world, so a click it makes is
+ * untrusted, the same as one from page script.
+ */
+export async function evaluateInCredentialModal<T, A = undefined>(
+  page: Page,
+  fn: (this: ShadowRoot, arg: A) => T,
+  arg?: A
+): Promise<T | null> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { result: hostRef } = await cdp.send("Runtime.evaluate", {
+      expression: `document.getElementById(${JSON.stringify(CREDENTIAL_MODAL_HOST_ID)})`
+    });
+    if (!hostRef.objectId) return null;
+    const { node } = await cdp.send("DOM.describeNode", {
+      objectId: hostRef.objectId,
+      depth: 1,
+      pierce: true
+    });
+    const shadow = node.shadowRoots?.[0];
+    if (!shadow) return null;
+    const { object } = await cdp.send("DOM.resolveNode", { backendNodeId: shadow.backendNodeId });
+    if (!object.objectId) return null;
+    const { result, exceptionDetails } = await cdp.send("Runtime.callFunctionOn", {
+      objectId: object.objectId,
+      functionDeclaration: fn.toString(),
+      arguments: [{ value: arg }],
+      returnByValue: true,
+      awaitPromise: true
+    });
+    if (exceptionDetails) {
+      throw new Error(
+        `Credential prompt evaluation failed: ${exceptionDetails.exception?.description ?? exceptionDetails.text}`
+      );
+    }
+    return (result.value ?? null) as T | null;
+  } finally {
+    await cdp.detach().catch(() => undefined);
+  }
+}
+
+export type CredentialModalState = {
+  title: string;
+  buttons: string[];
+  /** Label of the prompt control that has focus, if any. */
+  focused: string | null;
+};
+
+/**
+ * The open credential prompt, or null when none is rendered. A failed read
+ * throws rather than reading as "no prompt", so a check that the prompt went
+ * away cannot pass on an error.
+ */
+export async function readCredentialModal(page: Page): Promise<CredentialModalState | null> {
+  return evaluateInCredentialModal(page, function (this: ShadowRoot) {
+    const overlay = this.querySelector(".overlay");
+    if (!overlay) return null;
+    const rect = overlay.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    return {
+      title: this.querySelector(".title")?.textContent?.trim() ?? "",
+      buttons: Array.from(this.querySelectorAll(".footer button")).map(
+        (button) => button.textContent?.trim() ?? ""
+      ),
+      focused: this.activeElement?.textContent?.trim() ?? null
+    };
+  });
+}
+
+/** Waits for the credential prompt ("Credential submit blocked") to render. */
+export async function waitForCredentialModal(
+  page: Page,
+  timeout = 4000
+): Promise<CredentialModalState> {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    let state: CredentialModalState | null = null;
+    let failure: unknown = null;
+    try {
+      state = await readCredentialModal(page);
+    } catch (error) {
+      // A navigation can destroy the context mid-read; keep waiting.
+      failure = error;
+    }
+    if (state?.title === "Credential submit blocked") return state;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Credential prompt did not appear within ${timeout} ms (last: ${JSON.stringify(state)}` +
+          `${failure ? `, last read error: ${String(failure)}` : ""})`
+      );
+    }
+    await page.waitForTimeout(100);
+  }
+}
+
 export async function clickModalButton(page: Page, label: string): Promise<void> {
   // Trusted activation only (#783): see clickToastButton.
-  const point = await page.evaluate((expected) => {
-    const host = document.querySelector("#__sentinelsuite_cred_modal_host__");
-    const buttons = Array.from(host?.shadowRoot?.querySelectorAll(".footer button") ?? []);
-    const match = buttons.find((button) => button.textContent?.trim() === expected);
-    if (!(match instanceof HTMLButtonElement)) {
-      throw new Error(`Modal button not found: ${expected}`);
-    }
-    const rect = match.getBoundingClientRect();
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }, label);
+  const point = await evaluateInCredentialModal(
+    page,
+    function (this: ShadowRoot, expected: string) {
+      const buttons = Array.from(this.querySelectorAll(".footer button"));
+      const match = buttons.find((button) => button.textContent?.trim() === expected);
+      if (!match) return null;
+      const rect = match.getBoundingClientRect();
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    },
+    label
+  );
+  if (!point) throw new Error(`Modal button not found: ${label}`);
   await page.mouse.click(point.x, point.y);
 }
 
 /**
- * Attempts a hostile-page-style synthetic activation of a credential-modal
- * button. Must NOT resolve the prompt (#783). Negative-path helper only.
+ * Attempts a synthetic (untrusted) activation of a credential-modal button.
+ * Page script cannot reach the closed root (#894); this models an attacker
+ * who could, and checks the button's own trusted-input gate (#783). Must NOT
+ * resolve the prompt. Negative-path helper only.
  */
 export async function attemptSyntheticModalClick(page: Page, label: string): Promise<void> {
-  await page.evaluate((expected) => {
-    const host = document.querySelector("#__sentinelsuite_cred_modal_host__");
-    const buttons = Array.from(host?.shadowRoot?.querySelectorAll(".footer button") ?? []);
-    const match = buttons.find((button) => button.textContent?.trim() === expected);
-    if (!(match instanceof HTMLButtonElement)) {
-      throw new Error(`Modal button not found: ${expected}`);
-    }
-    match.click();
-  }, label);
+  const clicked = await evaluateInCredentialModal(
+    page,
+    function (this: ShadowRoot, expected: string) {
+      const buttons = Array.from(this.querySelectorAll(".footer button"));
+      const match = buttons.find((button) => button.textContent?.trim() === expected);
+      if (!(match instanceof HTMLElement)) return false;
+      match.click();
+      return true;
+    },
+    label
+  );
+  if (!clicked) throw new Error(`Modal button not found: ${label}`);
 }
 
 export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {

@@ -686,6 +686,74 @@ describe("suite storage and allowlist migration", () => {
     expect(settings.credential.mode).toBe("strict");
   });
 
+  it("serializes a suite import ahead of a worker settings patch so neither is lost (#891)", async () => {
+    const { chrome } = createChromeMock();
+    Object.assign(chrome, {
+      runtime: {
+        id: "suite-test",
+        getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+      },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const {
+      getSuiteSettings,
+      handleSuiteImportMessage,
+      handleSuiteSettingsUpdateMessage,
+      SUITE_SETTINGS_KEY,
+    } = await import("../extension/src/shared/storage");
+    const popup = { id: "suite-test", url: "chrome-extension://suite-test/src/popup/popup.html" } as chrome.runtime.MessageSender;
+    const options = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+
+    const originalSet = chrome.storage.local.set.bind(chrome.storage.local);
+    let gateOpen = false;
+    let started = false;
+    let signalStarted!: () => void;
+    const importSetReached = new Promise<void>((resolve) => { signalStarted = resolve; });
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseGate = resolve; });
+    chrome.storage.local.set = (async (next: Record<string, unknown>) => {
+      if (SUITE_SETTINGS_KEY in next && !gateOpen) {
+        if (!started) {
+          started = true;
+          signalStarted();
+        }
+        await gate;
+      }
+      return originalSet(next);
+    }) as typeof chrome.storage.local.set;
+
+    // Schedule the import first and hold its atomic core write before commit.
+    const importPromise = handleSuiteImportMessage(
+      { type: "ns-suite-import", payload: { settings: { nav: { defaultMode: "off" } } } },
+      options,
+    );
+    await importSetReached;
+    // Start a later popup patch while the import core write is still held.
+    const patchPromise = handleSuiteSettingsUpdateMessage(
+      { type: "ns-suite-settings-update", patch: { credential: { mode: "strict" } } },
+      popup,
+    );
+    // Flush racing microtasks while held. Pre-fix the patch reads stale settings
+    // here and later overwrites the import; post-fix it stays queued on the bulk
+    // lane and reads only after the import commits.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    gateOpen = true;
+    releaseGate();
+    const [importRes, patchRes] = await Promise.all([importPromise, patchPromise]);
+
+    expect(importRes).toMatchObject({ ok: true });
+    expect(patchRes).toMatchObject({ credential: { mode: "strict" } });
+    const settings = await getSuiteSettings();
+    // Pre-fix the patch overwrites the import and nav snaps back to "smart".
+    expect(settings.nav.defaultMode).toBe("off");
+    expect(settings.credential.mode).toBe("strict");
+  });
+
   it("rejects a simultaneous conflicting Options patch while preserving disjoint patches (#647)", async () => {
     const { chrome } = createChromeMock();
     Object.assign(chrome, {

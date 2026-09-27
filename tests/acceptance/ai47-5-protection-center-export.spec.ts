@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { AcceptanceSession, EVENT_LOG_KEY, SETTINGS_KEY, acceptanceRunDirectory, toastState, trustedClick } from "./acceptance_harness";
+import { readCredentialModal } from "../e2e/extension_test_utils";
 import {
   EVIDENCE_PAGE,
   OPTIONS_PAGE,
@@ -114,7 +115,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await trustedClick(options, "a.nav-btn[href$='evidence/evidence.html']");
       await options.waitForURL(`**/${EVIDENCE_PAGE}`, { timeout: 10_000 });
       expect(options.url()).toBe(session.extensionUrl(EVIDENCE_PAGE));
-      await expect(options).toHaveTitle("Protection Center · NavSentinel");
+      await expect(options).toHaveTitle("Protection Center · Heedline");
       await waitForSnapshot(options);
       const body = await options.locator("body").innerText();
       expect(safeClaims(body), "Protection Center must not describe history as a safety verdict").toEqual([]);
@@ -203,7 +204,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await page.evaluate(({ dest, pw }) => (window as unknown as { armLogin: (m: string, p: string) => void }).armLogin(dest, pw), { dest: markers.loginDest, pw: markers.password });
       await trustedClick(page, "#submit");
       await expect.poll(async () => shadowButtonPoint(page, "Cancel"), { timeout: 8000 }).not.toBeNull();
-      const modalButtons = await page.evaluate(() => Array.from(document.getElementById("__sentinelsuite_cred_modal_host__")?.shadowRoot?.querySelectorAll("button") ?? []).map((button) => button.textContent?.trim() ?? ""));
+      const modalButtons = (await readCredentialModal(page))?.buttons ?? [];
       session.observe("credential modal controls (pre-existing credential flow, not an evidence surface)", modalButtons.join(" | "));
       await session.screenshot(page, "setup-d-credential-modal");
       const cancel = (await shadowButtonPoint(page, "Cancel"))!;
@@ -281,7 +282,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       if (click.status === "rejected" && !(popup.closed && String(click.reason).includes("popup DevTools socket closed"))) {
         throw click.reason;
       }
-      await expect(pc).toHaveTitle("Protection Center · NavSentinel");
+      await expect(pc).toHaveTitle("Protection Center · Heedline");
       await waitForSnapshot(pc);
       const total = Number(await pc.locator("#total").textContent());
       expect(total, "retained observations are shown").toBeGreaterThanOrEqual(4);
@@ -471,7 +472,7 @@ test("AI-47.5: Protection Center (#640) and evidence export preview (#641) in br
       await clickInView(pc, "#downloadExport");
       const download = await pending;
       const bytes = await readDownload(download);
-      expect(download.suggestedFilename()).toMatch(/^navsentinel-evidence-\d{4}-\d{2}-\d{2}\.json$/);
+      expect(download.suggestedFilename()).toMatch(/^heedline-evidence-\d{4}-\d{2}-\d{2}\.json$/);
       expect(bytes.equals(Buffer.from(previewText, "utf8")), "downloaded bytes are identical to the reviewed preview").toBe(true);
       const saved = path.join(exportsDir, `filtered-${download.suggestedFilename()}`);
       await download.saveAs(saved);

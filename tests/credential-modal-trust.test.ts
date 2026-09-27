@@ -2,23 +2,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dispatchUntrusted, stubTrustedInput } from "./helpers/trusted-input";
 import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
+import type { credentialModalRoot as CredentialModalRootType } from "../extension/src/content/credential_modal";
 import type { ModalSpec } from "../extension/src/content/credential_modal";
 
 const HOST_ID = "__sentinelsuite_cred_modal_host__";
 
 let showCredentialModal: typeof ShowCredentialModalType;
+let credentialModalRoot: typeof CredentialModalRootType;
 
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/credential_modal");
   showCredentialModal = mod.showCredentialModal;
+  credentialModalRoot = mod.credentialModalRoot;
 }
 
 function getHost(): HTMLElement | null {
   return document.getElementById(HOST_ID);
 }
 
+// The root is closed (#894): host.shadowRoot is null, so read the module's own reference.
 function getShadow(): ShadowRoot | null {
-  return getHost()?.shadowRoot ?? null;
+  return getHost() ? credentialModalRoot() : null;
 }
 
 function getOverlay(): HTMLElement | null {

@@ -1,0 +1,742 @@
+/**
+ * JS Behavior Analysis Monitor (P4-02)
+ *
+ * Monitors JavaScript behavior patterns that indicate credential exfiltration
+ * or form manipulation attacks. Runs in the main world alongside main_guard.ts.
+ *
+ * Detection targets:
+ * - Form submit handlers POSTing to unexpected cross-origin endpoints
+ * - fetch/XHR/beacon requests to third parties during form submission
+ * - Credential field value reads by non-form code
+ * - Dynamic form action attribute manipulation
+ *
+ * Privacy guarantees:
+ * - Never stores, logs, or bridges actual credential values
+ * - Network destinations reduced to origin only (no paths/queries/bodies)
+ * - Debounced to prevent timing-based extension detection
+ *
+ * @see docs/design/js_behavior_analysis.md for full architecture
+ */
+
+// ============================================================================
+// Interfaces
+// ============================================================================
+
+/** Signal emitted when a form with credentials submits to a suspicious destination. */
+export interface JsFormSubmitSignal {
+  /** Timestamp of the submit event */
+  ts: number;
+  /** Whether the form contains password-type inputs */
+  hasCredentialFields: boolean;
+  /** Whether the form action is cross-origin relative to the page */
+  isCrossOrigin: boolean;
+  /** Whether the action attribute was dynamically modified */
+  actionDynamicallyChanged: boolean;
+  /** The destination origin (not full URL, for privacy) */
+  destinationOrigin: string;
+}
+
+/** Signal emitted when network exfiltration is suspected during form submission. */
+export interface JsExfilNetworkSignal {
+  /** Timestamp of the network request */
+  ts: number;
+  /** API used: 'fetch' | 'xhr' | 'beacon' */
+  api: "fetch" | "xhr" | "beacon";
+  /** Destination origin */
+  destinationOrigin: string;
+  /** Time since last form submission (ms), or -1 if no recent submit */
+  msSinceFormSubmit: number;
+  /** Whether password fields are present on the page */
+  credentialFieldsPresent: boolean;
+}
+
+/** Signal emitted when a credential field value is read outside form submission. */
+export interface JsCredentialReadSignal {
+  /** Timestamp of the read */
+  ts: number;
+  /** Whether the read occurred during a form submit event */
+  isInsideSubmitHandler: boolean;
+  /** Number of password fields on the page */
+  fieldCount: number;
+}
+
+import type { JsBehaviorMonitorConfig } from "./js_behavior_monitor.types";
+import {
+  hasVisiblePasswordField,
+  isVisiblePasswordField,
+  queryPasswordInputs,
+} from "./password_field";
+
+export type { JsBehaviorMonitorConfig };
+
+/**
+ * Capability marker for the enabled variant (RI-07). The build aliases
+ * `@navsentinel/js-behavior-monitor` to `js_behavior_monitor.disabled.ts`
+ * (which exports `false`) whenever `capabilities.jsBehaviorInstrumentation`
+ * is false in `config/release-profiles.json`.
+ */
+export const jsBehaviorInstrumentationEnabled = true;
+
+/**
+ * Build-check sentinel. `scripts/check-release-profile.mjs` asserts no built
+ * bundle contains this literal when the capability is off, which proves this
+ * module was not linked into the build at all rather than merely left inert.
+ * It is referenced from a live (debug-only) code path in
+ * `initJsBehaviorMonitor` so it cannot be dropped by dead-code elimination.
+ */
+export const JS_BEHAVIOR_INSTRUMENTATION_SENTINEL = "ns-js-behavior-instrumentation-v1";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** How long after a form submit to correlate network requests (ms). */
+const FORM_SUBMIT_CORRELATION_WINDOW_MS = 2000;
+
+/** Debounce window for credential field value reads (ms). */
+export const CREDENTIAL_READ_DEBOUNCE_MS = 500;
+
+/** Maximum tracked recent form submissions. */
+const MAX_RECENT_FORM_SUBMITS = 10;
+
+export {
+  type JsBehaviorState,
+  JS_BEHAVIOR_STATE_TTL_MS,
+  NRS_WEIGHT_JS_BEHAVIOR_CAP,
+  createEmptyState,
+  isStateExpired,
+  SCORE_CROSS_ORIGIN_CREDENTIAL_FORM,
+  SCORE_NETWORK_EXFIL_DURING_SUBMIT,
+  SCORE_BEACON_EXFIL_CREDENTIAL_PAGE,
+  SCORE_CREDENTIAL_READ_OUTSIDE_SUBMIT,
+  SCORE_MULTIPLE_SIGNALS_BONUS,
+} from "../shared/js_behavior_state";
+
+// ============================================================================
+// Internal State (module-scoped, reset per page load)
+// ============================================================================
+
+/** Recent form submissions tracked for correlation. */
+interface FormSubmitRecord {
+  ts: number;
+  actionOrigin: string;
+  hasCredentials: boolean;
+}
+
+let _recentFormSubmits: FormSubmitRecord[] = [];
+let _isInsideFormSubmit = false;
+let _config: JsBehaviorMonitorConfig | null = null;
+let _formSubmitPatched = false;
+
+/** Tracks original form action values at DOM parse time. */
+let _originalFormActions = new WeakMap<HTMLFormElement, string>();
+
+/** Tracks original submitter `formaction` values at DOM parse time. */
+let _originalSubmitterActions = new WeakMap<HTMLElement, string>();
+
+let _formObserver: MutationObserver | null = null;
+let _originalSubmitFn: typeof HTMLFormElement.prototype.submit | null = null;
+let _submitListener: ((e: Event) => void) | null = null;
+
+// ============================================================================
+// Form Submit Monitoring (Slice 2)
+// ============================================================================
+
+/** Record a form's initial action attribute for later comparison. */
+function recordOriginalAction(form: HTMLFormElement): void {
+  if (!_originalFormActions.has(form)) {
+    _originalFormActions.set(form, form.getAttribute("action") ?? "");
+  }
+}
+
+/** Record a submitter's initial `formaction` value for later comparison. */
+function recordOriginalSubmitterAction(submitter: HTMLElement): void {
+  if (!_originalSubmitterActions.has(submitter)) {
+    _originalSubmitterActions.set(submitter, submitter.getAttribute("formaction") ?? "");
+  }
+}
+
+/** Scan existing forms and submitter overrides and record their initial actions. */
+function snapshotExistingForms(): void {
+  const forms = document.querySelectorAll("form");
+  for (let i = 0; i < forms.length; i++) {
+    recordOriginalAction(forms[i] as HTMLFormElement);
+  }
+  const submitters = document.querySelectorAll("[formaction]");
+  for (let i = 0; i < submitters.length; i++) {
+    recordOriginalSubmitterAction(submitters[i] as HTMLElement);
+  }
+}
+
+/** Resolve a raw action attribute using browser form-submission base semantics. */
+function resolveAgainstBase(raw: string): string {
+  if (!raw.trim()) return location.href;
+  try {
+    return new URL(raw, document.baseURI).toString();
+  } catch {
+    return location.href;
+  }
+}
+
+/**
+ * Resolve the effective form destination. A present-but-empty `formaction`
+ * overrides the form action and means the current document; only a missing
+ * submitter attribute inherits the form action. (#818)
+ */
+function resolveEffectiveSubmitAction(
+  submitterAction: string | null,
+  formAction: string | null,
+): string {
+  return resolveAgainstBase(submitterAction ?? formAction ?? "");
+}
+
+function resolveActionOrigin(raw: string): string {
+  return raw.trim() ? extractOrigin(raw) : location.origin;
+}
+
+/** Handle a form submit event and emit signals if suspicious. */
+function handleFormSubmit(form: HTMLFormElement, submitter?: HTMLElement | null): void {
+  if (!_config || _config.mode === "off") return;
+
+  recordOriginalAction(form);
+  if (submitter) recordOriginalSubmitterAction(submitter);
+
+  const hasCredentials = formHasCredentialFields(form);
+  const submitterFormAction = submitter?.getAttribute("formaction") ?? null;
+  const formAction = form.getAttribute("action");
+  const action = resolveEffectiveSubmitAction(submitterFormAction, formAction);
+  const crossOrigin = isCrossOriginUrl(action);
+  const resolvedCurrent = extractOrigin(action);
+
+  const originalFormAction = _originalFormActions.get(form) ?? "";
+  const currentFormAction = formAction ?? "";
+  const submitterOverridesForm = submitter?.hasAttribute("formaction") ?? false;
+  const formDynamicallyChanged =
+    !submitterOverridesForm &&
+    originalFormAction !== currentFormAction &&
+    resolveActionOrigin(originalFormAction) !== resolveActionOrigin(currentFormAction);
+
+  const originalSubmitterAction = submitter
+    ? (_originalSubmitterActions.get(submitter) ?? "")
+    : "";
+  const currentSubmitterAction = submitterFormAction ?? "";
+  const submitterDynamicallyChanged =
+    !!submitter &&
+    originalSubmitterAction !== currentSubmitterAction &&
+    resolveActionOrigin(originalSubmitterAction) !== resolveActionOrigin(currentSubmitterAction);
+  const actionDynamicallyChanged =
+    formDynamicallyChanged || submitterDynamicallyChanged;
+
+  const now = Date.now();
+
+  _recentFormSubmits.push({
+    ts: now,
+    actionOrigin: resolvedCurrent,
+    hasCredentials,
+  });
+  if (_recentFormSubmits.length > MAX_RECENT_FORM_SUBMITS) {
+    _recentFormSubmits.shift();
+  }
+
+  _isInsideFormSubmit = true;
+  queueMicrotask(() => { _isInsideFormSubmit = false; });
+
+  const isSuspicious =
+    (hasCredentials && crossOrigin) || actionDynamicallyChanged;
+
+  if (isSuspicious) {
+    const signal: JsFormSubmitSignal = {
+      ts: now,
+      hasCredentialFields: hasCredentials,
+      isCrossOrigin: crossOrigin,
+      actionDynamicallyChanged,
+      destinationOrigin: resolvedCurrent,
+    };
+    _config.postSignal("ns-js-form-submit-suspicious", signal as unknown as Record<string, unknown>);
+  }
+}
+
+/** Install form submit monitoring: capturing listener + prototype patch. */
+function patchFormSubmitMonitoring(): void {
+  if (_formSubmitPatched) return;
+  _formSubmitPatched = true;
+
+  snapshotExistingForms();
+
+  // Observe newly added forms via MutationObserver
+  _formObserver = new MutationObserver((mutations) => {
+    for (let mi = 0; mi < mutations.length; mi++) {
+      const added = mutations[mi]!.addedNodes;
+      for (let ni = 0; ni < added.length; ni++) {
+        const node = added[ni];
+        if (!(node instanceof HTMLElement)) continue;
+
+        if (node instanceof HTMLFormElement) recordOriginalAction(node);
+        if (node.hasAttribute("formaction")) recordOriginalSubmitterAction(node);
+
+        const forms = node.querySelectorAll("form");
+        for (let fi = 0; fi < forms.length; fi++) {
+          recordOriginalAction(forms[fi] as HTMLFormElement);
+        }
+        const submitters = node.querySelectorAll("[formaction]");
+        for (let si = 0; si < submitters.length; si++) {
+          recordOriginalSubmitterAction(submitters[si] as HTMLElement);
+        }
+      }
+    }
+  });
+  _formObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Capturing submit event listener
+  _submitListener = (e) => {
+    const form = e.target;
+    if (form instanceof HTMLFormElement) {
+      const submitter = (e as SubmitEvent).submitter ?? null;
+      handleFormSubmit(form, submitter);
+    }
+  };
+  document.addEventListener("submit", _submitListener, true);
+
+  // Patch HTMLFormElement.prototype.submit for programmatic submits (the capturing
+  // 'submit' listener above only sees event-based submits + requestSubmit, not
+  // form.submit()). main_guard.patchForms() installs its own submit wrapper first;
+  // it is now writable+configurable (#349, was a frozen slot that made this throw
+  // and silently disabled programmatic-submit detection), so this assignment now
+  // succeeds and chains cleanly on top: this wrapper detects, then calls
+  // main_guard's wrapper (originalSubmit), then the native — handleFormSubmit fires
+  // exactly once, no double-handling. The try/catch stays as defense-in-depth in
+  // case another extension/page froze the slot; on failure leave _originalSubmitFn
+  // null so teardown skips a restore that would also throw.
+  const originalSubmit = HTMLFormElement.prototype.submit;
+  try {
+    HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+      handleFormSubmit(this);
+      return originalSubmit.call(this);
+    };
+    _originalSubmitFn = originalSubmit;
+  } catch {
+    _originalSubmitFn = null;
+  }
+
+  // Note: requestSubmit() fires a 'submit' event which the capturing listener
+  // above already handles. No prototype patch needed; patching it would double-fire.
+}
+
+// ============================================================================
+// Network Exfiltration Monitoring (Slice 3)
+// ============================================================================
+
+let _fetchPatched = false;
+let _xhrPatched = false;
+let _beaconPatched = false;
+
+function pageHasCredentialFields(): boolean {
+  return hasVisiblePasswordField(document);
+}
+
+function recordNetworkRequest(destinationOrigin: string, api: "fetch" | "xhr" | "beacon"): void {
+  if (!_config || _config.mode === "off") return;
+
+  const now = Date.now();
+
+  if (destinationOrigin === location.origin || !destinationOrigin) return;
+
+  if (api === "beacon") {
+    if (pageHasCredentialFields()) {
+      _config.postSignal("ns-js-exfil-beacon", {
+        ts: now,
+        api,
+        destinationOrigin,
+        credentialFieldsPresent: true,
+      } as unknown as Record<string, unknown>);
+    }
+    return;
+  }
+
+  const correlated = correlatesWithFormSubmit(now);
+  if (correlated) {
+    const signal: JsExfilNetworkSignal = {
+      ts: now,
+      api,
+      destinationOrigin,
+      msSinceFormSubmit: _recentFormSubmits.length > 0
+        ? now - _recentFormSubmits[_recentFormSubmits.length - 1]!.ts
+        : -1,
+      credentialFieldsPresent: pageHasCredentialFields(),
+    };
+    _config.postSignal(
+      "ns-js-exfil-network",
+      signal as unknown as Record<string, unknown>
+    );
+  }
+}
+
+function patchFetchMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_fetchPatched) return;
+  void _cfg;
+
+  const originalFetch = window.fetch;
+  if (!originalFetch) return;
+
+  const wrappedFetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    try {
+      let url = "";
+      if (typeof input === "string") {
+        url = input;
+      } else if (typeof input === "object" && input !== null && "href" in input) {
+        url = String((input as URL).href);
+      } else if (typeof input === "object" && input !== null && "url" in input) {
+        url = String((input as Request).url);
+      }
+
+      const origin = extractOrigin(url);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "fetch");
+      }
+    } catch (_) {
+      // Never break page fetch due to monitoring errors
+    }
+
+    return originalFetch.call(window, input, init);
+  };
+
+  // window.fetch may be hardened non-writable by another extension or by a
+  // page-level anti-fingerprinting / bot-detection script. A bare assignment
+  // would throw "Cannot assign to read only property 'fetch'" and abort the rest
+  // of initJsBehaviorMonitor — silently dropping the XHR, beacon, and
+  // credential-read patches and the ns-config-ack handshake. Guard the
+  // assignment and only mark patched on success so a later ns-config re-sync can
+  // retry. (Mirrors the form-submit patch and credential-getter patch.)
+  try {
+    window.fetch = wrappedFetch;
+    _fetchPatched = true;
+  } catch {
+    // fetch is locked; degrade without breaking page code or aborting init.
+  }
+}
+
+function patchXHRMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_xhrPatched) return;
+  void _cfg;
+
+  const originalOpen = XMLHttpRequest.prototype.open;
+  const originalSend = XMLHttpRequest.prototype.send;
+  const xhrUrlMap = new WeakMap<XMLHttpRequest, string>();
+
+  const wrappedOpen = function (
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
+    try {
+      const urlStr = typeof url === "string" ? url : String(url);
+      xhrUrlMap.set(this, urlStr);
+    } catch (_) {
+      // Never break XHR due to monitoring errors
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+    return (originalOpen as Function).apply(this, [method, url, ...rest]);
+  };
+
+  const wrappedSend = function (
+    this: XMLHttpRequest,
+    body?: Document | XMLHttpRequestBodyInit | null
+  ) {
+    try {
+      const url = xhrUrlMap.get(this);
+      if (url) {
+        const origin = extractOrigin(url);
+        if (origin && origin !== location.origin) {
+          recordNetworkRequest(origin, "xhr");
+        }
+      }
+    } catch (_) {
+      // Never break XHR due to monitoring errors
+    }
+    return originalSend.call(this, body);
+  };
+
+  // XMLHttpRequest.prototype.open/send may be hardened non-writable by another
+  // extension or a page-level anti-fingerprinting / bot-detection script. A bare
+  // assignment would throw and abort the rest of initJsBehaviorMonitor — dropping
+  // the beacon and credential-read patches and the ns-config-ack handshake. Guard
+  // each assignment, roll back a lone open() wrap if send() can't be patched
+  // (XHR monitoring needs both), and only mark patched once both succeed so a
+  // later ns-config re-sync starts from the native methods (no double-wrap).
+  try {
+    XMLHttpRequest.prototype.open = wrappedOpen;
+  } catch {
+    return;
+  }
+  try {
+    XMLHttpRequest.prototype.send = wrappedSend;
+  } catch {
+    try {
+      XMLHttpRequest.prototype.open = originalOpen;
+    } catch {
+      // open is now locked too; the wrapper only records URLs and calls through,
+      // so leaving it in place cannot break page XHR.
+    }
+    return;
+  }
+  _xhrPatched = true;
+}
+
+function patchBeaconMonitoring(_cfg: JsBehaviorMonitorConfig): void {
+  if (_beaconPatched) return;
+  void _cfg;
+
+  if (!navigator.sendBeacon) return;
+
+  const originalBeacon = navigator.sendBeacon.bind(navigator);
+  const wrappedBeacon = function (url: string | URL, data?: BodyInit | null): boolean {
+    try {
+      const urlStr = typeof url === "string" ? url : String(url);
+      const origin = extractOrigin(urlStr);
+      if (origin && origin !== location.origin) {
+        recordNetworkRequest(origin, "beacon");
+      }
+    } catch (_) {
+      // Never break sendBeacon due to monitoring errors
+    }
+    return originalBeacon(url, data);
+  };
+
+  // navigator.sendBeacon may be hardened non-writable by another extension or by
+  // a page-level anti-fingerprinting / bot-detection script. A bare assignment
+  // would throw and abort the rest of initJsBehaviorMonitor — dropping the
+  // credential-read patch and the ns-config-ack handshake. Guard the assignment
+  // and only mark patched on success so a later ns-config re-sync can retry.
+  try {
+    navigator.sendBeacon = wrappedBeacon;
+    _beaconPatched = true;
+  } catch {
+    // sendBeacon is locked; degrade without breaking page code or aborting init.
+  }
+}
+
+// ============================================================================
+// Credential Field Value Monitoring (Slice 4)
+// ============================================================================
+
+/** Per-input debounce tracking for credential reads. */
+const _credReadDebounceMap = new WeakMap<HTMLInputElement, number>();
+
+let _credentialGetterPatched = false;
+
+/** Install value getter patch on HTMLInputElement to detect credential reads. */
+function patchCredentialValueGetter(_cfg: JsBehaviorMonitorConfig): void {
+  if (_credentialGetterPatched) return;
+  void _cfg;
+
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  );
+  if (!descriptor || !descriptor.get) return;
+
+  const originalGetter = descriptor.get;
+  const originalSetter = descriptor.set;
+
+  try {
+    Object.defineProperty(HTMLInputElement.prototype, "value", {
+      get(this: HTMLInputElement) {
+        const val = originalGetter.call(this);
+
+        try {
+          if (
+            this.type === "password" &&
+            val.length > 0 &&
+            !_isInsideFormSubmit &&
+            _config &&
+            _config.mode !== "off"
+          ) {
+            const now = Date.now();
+            const lastRead = _credReadDebounceMap.get(this) ?? 0;
+            if (now - lastRead > CREDENTIAL_READ_DEBOUNCE_MS) {
+              _credReadDebounceMap.set(this, now);
+              const signal: JsCredentialReadSignal = {
+                ts: now,
+                isInsideSubmitHandler: false,
+                fieldCount: queryPasswordInputs(document).length,
+              };
+              _config.postSignal(
+                "ns-js-credential-read",
+                signal as unknown as Record<string, unknown>
+              );
+            }
+          }
+        } catch {
+          // Never break page scripts; swallow monitoring errors.
+        }
+
+        return val;
+      },
+      set(this: HTMLInputElement, v: string) {
+        if (originalSetter) {
+          originalSetter.call(this, v);
+        }
+      },
+      enumerable: descriptor.enumerable ?? true,
+      configurable: true,
+    });
+    _credentialGetterPatched = true;
+  } catch {
+    // Non-configurable or frozen prototypes should degrade without breaking page code.
+  }
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Initialize the JS behavior monitor from main_guard.ts. The main guard installs
+ * its writable form gate first; form-submit observation then chains on top of
+ * that wrapper. Network and credential-read wrappers install with the rest of
+ * the monitor patches.
+ *
+ * Installs prototype patches for:
+ * - fetch() wrapper
+ * - XMLHttpRequest.prototype.open() and .send()
+ * - navigator.sendBeacon()
+ * - HTMLInputElement.prototype.value getter (for password fields)
+ *
+ * @param config - Monitor configuration including bridge post function
+ */
+export function initJsBehaviorMonitor(config: JsBehaviorMonitorConfig): void {
+  _config = config;
+
+  if (config.mode === "off") return;
+
+  if (config.debug) {
+    console.debug(`[NavSentinel] ${JS_BEHAVIOR_INSTRUMENTATION_SENTINEL} installing`);
+  }
+
+  patchFormSubmitMonitoring();
+  patchFetchMonitoring(config);
+  patchXHRMonitoring(config);
+  patchBeaconMonitoring(config);
+  patchCredentialValueGetter(config);
+}
+
+/**
+ * Check whether a form contains credential-type input fields.
+ *
+ * Visible, non-disabled password controls count as credential fields even when
+ * they are unnamed because page code can still read them during submission.
+ * Inline-hidden controls count only when named: unlike passive page/beacon
+ * heuristics, this boundary must account for successful controls whose values
+ * the browser will serialize despite `display:none` or `visibility:hidden`.
+ * Disabled controls never count.
+ *
+ * @param form - The form element to inspect
+ * @returns true if the form can expose or submit password data
+ *
+ */
+export function formHasCredentialFields(form: HTMLFormElement): boolean {
+  const inputs = queryPasswordInputs(form);
+  for (let i = 0; i < inputs.length; i++) {
+    const input = inputs[i] as HTMLInputElement;
+    if (isVisiblePasswordField(input)) return true;
+    if (!input.disabled && input.name.length > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Determine whether a URL is cross-origin relative to the current page.
+ *
+ * Compares the origin (protocol + host + port) of the given URL against
+ * `location.origin`. Relative URLs are resolved against `document.baseURI`.
+ *
+ * @param url - The URL to check (absolute or relative)
+ * @returns true if the URL resolves to a different origin
+ *
+ */
+export function isCrossOriginUrl(url: string): boolean {
+  if (!url) return false;
+  const lc = url.trimStart().toLowerCase();
+  if (lc.startsWith("data:") || lc.startsWith("javascript:") || lc.startsWith("blob:")) {
+    return false;
+  }
+  try {
+    const resolved = new URL(url, document.baseURI);
+    if (resolved.origin === "null") return false;
+    return resolved.origin !== location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract the origin from a URL string for privacy-safe logging.
+ *
+ * Returns only protocol + host + port (e.g., "https://evil.com:443").
+ * Returns empty string for invalid or relative URLs that cannot be resolved.
+ *
+ * @param url - The URL to extract origin from
+ * @returns The origin string, or empty string on failure
+ *
+ */
+export function extractOrigin(url: string): string {
+  if (!url) return "";
+  const lc = url.trimStart().toLowerCase();
+  if (lc.startsWith("data:") || lc.startsWith("javascript:") || lc.startsWith("blob:")) {
+    return "";
+  }
+  try {
+    const resolved = new URL(url, document.baseURI);
+    if (resolved.origin === "null") return "";
+    return resolved.origin;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Check whether a network request correlates with a recent form submission.
+ *
+ * Returns true if a form with credential fields was submitted within
+ * FORM_SUBMIT_CORRELATION_WINDOW_MS of the network request timestamp.
+ *
+ * @param requestTs - Timestamp of the network request
+ * @returns Whether the request correlates with a credential form submit
+ *
+ */
+export function correlatesWithFormSubmit(requestTs: number): boolean {
+  return _recentFormSubmits.some(
+    (rec) => {
+      const delta = requestTs - rec.ts;
+      return rec.hasCredentials && delta >= 0 && delta <= FORM_SUBMIT_CORRELATION_WINDOW_MS;
+    }
+  );
+}
+
+/**
+ * Reset internal module state. Exposed for testing only.
+ */
+export function _resetState(): void {
+  _recentFormSubmits = [];
+  _isInsideFormSubmit = false;
+  _config = null;
+
+  if (_formObserver) {
+    _formObserver.disconnect();
+    _formObserver = null;
+  }
+  if (_submitListener) {
+    document.removeEventListener("submit", _submitListener, true);
+    _submitListener = null;
+  }
+  if (_originalSubmitFn) {
+    HTMLFormElement.prototype.submit = _originalSubmitFn;
+    _originalSubmitFn = null;
+  }
+  _originalFormActions = new WeakMap<HTMLFormElement, string>();
+  _originalSubmitterActions = new WeakMap<HTMLElement, string>();
+  _formSubmitPatched = false;
+}
+
+// Remaining implementation plan tracked in GitHub issue #127

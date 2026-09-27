@@ -338,7 +338,10 @@ describe("state-authority launcher replay boundary", () => {
     expect(output).toContain(
       "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
     );
-  });
+    // Spawns the Playwright CLI: 12s on a hosted Windows runner against the
+    // 5s default (run 36287246276), so give it the same cap as the spawn test
+    // above. (#766)
+  }, 60_000);
 
   it("keeps authoritative receipt issuance and signing in the committed launcher", () => {
     const launcher = fs.readFileSync(

@@ -813,10 +813,42 @@ Only Chris can record this item complete.
 
 ### AI-47 row 8 — #599 current-main clipboard pressure
 
-**OPEN — not run.** The queue policy was accepted in D-2026-09-25-R and #599
+**Waived on agent evidence (D-2026-09-27-S); these steps are for an optional
+later human pass.** The queue policy was accepted in D-2026-09-25-R and #599
 merged as `d4b1acf5843605f519ffe1732050a2c1bb501ee1`. This is the owner
 Chrome check retained under AI-47; the branch-head and policy-decision steps
 in the historical AI-37 guide below no longer apply.
+
+**Procedure replaced 2026-09-27 (#947).** The earlier mixed trial on
+`clickfix-01` (historical steps 5–6) could not fail: that page shows its overlay
+and instruction text from load, so the benign prewrite alone raised the warning,
+and the 10-second alert limit then absorbed the attack write. It also ran after
+the bridge was verified, so #599's queue was never used. The steps below use
+`gym/clickfix-06-clipboard-pressure.html` instead:
+
+- The page writes the clipboard in the short window after NavSentinel's
+  MAIN-world clipboard hook is installed and before the bridge verifies its
+  isolated peer. During that window, receipts wait in the queue that #599
+  coalesces to the latest command-like receipt and the latest other receipt.
+- Its overlay has no verification or paste wording, so a benign write alone
+  scores nothing. Only the command-like receipt can raise the warning, and the
+  page writes it after 40 benign ones.
+- With #599, the benign arm stays silent, the attack arm warns, and no
+  `bridge_buffer_overflow` row appears.
+- Without #599, the 40 receipts fill the 32-slot queue and the command-like
+  receipt is dropped. The attack arm then stays silent, and both arms log an
+  overflow row.
+
+Chrome lets a page write the clipboard without a click only when the site's
+Clipboard permission is **Allow**, so step 4 sets it. The agent's acceptance
+spec `tests/acceptance/ai47-8-clipboard-pressure.spec.ts` follows these steps.
+Run on a copy of the build with #599's coalescing removed
+(`node tests/acceptance/pr599-regressed-bundle.ts` on Node 22.18+ or 24, which
+run TypeScript files directly; on older Node use `npx tsx`. Then set
+`EXTENSION_PATH=<printed path>`), it fails the checks in steps 5–7 below: the
+benign arm logs an overflow row, and the attack arm shows no warning and logs no
+`clickfix_detected` row. Run on the real build, it passes. That is automated
+evidence only.
 
 1. An agent records the exact current `main` SHA, runs `npm ci`,
    `npx vitest run tests/bridge-outbound.test.ts`, `npm run typecheck`,
@@ -828,15 +860,80 @@ in the historical AI-37 guide below no longer apply.
    profile, Chris records the Chrome version, confirms that the service worker
    registers without error, selects Smart mode, and confirms neither `localhost`
    nor `127.0.0.1` is trusted or allowlisted.
-3. Chris performs steps 4–7 of the historical AI-37 guide immediately below,
-   on this release build. The benign CAPTCHA and mixed clipboard trials, event
-   log, and console observations all remain required. Do not run its branch
-   selection steps 1–3 or its old policy-decision reply step 8.
-4. Chris records `AI-47 row 8 passed on main at <40-character SHA>; Chrome
-   <version>` with the two trial outcomes and console observations, or
-   `AI-47 row 8 failed on main at <SHA>: <step and observed result>`. Keep AI-47
-   open until every other applicable row has a recorded human result. A CI run
-   or automated browser pass does not count as Chris's observation.
+3. Benign copy control (historical step 4). Open
+   `http://127.0.0.1:5173/clickfix-03-legit-captcha.html?ai37=benign`. Confirm
+   `data-navsentinel-capture-ready` and `data-navsentinel-bridge-ready` are both
+   `"1"`. Physically click **Copy Code**. The status must report **OTP copied**,
+   the page must remain usable, and no ClickFix or clipboard warning may appear
+   during the next two seconds. Physically select the local inert verification
+   checkbox as a second benign control; it must remain usable without a warning.
+4. Open `chrome://settings/content/siteDetails?site=http%3A%2F%2Flocalhost%3A5173`
+   (or click the site-information icon on any `localhost:5173` page, then
+   **Site settings**) and set **Clipboard** to **Allow**. Use exactly
+   `localhost`, not `127.0.0.1`.
+5. Benign arm. In a tab you have clicked into, type
+   `http://localhost:5173/clickfix-06-clipboard-pressure.html?mode=benign` and
+   press Enter. Do not click anything on the page yet. Read the **Fixture
+   self-check** box on the page:
+   - **VALID** with `40/40` writes finished before the bridge-ready marker: the
+     load counts.
+   - **RETRY**: click once inside the page and press F5. The box explains why.
+     "Refused" or "never finished" means that step 4 did not take effect or that
+     the page did not have focus.
+   - **FAILED**: Heedline's bridge never reported ready. Record it as a
+     product failure.
+
+   If three loads in a row read **RETRY**, stop and record `TEST_INVALID` with
+   the box text. That is neither a pass nor a failure. After a **VALID** load,
+   watch the page for three seconds. No ClickFix or clipboard warning may
+   appear.
+6. Attack arm. In the same way, open
+   `http://localhost:5173/clickfix-06-clipboard-pressure.html?mode=attack` and
+   require **VALID** with `41/41` writes. Without any click, NavSentinel must
+   show its fake-verification clipboard warning ("Do NOT paste into Run or
+   Terminal"). A missing warning is a failure. The clipboard now holds the inert
+   line `NAVSENTINEL_SENTINEL_DO_NOT_RUN base64`. Do not open an OS Run dialog,
+   and do not paste or execute it.
+7. Open NavSentinel Options > Event Log. There must be exactly one new
+   `clickfix_detected` row, for `localhost`, from the attack arm. Its reason is
+   `clipboard_command_with_overlay`. The copy page and the benign arm must add no
+   `clickfix_detected` row, and there must be no `bridge_buffer_overflow` row at
+   all. The log must not display `847293`, any `CF06-FLOOD-` value, or the
+   sentinel line. Do not export or share unrelated browsing rows.
+8. Inspect the page consoles and the extension service-worker console for new
+   errors. Set Clipboard for `localhost:5173` back to **Ask (default)**. Close
+   the test tabs and DevTools windows, stop the Gym server, close the disposable
+   profile, and remove only that profile. Do not alter an established profile or
+   disable security software.
+9. Chris records `AI-47 row 8 passed on main at <40-character SHA>; Chrome
+   <version>` with both self-check lines, the event-log outcome and any console
+   observations. Otherwise Chris records `AI-47 row 8 failed on main at <SHA>:
+   <step and observed result>`, or `AI-47 row 8 TEST_INVALID on main at <SHA>:
+   <self-check text>`. AI-47 itself was waived on 2026-09-27, so a recorded
+   result updates this row's evidence rather than reopening AI-47. A CI run or
+   automated browser pass does not count as Chris's observation.
+
+**What stays automated-only, and the limits of this check.**
+
+- The hostile same-session bridge retry stays in NS-ADV-SELF-005
+  (`tests/e2e/bridge-clipboard-pressure.spec.ts`, #186). So does the proof that
+  this procedure fails on a regressed build, which uses a patched copy that is
+  never loaded in the owner's profile.
+- The self-check is a page-side proxy. The page can see only NavSentinel's
+  public bridge-ready marker, which appears one message hop after the bridge
+  verifies. A write that finished inside that last hop would skip the queue. The
+  paired regressed-copy runs are the evidence that the proxy holds in practice.
+- The agent loads the page with the tab already focused. Whether typing the
+  address and pressing Enter gives the new page focus in time was not tested by
+  automation; the self-check reports it if not.
+- The #947 measurements were taken in branded Chrome 153. With the default
+  Clipboard setting (**Ask**), early writes without a click stayed pending, and
+  writes after 500 ms were rejected with "Write permission denied". A write
+  from Playwright's `page.evaluate` still succeeded, because it runs as a user
+  gesture. DevTools console evaluation is treated the same way, which probably
+  explains why the old console prewrite worked; that was not measured.
+- The procedure does not complete C-04, prove general bridge identity, or
+  establish OS paste or execution prevention.
 
 ### Historical AI-37 branch guide (retained for provenance)
 
@@ -848,7 +945,10 @@ known page-visible same-session handshake weakness in #186. This guide does not
 complete C-04, prove general bridge identity, or establish OS paste or execution
 prevention. Its branch-head and queue-policy decision steps describe the
 pre-merge gate and must not be used as current-main instructions. Only Chris can
-record the retained browser result through AI-47 row 8 above.
+record the retained browser result through AI-47 row 8 above. Steps 5–6 are
+superseded there by the `clickfix-06` pressure procedure (#947): on
+`clickfix-01`, the benign prewrite alone raises the warning, so that trial cannot
+fail.
 
 1. Resolve PR #599 and require its head branch to be
    `fix/issue523-unverified-clipboard-cap`. Record its 40-character

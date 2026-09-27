@@ -109,3 +109,226 @@ export function gestureBranchEmissionBound(
   if (!Number.isFinite(rapidWindowMs) || rapidWindowMs <= 0) return Number.POSITIVE_INFINITY;
   return Math.ceil((gestureWindowMs * belowThresholdPerWindow) / rapidWindowMs);
 }
+
+/**
+ * Redirect (form-submit) allowance for the MAIN-world guard (#864).
+ *
+ * The isolated world decides every trusted click and, when it allows one,
+ * sends `ns-allow` over the bridge MessagePort. That message is delivered a
+ * task later, so a page that submits its own form synchronously or in a
+ * microtask from its click handler used to find no allowance, while the same
+ * submit deferred by one task passed. The MAIN world therefore arms the SAME
+ * allowance for the click's own task from a document-capture listener that runs
+ * after the isolated world's window-capture decision. Every trusted click that
+ * world allows arms it, as the deferred grant always did; only a click that
+ * world stops (its interceptBlank/blockSameTab branches call
+ * stopImmediatePropagation) never reaches the listener. The isolated message
+ * stays the authority for everything after that task.
+ *
+ * Invariant: this never grants more than the one-task-deferred submit already
+ * got. The same-task arm is armed only in the top frame, where it matches the
+ * isolated grant's unrestricted scope (child frames wait for the isolated grant
+ * bound to the declared submit action). The helpers still accept a restricted
+ * scope because the isolated grant uses it. The arm is cleared by the
+ * next timer tick and in any case within the grant TTL (a delayed timer cannot
+ * stretch it further), and shares the per-gesture budget: the isolated follow-up for an armed
+ * click keeps the redirects already spent instead of resetting them. The
+ * follow-up is recognised by the click's `event.timeStamp`, which both worlds
+ * read from the same Event (measured identical on Chromium).
+ */
+export interface RedirectAllowanceState {
+  /** End of the window granted by the isolated world's `ns-allow`; 0 = none. */
+  until: number;
+  restrict: boolean;
+  target: string;
+  /** Same-task allowance armed by this world's trusted-click listener. */
+  sameTaskArmed: boolean;
+  sameTaskArmedAt: number;
+  sameTaskRestrict: boolean;
+  sameTaskTarget: string;
+  /** Redirects spent in the current gesture, shared by both allowances. */
+  count: number;
+  /** `event.timeStamp` of armed clicks whose isolated grant has not arrived. */
+  pendingFollowUps: number[];
+}
+
+export interface RedirectAllowanceLimits {
+  /** Lifetime of an isolated grant, and the outer bound of a same-task arm. */
+  ttlMs: number;
+  /** Redirects one gesture may spend across both allowances. */
+  maxPerGesture: number;
+  /** Bound on remembered same-task arms awaiting their follow-up. */
+  maxPendingFollowUps: number;
+}
+
+/** Where a redirect allowance may be spent. */
+export interface RedirectAllowanceScope {
+  /** When true, only `target` (an exact action URL) may be spent. */
+  restrict: boolean;
+  target: string;
+}
+
+export function createRedirectAllowance(): RedirectAllowanceState {
+  return {
+    until: 0,
+    restrict: false,
+    target: "",
+    sameTaskArmed: false,
+    sameTaskArmedAt: 0,
+    sameTaskRestrict: false,
+    sameTaskTarget: "",
+    count: 0,
+    pendingFollowUps: [],
+  };
+}
+
+/**
+ * Arm the allowance for the current task after a trusted click that the
+ * isolated world did not block. Starts the gesture's budget, as the isolated
+ * grant for the same click would one task later.
+ */
+export function armSameTaskRedirect(
+  state: RedirectAllowanceState,
+  now: number,
+  gestureTs: number,
+  scope: RedirectAllowanceScope,
+  limits: RedirectAllowanceLimits,
+): void {
+  state.count = 0;
+  state.sameTaskArmed = true;
+  state.sameTaskArmedAt = now;
+  state.sameTaskRestrict = scope.restrict;
+  state.sameTaskTarget = scope.target;
+  state.pendingFollowUps.push(gestureTs);
+  if (state.pendingFollowUps.length > limits.maxPendingFollowUps) state.pendingFollowUps.shift();
+}
+
+/** End the same-task arm; called from the next task. */
+export function endSameTaskRedirect(state: RedirectAllowanceState): void {
+  state.sameTaskArmed = false;
+}
+
+/**
+ * Apply an isolated-world `ns-allow` grant. When it carries the `gestureTs` of
+ * a click this world already armed, it is that click's follow-up and the
+ * gesture's spent redirects carry over; any grant without a matching click
+ * (a rollback grant, a click this world never saw) restarts the budget exactly
+ * as before #864. Grants arrive in click order over one port, so armed clicks
+ * older than the matched one never received a grant and are dropped.
+ */
+export function applyIsolatedRedirectAllowance(
+  state: RedirectAllowanceState,
+  now: number,
+  grant: RedirectAllowanceScope & { allowRedirect: boolean; gestureTs?: number },
+  limits: RedirectAllowanceLimits,
+): void {
+  const pending = state.pendingFollowUps;
+  const match = grant.gestureTs === undefined ? -1 : pending.indexOf(grant.gestureTs);
+  if (match >= 0) {
+    pending.splice(0, match + 1);
+  } else {
+    state.count = 0;
+  }
+  state.until = grant.allowRedirect ? now + limits.ttlMs : 0;
+  state.restrict = grant.restrict;
+  state.target = grant.target;
+}
+
+/**
+ * Spend one redirect for a submission to `actionUrl` if either allowance
+ * covers it and the gesture budget is not exhausted.
+ */
+export function consumeRedirect(
+  state: RedirectAllowanceState,
+  now: number,
+  actionUrl: string | undefined,
+  limits: RedirectAllowanceLimits,
+): boolean {
+  if (state.count >= limits.maxPerGesture) return false;
+  const inScope = (restrict: boolean, target: string) =>
+    !restrict || (actionUrl !== undefined && actionUrl !== "" && actionUrl === target);
+  const isolated = state.until > 0 && now <= state.until && inScope(state.restrict, state.target);
+  const sameTask =
+    state.sameTaskArmed &&
+    now - state.sameTaskArmedAt <= limits.ttlMs &&
+    inScope(state.sameTaskRestrict, state.sameTaskTarget);
+  if (!isolated && !sameTask) return false;
+  state.count += 1;
+  return true;
+}
+
+/**
+ * #943: a declared new-tab link whose click the page cancels and replaces with
+ * its own `window.open()`. YouTube's embedded player does this for "Watch on
+ * YouTube", and so do many share and "open in new tab" widgets. The native
+ * click would have opened the link's own href in a new tab; the page's
+ * `window.open()` of that same destination adds no authority, so a trusted
+ * click on such a link arms a one-shot allowance bound to the link's origin and
+ * path. A different destination, a target that could navigate an existing
+ * browsing context (`_top`, `_self`, `_parent`, or a name), or an open after
+ * the short lifetime stays gated.
+ */
+export interface AnchorOpenIntent {
+  origin: string;
+  pathname: string;
+  until: number;
+}
+
+export function anchorOpenIntentFor(href: string, now: number, ttlMs: number): AnchorOpenIntent | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(href);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  return { origin: parsed.origin, pathname: parsed.pathname, until: now + ttlMs };
+}
+
+export function matchesAnchorOpenIntent(
+  intent: AnchorOpenIntent | null,
+  now: number,
+  url: string | undefined,
+  target: string | undefined,
+  baseHref: string,
+): boolean {
+  if (!intent || now > intent.until) return false;
+  const normalizedTarget = (target ?? "").trim().toLowerCase();
+  if (normalizedTarget !== "" && normalizedTarget !== "_blank") return false;
+  if (url === undefined || url.trim() === "") return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url, baseHref);
+  } catch {
+    return false;
+  }
+  return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
+}
+
+const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
+
+/**
+ * The URL a form submission goes to, as Chromium computes it (#900). An action
+ * that is missing, empty or only HTML whitespace means the document's own URL.
+ * Any other action resolves against the document's base URL, which
+ * `<base href>` can point at another origin. Null when it does not parse.
+ *
+ * The MAIN-world gate uses this; the isolated world's declared-action binding
+ * keeps an identical copy (nav_authority.ts), so a child frame's click grant
+ * matches the submit it declared. A null base URL (the loader's early capture
+ * is missing) leaves an absolute action usable and a relative one unresolved.
+ */
+export function resolveFormActionUrl(
+  rawAction: string | null | undefined,
+  documentUrl: string,
+  baseUrl: string | null
+): string | null {
+  const action = (rawAction ?? "").replace(HTML_WHITESPACE_EDGES, "");
+  try {
+    if (!action) return new URL(documentUrl).toString();
+    if (baseUrl === null) return new URL(action).toString();
+    return new URL(action, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}

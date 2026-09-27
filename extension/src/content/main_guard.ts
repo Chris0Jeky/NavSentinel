@@ -13,7 +13,21 @@ import {
   isFloodableAlertType,
 } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { enforceMapSizeCap, pruneTimestampWindow, shouldEmitRapidPushState } from "./main_guard_helpers";
+import {
+  anchorOpenIntentFor,
+  applyIsolatedRedirectAllowance,
+  armSameTaskRedirect,
+  consumeRedirect,
+  createRedirectAllowance,
+  endSameTaskRedirect,
+  enforceMapSizeCap,
+  matchesAnchorOpenIntent,
+  pruneTimestampWindow,
+  resolveFormActionUrl,
+  shouldEmitRapidPushState,
+  type AnchorOpenIntent,
+  type RedirectAllowanceLimits,
+} from "./main_guard_helpers";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -29,7 +43,15 @@ const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
 const TARGET_NAV_TTL_MS = 10000;
 const MAX_OPENS_PER_GESTURE = 1;
+// #943: how long a trusted click on a declared new-tab link lets the page open
+// that link's own destination with window.open().
+const ANCHOR_OPEN_INTENT_TTL_MS = 1000;
 const MAX_REDIRECTS_PER_GESTURE = 2;
+const REDIRECT_LIMITS: RedirectAllowanceLimits = {
+  ttlMs: REDIRECT_TTL_MS,
+  maxPerGesture: MAX_REDIRECTS_PER_GESTURE,
+  maxPendingFollowUps: 8,
+};
 const ALLOW_ONCE_TTL_MS = 1200;
 const BLOCKED_ACTION_TTL_MS = 5000;
 // Hard cap on live blockedActions entries. The TTL-only prune evicts nothing within a 5s
@@ -151,7 +173,6 @@ function syncJsBehaviorMonitor(): void {
 }
 
 let openCount = 0;
-let redirectCount = 0;
 let allowOnceRemaining = 0;
 let allowOnceUntil = 0;
 // URL the one-shot allowance is bound to. Without the binding, the first
@@ -159,11 +180,13 @@ let allowOnceUntil = 0;
 // destination, so a racing open can ride a user's Allow-once click (#851).
 let allowOnceUrl = "";
 let allowOpenUntil = 0;
-let allowRedirectUntil = 0;
-let restrictRedirectTarget = false;
-let allowedRedirectTarget = "";
+// Form-submit allowance: the isolated world's grant plus the same-task arm (#864).
+const redirectAllowance = createRedirectAllowance();
+let sameTaskRedirectTimer = 0;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
+let anchorOpenIntent: AnchorOpenIntent | null = null;
+let anchorOpenIntentEvent: MouseEvent | null = null;
 
 // --- DoubleClickjacking detection state ---
 // Tracks the timestamp of the last window.open call from this page.
@@ -210,14 +233,22 @@ function markAllowance(params: {
   allowRedirect: boolean;
   restrictRedirectTarget?: boolean;
   redirectTarget?: string;
+  gestureTs?: number;
 }): void {
   const now = nowMs();
   openCount = 0;
-  redirectCount = 0;
   allowOpenUntil = params.allowOpen ? now + OPEN_TTL_MS : 0;
-  allowRedirectUntil = params.allowRedirect ? now + REDIRECT_TTL_MS : 0;
-  restrictRedirectTarget = params.restrictRedirectTarget === true;
-  allowedRedirectTarget = typeof params.redirectTarget === "string" ? params.redirectTarget : "";
+  applyIsolatedRedirectAllowance(
+    redirectAllowance,
+    now,
+    {
+      allowRedirect: params.allowRedirect,
+      restrict: params.restrictRedirectTarget === true,
+      target: typeof params.redirectTarget === "string" ? params.redirectTarget : "",
+      ...(params.gestureTs !== undefined ? { gestureTs: params.gestureTs } : {}),
+    },
+    REDIRECT_LIMITS,
+  );
 }
 
 function isOff(): boolean {
@@ -350,6 +381,47 @@ function consumePopupIntentAllowance(target?: string, features?: string): boolea
   return true;
 }
 
+// #943: one-shot, bound to the clicked link's origin and path, new-window
+// targets only. See AnchorOpenIntent in main_guard_helpers.ts.
+//
+// One tab per click: the page's open REPLACES the link's own navigation, never
+// adds to it. While the arming click is still dispatching, NavSentinel cancels
+// that navigation itself; either way the open is allowed only if the click is
+// still the trusted original and its navigation is verifiably cancelled.
+// Without this, a page could keep the native navigation AND open a second tab (a
+// popunder riding an ordinary link click). eventPhase, defaultPrevented and
+// preventDefault are read through getters captured at startup, so an
+// own-property spoof on the event cannot fake them; other MAIN-world reads
+// (composedPath, instanceof) remain page-overridable (#896), but none of them
+// can buy a second tab.
+function consumeAnchorOpenIntent(url: string | undefined, target: string | undefined): boolean {
+  if (mode !== "smart") return false;
+  if (openCount >= MAX_OPENS_PER_GESTURE) return false;
+  const event = anchorOpenIntentEvent;
+  // Resolve first: the match then compares absolute URLs, and an unresolvable
+  // URL never matches.
+  // An empty URL (about:blank) never matched a link's destination; keep it so.
+  const resolved = url === undefined || url.trim() === "" ? null : resolveAgainstBase(url);
+  if (!event || resolved === null) return false;
+  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved)) return false;
+  try {
+    // isTrusted is an unforgeable own property, and re-dispatching the saved
+    // event with dispatchEvent() makes it false: a later replay cannot pose as
+    // the original click.
+    if (!event.isTrusted) return false;
+    if (nativeEventPhase.call(event) !== 0) nativePreventDefault.call(event);
+    // Whatever the phase, allow the open only once the link's own navigation is
+    // really cancelled. A passive listener silently ignores preventDefault().
+    if (!nativeDefaultPrevented.call(event)) return false;
+  } catch {
+    return false;
+  }
+  anchorOpenIntent = null;
+  anchorOpenIntentEvent = null;
+  openCount += 1;
+  return true;
+}
+
 function armPopupIntent(): void {
   popupIntentArmed = true;
   if (popupIntentClearTimer) {
@@ -381,19 +453,7 @@ function maybeArmPopupIntent(
 }
 
 function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "none" {
-  const now = nowMs();
-  if (restrictRedirectTarget && (!actionUrl || actionUrl !== allowedRedirectTarget)) {
-    return "none";
-  }
-  if (
-    allowRedirectUntil > 0 &&
-    now <= allowRedirectUntil &&
-    redirectCount < MAX_REDIRECTS_PER_GESTURE
-  ) {
-    redirectCount += 1;
-    return "allowed";
-  }
-  return "none";
+  return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
 }
 
 function makeId(): string {
@@ -446,8 +506,9 @@ function postAllowed(params: { kind: string; url?: string; target?: string }): v
 function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQueryPrefix?: boolean }): void {
   if (url === undefined || String(url) === "") return;
   try {
-    const href = new URL(String(url), location.href).toString();
-    if (!href.startsWith("http:") && !href.startsWith("https:")) return;
+    // An unresolvable URL grants nothing.
+    const href = resolveAgainstBase(String(url));
+    if (href === null || (!href.startsWith("http:") && !href.startsWith("https:"))) return;
     postToIsolated("ns-allow-target-nav", {
       url: href,
       ttlMs: TARGET_NAV_TTL_MS,
@@ -494,7 +555,54 @@ function registerBlockedAction(params: {
 const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
+// #943: read link and click state through the platform getters, not through
+// properties a page can shadow on the element or event.
+function capturedGetter<T>(proto: object, prop: string, fallback: (self: never) => T): (this: unknown) => T {
+  const getter = Object.getOwnPropertyDescriptor(proto, prop)?.get;
+  return (getter ?? fallback) as (this: unknown) => T;
+}
+const nativeAnchorHref = capturedGetter<string>(HTMLAnchorElement.prototype, "href", () => "");
+const nativeAnchorTarget = capturedGetter<string>(HTMLAnchorElement.prototype, "target", () => "");
+const nativeEventPhase = capturedGetter<number>(Event.prototype, "eventPhase", () => 0);
+const nativeDefaultPrevented = capturedGetter<boolean>(Event.prototype, "defaultPrevented", () => false);
+const nativePreventDefault = Event.prototype.preventDefault;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+// #900: the browser resolves a relative form action, window.open URL or link
+// against the document's base URL, and `<base href>` can move that to another
+// origin. The loader captures the platform `baseURI` getter before its async
+// import (scripts/content-loader-contract.mjs), because an early inline page
+// script could replace `Node.prototype.baseURI` before this module runs.
+// Without that capture, relative URLs get no base at all: they lose authority
+// rather than trust a getter the page may control.
+const earlyBaseURI = (globalThis as typeof globalThis & {
+  __navsentinelMainBaseURI?: (this: Node) => string;
+}).__navsentinelMainBaseURI;
+
+function documentBaseUrl(): string | null {
+  if (typeof earlyBaseURI !== "function") return null;
+  try {
+    const base = earlyBaseURI.call(document);
+    return typeof base === "string" && base !== "" ? base : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The absolute URL the browser would use now, or null when it cannot be resolved. */
+function resolveAgainstBase(url: string): string | null {
+  try {
+    return new URL(url).toString();
+  } catch {
+    // Relative: needs the captured base URL.
+  }
+  const base = documentBaseUrl();
+  if (base === null) return null;
+  try {
+    return new URL(url, base).toString();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
@@ -658,14 +766,35 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
+  // #943: no notifyAllowedTarget here. That entry exempts a later navigation of
+  // THIS (opener) tab from rollback, which a replaced link click never needs.
+  if (consumeAnchorOpenIntent(url, target)) {
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
+    recordWindowOpen();
+    return callNativeOpen(receiver, url, target, features);
+  }
+
+  // #900: resolve once, against the base URL in force now, so the prompt shows
+  // and an approval opens the same absolute URL even if the page moves
+  // `<base href>` while the prompt waits. An empty URL keeps meaning about:blank.
+  const blockedUrl = url === undefined || url === "" ? url : resolveAgainstBase(url);
+  // An unresolvable URL (a non-hierarchical base such as `mailto:`, or no
+  // captured base) stays blocked with nothing to approve: the raw relative
+  // string must never reach a later native open, where it would resolve
+  // against whatever base exists then.
+  if (blockedUrl === null) return null;
   registerBlockedAction({
     kind: "window_open",
-    ...(url !== undefined ? { url: String(url) } : {}),
+    ...(blockedUrl !== undefined ? { url: blockedUrl } : {}),
     ...(target !== undefined ? { target } : {}),
     ...(features !== undefined ? { features } : {}),
     action: () => {
       recordWindowOpen();
-      callNativeOpen(receiver, url, target, features);
+      callNativeOpen(receiver, blockedUrl, target, features);
     }
   });
 
@@ -674,12 +803,7 @@ function patchedOpen(
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
   const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
-  if (!raw) return location.href;
-  try {
-    return new URL(raw, location.href).toString();
-  } catch {
-    return undefined;
-  }
+  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
 }
 
 /**
@@ -839,6 +963,7 @@ function handleBridgeMessage(message: unknown): void {
     restrictRedirectTarget?: boolean;
     redirectTarget?: string;
     url?: string;
+    gestureTs?: number;
   };
   if (!data || data.source !== NS_SOURCE || data.v !== PROTOCOL_VERSION) return;
   if (!bridgeSession || data.session !== bridgeSession) return;
@@ -873,14 +998,18 @@ function handleBridgeMessage(message: unknown): void {
       allowOpen,
       allowRedirect,
       restrictRedirectTarget: data.restrictRedirectTarget === true,
-      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {})
+      ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {}),
+      // Identifies the click this grant follows up (#864); anything else is ignored.
+      ...(typeof data.gestureTs === "number" && Number.isFinite(data.gestureTs)
+        ? { gestureTs: data.gestureTs }
+        : {})
     });
     if (debug) {
       console.debug("[NavSentinel] allowance", {
         allowOpen,
         allowRedirect,
         openUntil: allowOpenUntil,
-        redirectUntil: allowRedirectUntil
+        redirectUntil: redirectAllowance.until
       });
     }
     return;
@@ -944,6 +1073,86 @@ window.addEventListener(
   },
   true
 );
+
+// #864: arm the form-submit allowance for the trusted click's OWN task. The
+// isolated world's grant arrives over the MessagePort a task later, so a page
+// handler that submits synchronously or in a microtask (jQuery
+// `.trigger("submit")`, validation libraries, `<a onclick=form.submit()>`) was
+// blocked while the same submit one task later passed. This listener is on
+// `document` in the capture phase, so it runs AFTER every window-capture
+// listener, including the isolated world's click decision. Every trusted click
+// that world allows arms it, as the deferred grant always did; a click it stops
+// (interceptBlank/blockSameTab: stopImmediatePropagation) never reaches it. Only
+// trusted clicks arm: `click` cannot be produced trusted by page script, while
+// `change` and `submit` can (`checkbox.click()`, `requestSubmit()`), so they
+// arm nothing. See RedirectAllowanceState for the scope and budget invariant.
+//
+// Top frame only. A child frame's allowance is bound to the action its clicked
+// submit control declares (#593/#637), and only the isolated world's window-
+// capture read of that action is trustworthy: a page window-capture handler
+// runs between it and this document-capture listener and can rewrite `action`
+// or `formaction`, so an in-task arm would bind to an action the isolated world
+// never declared. Child frames therefore keep waiting for the isolated grant,
+// and a same-task child-frame submit stays gated as before #864.
+const nativeSetTimeout = window.setTimeout.bind(window);
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
+    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, { restrict: false, target: "" }, REDIRECT_LIMITS);
+    if (!sameTaskRedirectTimer) {
+      sameTaskRedirectTimer = nativeSetTimeout(() => {
+        sameTaskRedirectTimer = 0;
+        endSameTaskRedirect(redirectAllowance);
+      }, 0);
+    }
+  },
+  true
+);
+
+// #943: a trusted click on a visible, named `<a target="_blank">` arms a
+// one-shot window.open() allowance for that link's own destination, so a page
+// that cancels the click and opens the link itself (YouTube's embedded "Watch
+// on YouTube") is not blocked. Like the #864 listener this is on `document` in
+// the capture phase, after every window-capture listener: a click the isolated
+// world stops (its new-tab prompt calls stopImmediatePropagation) never arms
+// it. It covers child frames too, because the allowance is bound to the
+// destination the link declares, which the native click would have opened.
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent) || !event.isTrusted) return;
+    anchorOpenIntent = null;
+    anchorOpenIntentEvent = null;
+    if (mode !== "smart" || event.button !== 0) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const anchor = findDeclaredNewTabAnchor(event);
+    if (!anchor || !isSafePopupIntentSource(anchor)) return;
+    let href: string;
+    try {
+      href = nativeAnchorHref.call(anchor);
+    } catch {
+      return;
+    }
+    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS);
+    anchorOpenIntentEvent = anchorOpenIntent ? event : null;
+  },
+  true
+);
+
+function findDeclaredNewTabAnchor(event: MouseEvent): HTMLAnchorElement | null {
+  for (const node of event.composedPath()) {
+    if (!(node instanceof HTMLAnchorElement)) continue;
+    // The nearest link owns the click; only a declared new-tab link qualifies.
+    // Read through the captured getter: an own-property spoof cannot fake it.
+    try {
+      return nativeAnchorTarget.call(node).trim().toLowerCase() === "_blank" ? node : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 function generateChallenge(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));

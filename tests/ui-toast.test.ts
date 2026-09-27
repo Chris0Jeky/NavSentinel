@@ -132,7 +132,7 @@ describe("ui_toast", () => {
       showToast({ message: "Test" });
       const label = getWrap()!.querySelector(".head-label");
       expect(label).not.toBeNull();
-      expect(label!.textContent).toBe("NavSentinel");
+      expect(label!.textContent).toBe("Heedline");
     });
 
     it("renders pulsing dot before label in header", () => {
@@ -617,7 +617,7 @@ describe("ui_toast", () => {
 
     it("a rollback-shaped card renders Proceed and a single Dismiss", () => {
       showToast({
-        message: "NavSentinel rolled back a suspicious redirect to example.test",
+        message: "Heedline rolled back a suspicious redirect to example.test",
         actions: [{ label: "Proceed", onClick: vi.fn() }],
         timeoutMs: 0,
       });
