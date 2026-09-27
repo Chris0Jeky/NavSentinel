@@ -76,6 +76,8 @@ const budgets = [
     // allowance for feature growth. Their integration moves signal derivation
     // behind #601's lazy boundary: 66.4KB interaction-only and 66.9KB research.
     // The next capture growth slice must split or trim this chunk again.
+    // Trimmed 66.0 -> 64.2KB interaction-only by loading the opt-in debug panel
+    // lazily; that margin is for the pending #886 click-concealment stack.
     maxKB: 67,
   },
   {
