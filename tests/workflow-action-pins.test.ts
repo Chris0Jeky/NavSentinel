@@ -106,4 +106,25 @@ describe("Branded Chrome browser-gate trigger", () => {
     expect(source).toContain('"$checkout_head" "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
     expect(source).not.toContain('\n            "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
   });
+
+  it("records Git reachability before and after branded E2E without weakening acceptance", () => {
+    const source = fs.readFileSync(
+      path.join(workflowDirectory, "branded-chrome-advisory.yml"),
+      "utf8",
+    );
+
+    expect(source).toContain("name: Record Git reachability before browser run");
+    expect(source).toContain(
+      "node scripts/record-git-reachability.mjs --phase before-e2e",
+    );
+    expect(source).toContain("name: Record Git reachability after browser run");
+    expect(source).toContain(
+      "node scripts/record-git-reachability.mjs --phase after-e2e",
+    );
+    expect(source).toContain("if: ${{ always() }}");
+    expect(source).toContain("test-results/git-reachability-before-e2e.txt");
+    expect(source).toContain("test-results/git-reachability-after-e2e.txt");
+    expect(source).toContain("xvfb-run -a npm run test:acceptance");
+    expect(source).not.toContain("continue-on-error: true");
+  });
 });
