@@ -680,7 +680,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if ((message as { type?: unknown }).type === "ns-suite-settings-update" && "patch" in message) {
     void handleSuiteSettingsUpdateMessage(message as import("../shared/storage").SuiteSettingsUpdateMessage, sender)
       .then(sendResponse)
-      .catch(() => sendResponse?.());
+      .catch((error) => sendResponse?.({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     return true;
   }
 
