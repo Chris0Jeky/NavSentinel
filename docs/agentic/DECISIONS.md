@@ -14,6 +14,39 @@ When a decision changes, edit it in place and date the change.
 
 ---
 
+## 2026-09-27 — After the v0.5.0 pre-release
+
+### D-2026-09-27-S — AI-47 waived on agent evidence; known acceptance reds do not block; row 8 redesigned; v0.5.1 waits; AI-19 goes the rename route
+
+**Decision:** after using the v0.5.0 build, Chris asked the agent to run as much
+of the AI-47 owner check as it could. In answer to four explicit questions on
+2026-09-27 Chris chose the following; item 5 came with the v0.5.1 answer:
+
+1. **AI-47: waived on agent evidence.** The manual Chrome pass is waived on the
+   agent run recorded in
+   [`docs/testing/AI47_V050_AGENT_PASS_2026-09-26.md`](../testing/AI47_V050_AGENT_PASS_2026-09-26.md):
+   all eight rows' acceptance specs passed on the exact release build. Record it
+   as **"manual gate waived on agent evidence"**, never "Gate-3 passed". The
+   subjective checks that report lists remain unverified by a human: wording,
+   visual look, a screen reader, and opening the popup from the toolbar icon.
+2. **Acceptance lane: known reds do not block.** A browser-facing PR passes
+   D-2026-09-25-Q's acceptance lane if it adds no new acceptance failures
+   relative to `main`, and every known red has an open issue. Today the only
+   known red is #865's `fp-iframe-target-form`. This confirms how #895, #910,
+   #920, #921 and #946 merged.
+3. **AI-47 row 8 (#947): redesign.** The row-8 procedure cannot fail on a #599
+   regression, because the benign prewrite alone warns. Replace it with a
+   procedure that can fail.
+4. **v0.5.1: wait for more fixes** before cutting the next pre-release.
+5. **AI-19: rename.** Chris asked for a researched shortlist of replacement
+   names, based on the product's direction. The final choice is Chris's.
+
+**Why:** Chris did not want to spend time on the manual pass, and the automated
+acceptance lane covers every row on the exact artifact (row 8 only weakly, see
+#947). The acceptance rule
+keeps an unrelated, tracked red from freezing unrelated fixes, without letting a
+new failure through.
+
 ## 2026-09-25 — v0.5.0 release integration
 
 ### D-2026-09-25-R — AI-37 accepted; AI-19 deferred to the store submission; AI-23 retirements approved
