@@ -128,7 +128,19 @@ test("page script cannot reach the credential prompt; real Tab still moves betwe
     }, CREDENTIAL_MODAL_HOST_ID);
     expect(reach).toEqual({ host: true, shadowRoot: false, activeIsHost: true });
 
-    // Real Tab moves to the next action, and the focus trap leaves it there.
+    // Assistive technology reads Chrome's accessibility tree, which a closed
+    // root does not hide.
+    const cdp = await page.context().newCDPSession(page);
+    const { nodes } = await cdp.send("Accessibility.getFullAXTree");
+    await cdp.detach();
+    const exposed = nodes
+      .filter((node) => !node.ignored)
+      .map((node) => `${String(node.role?.value)}:${String(node.name?.value)}`);
+    expect(exposed).toEqual(
+      expect.arrayContaining(["dialog:Credential submit blocked", "button:Cancel", "button:Proceed once"]),
+    );
+
+    // Real Tab moves to the next action and stays there.
     await page.keyboard.press("Tab");
     await expect.poll(focused).toBe("Proceed once");
     await page.waitForTimeout(200);

@@ -617,13 +617,24 @@ describe("credential modal", () => {
       await promise;
     });
 
-    it("keeps focus on a second action instead of pulling it back to the first", async () => {
+    it("keeps focus that re-enters on a second action instead of pulling it back to the first", async () => {
       const promise = showCredentialModal(minimalSpec());
       vi.runAllTimers();
 
       const buttons = getButtons();
-      expect(getShadow()!.activeElement).toBe(buttons[0]);
       buttons[1]!.focus();
+      expect(getShadow()!.activeElement).toBe(buttons[1]);
+
+      // Focus re-entering the card from outside (window refocus, assistive
+      // technology) reaches the window listener with the closed root hidden
+      // from composedPath(): Chrome reports only the host and its ancestors.
+      // happy-dom does not truncate the path, so model that here.
+      const host = getHost()!;
+      const reentry = new FocusEvent("focusin");
+      Object.defineProperty(reentry, "composedPath", {
+        value: () => [host, document.documentElement, document, window],
+      });
+      window.dispatchEvent(reentry);
       expect(getShadow()!.activeElement).toBe(buttons[1]);
 
       activateButton(buttons[0]!);
