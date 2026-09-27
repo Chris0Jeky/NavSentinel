@@ -68,7 +68,7 @@
   </ol>
 
   <h2>ClickFix / Fake CAPTCHA</h2>
-  <p>These fixtures test fake CAPTCHA clipboard behavior with an exact inert sentinel. They never copy or execute a runnable command.</p>
+  <p>These fixtures test fake CAPTCHA clipboard behavior with an inert sentinel value. They never copy or execute a runnable command.</p>
 
   <ol>
     <li><a href="clickfix-01-basic.html">ClickFix 01 - basic fake CAPTCHA with clipboard write</a></li>
@@ -76,6 +76,9 @@
     <li><a href="clickfix-03-legit-captcha.html">ClickFix 03 - local verification control (false positive check)</a></li>
     <li><a href="clickfix-04-winr.html">ClickFix 04 - Win+R instruction variant</a></li>
     <li><a href="clickfix-05-delayed-rewrite.html">ClickFix 05 - delayed clipboard rewrite after manual copy</a></li>
+    <li>ClickFix 06 - clipboard pressure before the bridge handshake (needs Clipboard set to Allow for this site):
+      <a href="clickfix-06-clipboard-pressure.html?mode=benign">benign arm</a>,
+      <a href="clickfix-06-clipboard-pressure.html?mode=attack">attack arm</a></li>
   </ol>
 
   <h2>DoubleClickjacking</h2>
