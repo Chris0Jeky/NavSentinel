@@ -44,8 +44,8 @@ non-human gate still passes. The retained browser work is consolidated as AI-47
 below. Every AI-47 Human result is **OPEN — not run**: a merge, CI, or automated
 Chromium result is not a human-test result. Browser merge receipts cover #600,
 #609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658. PR #658
-merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result remains
-**OPEN — not run**. PR #599 stayed outside until AI-37 was accepted on
+merged as `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`; its child result was
+waived with AI-47 on 2026-09-27 (D-2026-09-27-S). PR #599 stayed outside until AI-37 was accepted on
 2026-09-25 (D-2026-09-25-R), and PR #572 remains parked outside on SP-F-013. PR #687
 merged as `63e3bbbc401f272e88abc88a4f890ba4003bdb1f`, but remains a test-only
 delayed-clipboard lane: its evidence is `MODELLED`/`UNVERIFIED`, not owner
@@ -238,8 +238,8 @@ This row records integration state, not a human-test result:
 
 ### Merged browser work retained under AI-47
 
-The following candidates are now on `main`; their owner checks remain open and
-are consolidated in AI-47. A merge commit is an integration fact, not a human
+The following candidates are now on `main`; their owner checks were consolidated
+in AI-47 and waived on agent evidence on 2026-09-27 (D-2026-09-27-S). A merge commit is an integration fact, not a human
 Chrome result. Only Chris may perform and record observations; agents may only
 preserve Chris's explicit observation.
 
@@ -269,8 +269,9 @@ stack ordering; record their merge commits here in the closeout sync. **This is
 an index, not a shortened replacement procedure:** every step and evidence field
 in each applicable current-`main` AI-47 subprocedure and branch-held exact guide
 remains required. Record a sub-result for each former AI item before reporting
-AI-47 as passed; one omitted sub-result keeps AI-47 open. Every Human result in
-the table above starts **OPEN — not run**. Only Chris may perform and record a
+AI-47 as passed; one omitted sub-result keeps AI-47 open. (Superseded 2026-09-27:
+AI-47 is waived, so this procedure is only for an optional later human pass.)
+Every Human result in the table above started **OPEN — not run**. Only Chris may perform and record a
 browser observation; a merge, CI run, or agent assertion must not change it.
 
 Build the then-current `main`, record its 40-character SHA, and have Chris load
@@ -318,11 +319,11 @@ revision printed by the build, then run this consolidated sequence:
 Inspect page, popup, Options, Protection Center, and service-worker consoles for
 new errors during the relevant steps. Only after Chris has explicitly recorded
 every applicable row may Chris report `AI-47 done; consolidated Gate-3 passed on
-main at <40-character SHA>; Chrome <version>`. #658 keeps row 6 and AI-47 open
-until Chris records its observation. On a mismatch, Chris records
+main at <40-character SHA>; Chrome <version>`. Before the 2026-09-27 waiver, #658 kept row 6 and
+AI-47 open until Chris recorded its observation. On a mismatch, Chris records
 `AI-47 failed on main at <SHA>: <numbered step and observed result>`. A failure
 reopens the smallest affected issue/PR slice; it does not invalidate unrelated
-checks. The general guided cursor is AI-47; AI-19 remains deferred until store submission.
+checks. The general guided cursor is AI-19 (D-2026-09-27-S).
 
 **Agent pre-check, 2026-09-24 (automated evidence only; every Human result above
 stays OPEN — not run):** each AI-47 row and AI-24/30/33/35/36 now has an
@@ -383,7 +384,7 @@ warning, or same-field conflict UX. Only Chris can complete this human Gate-3.
 The AI-36 guide carries a matching post-merge banner. Reply `AI-36 done; Gate-3
 passed on main at <40-character SHA>; Chrome <version>` or `AI-36 failed on main
 at <SHA>: <step and observed>`.
-The general guided resolution cursor is AI-47; AI-36 is an additional
+The general guided resolution cursor is AI-19; AI-36 is an additional
 branch-specific gate.
 
 **OPEN: AI-35 — #539 cross-host child-event attribution post-merge Gate-3.**
@@ -401,7 +402,7 @@ consoles. Only Chris can complete this human Gate-3. The AI-35 guide carries a
 matching post-merge banner. Reply `AI-35 done; Gate-3 passed on main at
 <40-character SHA>; Chrome <version>` or `AI-35 failed on main at <SHA>: <step
 and observed>`. The general guided
-resolution cursor is AI-47; AI-35 is an additional branch-specific gate.
+resolution cursor is AI-19; AI-35 is an additional branch-specific gate.
 
 **OPEN: AI-33 — Issue #530 popup trust-pill contrast post-merge Gate-3.** This
 is no longer a pre-merge gate. PR #582 merged on 2026-08-27 (head
@@ -416,7 +417,7 @@ chips, unclipped, keyboard-operable, and free of new popup-console errors. Only
 Chris can record this complete. Reply `AI-33 done; Gate-3 passed on main at
 <40-character SHA>; Chrome <version>` or `AI-33 failed on main at <SHA>:
 <step and observed>`. This PR-specific gate does not move the general guided-
-resolution cursor from AI-47.
+resolution cursor from AI-19.
 
 **OPEN: AI-30 - #567 Back/Forward history-integrity post-merge Gate-3.** This is
 no longer a pre-merge gate. PR #570 merged on 2026-08-27 (head
@@ -433,7 +434,7 @@ prompt. Also confirm the existing delayed page-initiated redirect still rolls
 back. Only Chris can record this complete. Reply `AI-30 done; Gate-3 passed on
 main at <40-character SHA>; Chrome <version>` or `AI-30 failed on main at
 <SHA>: <step and observed>`. This PR-specific gate does not move the general
-guided-resolution cursor from AI-47.
+guided-resolution cursor from AI-19.
 
 **OPEN: AI-19 — Clear or replace the working product name before CWS submission.**
 TruNav publicly uses the exact name `NavSentinel` for a coming-soon GNSS
