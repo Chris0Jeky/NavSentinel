@@ -165,7 +165,6 @@ async function loadValidPressureArm(
   for (let attempt = 1; attempt <= PRESSURE_ATTEMPTS; attempt++) {
     if (page) {
       await page.close();
-      page = null;
       await waitForEventLogQuiescence(session);
     }
     logBefore = await session.eventLog();
