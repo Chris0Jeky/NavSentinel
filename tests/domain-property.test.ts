@@ -255,7 +255,9 @@ describe("safeUrlParse properties", () => {
         }
       )
     );
-  });
+    // fc.webUrl generation is slow: 100 runs took 8.7s on a loaded 4-core host
+    // against the 5s default.
+  }, 20_000);
 
   it("never throws (returns null instead)", () => {
     fc.assert(
