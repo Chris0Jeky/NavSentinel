@@ -407,9 +407,9 @@ function updateSuiteSettingsDirect(
       )) return { ...cur, conflict: true };
       const merged = mergeSuiteSettings(cur, partial);
       if (
-  options?.recomputeAdaptiveScoresOnModeChange !== false &&
-  cur.nav.defaultMode !== merged.nav.defaultMode
-) {
+        options?.recomputeAdaptiveScoresOnModeChange !== false &&
+        cur.nav.defaultMode !== merged.nav.defaultMode
+      ) {
         // Mode is an input to the adaptive derivative (#891). Join the prompt
         // lane before reading outcomes, and commit both keys together: an
         // earlier append must finish first, and a later one must see this mode.
@@ -448,9 +448,9 @@ export async function resetSuiteSettingsSection(
     ? { nav: structuredClone(DEFAULT_SUITE_SETTINGS.nav) }
     : { credential: structuredClone(DEFAULT_SUITE_SETTINGS.credential) };
   return updateSuiteSettingsDirect(patch, undefined, {
-  // A section reset changes settings only; every behavioural-data lane stays byte-identical (#563).
-  recomputeAdaptiveScoresOnModeChange: false,
-});
+    // A section reset changes settings only; every behavioural-data lane stays byte-identical (#563).
+    recomputeAdaptiveScoresOnModeChange: false,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
