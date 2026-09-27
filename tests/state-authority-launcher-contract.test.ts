@@ -275,6 +275,9 @@ describe("state-authority launcher replay boundary", () => {
         timeout: 55_000,
       },
     );
+    // A timed-out child has status null, which would satisfy a nonzero-exit
+    // expectation after it printed the expected diagnostic and then hung.
+    expect(result.error, String(result.error)).toBeUndefined();
     const output = `${result.stdout}\n${result.stderr}`;
 
     if (repositoryIsShallow()) {
@@ -338,6 +341,9 @@ describe("state-authority launcher replay boundary", () => {
         timeout: 55_000,
       },
     );
+    // A timed-out child has status null, which would satisfy a nonzero-exit
+    // expectation after it printed the expected diagnostic and then hung.
+    expect(result.error, String(result.error)).toBeUndefined();
     const output = `${result.stdout}\n${result.stderr}`;
 
     expect(result.status).not.toBe(0);
