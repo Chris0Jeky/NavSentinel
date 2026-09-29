@@ -88,6 +88,7 @@ import {
 } from "./pushstate_guard";
 import { correlatesShadowGuardPrompt } from "./shadow_guard_correlation";
 import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
+import { resolveFormActionUrl } from "./form_action";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 import { isRiskReducingReason } from "../shared/reason_codes";
@@ -1386,6 +1387,42 @@ function findAnchorInShadowRoots(x: number, y: number): HTMLAnchorElement | null
     if (first) return first as HTMLAnchorElement;
   }
   return null;
+}
+
+/**
+ * Selector for a control whose default action submits a form: a `<button>`
+ * whose type defaults to submit, or a submit/image input.
+ */
+const SUBMIT_INTENT_SELECTOR =
+  "button:not([type=button]):not([type=reset]),input[type=submit],input[type=image]";
+
+/**
+ * True when a click resolves to a navigation the clicking frame itself declared
+ * through a form submit control. Paired with a cross-document anchor href, this
+ * is the "in-frame navigation intent" that lets a child frame mint tab-wide
+ * navigation authority (#593); a bare element does not qualify.
+ *
+ * Deliberately conservative in BOTH directions. Missing an intent (a submit
+ * control inside a shadow root, say) only costs a child frame the tab-wide
+ * allowance, which downgrades the navigation to the existing rollback prompt.
+ * Seeing one that the page never honours (a submit button whose handler calls
+ * preventDefault and then scripts a navigation) is a known forgeable path: the
+ * signal is page-declared markup, so it raises the cost of the #593 pattern
+ * rather than making it impossible. See the PR and the evidence-map limitation.
+ */
+function formSubmitIntentUrl(e: MouseEvent): string | null {
+  const target = e.target instanceof Element ? e.target : null;
+  const control = target?.closest(SUBMIT_INTENT_SELECTOR) ?? null;
+  const form = (control as HTMLButtonElement | HTMLInputElement | null)?.form;
+  if (!form) return null;
+  // Shared contract (#650): resolve against the effective base URL and admit
+  // only http(s) destinations, exactly as the MAIN-world enforcement point.
+  return resolveFormActionUrl({
+    submitterAction: control?.getAttribute("formaction") ?? null,
+    formAction: form.getAttribute("action"),
+    baseURI: document.baseURI,
+    documentURL: location.href,
+  });
 }
 
 function findAnchorFromEvent(e: MouseEvent): HTMLAnchorElement | null {

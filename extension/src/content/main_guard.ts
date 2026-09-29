@@ -24,11 +24,11 @@ import {
   enforceMapSizeCap,
   matchesAnchorOpenIntent,
   pruneTimestampWindow,
-  resolveFormActionUrl,
   shouldEmitRapidPushState,
   type AnchorOpenIntent,
   type RedirectAllowanceLimits,
 } from "./main_guard_helpers";
+import { resolveFormActionUrl as resolveSharedFormActionUrl } from "./form_action";
 import {
   PUSHSTATE_GESTURE_WINDOW_MS,
   PUSHSTATE_RAPID_THRESHOLD,
@@ -801,8 +801,14 @@ function patchedOpen(
 }
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
-  const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
-  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
+  // Shared contract (#650): resolve against the effective base URL and admit
+  // only http(s) destinations, exactly as the isolated-world intent probe.
+  return resolveSharedFormActionUrl({
+    submitterAction: submitter?.getAttribute("formaction") ?? null,
+    formAction: form.getAttribute("action"),
+    baseURI: document.baseURI,
+    documentURL: location.href,
+  }) ?? undefined;
 }
 
 /**
