@@ -109,10 +109,11 @@ describe("levenshtein properties", () => {
     );
   });
 
-  it("empty vs non-empty: levenshtein('', s) === s.length", () => {
+  it("empty vs non-empty: levenshtein('', s) === code-point length of s", () => {
     fc.assert(
       fc.property(shortString, (s) => {
-        expect(levenshtein("", s)).toBe(s.length);
+        // Code points, not UTF-16 units: "" vs "😀" is 1, not 2 (A4).
+        expect(levenshtein("", s)).toBe(Array.from(s).length);
       })
     );
   });
@@ -131,11 +132,13 @@ describe("levenshtein properties", () => {
     );
   });
 
-  it("long inputs above LEVENSHTEIN_MAX_LEN return max(|a|, |b|)", () => {
+  it("long inputs above LEVENSHTEIN_MAX_LEN return max(|a|, |b|) in code points", () => {
     const longString = fc.string({ minLength: 254, maxLength: 300 });
     fc.assert(
       fc.property(longString, longString, (a, b) => {
-        expect(levenshtein(a, b)).toBe(Math.max(a.length, b.length));
+        expect(levenshtein(a, b)).toBe(
+          Math.max(Array.from(a).length, Array.from(b).length)
+        );
       })
     );
   });
@@ -240,6 +243,56 @@ describe("recalcSeverity properties", () => {
       fc.property(fc.integer({ min: -100, max: 300 }), (score) => {
         expect(["none", "low", "medium", "high"]).toContain(recalcSeverity(score));
       })
+    );
+  });
+});
+
+describe("wave-2 slice 1 properties (A1/A2/A4)", () => {
+  it("any host containing ':::' is never an IP address (A1)", () => {
+    // NFKC never alters ASCII colons and IPv4 contains none, so the triple
+    // colon always survives to the strict isIPv6 validator, which rejects it.
+    fc.assert(
+      fc.property(
+        fc.string({ maxLength: 30 }),
+        fc.string({ maxLength: 30 }),
+        (a, b) => {
+          expect(isIPAddress(`${a}:::${b}`)).toBe(false);
+        }
+      )
+    );
+  });
+
+  it("fullwidth ASCII folds to plain lowercase ASCII (A2)", () => {
+    const asciiWord = fc
+      .array(
+        fc.constantFrom(
+          ..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".split("")
+        ),
+        { minLength: 1, maxLength: 20 }
+      )
+      .map((chars) => chars.join(""));
+    fc.assert(
+      fc.property(asciiWord, (s) => {
+        const fullwidth = Array.from(
+          s,
+          (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)
+        ).join("");
+        expect(normalizeHost(fullwidth)).toBe(s.toLowerCase());
+      })
+    );
+  });
+
+  it("astral repeat distance is |n - m| in characters, not UTF-16 units (A4)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 10 }),
+        fc.integer({ min: 0, max: 10 }),
+        (n, m) => {
+          expect(levenshtein("😀".repeat(n), "😀".repeat(m))).toBe(
+            Math.abs(n - m)
+          );
+        }
+      )
     );
   });
 });

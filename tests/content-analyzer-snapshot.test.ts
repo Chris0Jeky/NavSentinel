@@ -5,6 +5,7 @@ import {
   buildPageSnapshot,
   analyzeSnapshot,
   HTML_SNIPPET_MAX,
+  MAX_BODY_TEXT,
   MAX_IMG_ATTR,
   MAX_TITLE_LEN,
   MAX_FORMS,
@@ -273,6 +274,58 @@ describe("buildPageSnapshot effective base URL (#785)", () => {
     const snap = buildPageSnapshot(document);
     const result = analyzeSnapshot(snap, "bank.test");
     expect(result.suspiciousFormAction).toBe(false);
+  });
+});
+
+describe("buildPageSnapshot bodyText cap (wave-2 slice 1, A5)", () => {
+  it("bounds an oversized body to ~MAX_BODY_TEXT chars", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>${"x".repeat(MAX_BODY_TEXT * 3)}</p></body>`;
+    expect(buildPageSnapshot(document).bodyText.length).toBeLessThanOrEqual(
+      MAX_BODY_TEXT + (MAX_BODY_TEXT >> 2) + 1,
+    );
+  });
+
+  it("keeps head-window content unchanged (no regression in [0, max))", () => {
+    // Brand at ~700 -- inside the old head-only window, so both orderings keep
+    // it; a 50/50 head+tail split would have dropped it.
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>${"a".repeat(700)}PayPal Login${"c".repeat(MAX_BODY_TEXT)}</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).toContain("paypal");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+  });
+
+  it("keeps a tail-buried brand keyword visible (head-only would drop it)", () => {
+    // Brand/login terms after MAX_BODY_TEXT of padding -- the pre-fix
+    // slice(0, 5000) dropped them, hiding the signal from detectBrand.
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>${"x".repeat(MAX_BODY_TEXT * 2)} PayPal Login</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).toContain("paypal");
+    expect(snap.bodyText).toContain("login");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+  });
+
+  it("pins the accepted tradeoff: a mid-omitted keyword stays invisible", () => {
+    // boundedSample keeps a full head + short tail; content calibrated into the
+    // omitted middle is the inherent O(max) gap (same as the title channel).
+    const pad = "z".repeat(MAX_BODY_TEXT);
+    const tail = "z".repeat(MAX_BODY_TEXT >> 2);
+    document.documentElement.innerHTML =
+      `<body><p>${pad}NEEDLE${tail}end</p></body>`;
+    // NEEDLE sits just past the head boundary with calibrated trailing padding.
+    expect(buildPageSnapshot(document).bodyText).not.toContain("needle");
+  });
+
+  it("does not truncate a small body and still lowercases it", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`;
+    expect(buildPageSnapshot(document).bodyText).toContain("paypal login");
   });
 });
 
