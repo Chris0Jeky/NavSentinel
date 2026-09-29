@@ -150,18 +150,39 @@ export interface ImportErrorOutcome {
 }
 
 /**
+ * Thrown by the options import entry point when the file exceeds the parse
+ * cap, before any read or write. Classified by `classifyImportError` so the
+ * status line names the cause instead of reporting a flat failure.
+ */
+export class ImportSizeLimitError extends Error {
+  constructor() {
+    super("Import file exceeds the size limit.");
+    this.name = "ImportSizeLimitError";
+  }
+}
+
+/**
  * Pick the status message for a failed import. `importAll` is non-atomic and
  * writes the prompt-outcome history LAST; a *delivery* failure of that step (the
  * SW was unreachable) means the earlier settings/allowlist/eventLog sections
- * already applied, so word it as a partial result. Any other error may be a clean
- * failure (e.g. invalid JSON, before any write) OR a mid-import storage failure.
- * `runImportFlow` always refreshes persisted views afterward, but only a success
- * or known partial delivery replaces an unsaved settings draft (#188 R1/R2).
+ * already applied, so word it as a partial result. A SyntaxError is malformed
+ * JSON (rejected before any write); an ImportSizeLimitError was refused by the
+ * pre-parse size guard. Anything else may be a clean failure OR a mid-import
+ * storage failure, so it keeps the flat message. `runImportFlow` always
+ * refreshes persisted views afterward, but only a success or known partial
+ * delivery replaces an unsaved settings draft (#188 R1/R2).
  */
-export function classifyImportError(isDeliveryFailure: boolean): ImportErrorOutcome {
-  return isDeliveryFailure
-    ? { message: "Imported, but prompt-related data wasn't fully updated — try again.", tone: "error" }
-    : { message: "Import failed.", tone: "error" };
+export function classifyImportError(isDeliveryFailure: boolean, error?: unknown): ImportErrorOutcome {
+  if (isDeliveryFailure) {
+    return { message: "Imported, but prompt-related data wasn't fully updated — try again.", tone: "error" };
+  }
+  if (error instanceof SyntaxError) {
+    return { message: "Import failed: the file isn't valid JSON.", tone: "error" };
+  }
+  if (error instanceof ImportSizeLimitError) {
+    return { message: "Import failed: the file exceeds the size limit.", tone: "error" };
+  }
+  return { message: "Import failed.", tone: "error" };
 }
 
 export function formatImportSuccess(eventLogDropped = 0): string {
@@ -317,7 +338,7 @@ export async function runImportFlow(
     console.warn("[NavSentinel] import failed:", e);
     const partial = deps.isDeliveryFailure(e);
     await safeRefresh(() => deps.refresh(partial));
-    const outcome = classifyImportError(partial);
+    const outcome = classifyImportError(partial, e);
     deps.flash(outcome.message, outcome.tone);
   }
 }

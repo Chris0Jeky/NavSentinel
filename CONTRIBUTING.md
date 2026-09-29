@@ -4,7 +4,7 @@ This repo is best worked on as a browser-extension project with deterministic lo
 
 ## Environment
 
-- Node.js `^20.19.0 || ^22.13.0 || >=24` (the `package.json` engine range)
+- Node.js `^20.19.0 || ^22.13.0 || >=24` (the `package.json` engine range; CI pins Node 20)
 - Chrome or Chromium for MV3 testing
 - Tracked text files must materialize LF bytes, including on Windows. The
   provenance / state-authority tests intentionally compare raw worktree bytes
@@ -33,6 +33,7 @@ This preflight never rewrites files or relaxes the raw-byte integrity boundary.
 ```bash
 npm install
 npm run build
+npx playwright install --with-deps chromium
 ```
 
 Load `extension/dist` in `chrome://extensions` with Developer Mode enabled.
@@ -46,7 +47,8 @@ cannot be packaged or released.
 npm run watch
 npm run test
 npm run test:e2e
-npx tsc -p tsconfig.json --noEmit
+npm run typecheck
+npm run lint
 npm run verify:versions
 npm run package:ext
 npm run gym:serve
