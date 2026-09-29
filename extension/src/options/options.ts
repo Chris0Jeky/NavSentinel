@@ -11,6 +11,7 @@ import {
   findSettingsConflicts,
   describeJsBehaviorCapability,
   fmtTime,
+  ImportSizeLimitError,
   runClearBehaviouralData,
   runClearStats,
   runImportFlow,
@@ -834,14 +835,14 @@ importFileEl.addEventListener("change", async () => {
           // Guard JSON.parse against oversized files: reject past the cap before
           // parsing so a huge file cannot stall the page in the parser. The File
           // size check avoids the read entirely; the text-length check covers
-          // blobs that misreport size. Either rejection flows to "Import failed."
-          // via runImportFlow, leaving the draft untouched.
+          // blobs that misreport size. Either rejection is classified as a
+          // size-limit failure via runImportFlow, leaving the draft untouched.
           if (typeof f.size === "number" && f.size > MAX_IMPORT_FILE_BYTES) {
-            throw new Error("Import file exceeds the size limit.");
+            throw new ImportSizeLimitError();
           }
           const text = await f.text();
           if (text.length > MAX_IMPORT_FILE_BYTES) {
-            throw new Error("Import file exceeds the size limit.");
+            throw new ImportSizeLimitError();
           }
           return importAll(JSON.parse(text));
         },

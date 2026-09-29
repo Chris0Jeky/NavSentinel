@@ -1,6 +1,6 @@
 # NavSentinel Project Roadmap
 
-*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-09-12.*
+*Created 2026-04-09. Truth refresh 2026-07-10; live/status sync 2026-09-29.*
 
 This is the execution roadmap. [`Product_Strategy.md`](Product_Strategy.md) owns
 the product thesis, portfolio boundaries, and evidence gates; GitHub issues own
@@ -20,8 +20,9 @@ The programme adds a local Protection Center over existing event storage,
 explicit minimized evidence export/import, three presentation themes, a native
 lab shell and one measured cooperative fixture consequence. This section records
 programme provenance, not live PR state, and does not promote the experimental
-detector or declare a release. The current #640 visible-UI acceptance boundary is
-retained under AI-47 and the one-time D-2026-09-12-P merge policy.
+detector or declare a release. The current #640 visible-UI acceptance boundary was
+retained under AI-47 and the one-time D-2026-09-12-P merge policy; AI-47's
+manual gate was waived on agent evidence on 2026-09-27 (D-2026-09-27-S).
 
 ## Status Snapshot
 
@@ -43,7 +44,7 @@ readiness is tracked only by the outcome gates below.
 
 | Gate | State | Required next move |
 |---|---|---|
-| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged; #601's first suspicious `_blank` Proceed-once vertical is merged via #608 and remains under the AI-47/former-AI-39 post-merge check, while the remaining action classes stay open); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
+| Release integrity | **Blocked** | RI-01 extension-origin decision authority (#356/#464/#466 merged; #601's first suspicious `_blank` Proceed-once vertical is merged via #608 and its AI-47/former-AI-39 manual check was waived on agent evidence on 2026-09-27 (D-2026-09-27-S, not a Gate-3 pass), while the remaining action classes stay open); RI-02 visual-sim excision (#514 merged under a recorded Gate-3 waiver, not a real-Chrome pass); fake DNR removed (#528); purpose-specific data minimization and reset (#468/#535); beta-off JS behavior (#532); #175/#186 bridge identity/recovery |
 | Release profile | **Implemented; Gate-3 passed** | AI-9 selected interaction-only. PR #509 merged as `3faeb1e`, closing #321. Chrome 150.0.7871.187 passed on executable/artifact head `f6815be`; default runtime/manifest/package omit reputation; deterministic `research-reputation` is unpacked-only and non-release |
 | Brand/store | **Blocked** | AI-19 name clearance; #455 pre-collection disclosure/consent; one canonical claims-verified listing; assets and fresh-install checks |
 | Detection validation | **Open** | #417 methodology, #416/#426 rerun, confidence-aware reporting |
@@ -81,15 +82,18 @@ Refreshed 2026-09-12 from reconciled merge receipts: #649
 `8a9435349e0dcdbe834bfee2beeeccafd5b39ccf`. Fetch `origin/main` before using
 this dated receipt as an exact build identity. The merged browser chain includes
 #600, #609, #636, #640, #641, #643, #644, #649, #657, #608, #655, and #658; all seven
-owner-installed Chrome rows remain **OPEN — not run** under AI-47 in
-[`ACTION_ITEMS.md`](../ACTION_ITEMS.md), not waived by the merges. #658 is
-merged, but its AI-47 child result remains **OPEN — not run**. Test-only #687 is merged, but stays
+owner-installed Chrome rows were **OPEN — not run** under AI-47 in
+[`ACTION_ITEMS.md`](../ACTION_ITEMS.md), not waived by the merges, until AI-47's
+manual gate was waived on agent evidence on 2026-09-27 (D-2026-09-27-S, recorded
+as "manual gate waived on agent evidence", never "Gate-3 passed"). #658 is
+merged, and its AI-47 child result is covered by that waiver. Test-only #687 is merged, but stays
 `MODELLED` with an `UNVERIFIED` diagnostic; it is not owner Chrome evidence or
 OS-paste prevention. The live receipt tracker is
 [`PROGRAM_STATE.md`](security-program/PROGRAM_STATE.md). PR #572 remains parked
-on SP-F-013 and #599 remains outside the one-time browser-queue authorization
-pending its queue-policy choice. Issue #637 is **CLOSED/implemented via #649**;
-#593 remains open. There is no tag, GitHub release, or CWS release. These values
+on SP-F-013; #599 merged on 2026-09-25 under D-2026-09-25-R's automated gates
+after the queue-policy choice. Issue #637 is **CLOSED/implemented via #649**;
+#593 remains open. The `v0.5.0` tag and GitHub pre-release exist (2026-09-26);
+there is no CWS release. These values
 are a dated snapshot, not an instruction to trust cached refs. Re-derive them
 with `git fetch origin`, the GitHub REST/API issue and pull-request views, and
 Actions before acting. The exact 2026-07-10 audit baseline remains in
@@ -132,7 +136,8 @@ PR #608 (`feat/issue601-extension-origin-allow`) is merged on current `main` as
 suspicious `_blank` Proceed-once path, excluding prompts that still carry
 overlay-cleanup Undo, with one-time exact-document URL release, worker-side
 origin/hash/context validation and openerless tab creation, plus a URL-free
-extension popup. AI-47's former-AI-39 sub-result and all other
+extension popup. AI-47's former-AI-39 sub-result was waived on agent evidence on
+2026-09-27 (D-2026-09-27-S, not a Gate-3 pass) and all other
 protection-lowering action classes remain open, so RI-01 is not complete. AI-20
 is resolved: Chris left the original
 Defender-quarantined ClickFix property fixture quarantined, while an exact
@@ -271,7 +276,7 @@ See the exact sets, comments, state reasons, labels, and pre/post counts in the
    fund only Decision Journal + recovery guidance; otherwise change segment/
    position or stop before advanced architecture.
 
-Last updated: 2026-09-12
+Last updated: 2026-09-29
 
 ---
 

@@ -407,7 +407,7 @@ async function closeExtraPages(context) {
   }
 }
 
-async function performInteraction(page, context, interact, timeoutMs) {
+async function performInteraction(page, context, interact, _timeoutMs) {
   if (interact.startsWith("wait:")) {
     const ms = parseInt(interact.slice(5), 10);
     await page.waitForTimeout(ms);
