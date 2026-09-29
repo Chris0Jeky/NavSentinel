@@ -800,6 +800,9 @@ async function refreshImportedSettings(replaceDraft = false): Promise<void> {
   await refreshDomainProfiles();
 }
 
+/** Upper bound on the import payload read before JSON.parse (~5MB). */
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+
 importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
   if (!f || writes.importPending) return;
@@ -817,7 +820,21 @@ importFileEl.addEventListener("change", async () => {
       importApplying = true;
       importIncoming = null;
       await runImportFlow({
-        importPayload: async () => importAll(JSON.parse(await f.text())),
+        importPayload: async () => {
+          // Guard JSON.parse against oversized files: reject past ~5MB before
+          // parsing so a huge file cannot stall the page in the parser. The File
+          // size check avoids the read entirely; the text-length check covers
+          // blobs that misreport size. Either rejection flows to "Import failed."
+          // via runImportFlow, leaving the draft untouched.
+          if (typeof f.size === "number" && f.size > MAX_IMPORT_FILE_BYTES) {
+            throw new Error("Import file exceeds the size limit.");
+          }
+          const text = await f.text();
+          if (text.length > MAX_IMPORT_FILE_BYTES) {
+            throw new Error("Import file exceeds the size limit.");
+          }
+          return importAll(JSON.parse(text));
+        },
         refresh: refreshImportedSettings,
         flash: (msg, tone) => flashStatus(statusEl, msg, tone),
         isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,

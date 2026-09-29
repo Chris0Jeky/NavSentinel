@@ -20,7 +20,7 @@
  *
  * Options:
  *   --headed           Run browser in headed mode (visible)
- *   --timeout MS       Per-fixture timeout in ms (default: 20000)
+ *   --timeout MS       Per-fixture timeout in ms; positive integer (default: 20000)
  *   --baseline path    Path to baseline JSON (default: scripts/benchmark-baseline.json)
  *   --out path         Output directory (default: tests/benchmark-results/)
  *   --update-baseline  Overwrite the baseline with this run's results
@@ -170,8 +170,8 @@ function parseArgs() {
     const arg = args[i];
     if (arg === "--headed") {
       opts.headed = true;
-    } else if (arg === "--timeout" && args[i + 1]) {
-      opts.timeout = parseInt(args[++i], 10);
+    } else if (arg === "--timeout") {
+      opts.timeout = (() => { const raw = args[++i]; const parsed = Number(raw); if (!Number.isInteger(parsed) || parsed <= 0) { console.error(`Invalid --timeout "${raw}": expected a positive integer in ms (default: 20000)`); process.exit(1); } return parsed; })();
     } else if (arg === "--baseline" && args[i + 1]) {
       opts.baseline = path.resolve(args[++i]);
     } else if (arg === "--out" && args[i + 1]) {
@@ -183,7 +183,7 @@ function parseArgs() {
 
 Options:
   --headed            Run browser visibly
-  --timeout MS        Per-fixture timeout in ms (default: 20000)
+  --timeout MS        Per-fixture timeout in ms; positive integer (default: 20000)
   --baseline PATH     Baseline JSON path (default: scripts/benchmark-baseline.json)
   --out PATH          Output directory (default: tests/benchmark-results/)
   --update-baseline   Overwrite baseline with this run's results
