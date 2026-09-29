@@ -24,19 +24,41 @@ export function findSettingsConflicts(baseline: SuiteSettings, draft: SuiteSetti
   return conflicts;
 }
 
+/** Path segments that must never be traversed or written (prototype pollution). */
+function isUnsafePathSegment(segment: string): boolean {
+  return segment === "__proto__" || segment === "constructor" || segment === "prototype";
+}
+
 /** Replace only the conflicted leaves; unrelated draft edits survive. */
 export function acceptExternalSettings(draft: SuiteSettings, incoming: SuiteSettings, paths: string[]): SuiteSettings {
   const result = structuredClone(draft);
   for (const path of paths) {
     const keys = path.split(".");
     const leaf = keys.pop()!;
-    let target = result as unknown as Record<string, unknown>;
-    let source = incoming as unknown as Record<string, unknown>;
+    // An empty leaf ("", "a.") would create a junk "" property on the target;
+    // skip the path instead of writing target[''].
+    if (!leaf || isUnsafePathSegment(leaf)) continue;
+    let target: unknown = result;
+    let source: unknown = incoming;
+    let walkable = true;
     for (const key of keys) {
-      target = target[key] as Record<string, unknown>;
-      source = source[key] as Record<string, unknown>;
+      // A missing or non-object intermediate on either side (a stale conflict path
+      // against a reshaped draft, or an empty segment such as "a..b") means there
+      // is no leaf to replace: skip the path instead of throwing on undefined.
+      // Unsafe segments are skipped for the same reason: blind traversal would
+      // read live prototypes and the leaf write would pollute them.
+      if (!key || isUnsafePathSegment(key) || typeof target !== "object" || target === null ||
+          typeof source !== "object" || source === null) {
+        walkable = false;
+        break;
+      }
+      target = (target as Record<string, unknown>)[key];
+      source = (source as Record<string, unknown>)[key];
     }
-    target[leaf] = source[leaf];
+    if (!walkable) continue;
+    if (typeof target !== "object" || target === null ||
+        typeof source !== "object" || source === null) continue;
+    (target as Record<string, unknown>)[leaf] = (source as Record<string, unknown>)[leaf];
   }
   return result;
 }

@@ -901,8 +901,33 @@ function normalizeEventLog(value: unknown): EventLogEntry[] {
   return normalizeEventLogWithMetadata(value).entries;
 }
 
+let eventIdCounter = 0;
+
+/**
+ * Unique event ids: persistEventLogEntry dedups by id
+ * (`cur.filter((item) => item.id !== entry.id)`), so a collision silently
+ * drops the older event. The timestamp plus a per-context monotonic counter
+ * separates ids minted in the same millisecond; 96 bits of cryptographic
+ * randomness separate ids minted in different contexts.
+ *
+ * The isolated world keeps an identical copy (makeSilentNavEventId in
+ * content/capture_isolated.ts). Deliberately duplicated, not shared, following
+ * the nav_authority.ts precedent: a helper module imported across worlds makes
+ * the bundler split it into a chunk shared with the MAIN-world guard, which
+ * then loads one module later at document start.
+ */
 function makeId(): string {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  eventIdCounter = (eventIdCounter + 1) % 0xffffffff;
+  const unique = `${Date.now().toString(36)}_${eventIdCounter.toString(36)}`;
+  try {
+    const bytes = globalThis.crypto?.getRandomValues(new Uint8Array(12));
+    if (bytes) {
+      return `${unique}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+    }
+  } catch {
+    // Fall through to the Math.random fallback below.
+  }
+  return `${unique}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export async function getEventLog(): Promise<EventLogEntry[]> {

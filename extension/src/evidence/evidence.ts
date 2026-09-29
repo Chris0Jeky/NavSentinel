@@ -93,7 +93,10 @@ exportButton.addEventListener("click", () => {
   try {
     preparedExport = prepareEvidenceExport(visible.slice().reverse());
   } catch (error) {
-    status.textContent = error instanceof RangeError
+    // Only the export-size guard's own RangeError earns the 8 MiB message: any
+    // other RangeError (e.g. stack exhaustion while serializing) must not send
+    // the user narrowing filters that cannot help.
+    status.textContent = error instanceof RangeError && error.message === EVIDENCE_EXPORT_LIMIT_MESSAGE
       ? EVIDENCE_EXPORT_LIMIT_MESSAGE
       : "Could not prepare local evidence. Refresh the journal and try again.";
     return;

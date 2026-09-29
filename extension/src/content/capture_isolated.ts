@@ -803,6 +803,32 @@ function notifyAllowedTarget(
   }
 }
 
+let eventIdCounter = 0;
+
+/**
+ * Twin of makeId in shared/storage_impl.ts: persist dedups events by id, so a
+ * collision silently drops the older event. The timestamp plus a per-context
+ * monotonic counter separates ids minted in the same millisecond; 96 bits of
+ * cryptographic randomness separate ids minted in different contexts.
+ * Deliberately duplicated, not shared, following the nav_authority.ts
+ * precedent: a helper module imported across worlds makes the bundler split it
+ * into a chunk shared with the MAIN-world guard, which then loads one module
+ * later at document start.
+ */
+function makeSilentNavEventId(): string {
+  eventIdCounter = (eventIdCounter + 1) % 0xffffffff;
+  const unique = `${Date.now().toString(36)}_${eventIdCounter.toString(36)}`;
+  try {
+    const bytes = globalThis.crypto?.getRandomValues(new Uint8Array(12));
+    if (bytes) {
+      return `${unique}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+    }
+  } catch {
+    // Fall through to the Math.random fallback below.
+  }
+  return `${unique}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function buildSilentNavEvent(params: {
   destHref: string | null | undefined;
   destHost: string | null | undefined;
@@ -815,7 +841,7 @@ function buildSilentNavEvent(params: {
   if (!isTopFrame()) return null;
   if (!isDocumentNavigationHref(params.destHref, params.destHost, location.href)) return null;
   return {
-    id: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+    id: makeSilentNavEventId(),
     ts: Date.now(),
     kind: "nav_silent_allow",
     site: siteKeyFromLocation(),
@@ -844,7 +870,16 @@ function isImmediateWindowOpenTarget(target: unknown): boolean {
 
 function appendImmediateSilentNav(event: EventLogEntry | null): void {
   if (!event) return;
-  const throttleKey = getRegistrableDomain(event.destHost ?? "") ?? event.destHost ?? "";
+  // getRegistrableDomain returns "" (never nullish) for empty input, so a ??
+  // chain cannot fall back and a missing destHost keys everything to the ""
+  // bucket, where unrelated events throttle each other. Key a missing
+  // destHost by the source page instead; the "site:" prefix keeps a page key
+  // from colliding with a real registrable domain when the navigation stays
+  // on the same site.
+  const destHost = event.destHost ?? "";
+  const throttleKey = destHost
+    ? getRegistrableDomain(destHost) || destHost
+    : `site:${event.site ?? ""}`;
   if (!silentNavThrottleAllows(silentNavThrottle, throttleKey, performance.now(), SILENT_NAV_THROTTLE_MS)) {
     return;
   }
