@@ -800,8 +800,18 @@ async function refreshImportedSettings(replaceDraft = false): Promise<void> {
   await refreshDomainProfiles();
 }
 
-/** Upper bound on the import payload read before JSON.parse (~5MB). */
-const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+/**
+ * Upper bound on the import payload read before JSON.parse (~16MB).
+ * Must admit any backup the extension itself could have produced: a suite
+ * export carries up to 5,000 event-log entries at ~17KB worst-case each
+ * (5 x 2048-char string fields + 4KiB extra + 32 x 80-char reasons), and is
+ * ultimately bounded by what chrome.storage.local can persist (QUOTA_BYTES,
+ * 10MiB default) plus JSON framing -- so a 5MB cap rejects valid large
+ * histories and breaks export/import round-tripping. 16MiB clears that
+ * ceiling with headroom while still rejecting hostile hundred-MB files
+ * before they can stall the page in the parser. (#974 R1)
+ */
+const MAX_IMPORT_FILE_BYTES = 16 * 1024 * 1024;
 
 importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
@@ -821,7 +831,7 @@ importFileEl.addEventListener("change", async () => {
       importIncoming = null;
       await runImportFlow({
         importPayload: async () => {
-          // Guard JSON.parse against oversized files: reject past ~5MB before
+          // Guard JSON.parse against oversized files: reject past the cap before
           // parsing so a huge file cannot stall the page in the parser. The File
           // size check avoids the read entirely; the text-length check covers
           // blobs that misreport size. Either rejection flows to "Import failed."
