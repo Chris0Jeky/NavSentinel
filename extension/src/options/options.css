@@ -223,7 +223,7 @@ body {
 .pane-sub {
   margin: 3px 0 0;
   font-size: 12px;
-  color: var(--ns-text-3);
+  color: var(--ns-text-2);
 }
 
 .pane-actions {
@@ -327,6 +327,8 @@ body {
 }
 
 .seg-btn {
+  min-width: 24px;
+  min-height: 24px;
   padding: 5px 14px;
   border: none;
   cursor: pointer;
@@ -359,8 +361,8 @@ body {
 /* Toggle switch */
 .toggle {
   width: 32px;
-  height: 18px;
-  border-radius: 9px;
+  height: 24px;
+  border-radius: 12px;
   padding: 0;
   border: none;
   cursor: pointer;
@@ -376,7 +378,7 @@ body {
 
 .toggle-thumb {
   position: absolute;
-  top: 2px;
+  top: 5px;
   left: 2px;
   width: 14px;
   height: 14px;
@@ -422,7 +424,7 @@ body {
 
 .toggle-sub {
   font-size: 10.5px;
-  color: var(--ns-text-3);
+  color: var(--ns-text-2);
   margin-top: 1px;
 }
 

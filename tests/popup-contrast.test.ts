@@ -386,3 +386,54 @@ describe("popup unscored-threat gauge (#219) meets WCAG AA 1.4.3", () => {
     }
   });
 });
+
+/** Muted annotations are normal-size text, not decorative artwork (#979). */
+describe("popup/options annotations meet WCAG AA 1.4.3 (#979)", () => {
+  const optionsCss = readFileSync(
+    path.resolve(__dirname, "..", "extension", "src", "options", "options.css"), "utf8",
+  );
+  const optionsRules = parseRules(optionsCss);
+  const optionsRule = (selector: string): string => {
+    const rule = optionsRules.find((candidate) => candidate.selector === selector);
+    if (!rule) throw new Error(`options.css has no rule for "${selector}"`);
+    return rule.body;
+  };
+  const popupBase = [...declaration(ruleBody("body"), "background").matchAll(/#[0-9a-f]{6}/gi)]
+    .map((match) => parseColor(match[0]));
+  const glowBody = ruleBody(".hero::before");
+  const glow = compositeCssBackgrounds(
+    [...glowBody.matchAll(/rgba\([^)]*\)/g)].map((match) => parseColor(match[0])),
+  );
+  const popupGlow = withAlpha(glow, glow[3] * Number(declaration(glowBody, "opacity")));
+  const shellBase = parseColor("var(--ns-bg)");
+  const shellGlowColors = [...optionsRule(".shell::before").matchAll(/rgba\([^)]*\)/g)]
+    .map((match) => parseColor(match[0]));
+  const shellGlow = compositeCssBackgrounds(shellGlowColors);
+  const cardBase = over(parseColor(declaration(optionsRule(".card"), "background")), shellBase);
+
+  const cases = [
+    { name: ".hero-meta", color: declaration(ruleBody(".hero-meta"), "color"),
+      backdrops: popupBase.flatMap((base) => [base, over(popupGlow, base)]) },
+    { name: ".pane-sub", color: declaration(optionsRule(".pane-sub"), "color"),
+      backdrops: [shellBase, over(shellGlow, shellBase)] },
+    // Conservatively include the peak decorative glow over the card as well.
+    { name: ".toggle-sub", color: declaration(optionsRule(".toggle-sub"), "color"),
+      backdrops: [cardBase, over(shellGlow, cardBase)] },
+  ];
+
+  it("keeps source-derived backdrops nonempty", () => {
+    expect(popupBase.length).toBeGreaterThanOrEqual(2);
+    expect(shellGlowColors.length).toBeGreaterThan(0);
+  });
+
+  for (const annotation of cases) {
+    it(`${annotation.name} clears 4.5:1 including decorative glow peaks`, () => {
+      const text = parseColor(annotation.color);
+      for (const backdrop of annotation.backdrops) {
+        const ratio = contrastRatio(over(text, backdrop), backdrop);
+        expect(ratio, `${annotation.name} => ${ratio.toFixed(2)}:1`)
+          .toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      }
+    });
+  }
+});

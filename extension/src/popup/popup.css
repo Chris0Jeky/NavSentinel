@@ -51,6 +51,7 @@ body {
 }
 
 .hero-title {
+  margin: 0;
   font-size: 19px;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -61,7 +62,7 @@ body {
   align-items: center;
   gap: 5px;
   font-size: 10px;
-  color: var(--ns-text-3);
+  color: var(--ns-text-2);
 }
 
 .icon-btn {
@@ -338,6 +339,8 @@ body {
 }
 
 .seg-btn {
+  min-width: 24px;
+  min-height: 24px;
   padding: 5px 4px;
   border: none;
   cursor: pointer;
@@ -602,6 +605,8 @@ body {
 
 .footer-link {
   all: unset;
+  min-width: 24px;
+  min-height: 24px;
   font-size: 10.5px;
   color: var(--ns-cyan);
   display: flex;
