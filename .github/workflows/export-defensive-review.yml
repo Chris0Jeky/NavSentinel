@@ -1,0 +1,59 @@
+name: Export defensive review inputs
+on:
+  push:
+    branches: [audit/20261001-defensive-integration]
+    paths: [.github/workflows/export-defensive-review.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.repository == 'Chris0Jeky/NavSentinel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - name: Export exact Git objects and locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ns-review-export
+          refs=(
+            refs/remotes/origin/main
+            refs/remotes/origin/codex/865-formdata-child-replay-20260925
+            refs/remotes/origin/codex/812-form-mutation-telemetry-20260925
+            refs/remotes/origin/codex/pushstate-single-coercion-20260925
+            refs/remotes/origin/codex/issue886-transparent-text-20260925
+            refs/remotes/origin/fix/972-dom-independent-lazy-imports
+            refs/remotes/origin/fix/976-worker-cooldowns
+            refs/remotes/origin/fix/891-mode-adaptive-cache-v2
+            refs/remotes/origin/test/958-pointerdown-observation
+            refs/remotes/origin/audit/20261001-dependency-advisories
+          )
+          for ref in "${refs[@]}"; do
+            git rev-parse --verify "$ref^{commit}"
+            printf '%s %s\n' "$(git rev-parse "$ref")" "$ref" >> /tmp/ns-review-export/refs.txt
+          done
+          git bundle create /tmp/ns-review-export/source.bundle "${refs[@]}"
+          git bundle verify /tmp/ns-review-export/source.bundle
+          git worktree add --detach /tmp/ns-review-deps refs/remotes/origin/main
+          cd /tmp/ns-review-deps
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --version > /tmp/ns-review-export/node-version.txt
+          npm --version > /tmp/ns-review-export/npm-version.txt
+          sha256sum package.json package-lock.json > /tmp/ns-review-export/dependency-source-sha256.txt
+          tar -czf /tmp/ns-review-export/dependencies.tar.gz node_modules
+          cd /tmp/ns-review-export
+          sha256sum source.bundle dependencies.tar.gz refs.txt > SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: defensive-review-inputs-${{ github.sha }}
+          path: /tmp/ns-review-export/
+          retention-days: 1
+          if-no-files-found: error
