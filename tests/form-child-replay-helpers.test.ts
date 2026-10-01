@@ -2,9 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   MAX_CHILD_NAVIGABLE_SCAN,
-  effectiveFormTarget,
   resolveChildNavigable,
-  targetsChildNavigable,
   type ChildNavigableView,
 } from "../extension/src/content/main_guard_helpers";
 
@@ -17,32 +15,6 @@ function form(html: string): HTMLFormElement {
   document.body.innerHTML = html;
   return document.querySelector("form")!;
 }
-
-describe("effectiveFormTarget (#865)", () => {
-  it("uses the form target attribute", () => {
-    expect(effectiveFormTarget(form(`<form target="sink"></form>`))).toBe("sink");
-  });
-
-  it("lets a submitter formtarget override the form, including an empty value", () => {
-    const targetForm = form(
-      `<form target="sink"><button formtarget="other">a</button><button formtarget="">b</button></form>`,
-    );
-    const [other, empty] = Array.from(targetForm.querySelectorAll("button"));
-    expect(effectiveFormTarget(targetForm, other)).toBe("other");
-    expect(effectiveFormTarget(targetForm, empty)).toBe("");
-    expect(effectiveFormTarget(targetForm, null)).toBe("sink");
-  });
-
-  it("uses the first base target only when the form has no target attribute", () => {
-    document.head.innerHTML = `<base target="first"><base target="second">`;
-    expect(effectiveFormTarget(form(`<form></form>`))).toBe("first");
-    expect(effectiveFormTarget(form(`<form target=""></form>`))).toBe("");
-  });
-
-  it("returns the empty self target when no target is declared", () => {
-    expect(effectiveFormTarget(form(`<form></form>`))).toBe("");
-  });
-});
 
 describe("resolveChildNavigable (#865)", () => {
   const sinkChild = { window: "sink" };
@@ -65,7 +37,6 @@ describe("resolveChildNavigable (#865)", () => {
 
   it("returns the exact direct-child identity selected by the browser", () => {
     expect(resolveChildNavigable("sink", view())).toBe(sinkChild);
-    expect(targetsChildNavigable("sink", view())).toBe(true);
   });
 
   it("never treats keyword or empty targets as a child", () => {

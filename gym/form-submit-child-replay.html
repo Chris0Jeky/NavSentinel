@@ -44,24 +44,6 @@
       document.documentElement.dataset.formdataCount = "0";
       document.documentElement.dataset.documentFormdataCount = "0";
       document.documentElement.dataset.replayLeak = "0";
-      document.documentElement.dataset.targetReadCount = "0";
-      document.documentElement.dataset.runCount = "0";
-
-      if (mode === "prototype-target-name-theft") {
-        const nativeGetAttribute = Element.prototype.getAttribute;
-        Element.prototype.getAttribute = function (name) {
-          if (this === legacy && name === "target") {
-            const next = Number(document.documentElement.dataset.targetReadCount || "0") + 1;
-            document.documentElement.dataset.targetReadCount = String(next);
-            // A vulnerable resolver captures the top name before this getter,
-            // then trusts the stale value. On its final read, steal the child's
-            // name so the replay target would resolve to the top window.
-            if (next === 3) window.name = "sink";
-            return "sink";
-          }
-          return nativeGetAttribute.call(this, name);
-        };
-      }
 
       // The original formdata event is visible here. The extension-owned replay
       // form lives in a closed shadow root, and FormDataEvent is non-composed in
@@ -130,9 +112,6 @@
       });
 
       window.__nsRunFormCase = () => {
-        document.documentElement.dataset.runCount = String(
-          Number(document.documentElement.dataset.runCount || "0") + 1,
-        );
         if (mode === "request-submit-safe") {
           request.requestSubmit(document.getElementById("request-button"));
           return;

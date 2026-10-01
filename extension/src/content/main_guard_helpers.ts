@@ -127,22 +127,6 @@ export function gestureBranchEmissionBound(
 }
 
 /**
- * The browsing-context name a form submission targets, resolved the way the
- * HTML "get an element's target" steps do: the submitter's `formtarget`
- * attribute when present, else the form's `target` attribute, else the first
- * `<base target>` in the form's document, else the empty string (this browsing
- * context). Attribute PRESENCE decides, so an explicitly empty value still
- * overrides. (#865)
- */
-export function effectiveFormTarget(form: HTMLFormElement, submitter?: Element | null): string {
-  const fromSubmitter = submitter?.getAttribute("formtarget");
-  if (typeof fromSubmitter === "string") return fromSubmitter;
-  const fromForm = form.getAttribute("target");
-  if (fromForm !== null) return fromForm;
-  return form.ownerDocument?.querySelector("base[target]")?.getAttribute("target") ?? "";
-}
-
-/**
  * Upper bound on how many direct child navigables {@link resolveChildNavigable}
  * compares by identity. Callers read `window.length` through its native getter,
  * but the cap keeps a malformed or hostile value from producing an unbounded
@@ -190,11 +174,6 @@ export function resolveChildNavigable(target: string, view: ChildNavigableView):
     if (view.child(index) === candidate) return candidate;
   }
   return null;
-}
-
-/** True when `target` resolves to a direct child navigable. */
-export function targetsChildNavigable(target: string, view: ChildNavigableView): boolean {
-  return resolveChildNavigable(target, view) !== null;
 }
 
 /**
