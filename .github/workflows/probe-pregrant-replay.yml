@@ -1,0 +1,61 @@
+name: Probe pre-grant child replay ordering
+on:
+  push:
+    branches: [audit/20261001-defensive-integration]
+    paths: [.github/workflows/probe-pregrant-replay.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.repository == 'Chris0Jeky/NavSentinel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NAVSENTINEL_REALISTIC_CHROME: '1'
+      NAVSENTINEL_BRANDED_RECORD: /tmp/pregrant-proof/launches.jsonl
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: b9dfed74f91d71761e36fe281a6c615ac90aac13
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+      - name: Extend only authored timing fixtures and security assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pregrant-proof
+          git rev-parse HEAD > /tmp/pregrant-proof/head.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('gym/form-submit-unmatched-replay.html')
+          s=p.read_text().replace('      const later = query.get("later") === "1";','      const later = query.get("later") === "1";\n      const beforeGrant = query.get("beforeGrant") === "1";')
+          s=s.replace('if (later) setTimeout(escape, 0);','if (later) setTimeout(escape, beforeGrant ? 100 : 0);').replace('        setTimeout(() => {','        const submit = () => {').replace('        }, 100);','        };\n        if (beforeGrant && !control) submit();\n        else setTimeout(submit, 100);')
+          p.write_text(s)
+          p=Path('tests/e2e/form-submit-unmatched-replay.spec.ts')
+          s=p.read_text().replace('  control: boolean;','  control: boolean;\n  beforeGrant?: boolean;').replace('      control: options.control ? "1" : "0",','      control: options.control ? "1" : "0",\n      beforeGrant: options.beforeGrant ? "1" : "0",')
+          anchor='for (const target of ["top", "blank"] as const) {'
+          s=s.replace(anchor,anchor+'''
+            test(`pre-grant child replay does not let the late grant authorize ${target} escape (#936) @regression`, async () => {
+              const result = await journey({ enabled: true, target, later: true, control: false, beforeGrant: true });
+              expect(result.receipts).toEqual(["child"]);
+              expect(result.formdataCount).toBe(1);
+            });
+          ''')
+          p.write_text(s)
+          PY
+          git diff --check
+          git diff > /tmp/pregrant-proof/test-only.patch
+      - run: npm ci && npm run typecheck && npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Run both late-grant cases and all existing controls without retries
+        run: xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts --project=regression --retries=0 --reporter=json > /tmp/pregrant-proof/results.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: pregrant-replay-proof-${{ github.run_id }}
+          path: /tmp/pregrant-proof/
+          retention-days: 7
+          if-no-files-found: error
