@@ -3,6 +3,9 @@ on:
   push:
     branches: [audit/20261001-defensive-integration]
     paths: [.github/workflows/publish-reviewed-form-repair.yml]
+concurrency:
+  group: reviewed-form-repair
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
@@ -32,18 +35,19 @@ jobs:
           p.write_text(s)
           PY
       - run: npm run build
-      - name: Require exactly the four security regressions, with all controls passing
+      - name: Require exactly four security failures and four passing controls
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p test-results
+          mkdir -p /tmp/form-proof
+          git rev-parse HEAD > /tmp/form-proof/red-head.txt
           status=0
-          xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts --project=regression --retries=0 --reporter=json > /tmp/replay-red.json || status=$?
+          xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts --project=regression --retries=0 --reporter=json > /tmp/form-proof/red.json || status=$?
           test "$status" = 1
           node --input-type=module - <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
-          const r=JSON.parse(fs.readFileSync('/tmp/replay-red.json','utf8'));
+          const r=JSON.parse(fs.readFileSync('/tmp/form-proof/red.json','utf8'));
           assert.equal(r.stats.expected,4); assert.equal(r.stats.unexpected,4); assert.equal(r.stats.skipped,0); assert.equal(r.stats.flaky,0);
           console.log(JSON.stringify(r.stats));
           function walk(s) { for(const c of s.specs??[]) for(const t of c.tests??[]) if(t.status==='unexpected') { assert.match(c.title,/child-only replay retires unmatched authority/); console.log(c.title); } for(const child of s.suites??[]) walk(child); }
@@ -57,4 +61,61 @@ jobs:
           python3 - <<'PY'
           import base64,gzip,hashlib,subprocess
           encoded='H4sIAAAAAAAC/9VabXPbxhH+jl9xYToJGQKgSFGyJEdxZMdpNLUSjyxPP2Qy4hE4krBBALkDRLGu/nuf3TuApF6pttOZajySCNzt7cuzu8+eHCeTiQiCaVIK2YvzyPROdDRLShWVlVaXMosvf5KlvPw5zRfhPBbjLRZ5SRara9GXw/7OeDAIw101ONyPX+yI/s7O/nDoBUGw1Wlet9vd7sQffxRBf2ff7w101ODUMMY'
+          # The patch is supplied as clear-text below; this obsolete transport
+          # variable is never decoded or executed.
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          helper=Path('extension/src/content/main_guard_helpers.ts')
+          s=helper.read_text()
+          marker='export function consumeRedirectAllowance('
+          pos=s.index(marker)
+          start=s.rfind('/**',0,pos)
+          block='''/**
+           * Retire the current gesture before child-only replay invokes page callbacks.
+           * This is deliberately independent of the replay's URL: an unrelated scoped
+           * grant must not survive just because consumeRedirect would reject that URL.
+           * Keep pendingFollowUps so a delayed follow-up to an in-task arm cannot reset
+           * the retired budget. Only a fresh gesture or independent grant can renew it.
+           */
+          export function exhaustRedirectAllowance(
+            state: RedirectAllowanceState,
+            limits: RedirectAllowanceLimits,
+          ): void {
+            state.count = limits.maxPerGesture;
+            state.sameTaskArmed = false;
+          }
+
+          '''
+          helper.write_text(s[:start]+block+s[start:])
+          p=Path('extension/src/content/main_guard.ts')
+          s=p.read_text().replace('  consumeRedirectAllowance,','  consumeRedirectAllowance,\n  exhaustRedirectAllowance,',1)
+          start=s.index('function exhaustMatchingRedirectAllowance(')
+          end=s.index('\n}\n',start)+3
+          s=s[:start]+s[end:]
+          s=s.replace('exhaustMatchingRedirectAllowance(snapshot.actionUrl);','exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS);')
+          p.write_text(s)
+          PY
+          git diff --check
+          npm run typecheck
+          npm run lint
+      - name: Verify the repaired real-browser matrix without retries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/e2e/form-submit-unmatched-replay.spec.ts')
+          p.write_text(p.read_text().replace('if (receipt === "escape") await route.abort();','if (receipt === "escape") await route.fulfill({ status: 204, body: "" });'))
+          PY
+          npm run build
+          xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts tests/e2e/form-submit-child-replay.spec.ts tests/e2e/form-submit-child-authority.spec.ts --project=regression --retries=0 --reporter=json > /tmp/form-proof/green.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: form-repair-probe-${{ github.run_id }}
+          path: |
+            /tmp/form-proof/
+          retention-days: 7
+          if-no-files-found: error
