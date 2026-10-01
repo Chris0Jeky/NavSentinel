@@ -35,6 +35,19 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0 # Acceptance procedures verify ancestry of merged fixes.
+          # PR evidence must describe the immutable branch head, not GitHub's
+          # synthetic refs/pull/<n>/merge commit (#948).
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact checkout provenance
+        env:
+          EXPECTED_CHECKOUT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          actual_head=$(git rev-parse HEAD)
+          test "$actual_head" = "$EXPECTED_CHECKOUT_HEAD"
+          test "$(git rev-parse --is-shallow-repository)" = "false"
+          git cat-file -e "$actual_head^{commit}"
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -64,15 +77,40 @@ jobs:
           test -x /opt/google/chrome/chrome
           mkdir -p test-results
           chrome_version=$(/opt/google/chrome/chrome --version)
-          printf 'checkout_head=%s\npull_request=%s\npull_request_head=%s\npull_request_base=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
-            "$GITHUB_SHA" "$PULL_REQUEST_NUMBER" "$PULL_REQUEST_HEAD" "$PULL_REQUEST_BASE" \
+          checkout_head=$(git rev-parse HEAD)
+          printf 'checkout_head=%s\nevent_sha=%s\npull_request=%s\npull_request_head=%s\npull_request_base=%s\nrun_id=%s\nrun_attempt=%s\nrunner_image=%s\nchrome=%s\nrealistic=1\n' \
+            "$checkout_head" "$GITHUB_SHA" "$PULL_REQUEST_NUMBER" "$PULL_REQUEST_HEAD" "$PULL_REQUEST_BASE" \
             "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ImageVersion" "$chrome_version" > test-results/branded-run.txt
           cat test-results/branded-run.txt
+
+      - name: Record Git reachability before browser run
+        run: |
+          node scripts/record-git-reachability.mjs --phase before-e2e
+          test -s test-results/git-reachability-before-e2e.txt
 
       - name: Run realistic branded Chrome E2E
         id: e2e
         timeout-minutes: 45
-        run: xvfb-run -a npm run test:e2e:branded
+        run: |
+          set -euo pipefail
+          # Preserve the existing smoke -> regression -> phase2 ordering and
+          # fail-fast result while recording which project makes the full
+          # checkout shallow on pull_request runners (#948).
+          for project in smoke regression phase2; do
+            status=0
+            xvfb-run -a npx playwright test -c playwright.branded.config.ts --project="$project" || status=$?
+            node scripts/record-git-reachability.mjs --phase "after-$project"
+            test -s "test-results/git-reachability-after-$project.txt"
+            if [ "$status" -ne 0 ]; then
+              exit "$status"
+            fi
+          done
+
+      - name: Record Git reachability after browser run
+        if: ${{ always() }}
+        run: |
+          node scripts/record-git-reachability.mjs --phase after-e2e
+          test -s test-results/git-reachability-after-e2e.txt
 
       - name: Run non-live acceptance procedures
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.browsers.outcome == 'success' && steps.chrome.outcome == 'success' }}
