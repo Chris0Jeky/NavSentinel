@@ -1,0 +1,104 @@
+diff --git a/tests/release-input-integrity.test.ts b/tests/release-input-integrity.test.ts
+index 7f55d28e..d25f059f 100644
+--- a/tests/release-input-integrity.test.ts
++++ b/tests/release-input-integrity.test.ts
+@@ -80,34 +80,23 @@ function createRepository(
+ }
+ 
+ function copyRepositoryForReleaseTest(): string {
+-  const root = path.join(makeTempRoot("release-script"), "repo");
+-  const excluded = new Set([
+-    ".git",
+-    ".worktrees",
+-    "node_modules",
+-    "extension/dist",
+-    "artifacts",
+-    "test-results",
+-    "playwright-report",
+-  ]);
+-  fs.cpSync(repositoryRoot, root, {
+-    recursive: true,
+-    filter(source) {
+-      const relativePath = path.relative(repositoryRoot, source).replaceAll("\\", "/");
+-      if (!relativePath) return true;
+-      for (const prefix of excluded) {
+-        if (relativePath === prefix || relativePath.startsWith(`${prefix}/`)) return false;
+-      }
+-      return true;
+-    },
+-  });
+-  runGit(root, ["init", "-b", "main"]);
+-  configureFixtureRepository(root);
+-  runGit(root, ["config", "user.name", "Release Integrity Test"]);
+-  runGit(root, ["config", "user.email", "release-integrity@example.invalid"]);
+-  runGit(root, ["add", "-A"]);
+-  runGit(root, ["commit", "-m", "fixture"]);
+-  return root;
++  // Exercise the actual release entry point and its complete local import/data
++  // closure. Copying every Gym fixture and archived report makes this security
++  // assertion depend on unrelated repository growth, especially on Windows.
++  const paths = [
++    ...RELEASE_MUTABLE_PATHS,
++    "config/release-profiles.json",
++    "scripts/release.mjs",
++    "scripts/check-bloom-real.mjs",
++    "scripts/check-bloom-size.mjs",
++    "scripts/release-profile.mjs",
++    "scripts/release-input-integrity.mjs",
++    "scripts/sensitive-environment.mjs",
++  ];
++  const files = Object.fromEntries(paths.map((relativePath) => [
++    relativePath, fs.readFileSync(path.join(repositoryRoot, relativePath)),
++  ]));
++  return createRepository("release-script", files);
+ }
+ 
+ afterEach(() => {
+@@ -392,6 +381,25 @@ describe("release input integrity", () => {
+ describe("release script integration", () => {
+   it("fails closed when git status is clean but raw project bytes differ", () => {
+     const root = copyRepositoryForReleaseTest();
++    const runDryRelease = () => spawnSync(process.execPath, ["scripts/release.mjs", "patch", "--dry-run"], {
++      cwd: root,
++      encoding: "utf8",
++      timeout: 10_000,
++      env: { ...process.env, NAVSENTINEL_BUILD_PROFILE: "interaction-only" },
++    });
++    const originalHead = runGit(root, ["rev-parse", "HEAD"]);
++    const originalMetadata = RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)));
++    // A positive run proves the reduced fixture is complete and the real entry
++    // point executes. Missing imports or broken setup cannot count as rejection.
++    const clean = runDryRelease();
++    expect(clean.error).toBeUndefined();
++    expect(clean.status, `${clean.stdout}\n${clean.stderr}`).toBe(0);
++    expect(clean.stdout).toContain("[dry-run] No changes made.");
++    expect(runGit(root, ["rev-parse", "HEAD"])).toBe(originalHead);
++    expect(runGit(root, ["tag", "--list"])).toBe("");
++    expect(runGit(root, ["status", "--porcelain"])).toBe("");
++    expect(RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)))).toEqual(originalMetadata);
++
+     const filterScript = path.join(root, ".git-clean-mask.mjs");
+     fs.writeFileSync(
+       filterScript,
+@@ -407,14 +415,14 @@ describe("release script integration", () => {
+     runGit(root, ["add", "raw-input.txt"]);
+     expect(runGit(root, ["status", "--porcelain"])).toBe("");
+ 
+-    const result = spawnSync(process.execPath, ["scripts/release.mjs", "patch", "--dry-run"], {
+-      cwd: root,
+-      encoding: "utf8",
+-      env: { ...process.env, NAVSENTINEL_BUILD_PROFILE: "interaction-only" },
+-    });
+-
+-    expect(result.status).not.toBe(0);
++    const filteredHead = runGit(root, ["rev-parse", "HEAD"]);
++    const result = runDryRelease();
++    expect(result.error).toBeUndefined();
++    expect(result.status).toBe(1);
+     expect(`${result.stdout}\n${result.stderr}`).toMatch(/raw filesystem bytes differ/i);
++    expect(runGit(root, ["rev-parse", "HEAD"])).toBe(filteredHead);
++    expect(runGit(root, ["tag", "--list"])).toBe("");
++    expect(RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)))).toEqual(originalMetadata);
+   }, 30_000);
+ 
+   it("declares the only paths a release commit may change", () => {
