@@ -8,7 +8,7 @@ import { describe, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
-const cli = require.resolve("playwright/cli");
+const cli = path.join(path.dirname(require.resolve("playwright/package.json")), "cli.js");
 const testModule = require.resolve("@playwright/test");
 
 function command(cwd: string, file: string, args: string[], env: NodeJS.ProcessEnv) {
