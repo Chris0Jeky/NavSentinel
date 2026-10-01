@@ -1,35 +1,70 @@
-name: Inspect exact lockfile advisories
+name: Publish audited transitive dependency patches
 on:
   push:
     branches: [audit/20261001-dependency-advisories]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  audit:
+  publish:
     if: github.repository == 'Chris0Jeky/NavSentinel' && github.ref == 'refs/heads/audit/20261001-dependency-advisories'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           ref: ${{ github.sha }}
-          persist-credentials: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24
-      - name: Record exact dependency findings without package installation
+      - name: Refresh only the two reviewed patch versions
         shell: bash
         run: |
           set -euo pipefail
-          git rev-parse HEAD
-          sha256sum package.json package-lock.json
-          status=0
-          npm audit --package-lock-only --ignore-scripts --json > /tmp/ns-audit.json || status=$?
-          test "$status" -le 1
+          npm view brace-expansion@5.0.12 --json > /tmp/ns-brace.json
+          npm view fast-uri@3.1.8 --json > /tmp/ns-uri.json
           node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import crypto from 'node:crypto';
           import fs from 'node:fs';
-          const audit = JSON.parse(fs.readFileSync('/tmp/ns-audit.json', 'utf8'));
-          if (audit.error || !audit.metadata || !audit.vulnerabilities) throw new Error(JSON.stringify(audit));
-          console.log(JSON.stringify({ metadata: audit.metadata, vulnerabilities: audit.vulnerabilities }, null, 2));
+          const original = fs.readFileSync('package-lock.json');
+          assert.equal(crypto.createHash('sha256').update(original).digest('hex'), 'f4a0d206a906d9a75d76287d617c9b09d21fff925bbdc3b0149db21feaf08b9d');
+          const lock = JSON.parse(original);
+          const targets = [['brace-expansion', '5.0.12', '/tmp/ns-brace.json'], ['fast-uri', '3.1.8', '/tmp/ns-uri.json']];
+          for (const [name, version, filename] of targets) {
+            const metadata = JSON.parse(fs.readFileSync(filename, 'utf8'));
+            const entry = lock.packages['node_modules/' + name];
+            assert.equal(metadata.name, name);
+            assert.equal(metadata.version, version);
+            assert.equal(entry.dev, true);
+            assert.deepEqual(metadata.dependencies ?? {}, entry.dependencies ?? {});
+            assert.deepEqual(metadata.engines ?? {}, entry.engines ?? {});
+            assert.equal(metadata.dist.tarball, `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz`);
+            assert.match(metadata.dist.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/);
+            entry.version = version;
+            entry.resolved = metadata.dist.tarball;
+            entry.integrity = metadata.dist.integrity;
+          }
+          const before = JSON.parse(original);
+          const changed = Object.keys(lock.packages).filter((key) => JSON.stringify(before.packages[key]) !== JSON.stringify(lock.packages[key]));
+          assert.deepEqual(changed.sort(), targets.map(([name]) => 'node_modules/' + name).sort());
+          fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+          for (const key of changed) console.log(key, JSON.stringify(lock.packages[key]));
           JS
-          git diff --exit-code -- package.json package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm audit --package-lock-only --ignore-scripts --json > /tmp/ns-patched-audit.json
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const audit = JSON.parse(fs.readFileSync('/tmp/ns-patched-audit.json', 'utf8'));
+          assert.equal(audit.metadata.vulnerabilities.total, 0);
+          console.log(JSON.stringify(audit.metadata));
+          JS
+          git diff --exit-code -- package.json
+          git diff --check
+          git diff --stat
+          git add package-lock.json
+          git rm .github/workflows/inspect-dependency-advisories.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(deps): patch brace-expansion and fast-uri advisories'
+          git push origin HEAD:refs/heads/audit/20261001-dependency-advisories
