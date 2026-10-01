@@ -230,6 +230,29 @@ const originalFormActions = new WeakMap<Element, string>();
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Maximum characters of one page-derived URL interpolated into an alert
+ * `details` string. Attribute values are unbounded — a multi-MB `action`
+ * would otherwise flow verbatim into the event `extra`, and the single
+ * `storage.local.set` write of the whole log array would fail quota, burn
+ * all retries, and lose the entry, letting a page suppress its own
+ * form-tampering telemetry. (#857)
+ */
+const MAX_DETAILS_URL_CHARS = 200;
+
+/** Marker appended when `truncateUrlForAlertDetails` cuts a URL short. */
+const TRUNCATED_URL_SUFFIX = "...(truncated)";
+
+/**
+ * Bound a page-derived URL for interpolation into an alert `details` string.
+ * Realistic URLs pass through byte-identical; pathological ones are cut to
+ * MAX_DETAILS_URL_CHARS plus an explicit truncation marker. (#857)
+ */
+export function truncateUrlForAlertDetails(url: string): string {
+  if (url.length <= MAX_DETAILS_URL_CHARS) return url;
+  return url.slice(0, MAX_DETAILS_URL_CHARS) + TRUNCATED_URL_SUFFIX;
+}
+
 function hostFromUrl(url: string): string | null {
   try {
     // Resolve against document.baseURI, not location.href: on pages with a
@@ -672,9 +695,11 @@ function checkFormActionChange(form: Element): void {
   if (current === original) return;
 
   const crossDomain = current ? isCrossDomain(current) : false;
+  // Truncate AFTER the equality comparison above: two URLs differing only
+  // past the cap are still a genuine change and must alert. (#857)
   const detail = crossDomain
-    ? `Form action changed to cross-domain URL: "${current}" (was "${original}")`
-    : `Form action changed: "${current}" (was "${original}")`;
+    ? `Form action changed to cross-domain URL: "${truncateUrlForAlertDetails(current)}" (was "${truncateUrlForAlertDetails(original)}")`
+    : `Form action changed: "${truncateUrlForAlertDetails(current)}" (was "${truncateUrlForAlertDetails(original)}")`;
 
   pushAlert({
     type: "form_action_changed",
