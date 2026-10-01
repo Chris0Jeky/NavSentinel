@@ -1,0 +1,59 @@
+name: Assemble reviewed hardening integration
+on:
+  push:
+    branches: [integration/20261001-reviewed-hardening]
+    paths: [.github/workflows/publish-reviewed-integration.yml]
+permissions:
+  contents: write
+jobs:
+  assemble:
+    if: github.repository == 'Chris0Jeky/NavSentinel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+      - name: Reproduce the reviewed merge and exact fixture patch
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 3665ae784577e79c60578fa5709d5c1849de3511
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git merge --no-ff --no-commit 04b9a3b3dc6cd89f5f127d13c09e8c7be9f862a1 08405c13ff723386f5bc36f5a94575cef41b314b de3f7048dab1fad003a0fec11788899810835dd4 b4a7e9ed8fa1848ddf68d75b99f59af3bea55287
+          python3 - <<'PY'
+          import hashlib,subprocess
+          patch=subprocess.check_output(['git','show','0a8dc6f6335d37e8e6f0cc71f08be2162ec8ac1d:.reviewed-release-fixture.patch'])
+          assert hashlib.sha256(patch).hexdigest()=='6d0cf33f201a0df2c7464794359ac3ea84f0507c6c7ba3c96ea5fdc1302ef88f'
+          subprocess.run(['git','apply','--index','-'],input=patch,check=True)
+          PY
+          git rm .github/workflows/publish-reviewed-integration.yml
+          git diff --cached --check
+          test "$(git write-tree)" = 4cf2446d4c4864d05657fca8191688325220af9e
+          git commit -m 'Integrate reviewed hardening #966 #983 #984 #985 and qualify the real release fixture'
+          mkdir -p /tmp/integration-proof
+          git rev-parse HEAD > /tmp/integration-proof/head.txt
+          git rev-parse HEAD^{tree} > /tmp/integration-proof/tree.txt
+          git diff --stat 3665ae784577e79c60578fa5709d5c1849de3511 HEAD > /tmp/integration-proof/scope.txt
+      - run: npm ci
+      - run: npm audit --json > /tmp/integration-proof/audit.json
+      - run: npm run typecheck && npm run lint && npm test
+      - run: npm run build && npm run check:perf-budget && npm run package:ext
+      - run: npm run build:research-reputation && npm run check:perf-budget
+      - name: Publish candidate without rewriting any source branch
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^{tree})" = 4cf2446d4c4864d05657fca8191688325220af9e
+          git diff --exit-code
+          git push origin HEAD:refs/heads/integration/20261001-reviewed-hardening
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: reviewed-integration-${{ github.run_id }}
+          path: /tmp/integration-proof/
+          retention-days: 7
+          if-no-files-found: error
