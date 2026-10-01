@@ -579,6 +579,7 @@ const nativeAppendChild = nodePrototype.appendChild;
 const nativeRemoveChild = nodePrototype.removeChild;
 const nativeSetAttribute = Element.prototype.setAttribute;
 const nativeAddEventListener = EventTarget.prototype.addEventListener;
+const nativeRemoveEventListener = EventTarget.prototype.removeEventListener;
 const nativeFormDataEventDataGetter =
   typeof FormDataEvent === "undefined"
     ? undefined
@@ -1161,6 +1162,73 @@ function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null
  * Chromium moved these members off the instance.
  */
 
+/**
+ * #898: re-check a subframe self-target exemption AFTER the page's submit and
+ * formdata listeners have run. The browser resolves the target navigable only
+ * after those events, so a listener can retarget an exempted self-post to _top
+ * after the call-time check. This guard is registered now, so it runs after
+ * every page formdata listener registered before this submit call, and fails
+ * closed: a submission whose target no longer resolves to this frame is
+ * cancelled and gated like any other blocked submit (the prompt shows the
+ * action as re-resolved at cancel time, since a listener can rewrite that too —
+ * see #898's scope note on #897).
+ *
+ * Returns a cleanup that removes the listener when formdata never fired (the
+ * submit was canceled or, for requestSubmit, the form was invalid), so a stale
+ * guard cannot police a later, unrelated submission. Event dispatch is
+ * synchronous, so the caller runs the cleanup right after the native returns.
+ *
+ * Residual: a page submit listener can register a NEW formdata listener during
+ * dispatch, which runs after this guard. Closing that needs the Navigation API
+ * `navigate` design from #898's scope note.
+ */
+function armSubframeSelfTargetGuard(
+  form: HTMLFormElement,
+  kind: string,
+  submitter: HTMLElement | null | undefined,
+  replay: () => void,
+): () => void {
+  let fired = false;
+  const onFormData = (event: Event): void => {
+    fired = true;
+    let target: string;
+    try {
+      target = form.target;
+    } catch {
+      target = "";
+    }
+    if (isFormSelfTarget(target)) return;
+    try {
+      event.preventDefault();
+    } catch {
+      // ignore — cancellation is best-effort past this point
+    }
+    const retargetUrl = resolveFormAction(form, submitter);
+    registerBlockedAction({
+      kind,
+      ...(retargetUrl !== undefined ? { url: retargetUrl } : {}),
+      action: () => {
+        // Same live-form revalidation as the call-time gate (#890, #897).
+        if (resolveFormAction(form, submitter) !== retargetUrl) return;
+        replay();
+      },
+    });
+  };
+  try {
+    nativeApply(nativeAddEventListener, form, ["formdata", onFormData, { once: true }]);
+  } catch {
+    return () => {};
+  }
+  return () => {
+    if (fired) return;
+    try {
+      nativeApply(nativeRemoveEventListener, form, ["formdata", onFormData]);
+    } catch {
+      // ignore
+    }
+  };
+}
+
 /** Shared dispatch; only legacy submit has the closed-shadow child exception. */
 function dispatchFormSubmit(
   form: HTMLFormElement,
@@ -1194,8 +1262,19 @@ function dispatchFormSubmit(
     postAllowed(kind, childReplay.actionUrl);
     return;
   }
-  if (childReplay.status === "not-child" &&
-      ((isSubframe() && isFormSelfTarget(form.target)) || consumeRedirectAllowance(actionUrl) !== "none")) {
+  // #898: the subframe self-target exemption is re-checked after the page's
+  // submit/formdata listeners run (see armSubframeSelfTargetGuard). It stays
+  // ahead of the allowance branch so an exempt self-post spends no grant.
+  if (childReplay.status === "not-child" && isSubframe() && isFormSelfTarget(form.target)) {
+    const disarm = armSubframeSelfTargetGuard(form, kind, submitter, invokeNative);
+    try {
+      allow();
+    } finally {
+      disarm();
+    }
+    return;
+  }
+  if (childReplay.status === "not-child" && consumeRedirectAllowance(actionUrl) !== "none") {
     allow();
     return;
   }
