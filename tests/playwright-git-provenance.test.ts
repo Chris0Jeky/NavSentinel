@@ -63,7 +63,8 @@ function probe(configName: string, forceDiff = false) {
     const config = path.join(checkout, "probe.config.mts");
     fs.writeFileSync(config, `
 import base from ${JSON.stringify(pathToFileURL(path.join(root, configName)).href)};
-import { defineConfig } from ${JSON.stringify(pathToFileURL(testModule).href)};
+import playwright from ${JSON.stringify(pathToFileURL(testModule).href)};
+const { defineConfig } = playwright;
 export default defineConfig(base, {
   testDir: ".", testMatch: "probe.spec.cjs", testIgnore: [],
   projects: [{ name: "checkout-probe", testMatch: "probe.spec.cjs" }],
