@@ -24,6 +24,10 @@ async function journey(options: {
   target: "top" | "blank";
   later: boolean;
   control: boolean;
+  early?: boolean;
+  topdoc?: boolean;
+  phase?: "window";
+  recover?: boolean;
 }): Promise<{ receipts: string[]; formdataCount: number }> {
   const { baseUrl, gym } = await getGymBaseUrl(path.join(root, "gym"));
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "ns-unmatched-replay-"));
@@ -50,11 +54,14 @@ async function journey(options: {
       target: options.target,
       later: options.later ? "1" : "0",
       control: options.control ? "1" : "0",
+      early: options.early ? "1" : "0",
+      topdoc: options.topdoc ? "1" : "0",
+      phase: options.phase ?? "target",
     });
     await page.goto(`${baseUrl}${fixture}?${query}`);
     if (options.enabled) await waitForNavSentinelBridge(page);
-    const source = await page.locator("#source").elementHandle();
-    const frame = await source?.contentFrame();
+    const source = options.topdoc ? null : await page.locator("#source").elementHandle();
+    const frame = options.topdoc ? page.mainFrame() : await source?.contentFrame();
     if (!frame) throw new Error("Authored source frame did not load");
     await frame.locator("#activate").waitFor();
     if (options.enabled) {
@@ -82,6 +89,10 @@ async function journey(options: {
       if (options.enabled && !options.control) expect(receipts).toEqual(["child"]);
       await new Promise((resolve) => setTimeout(resolve, 50));
     } while (Date.now() < until);
+    if (options.recover) {
+      await frame.locator("#recover").click();
+      await expect.poll(() => receipts.filter((value) => value === "escape").length).toBe(1);
+    }
     return {
       receipts,
       formdataCount: await frame.evaluate(() => Number(document.documentElement.dataset.formdataCount)),
@@ -112,6 +123,24 @@ for (const target of ["top", "blank"] as const) {
       test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
       const result = await journey({ enabled: true, target, later, control: false });
       expect(result.receipts).toEqual(["child"]);
+      expect(result.formdataCount).toBe(1);
+    });
+  }
+}
+
+for (const target of ["top", "blank"] as const) {
+  for (const topdoc of [false, true]) {
+    test(`pre-grant ${topdoc ? "top-window" : "child"} replay retires late ${target} authority (#936) @regression`, async () => {
+      test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+      const result = await journey({ enabled: true, target, later: true, control: false, early: true,
+        topdoc, ...(topdoc ? { phase: "window" as const } : {}), recover: true });
+      expect(result.receipts).toEqual(["child", "escape"]);
+      expect(result.formdataCount).toBe(1);
+    });
+    test(`unprotected pre-grant ${topdoc ? "top-window" : "child"} replay reaches ${target} harm (#936) @regression`, async () => {
+      const result = await journey({ enabled: false, target, later: true, control: false, early: true,
+        topdoc, ...(topdoc ? { phase: "window" as const } : {}) });
+      expect(result.receipts.filter((value) => value === "escape")).toHaveLength(1);
       expect(result.formdataCount).toBe(1);
     });
   }

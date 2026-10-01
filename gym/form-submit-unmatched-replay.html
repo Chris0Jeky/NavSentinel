@@ -7,7 +7,7 @@
   <script>
     (() => {
       const query = new URLSearchParams(location.search);
-      if (!query.has("inner")) {
+      if (!query.has("inner") && query.get("topdoc") !== "1") {
         query.set("inner", "1");
         document.getElementById("source").src = `${location.pathname}?${query}`;
         return;
@@ -16,11 +16,14 @@
       const target = query.get("target") === "blank" ? "_blank" : "_top";
       const control = query.get("control") === "1";
       const later = query.get("later") === "1";
+      const early = query.get("early") === "1";
+      const atWindow = query.get("phase") === "window";
       document.body.insertAdjacentHTML("beforeend", `
         <iframe name="sink" title="replay sink"></iframe>
         <form id="declared" action="form-submit-landing.html?authority=A" target="${target}">
           <input name="receipt" value="escape" type="hidden">
           <button id="activate" type="submit">Continue to declared destination</button>
+          <button id="recover" type="submit">Continue after replay</button>
         </form>
         <form id="replay" action="form-submit-landing.html?authority=B" target="sink">
           <input name="receipt" value="child" type="hidden">
@@ -36,18 +39,28 @@
           declared.submit();
           document.documentElement.dataset.nestedReturned = "1";
         };
-        if (later) setTimeout(escape, 0);
+        if (later) setTimeout(escape, early ? 100 : 0);
         else escape();
       });
-      document.getElementById("activate").addEventListener("click", (event) => {
+      const activate = document.getElementById("activate");
+      (atWindow ? window : activate).addEventListener("click", (event) => {
+        if (event.target !== activate) return;
         event.preventDefault();
         // Child frames deliberately wait for the isolated-world grant. The
         // ordinary-submit control uses this identical timing, without a replay.
-        setTimeout(() => {
+        const start = () => {
           if (control) declared.submit();
           else replay.submit();
           document.documentElement.dataset.outerReturned = "1";
-        }, 100);
+        };
+        // Replay before the isolated grant; its callback then runs after it.
+        // Window capture also runs before the MAIN document-capture arm.
+        if (early && !control) start();
+        else setTimeout(start, 100);
+      }, atWindow);
+      document.getElementById("recover").addEventListener("click", (event) => {
+        event.preventDefault();
+        setTimeout(() => declared.submit(), 100);
       });
     })();
   </script>

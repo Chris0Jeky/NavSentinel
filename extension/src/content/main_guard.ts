@@ -566,6 +566,8 @@ function capturedGetter<T>(proto: object, prop: string, fallback: (self: never) 
 const nativeAnchorHref = capturedGetter<string>(HTMLAnchorElement.prototype, "href", () => "");
 const nativeAnchorTarget = capturedGetter<string>(HTMLAnchorElement.prototype, "target", () => "");
 const nativeEventPhase = capturedGetter<number>(Event.prototype, "eventPhase", () => 0);
+const NativeEvent = Event;
+const nativeEventTimestamp = capturedGetter<number>(Event.prototype, "timeStamp", () => Number.NaN);
 const nativeDefaultPrevented = capturedGetter<boolean>(Event.prototype, "defaultPrevented", () => false);
 const nativePreventDefault = Event.prototype.preventDefault;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
@@ -1021,7 +1023,17 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
   // dispatches page-controlled callbacks synchronously. Otherwise a callback
   // can spend the click's still-live URL-only allowance on `_top`, `_blank`, or
   // a second same-action form while this replay is still being validated.
-  exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS);
+  // Sample the same browser clock as the click and its isolated bridge grant.
+  // This event is never dispatched. Sampling, rather than remembering observed
+  // clicks, also covers a window-capture replay before our document listener.
+  let retiredThrough: number;
+  try {
+    retiredThrough = nativeApply(nativeEventTimestamp, new NativeEvent(""), []) as number;
+    if (!Number.isFinite(retiredThrough)) throw new Error("Missing native event clock");
+  } catch {
+    return { status: "blocked", actionUrl: initialState.actionUrl };
+  }
+  exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS, retiredThrough);
 
   childReplayInProgress.add(form);
   try {
@@ -1463,7 +1475,7 @@ document.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
-    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, { restrict: false, target: "" }, REDIRECT_LIMITS);
+    armSameTaskRedirect(redirectAllowance, nowMs(), nativeEventTimestamp.call(event), { restrict: false, target: "" }, REDIRECT_LIMITS);
     if (!sameTaskRedirectTimer) {
       sameTaskRedirectTimer = nativeSetTimeout(() => {
         sameTaskRedirectTimer = 0;

@@ -237,6 +237,8 @@ export interface RedirectAllowanceState {
   count: number;
   /** `event.timeStamp` of armed clicks whose isolated grant has not arrived. */
   pendingFollowUps: number[];
+  /** Event-clock boundary consumed by child replay, including undelivered grants. */
+  retiredThrough: number;
 }
 
 export interface RedirectAllowanceLimits {
@@ -266,6 +268,7 @@ export function createRedirectAllowance(): RedirectAllowanceState {
     sameTaskTarget: "",
     count: 0,
     pendingFollowUps: [],
+    retiredThrough: -1,
   };
 }
 
@@ -281,6 +284,7 @@ export function armSameTaskRedirect(
   scope: RedirectAllowanceScope,
   limits: RedirectAllowanceLimits,
 ): void {
+  if (gestureTs <= state.retiredThrough) return;
   state.count = 0;
   state.sameTaskArmed = true;
   state.sameTaskArmedAt = now;
@@ -309,6 +313,9 @@ export function applyIsolatedRedirectAllowance(
   grant: RedirectAllowanceScope & { allowRedirect: boolean; gestureTs?: number },
   limits: RedirectAllowanceLimits,
 ): void {
+  // A replay may precede both this bridge delivery and the document listener.
+  // Ignore its old grant completely: it must not renew or widen newer authority.
+  if (grant.gestureTs !== undefined && grant.gestureTs <= state.retiredThrough) return;
   const pending = state.pendingFollowUps;
   const match = grant.gestureTs === undefined ? -1 : pending.indexOf(grant.gestureTs);
   if (match >= 0) {
@@ -326,12 +333,16 @@ export function applyIsolatedRedirectAllowance(
  * This is deliberately independent of the replay's URL: an unrelated scoped
  * grant must not survive just because consumeRedirect would reject that URL.
  * Keep pendingFollowUps so a delayed follow-up to an in-task arm cannot reset
- * the retired budget. Only a fresh gesture or independent grant can renew it.
+ * the retired budget. The native Event-clock cutoff also retires clicks whose
+ * bridge grant or document-capture observer has not arrived yet. Only a newer
+ * gesture or an explicit independent grant can renew it; equal-time ties deny.
  */
 export function exhaustRedirectAllowance(
   state: RedirectAllowanceState,
   limits: RedirectAllowanceLimits,
+  retiredThrough = state.retiredThrough,
 ): void {
+  if (retiredThrough > state.retiredThrough) state.retiredThrough = retiredThrough;
   state.count = limits.maxPerGesture;
   state.sameTaskArmed = false;
 }
