@@ -870,16 +870,12 @@ function isImmediateWindowOpenTarget(target: unknown): boolean {
 
 function appendImmediateSilentNav(event: EventLogEntry | null): void {
   if (!event) return;
-  // getRegistrableDomain returns "" (never nullish) for empty input, so a ??
-  // chain cannot fall back and a missing destHost keys everything to the ""
-  // bucket, where unrelated events throttle each other. Key a missing
-  // destHost by the source page instead; the "site:" prefix keeps a page key
-  // from colliding with a real registrable domain when the navigation stays
-  // on the same site.
+  // Every caller passes buildSilentNavEvent output, which is non-null only
+  // when destHost is truthy (#975), so no hostless fallback is needed. The
+  // || destHost covers getRegistrableDomain returning "" for odd-but-nonempty
+  // hosts, keying them by the raw host instead of the shared "" bucket.
   const destHost = event.destHost ?? "";
-  const throttleKey = destHost
-    ? getRegistrableDomain(destHost) || destHost
-    : `site:${event.site ?? ""}`;
+  const throttleKey = getRegistrableDomain(destHost) || destHost;
   if (!silentNavThrottleAllows(silentNavThrottle, throttleKey, performance.now(), SILENT_NAV_THROTTLE_MS)) {
     return;
   }
