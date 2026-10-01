@@ -1,20 +1,10 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   MAX_CHILD_NAVIGABLE_SCAN,
   resolveChildNavigable,
   type ChildNavigableView,
 } from "../extension/src/content/main_guard_helpers";
-
-afterEach(() => {
-  document.head.innerHTML = "";
-  document.body.innerHTML = "";
-});
-
-function form(html: string): HTMLFormElement {
-  document.body.innerHTML = html;
-  return document.querySelector("form")!;
-}
 
 describe("resolveChildNavigable (#865)", () => {
   const sinkChild = { window: "sink" };
