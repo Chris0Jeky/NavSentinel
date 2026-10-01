@@ -15,7 +15,7 @@ const service=await createService({port:0,labPort:0,dataDir:fs.mkdtempSync(path.
 const browser=await chromium.launch({channel:'chromium',headless:true,...(process.env.NS_CHROMIUM_PATH?{executablePath:process.env.NS_CHROMIUM_PATH}:{})}).catch(async error=>{await service.close();throw error;});
 const context=await browser.newContext({viewport:{width:1480,height:1000},acceptDownloads:true});
 const checks=[],errors=[],expectedDiagnostics=[];
-let expectingReplayRejection=false;
+const expectingReplayRejection=false;
 const page=await context.newPage();
 page.on('pageerror',error=>errors.push(error.message));
 page.on('console',message=>{

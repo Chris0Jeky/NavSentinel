@@ -6,7 +6,7 @@
 
 ## Summary
 
-NavSentinel is a local-first Chrome MV3 extension designed to guard two high-risk browser surfaces:
+Heedline is a local-first Chrome MV3 extension designed to guard two high-risk browser surfaces:
 
 - deceptive navigation attempts that try to move the user somewhere they did not clearly intend to go
 - risky credential submissions that look like phishing or unsafe login handling
@@ -108,7 +108,7 @@ frozen until that sequence produces a credible signal.
 Issue #555's first overlay-cleanup vertical adds an off-by-default control. It
 hides up to five high-severity foreground layers found by a fast bounded scan
 after DOM readiness, an overlay identified after injection, or one encountered
-by an already-blocked click. An initial batch has one grouped Undo. NavSentinel
+by an already-blocked click. An initial batch has one grouped Undo. Heedline
 never synthesizes or replays a click, remains inert when the setting or
 Navigation is off, and leaves covered benign dialogs and widgets usable. The
 control is available in Options and as a quick setting in the extension popup.

@@ -59,7 +59,7 @@ function ensureHost(): void {
 
   pre = document.createElement("pre");
   pre.className = "panel";
-  pre.textContent = "NavSentinel debug enabled...";
+  pre.textContent = "Heedline debug enabled...";
 
   root.appendChild(pre);
   document.documentElement.appendChild(host);
@@ -103,7 +103,7 @@ export function updateDebugOverlay(info: DebugInfo): void {
   const nrsFactors = info.nrsFactors ?? info.reasonCodes.filter((r) => r.startsWith("nrs_"));
 
   const lines = [
-    "NavSentinel Debug",
+    "Heedline Debug",
     `Mode: ${info.mode}`,
     `MainGuard: ${info.mainGuard ?? "unknown"}`,
     `Decision: ${info.decision}`,

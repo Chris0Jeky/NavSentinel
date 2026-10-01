@@ -13,18 +13,22 @@ import {
   isFloodableAlertType,
 } from "./bridge_outbound";
 import { looksLikeCommand } from "./command_keywords";
-import { formSubmitIntentUrl } from "./nav_authority";
 import {
+  anchorOpenIntentFor,
   applyIsolatedRedirectAllowance,
   armSameTaskRedirect,
   consumeRedirect,
   createRedirectAllowance,
+  createBlockedActionIdAllocator,
   endSameTaskRedirect,
   enforceMapSizeCap,
+  matchesAnchorOpenIntent,
   pruneTimestampWindow,
   resolveChildNavigable,
+  resolveFormActionUrl,
   shouldEmitRapidPushState,
   type ChildNavigableView,
+  type AnchorOpenIntent,
   type RedirectAllowanceLimits,
 } from "./main_guard_helpers";
 import {
@@ -42,6 +46,9 @@ const OPEN_TTL_MS = 800;
 const REDIRECT_TTL_MS = 1500;
 const TARGET_NAV_TTL_MS = 10000;
 const MAX_OPENS_PER_GESTURE = 1;
+// #943: how long a trusted click on a declared new-tab link lets the page open
+// that link's own destination with window.open().
+const ANCHOR_OPEN_INTENT_TTL_MS = 1000;
 const MAX_REDIRECTS_PER_GESTURE = 2;
 const REDIRECT_LIMITS: RedirectAllowanceLimits = {
   ttlMs: REDIRECT_TTL_MS,
@@ -181,6 +188,8 @@ const redirectAllowance = createRedirectAllowance();
 let sameTaskRedirectTimer = 0;
 let popupIntentArmed = false;
 let popupIntentClearTimer = 0;
+let anchorOpenIntent: AnchorOpenIntent | null = null;
+let anchorOpenIntentEvent: MouseEvent | null = null;
 
 // --- DoubleClickjacking detection state ---
 // Tracks the timestamp of the last window.open call from this page.
@@ -197,6 +206,8 @@ let pushStateTimestamps: number[] = [];
 // Cooldown anchor so a sustained rapid-pushState burst emits at most one alert per window,
 // not one per call (which would flood the priority bridge queue and drop ns-nav-blocked) (#302).
 let lastRapidPushStateEmitAt = 0;
+
+const allocateBlockedActionId = createBlockedActionIdAllocator();
 
 const blockedActions = new Map<
   string,
@@ -375,6 +386,47 @@ function consumePopupIntentAllowance(target?: string, features?: string): boolea
   return true;
 }
 
+// #943: one-shot, bound to the clicked link's origin and path, new-window
+// targets only. See AnchorOpenIntent in main_guard_helpers.ts.
+//
+// One tab per click: the page's open REPLACES the link's own navigation, never
+// adds to it. While the arming click is still dispatching, NavSentinel cancels
+// that navigation itself; either way the open is allowed only if the click is
+// still the trusted original and its navigation is verifiably cancelled.
+// Without this, a page could keep the native navigation AND open a second tab (a
+// popunder riding an ordinary link click). eventPhase, defaultPrevented and
+// preventDefault are read through getters captured at startup, so an
+// own-property spoof on the event cannot fake them; other MAIN-world reads
+// (composedPath, instanceof) remain page-overridable (#896), but none of them
+// can buy a second tab.
+function consumeAnchorOpenIntent(url: string | undefined, target: string | undefined): boolean {
+  if (mode !== "smart") return false;
+  if (openCount >= MAX_OPENS_PER_GESTURE) return false;
+  const event = anchorOpenIntentEvent;
+  // Resolve first: the match then compares absolute URLs, and an unresolvable
+  // URL never matches.
+  // An empty URL (about:blank) never matched a link's destination; keep it so.
+  const resolved = url === undefined || url.trim() === "" ? null : resolveAgainstBase(url);
+  if (!event || resolved === null) return false;
+  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved)) return false;
+  try {
+    // isTrusted is an unforgeable own property, and re-dispatching the saved
+    // event with dispatchEvent() makes it false: a later replay cannot pose as
+    // the original click.
+    if (!event.isTrusted) return false;
+    if (nativeEventPhase.call(event) !== 0) nativePreventDefault.call(event);
+    // Whatever the phase, allow the open only once the link's own navigation is
+    // really cancelled. A passive listener silently ignores preventDefault().
+    if (!nativeDefaultPrevented.call(event)) return false;
+  } catch {
+    return false;
+  }
+  anchorOpenIntent = null;
+  anchorOpenIntentEvent = null;
+  openCount += 1;
+  return true;
+}
+
 function armPopupIntent(): void {
   popupIntentArmed = true;
   if (popupIntentClearTimer) {
@@ -419,10 +471,6 @@ function exhaustMatchingRedirectAllowance(actionUrl: string): void {
   if (consumeRedirectAllowance(actionUrl) === "none") return;
   redirectAllowance.count = REDIRECT_LIMITS.maxPerGesture;
   redirectAllowance.sameTaskArmed = false;
-}
-
-function makeId(): string {
-  return `${Math.floor(nowMs())}-${Math.random().toString(16).slice(2)}`;
 }
 
 function pruneBlockedActions(): void {
@@ -471,8 +519,9 @@ function postAllowed(params: { kind: string; url?: string; target?: string }): v
 function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQueryPrefix?: boolean }): void {
   if (url === undefined || String(url) === "") return;
   try {
-    const href = new URL(String(url), location.href).toString();
-    if (!href.startsWith("http:") && !href.startsWith("https:")) return;
+    // An unresolvable URL grants nothing.
+    const href = resolveAgainstBase(String(url));
+    if (href === null || (!href.startsWith("http:") && !href.startsWith("https:"))) return;
     postToIsolated("ns-allow-target-nav", {
       url: href,
       ttlMs: TARGET_NAV_TTL_MS,
@@ -496,7 +545,7 @@ function registerBlockedAction(params: {
   action: () => void;
 }): void {
   pruneBlockedActions();
-  const id = makeId();
+  const id = allocateBlockedActionId();
   blockedActions.set(id, {
     action: params.action,
     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
@@ -519,6 +568,17 @@ function registerBlockedAction(params: {
 const nativeProtoOpen = Window.prototype.open;
 const nativeOpen = window.open;
 const nativeFormSubmit = HTMLFormElement.prototype.submit;
+// #943: read link and click state through the platform getters, not through
+// properties a page can shadow on the element or event.
+function capturedGetter<T>(proto: object, prop: string, fallback: (self: never) => T): (this: unknown) => T {
+  const getter = Object.getOwnPropertyDescriptor(proto, prop)?.get;
+  return (getter ?? fallback) as (this: unknown) => T;
+}
+const nativeAnchorHref = capturedGetter<string>(HTMLAnchorElement.prototype, "href", () => "");
+const nativeAnchorTarget = capturedGetter<string>(HTMLAnchorElement.prototype, "target", () => "");
+const nativeEventPhase = capturedGetter<number>(Event.prototype, "eventPhase", () => 0);
+const nativeDefaultPrevented = capturedGetter<boolean>(Event.prototype, "defaultPrevented", () => false);
+const nativePreventDefault = Event.prototype.preventDefault;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 const NativeFormData = FormData;
 const NativeURL = URL;
@@ -584,6 +644,43 @@ const windowNamedProperties: object | null = (() => {
     return null;
   }
 })();
+
+// #900: the browser resolves a relative form action, window.open URL or link
+// against the document's base URL, and `<base href>` can move that to another
+// origin. The loader captures the platform `baseURI` getter before its async
+// import (scripts/content-loader-contract.mjs), because an early inline page
+// script could replace `Node.prototype.baseURI` before this module runs.
+// Without that capture, relative URLs get no base at all: they lose authority
+// rather than trust a getter the page may control.
+const earlyBaseURI = (globalThis as typeof globalThis & {
+  __navsentinelMainBaseURI?: (this: Node) => string;
+}).__navsentinelMainBaseURI;
+
+function documentBaseUrl(): string | null {
+  if (typeof earlyBaseURI !== "function") return null;
+  try {
+    const base = earlyBaseURI.call(document);
+    return typeof base === "string" && base !== "" ? base : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The absolute URL the browser would use now, or null when it cannot be resolved. */
+function resolveAgainstBase(url: string): string | null {
+  try {
+    return new URL(url).toString();
+  } catch {
+    // Relative: needs the captured base URL.
+  }
+  const base = documentBaseUrl();
+  if (base === null) return null;
+  try {
+    return new URL(url, base).toString();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
@@ -1020,14 +1117,35 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
+  // #943: no notifyAllowedTarget here. That entry exempts a later navigation of
+  // THIS (opener) tab from rollback, which a replaced link click never needs.
+  if (consumeAnchorOpenIntent(url, target)) {
+    postAllowed({
+      kind: "window_open",
+      ...(url !== undefined ? { url: String(url) } : {}),
+      ...(target !== undefined ? { target } : {})
+    });
+    recordWindowOpen();
+    return callNativeOpen(receiver, url, target, features);
+  }
+
+  // #900: resolve once, against the base URL in force now, so the prompt shows
+  // and an approval opens the same absolute URL even if the page moves
+  // `<base href>` while the prompt waits. An empty URL keeps meaning about:blank.
+  const blockedUrl = url === undefined || url === "" ? url : resolveAgainstBase(url);
+  // An unresolvable URL (a non-hierarchical base such as `mailto:`, or no
+  // captured base) stays blocked with nothing to approve: the raw relative
+  // string must never reach a later native open, where it would resolve
+  // against whatever base exists then.
+  if (blockedUrl === null) return null;
   registerBlockedAction({
     kind: "window_open",
-    ...(url !== undefined ? { url: String(url) } : {}),
+    ...(blockedUrl !== undefined ? { url: blockedUrl } : {}),
     ...(target !== undefined ? { target } : {}),
     ...(features !== undefined ? { features } : {}),
     action: () => {
       recordWindowOpen();
-      callNativeOpen(receiver, url, target, features);
+      callNativeOpen(receiver, blockedUrl, target, features);
     }
   });
 
@@ -1036,12 +1154,7 @@ function patchedOpen(
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
   const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
-  if (!raw) return location.href;
-  try {
-    return new URL(raw, location.href).toString();
-  } catch {
-    return undefined;
-  }
+  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
 }
 
 /**
@@ -1348,24 +1461,20 @@ window.addEventListener(
 // trusted clicks arm: `click` cannot be produced trusted by page script, while
 // `change` and `submit` can (`checkbox.click()`, `requestSubmit()`), so they
 // arm nothing. See RedirectAllowanceState for the scope and budget invariant.
+//
+// Top frame only. A child frame's allowance is bound to the action its clicked
+// submit control declares (#593/#637), and only the isolated world's window-
+// capture read of that action is trustworthy: a page window-capture handler
+// runs between it and this document-capture listener and can rewrite `action`
+// or `formaction`, so an in-task arm would bind to an action the isolated world
+// never declared. Child frames therefore keep waiting for the isolated grant,
+// and a same-task child-frame submit stays gated as before #864.
 const nativeSetTimeout = window.setTimeout.bind(window);
 document.addEventListener(
   "click",
   (event) => {
-    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff()) return;
-    let scope = { restrict: false, target: "" };
-    if (isSubframe()) {
-      // Mirror the isolated grant: a child frame may only spend it on the
-      // action its clicked submit control declares (#593/#637).
-      let declared = "";
-      try {
-        declared = formSubmitIntentUrl(event.target, location.href) ?? "";
-      } catch {
-        // Unresolvable markup declares nothing; the scope stays restricted.
-      }
-      scope = { restrict: true, target: declared };
-    }
-    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, scope, REDIRECT_LIMITS);
+    if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
+    armSameTaskRedirect(redirectAllowance, nowMs(), event.timeStamp, { restrict: false, target: "" }, REDIRECT_LIMITS);
     if (!sameTaskRedirectTimer) {
       sameTaskRedirectTimer = nativeSetTimeout(() => {
         sameTaskRedirectTimer = 0;
@@ -1375,6 +1484,50 @@ document.addEventListener(
   },
   true
 );
+
+// #943: a trusted click on a visible, named `<a target="_blank">` arms a
+// one-shot window.open() allowance for that link's own destination, so a page
+// that cancels the click and opens the link itself (YouTube's embedded "Watch
+// on YouTube") is not blocked. Like the #864 listener this is on `document` in
+// the capture phase, after every window-capture listener: a click the isolated
+// world stops (its new-tab prompt calls stopImmediatePropagation) never arms
+// it. It covers child frames too, because the allowance is bound to the
+// destination the link declares, which the native click would have opened.
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!(event instanceof MouseEvent) || !event.isTrusted) return;
+    anchorOpenIntent = null;
+    anchorOpenIntentEvent = null;
+    if (mode !== "smart" || event.button !== 0) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const anchor = findDeclaredNewTabAnchor(event);
+    if (!anchor || !isSafePopupIntentSource(anchor)) return;
+    let href: string;
+    try {
+      href = nativeAnchorHref.call(anchor);
+    } catch {
+      return;
+    }
+    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS);
+    anchorOpenIntentEvent = anchorOpenIntent ? event : null;
+  },
+  true
+);
+
+function findDeclaredNewTabAnchor(event: MouseEvent): HTMLAnchorElement | null {
+  for (const node of event.composedPath()) {
+    if (!(node instanceof HTMLAnchorElement)) continue;
+    // The nearest link owns the click; only a declared new-tab link qualifies.
+    // Read through the captured getter: an own-property spoof cannot fake it.
+    try {
+      return nativeAnchorTarget.call(node).trim().toLowerCase() === "_blank" ? node : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 function generateChallenge(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));

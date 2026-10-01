@@ -8,6 +8,7 @@ import {
   CORPUS_RECEIPT_SETTLE_MS,
   exerciseFirstEligibleControl,
 } from "./corpus_replay_harness";
+import { readCredentialModal } from "./extension_test_utils";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = process.env.EXTENSION_PATH
@@ -45,11 +46,11 @@ async function startHarness(): Promise<CorpusReplayHarness> {
   return CorpusReplayHarness.start(extensionPath);
 }
 
+// The credential prompt's root is closed (#894), so Playwright selectors
+// cannot see into it; read it through CDP. A failed read counts as not
+// visible, as the former isVisible() check did.
 async function credentialModalVisible(page: Page): Promise<boolean> {
-  return page
-    .locator("#__sentinelsuite_cred_modal_host__ .overlay")
-    .isVisible()
-    .catch(() => false);
+  return (await readCredentialModal(page).catch(() => null)) !== null;
 }
 
 test.beforeAll(() => {
@@ -142,9 +143,7 @@ test("shared corpus replay records no harm receipt when credential submission is
       () => credentialModalVisible(page),
     );
     expect(harmReached).toBe(false);
-    await expect(
-      page.locator("#__sentinelsuite_cred_modal_host__ .overlay"),
-    ).toBeVisible();
+    expect(await credentialModalVisible(page)).toBe(true);
     expect(harness.receipts).toEqual([]);
     harness.throwIfInvalid();
   } finally {

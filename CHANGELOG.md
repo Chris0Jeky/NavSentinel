@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Script-submitted sign-in forms work in the top frame.** A page that submits its own declared form synchronously or in a microtask from its handler for a trusted click is no longer blocked. This covers Stack Overflow "Log in with Google" (jQuery `.trigger("submit")`), validation libraries, and `<a href=# onclick=form.submit()>`. The same submit one task later always passed (#864, #895).
+  - In a child frame, a same-task submit stays gated: a page handler could rewrite the declared action before NavSentinel reads it.
+  - A keyboard-only selection that auto-submits stays gated.
+  - Posts into the page's own named iframe are still blocked (#865).
+- **YouTube's embedded "Watch on YouTube" link opens.** The player cancels the click on its `target="_blank"` link and calls `window.open()` itself, and that open was blocked (#943).
+  - A trusted click on a visible, named new-tab link now lets the page open that link's own origin and path once, within one second, in a new window only.
+  - The page's open replaces the link's own navigation, so one click never produces two tabs (#946).
+  - Another destination, a `_top`/`_self`/`_parent` or named target, a late open, a replayed or untrusted click, and a click elsewhere all stay gated.
+
+### Security
+
+- **Automatic approval of a blocked form submit is scoped to its URL.** For an allowlisted destination, the service worker now gets an allowance for that URL only, instead of a tab-wide rollback window (#920).
+- **Blocked submits and popups resolve relative URLs the way Chrome does.** A relative form action, `window.open()` URL or link now resolves against the page's base URL. An empty or whitespace-only action still means the page itself. Before, a `<base href>` pointing at another origin could make a prompt name the page's own site while the submit went elsewhere (#900).
+  - A blocked popup's URL is fixed when it is blocked, so moving `<base href>` while the prompt waits cannot change where an approval opens.
+  - For a blocked submit, a `<base href>` moved between the block and its approval is caught by the destination re-check from #890.
+  - Page `submit`/`formdata` listeners can still change the destination after the check; that gap is #898.
+- **The MAIN-world clock is captured before the guard's async import**, so an early inline page script can no longer replace `Date.now` first (#877, #921). Follow-ups are tracked in #942.
+- **Page script can no longer reach the credential prompt's buttons.** The prompt now sits in a closed shadow root, so a page cannot move focus onto Trust or Proceed once just before the user's next Enter or Space (#894). Keyboard use is unchanged, and the prompt stays in the accessibility tree that screen readers read; no screen reader was run. The notice toasts still use an open root (#601).
+
+### Changed
+
+- **NavSentinel is now Heedline.** The new name appears everywhere users see the product:
+  - the extension name, and the popup, Options, onboarding and Protection Center;
+  - notices and prompts;
+  - export filenames (`heedline-evidence-*.json`, `heedline-suite-export-*.json`);
+  - the release zip (`heedline-v<version>.zip`).
+
+  Internal identifiers keep the former name, so an existing install keeps its settings and history, and older exports still import. Formal trademark clearance is still pending before any store submission (AI-19).
+- **Mutation alerts no longer store destination URLs.** Form-action and cross-domain iframe URLs are removed from `mutation_alert` details in new records, imports, migrated rows and exports. The reason and severity stay (#902, #910).
+
+### Tests and evidence
+
+- An acceptance spec now automates the AI-47 row 8 owner procedure, and the v0.5.0 agent pass is recorded (#944). That first procedure could not detect a #599 regression, because the benign prewrite alone warned (#947); #952 replaced it with a clipboard-pressure procedure whose spec fails against a #599-regressed build.
+- The popup acceptance helper waits for the pending-decision controller's first render (#884, #899).
+
 ## [0.5.0] - 2026-09-26
 
 The release channel for v0.5.0 is a GitHub pre-release for the owner and testers. The Chrome Web Store beta has not been submitted; it keeps its own gates and will ship later as a 0.5.x release. The packaged build uses the `interaction-only` profile: it contains no URL-reputation runtime or data, and JavaScript-behaviour instrumentation is off. The owner's manual browser checks for this release (ACTION_ITEMS.md, AI-47) are still open; the automated branded-Chrome and acceptance lanes are supporting evidence, not a substitute. The extension still makes no runtime network calls. This section summarizes notable changes merged to `main` since v0.4.0 (2026-05-03), including the v0.5.0 release push, and replaces the stale `[Unreleased]` notes.

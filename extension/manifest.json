@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "NavSentinel",
+  "name": "Heedline",
   "version": "0.5.0",
   "description": "Navigation intent firewall plus local-first credential submission guardrails.",
   "icons": {
@@ -66,6 +66,6 @@
       "32": "assets/icon32.png"
     },
     "default_popup": "src/popup/popup.html",
-    "default_title": "NavSentinel"
+    "default_title": "Heedline"
   }
 }

@@ -696,7 +696,7 @@ test("options import and export preserve normalized trusted-domain and allowlist
       await options.locator('#navModeSeg .seg-btn[data-value="strict"]').click();
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await options.locator("#importFile").setInputFiles(invalidImportPath);
-      await expect(options.locator("#status")).toHaveText("Import failed.");
+      await expect(options.locator("#status")).toHaveText("Import failed: the file isn't valid JSON.");
       await expect(options.locator('#navModeSeg .seg-btn[data-value="strict"]')).toHaveAttribute("aria-checked", "true");
       await options.locator("#importFile").setInputFiles(importPath);
       await expect(options.locator('#navModeSeg .seg-btn[data-value="off"]')).toHaveAttribute("aria-checked", "true");

@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertContentAddressedLoader,
+  assertEarlyMainPrelude,
   assertUiGuardRevision,
 } from "./content-loader-contract.mjs";
 
@@ -30,6 +31,16 @@ if (!fs.existsSync(loaderPath)) {
 const loader = fs.readFileSync(loaderPath, "utf8");
 const digest = assertContentAddressedLoader(captureScript, loader);
 const revision = assertUiGuardRevision(loader);
+
+const mainScript = manifest.content_scripts
+  ?.find((entry) => entry.world === "MAIN" && /main_guard/.test(entry.js?.[0] ?? ""))
+  ?.js?.[0];
+if (!mainScript) throw new Error("MAIN-world guard content-script loader is missing");
+const mainPath = path.join(dist, mainScript);
+if (!fs.existsSync(mainPath)) throw new Error(`Manifest MAIN-world guard loader does not exist: ${mainScript}`);
+const mainLoader = fs.readFileSync(mainPath, "utf8");
+assertContentAddressedLoader(mainScript, mainLoader);
+assertEarlyMainPrelude(mainLoader);
 
 console.log(
   `[content-loader] final isolated capture loader identity OK; revision=` +

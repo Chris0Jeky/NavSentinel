@@ -1,8 +1,8 @@
-# NavSentinel
+# Heedline
 
-> **Pre-alpha; not yet efficacy-validated, independently audited, distributed, or adopted.** `NavSentinel` is a working name pending clearance. Use the repository build for controlled development and dogfooding, not as a sole security control.
+> **Pre-alpha; not yet efficacy-validated, independently audited, distributed, or adopted.** The product was renamed from NavSentinel to `Heedline` on 2026-09-27; formal trademark clearance is still pending before any store submission. Use the repository build for controlled development and dogfooding, not as a sole security control.
 
-NavSentinel is a local-first Chrome MV3 interaction guard for deceptive navigation and risky browser actions. It checks consequential clicks, redirects, popup attempts, credential submissions, double-click attacks, and ClickFix-style clipboard traps before or immediately after they cross a security boundary.
+Heedline is a local-first Chrome MV3 interaction guard for deceptive navigation and risky browser actions. It checks consequential clicks, redirects, popup attempts, credential submissions, double-click attacks, and ClickFix-style clipboard traps before or immediately after they cross a security boundary.
 
 Its emerging differentiator is not a growing list of heuristics. It is a system of **inspectable decisions and reproducible evidence**: the extension explains why it intervened, the Gym can replay attack and benign contrasts, the Observatory work can record bounded scenes and receipts, and release artifacts are expected to prove exactly which source and profile produced them.
 
@@ -51,7 +51,7 @@ Protection-lowering decisions must move toward extension-origin UI bound to the 
 
 ## Evidence-first development
 
-NavSentinel is developed as two cooperating systems:
+Heedline is developed as two cooperating systems:
 
 1. **The Guard** — the MV3 extension, local policies, decision engine, operator UI, bounded logs, and release profile.
 2. **The Evidence system** — deterministic Gym fixtures, adversarial campaigns, recorded scenes, DOM/timing traces, reason codes, proof receipts, and release-input attestations.
@@ -90,7 +90,7 @@ The narrow product path remains:
 1. pass the release and authority blockers;
 2. package one understandable interaction-only beta;
 3. recruit roughly ten real users;
-4. measure whether NavSentinel adds protection without becoming noisy or confusing;
+4. measure whether Heedline adds protection without becoming noisy or confusing;
 5. fix the evidence-backed problems before adding broader reputation, cloud services, policy administration, or commercial layers.
 
 See [Product_Strategy.md](docs/Product_Strategy.md) for the gates and non-goals.
@@ -102,7 +102,7 @@ npm install
 npm run build
 ```
 
-Load `extension/dist` from `chrome://extensions` with Developer Mode enabled. After every rebuild, click **Reload** for NavSentinel before reloading an open test page; reloading only the page can keep an old hashed content-script loader alive.
+Load `extension/dist` from `chrome://extensions` with Developer Mode enabled. After every rebuild, click **Reload** for Heedline before reloading an open test page; reloading only the page can keep an old hashed content-script loader alive.
 
 `npm run build` selects the release-eligible `interaction-only` profile. The following is for local research only and produces a non-release artifact:
 
@@ -162,7 +162,7 @@ Read [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the threat model 
 
 ## Not currently claimed
 
-NavSentinel does **not** currently claim:
+Heedline does **not** currently claim:
 
 - measured efficacy or a reduction in real-world compromise;
 - complete coverage of browser navigation, frames, forms, or extension races;

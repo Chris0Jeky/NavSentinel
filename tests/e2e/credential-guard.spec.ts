@@ -14,6 +14,7 @@ import {
   getExtensionId,
   getGymBaseUrl,
   getServiceWorker,
+  waitForCredentialModal,
   waitForNavSentinelBridge
 } from "./extension_test_utils";
 
@@ -48,7 +49,7 @@ test("credential guard prompts before risky password submit @smoke", async () =>
 
       await page.click("#submitBtn");
 
-      await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
+      await waitForCredentialModal(page);
       await expect(page).toHaveURL(/level11-credential-guard\.html/);
     } finally {
       await context.close();
@@ -296,7 +297,7 @@ test("RW-07 fake re-auth interstitial prompts before risky credential submit @re
 
       await page.click("#rw07Submit");
 
-      await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
+      await waitForCredentialModal(page);
       await expect(page).toHaveURL(/rw07-fake-reauth-interstitial\.html/);
     } finally {
       await context.close();
@@ -330,7 +331,7 @@ test("RW-13 courier tracking login lure prompts before risky credential submit @
 
       await page.click("#rw13Submit");
 
-      await expect(page.locator("text=Credential submit blocked")).toBeVisible({ timeout: 4000 });
+      await waitForCredentialModal(page);
       await expect(page).toHaveURL(/rw13-courier-tracking-login\.html/);
     } finally {
       await context.close();

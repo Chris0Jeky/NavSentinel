@@ -6,6 +6,22 @@
  */
 
 /**
+ * Create a guard-local blocked-action ID allocator (#933). The returned closure
+ * owns an unbounded BigInt sequence, so every ID in one document/guard lifetime
+ * is unique without consulting page-overridable clocks or entropy. IDs are
+ * intentionally predictable: the authenticated bridge and one-use Map entry are
+ * the authority boundary; uniqueness prevents one prompt from naming a closure
+ * that a later blocked action silently replaced.
+ */
+export function createBlockedActionIdAllocator(initialSequence = 0n): () => string {
+  let sequence = initialSequence;
+  return () => {
+    sequence += 1n;
+    return `blocked-action-${sequence}`;
+  };
+}
+
+/**
  * Evict the oldest entries from `map` until its size is at most `maxSize`.
  * Map iteration is insertion-ordered, so the first key is the oldest. Returns
  * the number of entries evicted.
@@ -197,8 +213,10 @@ export function targetsChildNavigable(target: string, view: ChildNavigableView):
  * stays the authority for everything after that task.
  *
  * Invariant: this never grants more than the one-task-deferred submit already
- * got. The same-task arm has the isolated grant's scope (unrestricted in the
- * top frame, the declared submit action in a child frame), is cleared by the
+ * got. The same-task arm is armed only in the top frame, where it matches the
+ * isolated grant's unrestricted scope (child frames wait for the isolated grant
+ * bound to the declared submit action). The helpers still accept a restricted
+ * scope because the isolated grant uses it. The arm is cleared by the
  * next timer tick and in any case within the grant TTL (a delayed timer cannot
  * stretch it further), and shares the per-gesture budget: the isolated follow-up for an armed
  * click keeps the redirects already spent instead of resetting them. The
@@ -324,4 +342,80 @@ export function consumeRedirect(
   if (!isolated && !sameTask) return false;
   state.count += 1;
   return true;
+}
+
+/**
+ * #943: a declared new-tab link whose click the page cancels and replaces with
+ * its own `window.open()`. YouTube's embedded player does this for "Watch on
+ * YouTube", and so do many share and "open in new tab" widgets. The native
+ * click would have opened the link's own href in a new tab; the page's
+ * `window.open()` of that same destination adds no authority, so a trusted
+ * click on such a link arms a one-shot allowance bound to the link's origin and
+ * path. A different destination, a target that could navigate an existing
+ * browsing context (`_top`, `_self`, `_parent`, or a name), or an open after
+ * the short lifetime stays gated.
+ */
+export interface AnchorOpenIntent {
+  origin: string;
+  pathname: string;
+  until: number;
+}
+
+export function anchorOpenIntentFor(href: string, now: number, ttlMs: number): AnchorOpenIntent | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(href);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  return { origin: parsed.origin, pathname: parsed.pathname, until: now + ttlMs };
+}
+
+export function matchesAnchorOpenIntent(
+  intent: AnchorOpenIntent | null,
+  now: number,
+  url: string | undefined,
+  target: string | undefined,
+  baseHref: string,
+): boolean {
+  if (!intent || now > intent.until) return false;
+  const normalizedTarget = (target ?? "").trim().toLowerCase();
+  if (normalizedTarget !== "" && normalizedTarget !== "_blank") return false;
+  if (url === undefined || url.trim() === "") return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url, baseHref);
+  } catch {
+    return false;
+  }
+  return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
+}
+
+const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
+
+/**
+ * The URL a form submission goes to, as Chromium computes it (#900). An action
+ * that is missing, empty or only HTML whitespace means the document's own URL.
+ * Any other action resolves against the document's base URL, which
+ * `<base href>` can point at another origin. Null when it does not parse.
+ *
+ * The MAIN-world gate uses this; the isolated world's declared-action binding
+ * keeps an identical copy (nav_authority.ts), so a child frame's click grant
+ * matches the submit it declared. A null base URL (the loader's early capture
+ * is missing) leaves an absolute action usable and a relative one unresolved.
+ */
+export function resolveFormActionUrl(
+  rawAction: string | null | undefined,
+  documentUrl: string,
+  baseUrl: string | null
+): string | null {
+  const action = (rawAction ?? "").replace(HTML_WHITESPACE_EDGES, "");
+  try {
+    if (!action) return new URL(documentUrl).toString();
+    if (baseUrl === null) return new URL(action).toString();
+    return new URL(action, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }

@@ -99,7 +99,7 @@ describe("showPendingBlankNavigationPrompt settles messaging failures (#849)", (
     expect(showToastMock).toHaveBeenCalledTimes(1);
     expect(showToastMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: expect.stringContaining("Open NavSentinel to review"),
+        message: expect.stringContaining("Open Heedline to review"),
       }),
     );
   });

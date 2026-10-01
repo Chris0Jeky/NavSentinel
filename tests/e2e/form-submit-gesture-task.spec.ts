@@ -19,9 +19,9 @@
  * checked when submit()/requestSubmit() is called is unsound; any future #865
  * design must keep every case here blocked.
  *
- * Fixture: gym/form-submit-gesture-task.html. Child-frame (#593/#637) behaviour
- * for same-task submits is covered by the `-sync` arms of
- * issue593-hidden-media-layer.spec.ts.
+ * Fixture: gym/form-submit-gesture-task.html. The same-task arm is top-frame
+ * only; the `-sync` arms of issue593-hidden-media-layer.spec.ts pin that a
+ * child frame's same-task submit stays gated (#593/#637).
  */
 import { chromium, expect, test, type BrowserContext, type Page } from "@playwright/test";
 import fs from "node:fs";

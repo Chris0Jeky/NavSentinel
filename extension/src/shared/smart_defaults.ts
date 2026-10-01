@@ -110,14 +110,31 @@ export function analyzeOutcomesForPair(
   return null;
 }
 
-/**
- * Get the cooldown map from storage.
- * Prunes expired entries on read.
- */
-export async function getCooldowns(): Promise<CooldownMap> {
+// In-process FIFO write queue mirroring the repo read-modify-write pattern
+// (createStorageWriteQueue in storage_impl.ts, enqueueAllowlistWrite in
+// allowlist.ts). Every cooldown mutation reads the stored map then writes a
+// derived map; without a queue, two concurrent calls both read the same base
+// and the second write silently clobbers the first -- a lost dismissal or a
+// prune wiping a just-added cooldown. The chain survives rejections so one
+// failed mutation never stalls later ones; the rejection still reaches the
+// caller. Queued operations must use readCooldowns() directly -- calling the
+// public getCooldowns() from inside the queue would enqueue a second operation
+// on the same queue and deadlock (same rule as importAllDirect).
+let cooldownWriteQueue: Promise<unknown> = Promise.resolve();
+
+function queueCooldownWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const next = cooldownWriteQueue.then(operation);
+  cooldownWriteQueue = next.catch((err) => {
+    console.warn("[NavSentinel] smart-default cooldown serialization error:", err);
+  });
+  return next;
+}
+
+/** Read the stored map and compute the TTL-pruned view, without writing. */
+async function readCooldowns(): Promise<{ pruned: CooldownMap; changed: boolean }> {
   const res = await chrome.storage.local.get(SMART_DEFAULT_COOLDOWNS_KEY);
   const raw = res[SMART_DEFAULT_COOLDOWNS_KEY];
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { pruned: {}, changed: false };
 
   const map = raw as CooldownMap;
   const now = Date.now();
@@ -132,12 +149,27 @@ export async function getCooldowns(): Promise<CooldownMap> {
     }
   }
 
-  // Persist pruned map if we removed stale entries
-  if (changed) {
-    await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: pruned });
-  }
+  return { pruned, changed };
+}
 
-  return pruned;
+/**
+ * Get the cooldown map from storage.
+ * Prunes expired entries on read.
+ */
+export async function getCooldowns(): Promise<CooldownMap> {
+  const { pruned, changed } = await readCooldowns();
+  if (!changed) return pruned;
+
+  // Persist the pruned map through the write queue, re-reading under the lock:
+  // a setCooldown/clearCooldown that landed after our read must not be clobbered
+  // by this stale prune snapshot.
+  return queueCooldownWrite(async () => {
+    const fresh = await readCooldowns();
+    if (fresh.changed) {
+      await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: fresh.pruned });
+    }
+    return fresh.pruned;
+  });
 }
 
 /**
@@ -183,10 +215,12 @@ export async function setCooldown(
   sourceDomain: string,
   destDomain: string
 ): Promise<void> {
-  const cooldowns = await getCooldowns();
-  cooldowns[pairKey(sourceDomain, destDomain)] = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
-  await chrome.storage.local.set({
-    [SMART_DEFAULT_COOLDOWNS_KEY]: capCooldowns(cooldowns)
+  return queueCooldownWrite(async () => {
+    const { pruned } = await readCooldowns();
+    pruned[pairKey(sourceDomain, destDomain)] = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
+    await chrome.storage.local.set({
+      [SMART_DEFAULT_COOLDOWNS_KEY]: capCooldowns(pruned)
+    });
   });
 }
 
@@ -197,9 +231,11 @@ export async function clearCooldown(
   sourceDomain: string,
   destDomain: string
 ): Promise<void> {
-  const cooldowns = await getCooldowns();
-  delete cooldowns[pairKey(sourceDomain, destDomain)];
-  await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: cooldowns });
+  return queueCooldownWrite(async () => {
+    const { pruned } = await readCooldowns();
+    delete pruned[pairKey(sourceDomain, destDomain)];
+    await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: pruned });
+  });
 }
 
 /**

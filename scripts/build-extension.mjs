@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   contentAddressedLoaderPath,
   finalizeUiGuardLoader,
+  installEarlyMainClockText,
   UI_GUARD_REVISION_PLACEHOLDER,
 } from "./content-loader-contract.mjs";
 import { compactKnownOptionsHtml } from "./packaged-html.mjs";
@@ -116,10 +117,31 @@ function installEarlyUiFence() {
   return revision;
 }
 
+function installEarlyMainClock() {
+  const dist = path.join(root, "extension", "dist");
+  const manifestPath = path.join(dist, "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const mainEntry = manifest.content_scripts?.find(
+    (entry) => entry.world === "MAIN" && /main_guard/.test(entry.js?.[0] ?? ""),
+  );
+  const loaderScript = mainEntry?.js?.[0];
+  if (!loaderScript) throw new Error("MAIN-world guard content-script loader is missing");
+  const loaderPath = path.join(dist, loaderScript);
+  const generated = fs.readFileSync(loaderPath, "utf8");
+  const finalLoader = installEarlyMainClockText(generated);
+  const finalScript = contentAddressedLoaderPath(loaderScript, finalLoader);
+  const finalPath = path.join(dist, finalScript);
+  fs.writeFileSync(finalPath, finalLoader, "utf8");
+  if (finalPath !== loaderPath) fs.rmSync(loaderPath, { force: true });
+  mainEntry.js[0] = finalScript;
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
 console.log(`[build] profile=${profile.id}; releaseEligible=${profile.releaseEligible}`);
 const env = { [RELEASE_PROFILE_ENV]: profile.id };
 runNode(viteBin, ["build", "--config", path.join(root, "vite.config.ts")], env);
 const uiGuardRevision = installEarlyUiFence();
+installEarlyMainClock();
 runNode(path.join(root, "scripts", "check-content-loader-identity.mjs"));
 compactPackagedHtml();
 runNode(path.join(root, "scripts", "check-mv3-worker-imports.mjs"));

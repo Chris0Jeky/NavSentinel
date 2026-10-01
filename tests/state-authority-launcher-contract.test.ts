@@ -270,8 +270,14 @@ describe("state-authority launcher replay boundary", () => {
         env: environment,
         encoding: "utf8",
         maxBuffer: 128 * 1024 * 1024,
+        // spawnSync blocks the event loop, so vitest's 60s cap cannot fire
+        // while the child runs; bound the child itself below that cap.
+        timeout: 55_000,
       },
     );
+    // A timed-out child has status null, which would satisfy a nonzero-exit
+    // expectation after it printed the expected diagnostic and then hung.
+    expect(result.error, String(result.error)).toBeUndefined();
     const output = `${result.stdout}\n${result.stderr}`;
 
     if (repositoryIsShallow()) {
@@ -330,15 +336,24 @@ describe("state-authority launcher replay boundary", () => {
         env: environment,
         encoding: "utf8",
         maxBuffer: 128 * 1024 * 1024,
+        // spawnSync blocks the event loop, so vitest's 60s cap cannot fire
+        // while the child runs; bound the child itself below that cap.
+        timeout: 55_000,
       },
     );
+    // A timed-out child has status null, which would satisfy a nonzero-exit
+    // expectation after it printed the expected diagnostic and then hung.
+    expect(result.error, String(result.error)).toBeUndefined();
     const output = `${result.stdout}\n${result.stderr}`;
 
     expect(result.status).not.toBe(0);
     expect(output).toContain(
       "COMMITTED_CAMPAIGN_EXECUTION_REQUIRED",
     );
-  });
+    // Spawns the Playwright CLI: 12s on a hosted Windows runner against the
+    // 5s default (run 36287246276), so give it the same cap as the spawn test
+    // above. (#766)
+  }, 60_000);
 
   it("keeps authoritative receipt issuance and signing in the committed launcher", () => {
     const launcher = fs.readFileSync(

@@ -1,15 +1,22 @@
-# NavSentinel repository guide
+# Heedline repository guide
 
-NavSentinel is a local-first Chrome MV3 extension built with TypeScript, Vite,
-Vitest, and Playwright. It protects abuse-heavy browser surfaces including
+Heedline (formerly NavSentinel) is a local-first Chrome MV3 extension built with
+TypeScript, Vite, Vitest, and Playwright. It protects abuse-heavy browser surfaces including
 deceptive navigation, risky credential submits, DoubleClickjacking, and
 ClickFix/fake-CAPTCHA overlays. The project is a pre-release private alpha and
 has zero runtime network calls by design.
 
+Internal identifiers keep the former name on purpose, so existing installs keep
+their data and older exports still import: storage keys, DOM ids and
+`data-navsentinel-*` markers, export format identifiers, the `[NavSentinel]`
+console-log prefix, `NAVSENTINEL_*` environment variables and the repository name.
+
 Owner decision #499 (2026-07-31) retired the repository-local agent harness.
-There is no project tier, lifecycle hook, command floor, agent-validation
-script, or Harness CI job. Do not recreate those surfaces without a new
-explicit owner decision. User- or runtime-level settings outside this
+There is no lifecycle hook, command floor, agent-validation script, or Harness
+CI job. Do not recreate those surfaces without a new explicit owner decision.
+The tier declaration alone was restored on 2026-09-27 by owner decision:
+`.agent-harness/tier.json` declares T2 with push and merge free. It adds no
+hook or check. User- or runtime-level settings outside this
 repository are separate and are not described or verified here. `.mcp.json`
 contains optional credential-free tooling, not an enforcement layer.
 
@@ -48,12 +55,14 @@ Avoid bulk-reading `node_modules/`, generated output, `test-results/`,
 | One unit seam | `npx vitest run tests/<name>.test.ts` |
 | Shared/content/service-worker logic | `npm test` |
 | Manifest, worker imports, bundling | `npm run build` |
+| Content-loader identity, MV3 worker imports | `npm run check:content-loader` and `npm run check:mv3-worker` |
 | MAIN-world guard, bridge, detections | `npm run build` then `npm run test:e2e` |
 | Service-worker lifecycle/rollback | `npm run build` then `npm run test:e2e:rollback` |
 | Behavior on current branded Chrome | `npm run build` then `npm run test:e2e:branded` (`NAVSENTINEL_REALISTIC_CHROME=1` enables the back/forward cache and Chrome's popup blocker) |
 | Owner browser procedures (automated evidence, never a Gate-3 result) | `npm run build` then `npm run test:acceptance`; see `docs/testing/BRANDED_CHROME_VALIDATION_2026-09-24.md` |
 | Release profiles | `npm run build`, `npm run check:release-profile -- --release`, then `npm run build:research-reputation` |
 | Reputation/corpus research data | `npm run check:topsites`, `npm run build:bloom:test`, `npm run check:bloom-size` |
+| Security-programme registry/views | `npm run security:check` |
 | Performance-sensitive code | `npm run build` then `npm run check:perf-budget` |
 | Version or manifest bump | `npm run verify:versions` |
 | Package/release code | `npm run package:ext` |

@@ -52,7 +52,7 @@ import {
   capturePointerDown,
   type DownCapture
 } from "./dom_builder";
-import { setDebugEnabled, updateDebugOverlay, type DebugInfo } from "./debug_overlay";
+import type { DebugInfo } from "./debug_overlay";
 import { scanForClickFix } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { OutboundQueue } from "./bridge_outbound";
@@ -254,15 +254,35 @@ function markMainGuardReady(): void {
   refreshDebug();
 }
 
+// The debug panel is opt-in developer UI, so it loads lazily and stays out of
+// the always-on capture chunk (perf budget). Nothing loads until debug is on.
+let debugEnabled = false;
+let debugOverlay: Promise<typeof import("./debug_overlay")> | null = null;
+
+function setDebugEnabled(value: boolean): void {
+  debugEnabled = value;
+  if (!value && !debugOverlay) return;
+  // Start the import inside a promise callback: Vite's preload helper touches
+  // document.head synchronously and would otherwise throw out of initSettings
+  // (and skip the protection setup after it) on a page with no <head>.
+  debugOverlay ??= Promise.resolve().then(() => import("./debug_overlay"));
+  void debugOverlay.then((overlay) => {
+    // Apply the latest value, not this call's: toggles may resolve out of order.
+    overlay.setDebugEnabled(debugEnabled);
+    if (debugEnabled) refreshDebug();
+  }).catch((err) => { console.warn("[NavSentinel] debug overlay failed to load:", err); });
+}
+
 function refreshDebug(): void {
-  if (!lastDebug) return;
-  updateDebugOverlay({
+  if (!lastDebug || !debugEnabled || !debugOverlay) return;
+  const info: DebugInfo = {
     ...lastDebug,
     mainGuard,
     mutationAlerts: getMutationAlertCount(),
     ...(lastNav ? { lastNav } : {}),
     ...(cachedCSPAnalysis ? { cspInfo: cachedCSPAnalysis } : {}),
-  });
+  };
+  void debugOverlay.then((overlay) => overlay.updateDebugOverlay(info)).catch(() => {});
 }
 
 /** Safe top-frame check that won't throw in sandboxed iframes without allow-same-origin. */
@@ -512,7 +532,7 @@ function handleBridgeMessage(message: unknown): void {
     if (!url) return;
 
     if (parsed.host && isAllowlisted(allowlist, siteKeyFromLocation(), parsed.host)) {
-      allowActionOnce(data.id, url, data.target || "_blank", data.features);
+      allowActionOnce(data.id, url, data.target || "_blank", data.features, { automatic: true });
       return;
     }
 
@@ -783,6 +803,32 @@ function notifyAllowedTarget(
   }
 }
 
+let eventIdCounter = 0;
+
+/**
+ * Twin of makeId in shared/storage_impl.ts: persist dedups events by id, so a
+ * collision silently drops the older event. The timestamp plus a per-context
+ * monotonic counter separates ids minted in the same millisecond; 96 bits of
+ * cryptographic randomness separate ids minted in different contexts.
+ * Deliberately duplicated, not shared, following the nav_authority.ts
+ * precedent: a helper module imported across worlds makes the bundler split it
+ * into a chunk shared with the MAIN-world guard, which then loads one module
+ * later at document start.
+ */
+function makeSilentNavEventId(): string {
+  eventIdCounter = (eventIdCounter + 1) % 0xffffffff;
+  const unique = `${Date.now().toString(36)}_${eventIdCounter.toString(36)}`;
+  try {
+    const bytes = globalThis.crypto?.getRandomValues(new Uint8Array(12));
+    if (bytes) {
+      return `${unique}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+    }
+  } catch {
+    // Fall through to the Math.random fallback below.
+  }
+  return `${unique}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function buildSilentNavEvent(params: {
   destHref: string | null | undefined;
   destHost: string | null | undefined;
@@ -795,7 +841,7 @@ function buildSilentNavEvent(params: {
   if (!isTopFrame()) return null;
   if (!isDocumentNavigationHref(params.destHref, params.destHost, location.href)) return null;
   return {
-    id: `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+    id: makeSilentNavEventId(),
     ts: Date.now(),
     kind: "nav_silent_allow",
     site: siteKeyFromLocation(),
@@ -824,7 +870,16 @@ function isImmediateWindowOpenTarget(target: unknown): boolean {
 
 function appendImmediateSilentNav(event: EventLogEntry | null): void {
   if (!event) return;
-  const throttleKey = getRegistrableDomain(event.destHost ?? "") ?? event.destHost ?? "";
+  // getRegistrableDomain returns "" (never nullish) for empty input, so a ??
+  // chain cannot fall back and a missing destHost keys everything to the ""
+  // bucket, where unrelated events throttle each other. Key a missing
+  // destHost by the source page instead; the "site:" prefix keeps a page key
+  // from colliding with a real registrable domain when the navigation stays
+  // on the same site.
+  const destHost = event.destHost ?? "";
+  const throttleKey = destHost
+    ? getRegistrableDomain(destHost) || destHost
+    : `site:${event.site ?? ""}`;
   if (!silentNavThrottleAllows(silentNavThrottle, throttleKey, performance.now(), SILENT_NAV_THROTTLE_MS)) {
     return;
   }
@@ -940,7 +995,7 @@ function handleClickFixScan(): void {
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage("NavSentinel detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
@@ -1066,7 +1121,7 @@ function handleMutationAlert(alert: MutationAlert): void {
   if (isOverlayAlert && alert.severity === "high") {
     sendIconUpdate("yellow");
     showToast({
-      message: "NavSentinel detected a suspicious overlay.",
+      message: "Heedline detected a suspicious overlay.",
       timeoutMs: 0,
     });
   }
@@ -1195,7 +1250,7 @@ function showRollbackPrompt(url: string): void {
   sendIconUpdate("yellow");
   appendEventSafely({ kind: "nav_rollback", site: siteKeyFromLocation(), url, destHost: host });
   showToast({
-    message: `NavSentinel rolled back a suspicious redirect to ${host}`,
+    message: `Heedline rolled back a suspicious redirect to ${host}`,
     actions: [
       {
         label: "Proceed",
@@ -1279,7 +1334,9 @@ function handleRollback(url: string, prevUrl?: string): void {
 function parseDestination(rawUrl: string | null | undefined): { href: string | null; host: string | null } {
   if (!rawUrl) return { href: null, host: null };
   try {
-    const u = new URL(rawUrl, location.href);
+    // The browser resolves a relative URL against the base URL, which
+    // `<base href>` can point at another origin (#900).
+    const u = new URL(rawUrl, document.baseURI || location.href);
     return { href: u.toString(), host: u.hostname.toLowerCase() };
   } catch {
     return { href: null, host: null };
@@ -1393,14 +1450,23 @@ function allowOnce(url: string, target?: string, features?: string): void {
     try {
       window.open(url, target ?? "_blank", features);
     } catch {
-      showToast({ message: "NavSentinel could not open the allowed navigation." });
+      showToast({ message: "Heedline could not open the allowed navigation." });
     }
   }, 0);
 }
 
-function allowActionOnce(actionId?: string | null, url?: string, target?: string, features?: string): void {
+function allowActionOnce(
+  actionId?: string | null,
+  url?: string,
+  target?: string,
+  features?: string,
+  options?: { automatic?: boolean }
+): void {
   if (actionId) {
-    notifyNavAllow();
+    // An allowlisted action needs authority for its approved URL, not a tab-wide
+    // rollback window. The MAIN-world release sends its own target grant too.
+    if (options?.automatic && url) notifyAllowedTarget(url);
+    else notifyNavAllow();
     postToMain("ns-allow-action", { id: actionId });
     return;
   }
@@ -1983,7 +2049,7 @@ window.addEventListener(
                   showPendingBlankNavigationPrompt(prompt),
                 )
                 .catch(() => {
-                  showToast({ message: "NavSentinel blocked a suspicious new tab." });
+                  showToast({ message: "Heedline blocked a suspicious new tab." });
                 });
             } else {
               showAllowPrompt(prompt);
@@ -1992,8 +2058,8 @@ window.addEventListener(
             if (hasClickfix) clickFixAlertedAt = Date.now();
           } else {
             const prefix = hasClickfix
-              ? "NavSentinel blocked a new tab with fake dialog detected"
-              : "NavSentinel blocked a suspicious new tab";
+              ? "Heedline blocked a new tab with fake dialog detected"
+              : "Heedline blocked a suspicious new tab";
             showToast({
               message: buildPlainMessage(
                 overlaySuppression ? `${prefix} and hid its overlay` : prefix,
@@ -2022,8 +2088,8 @@ window.addEventListener(
             ...navFeatures
           });
           const blockPrefix = hasClickfix
-            ? "NavSentinel blocked a deceptive click with fake dialog"
-            : "NavSentinel blocked a deceptive click";
+            ? "Heedline blocked a deceptive click with fake dialog"
+            : "Heedline blocked a deceptive click";
           showToast({
             message: buildPlainMessage(
               overlaySuppression ? `${blockPrefix} and hid the overlay` : blockPrefix,
@@ -2073,8 +2139,8 @@ window.addEventListener(
       // navigation intent — an anchor href or a form submit — to inherit that
       // authority. The MAIN-world form allowance below is separately bound to
       // the declared action so it cannot authorize an unrelated form target;
-      // main_guard.ts derives the same action for the click's own task (#864).
-      const declaredFormAction = formSubmitIntentUrl(e.target, location.href);
+      // main_guard.ts arms a same-task allowance only in the top frame (#864).
+      const declaredFormAction = formSubmitIntentUrl(e.target, location.href, document.baseURI || location.href);
       if (grantsTabNavigationAuthority({
         isTopFrame: topFrame,
         isTrustedInput: e.isTrusted,
@@ -2196,7 +2262,7 @@ window.addEventListener(
             reasons: ["late_async_child_frame"],
           });
           showToast({
-            message: `NavSentinel warning: ${host} is a known malicious domain`,
+            message: `Heedline warning: ${host} is a known malicious domain`,
             timeoutMs: 8000,
           });
         } catch {

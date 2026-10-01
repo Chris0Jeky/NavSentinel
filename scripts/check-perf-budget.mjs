@@ -76,6 +76,8 @@ const budgets = [
     // allowance for feature growth. Their integration moves signal derivation
     // behind #601's lazy boundary: 66.4KB interaction-only and 66.9KB research.
     // The next capture growth slice must split or trim this chunk again.
+    // Trimmed 66.0 -> 64.2KB interaction-only by loading the opt-in debug panel
+    // lazily; that margin is for the pending #886 click-concealment stack.
     maxKB: 67,
   },
   {
@@ -112,7 +114,12 @@ const budgets = [
   {
     label: "options JS",
     glob: "assets/options.html-*.js",
-    maxKB: 15,
+    // Raised 15 -> 15.5KB for the swarm quality wave 1 security guards: the
+    // ~5MB settings-import cap plus the __proto__/constructor/prototype path
+    // guard measure 15.2KB on Linux CI against a 15KB ceiling that PR #935's
+    // trim had filled to 15350B. The options page loads only when opened, so
+    // this adds no page-load cost; total dist stays at 96% of its budget.
+    maxKB: 15.5,
   },
   // I-01: Per-chunk budgets for shared modules visible in dist/assets/
   {

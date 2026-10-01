@@ -11,6 +11,7 @@ import {
   findSettingsConflicts,
   describeJsBehaviorCapability,
   fmtTime,
+  ImportSizeLimitError,
   runClearBehaviouralData,
   runClearStats,
   runImportFlow,
@@ -768,7 +769,7 @@ exportBtn.addEventListener("click", async () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `navsentinel-suite-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  a.download = `heedline-suite-export-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -800,6 +801,19 @@ async function refreshImportedSettings(replaceDraft = false): Promise<void> {
   await refreshDomainProfiles();
 }
 
+/**
+ * Upper bound on the import payload read before JSON.parse (~16MB).
+ * Must admit any backup the extension itself could have produced: a suite
+ * export carries up to 5,000 event-log entries at ~17KB worst-case each
+ * (5 x 2048-char string fields + 4KiB extra + 32 x 80-char reasons), and is
+ * ultimately bounded by what chrome.storage.local can persist (QUOTA_BYTES,
+ * 10MiB default) plus JSON framing -- so a 5MB cap rejects valid large
+ * histories and breaks export/import round-tripping. 16MiB clears that
+ * ceiling with headroom while still rejecting hostile hundred-MB files
+ * before they can stall the page in the parser. (#974 R1)
+ */
+const MAX_IMPORT_FILE_BYTES = 16 * 1024 * 1024;
+
 importFileEl.addEventListener("change", async () => {
   const f = importFileEl.files?.[0];
   if (!f || writes.importPending) return;
@@ -817,7 +831,21 @@ importFileEl.addEventListener("change", async () => {
       importApplying = true;
       importIncoming = null;
       await runImportFlow({
-        importPayload: async () => importAll(JSON.parse(await f.text())),
+        importPayload: async () => {
+          // Guard JSON.parse against oversized files: reject past the cap before
+          // parsing so a huge file cannot stall the page in the parser. The File
+          // size check avoids the read entirely; the text-length check covers
+          // blobs that misreport size. Either rejection is classified as a
+          // size-limit failure via runImportFlow, leaving the draft untouched.
+          if (typeof f.size === "number" && f.size > MAX_IMPORT_FILE_BYTES) {
+            throw new ImportSizeLimitError();
+          }
+          const text = await f.text();
+          if (text.length > MAX_IMPORT_FILE_BYTES) {
+            throw new ImportSizeLimitError();
+          }
+          return importAll(JSON.parse(text));
+        },
         refresh: refreshImportedSettings,
         flash: (msg, tone) => flashStatus(statusEl, msg, tone),
         isDeliveryFailure: (e) => e instanceof PromptOutcomeDeliveryError,
