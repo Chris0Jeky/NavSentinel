@@ -1,7 +1,7 @@
 /**
  * #936: an unrelated A-scoped click must not survive a child-only replay to B.
  * The authored page, not test-injected code, invokes both submissions. Requests
- * to the inert escape sink are recorded and aborted to contain the baseline;
+ * to the inert escape sink are recorded and answered with no content to contain the baseline;
  * reaching that sink is a failure even when the browser would later roll back.
  */
 import { chromium, expect, test, type BrowserContext } from "@playwright/test";
@@ -42,7 +42,7 @@ async function journey(options: {
       const receipt = new URL(request.url()).searchParams.get("receipt");
       if (receipt !== "child" && receipt !== "escape") throw new Error("Unrecognized form receipt");
       receipts.push(receipt);
-      if (receipt === "escape") await route.abort();
+      if (receipt === "escape") await route.fulfill({ status: 204, body: "" });
       else await route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Child sink</title>" });
     });
     const page = await context.newPage();

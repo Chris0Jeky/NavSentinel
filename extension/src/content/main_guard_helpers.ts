@@ -322,6 +322,21 @@ export function applyIsolatedRedirectAllowance(
 }
 
 /**
+ * Retire the current gesture before child-only replay invokes page callbacks.
+ * This is deliberately independent of the replay's URL: an unrelated scoped
+ * grant must not survive just because consumeRedirect would reject that URL.
+ * Keep pendingFollowUps so a delayed follow-up to an in-task arm cannot reset
+ * the retired budget. Only a fresh gesture or independent grant can renew it.
+ */
+export function exhaustRedirectAllowance(
+  state: RedirectAllowanceState,
+  limits: RedirectAllowanceLimits,
+): void {
+  state.count = limits.maxPerGesture;
+  state.sameTaskArmed = false;
+}
+
+/**
  * Spend one redirect for a submission to `actionUrl` if either allowance
  * covers it and the gesture budget is not exhausted.
  */

@@ -22,6 +22,7 @@ import {
   createBlockedActionIdAllocator,
   endSameTaskRedirect,
   enforceMapSizeCap,
+  exhaustRedirectAllowance,
   matchesAnchorOpenIntent,
   pruneTimestampWindow,
   resolveChildNavigable,
@@ -459,18 +460,6 @@ function maybeArmPopupIntent(
 
 function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "none" {
   return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
-}
-
-/**
- * Claim a matching redirect allowance for a direct-child replay and exhaust the
- * rest of that gesture before page-owned `formdata` callbacks run. A later
- * isolated-world follow-up for the same click preserves the exhausted count, so
- * neither a nested callback nor a second same-task form can redirect elsewhere.
- */
-function exhaustMatchingRedirectAllowance(actionUrl: string): void {
-  if (consumeRedirectAllowance(actionUrl) === "none") return;
-  redirectAllowance.count = REDIRECT_LIMITS.maxPerGesture;
-  redirectAllowance.sameTaskArmed = false;
 }
 
 function pruneBlockedActions(): void {
@@ -1028,11 +1017,11 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
     return { status: "blocked", actionUrl: initialState?.actionUrl ?? resolveFormAction(form) };
   }
 
-  // Reserve this exact child authority before constructing FormData, which
+  // Retire any current redirect authority before constructing FormData, which
   // dispatches page-controlled callbacks synchronously. Otherwise a callback
   // can spend the click's still-live URL-only allowance on `_top`, `_blank`, or
   // a second same-action form while this replay is still being validated.
-  exhaustMatchingRedirectAllowance(initialState.actionUrl);
+  exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS);
 
   childReplayInProgress.add(form);
   try {
