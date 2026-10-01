@@ -1,0 +1,36 @@
+name: Finalize typechecked malformed-mode fixture
+on:
+  push:
+    branches: [fix/release-object-identity-20261001]
+    paths: [.github/workflows/finalize-mode-fixture-type.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'Chris0Jeky/NavSentinel' && github.ref == 'refs/heads/fix/release-object-identity-20261001'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Apply one verified fixture correction
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = c333771594eb80e3f0ee100f6986bd48e4723bb1
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('tests/release-object-identity.test.ts')
+          text = source.read_text()
+          assert text.count('rawTree[0] |= 0x80;') == 1
+          source.write_text(text.replace('rawTree[0] |= 0x80;', 'rawTree[0] = rawTree.readUInt8(0) | 0x80;'))
+          PY
+          git add tests/release-object-identity.test.ts
+          git rm .github/workflows/finalize-mode-fixture-type.yml
+          git diff --cached --check
+          test "$(git write-tree)" = 2653614c71b97f01b9ed75593855896e6315988c
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(release): use checked Buffer access in malformed-mode fixture'
+          git push origin HEAD:refs/heads/fix/release-object-identity-20261001
