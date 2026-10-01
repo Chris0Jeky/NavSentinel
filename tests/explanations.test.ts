@@ -54,6 +54,7 @@ const KNOWN_MUTATION_CODES = [
   "overlay_detected",
   "overlay_injected",
   "form_action_changed",
+  "form_method_changed",
   "password_injected",
   "suspicious_iframe",
 ];

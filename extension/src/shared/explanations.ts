@@ -49,6 +49,7 @@ const EXPLANATIONS: Record<string, string> = {
   overlay_detected: "Suspicious foreground overlay found",
   overlay_injected: "A suspicious overlay was injected after the page loaded",
   form_action_changed: "A form's submission target was changed after page load",
+  form_method_changed: "A form switched from POST to GET after page load",
   password_injected: "A password field was injected into an existing form",
   suspicious_iframe: "A suspicious iframe was injected after the page loaded",
 
