@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 
 /**
  * The MAIN-world one-shot open allowance must be bound to the authorized URL.
@@ -11,8 +12,9 @@ import { describe, expect, it } from "vitest";
  * MAIN prompt as the only gate. (#851)
  *
  * Source-level structural suite in the #389/#847 style: `main_guard` has
- * import-time side effects and is never imported by unit tests (see the
- * bridge-race model note). Fails against the pre-fix source, where
+ * import-time side effects. The real bridge dispatch suite separately covers
+ * actual one-shot behavior with native navigation sinks stubbed. This suite
+ * fails against the pre-fix source, where
  * `setAllowOnce()`/`consumeOpenAllowance()` took no URL and both call sites
  * were bare.
  */
@@ -50,7 +52,23 @@ describe("allow-once open allowance is URL-bound (#851)", () => {
   });
 
   it("passes the attempted URL from the open interceptor", () => {
-    expect(guard).toContain("const allowance = consumeOpenAllowance(url);");
+    // The short-circuit dispatcher no longer needs a temporary variable. Pin
+    // the actual call AST inside patchedOpen, not a spelling or comment.
+    const source = ts.createSourceFile("main_guard.ts", guard, ts.ScriptTarget.Latest, true);
+    const interceptor = source.statements.find((node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "patchedOpen");
+    expect(interceptor).toBeDefined();
+    const calls: ts.CallExpression[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+          node.expression.text === "consumeOpenAllowance") calls.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(interceptor!);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.arguments).toHaveLength(1);
+    const argument = calls[0]!.arguments[0]!;
+    expect(ts.isIdentifier(argument) && argument.text === "url").toBe(true);
   });
 
   it("coerces url, target and features once, before any check or the native open", () => {

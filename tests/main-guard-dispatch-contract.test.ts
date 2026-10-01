@@ -97,6 +97,19 @@ describe("native navigation dispatch through real main_guard", () => {
     expect(blocked[0]).not.toHaveProperty("features");
   });
 
+  it("a mismatched popup cannot spend the URL-bound one-shot allowance", async () => {
+    await send("ns-allow-once", { url: "https://example.test/approved" });
+    const start = messages.length;
+    window.open("https://example.test/other", "_blank");
+    window.open("https://example.test/approved", "_blank");
+    window.open("https://example.test/approved", "_blank");
+    await send("ns-config", { mode: "smart" });
+    expect(open.mock.calls).toEqual([["https://example.test/approved", "_blank", undefined]]);
+    const records = messages.slice(start);
+    expect(records.filter((message) => message.type === "ns-nav-allowed")).toHaveLength(1);
+    expect(records.filter((message) => message.type === "ns-nav-blocked")).toHaveLength(2);
+  });
+
   it("forwards off-mode popups with the original optional arguments", async () => {
     await send("ns-config", { mode: "off" });
     window.open();
