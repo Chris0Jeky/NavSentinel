@@ -95,7 +95,43 @@ describe("Branded Chrome browser-gate trigger", () => {
     expect(source).toContain(
       "PULL_REQUEST_HEAD: ${{ github.event.pull_request.head.sha || '' }}",
     );
-    expect(source).toContain("checkout_head=%s");
-    expect(source).toContain('"$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
+    expect(source).toContain(
+      "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+    );
+    expect(source).toContain(
+      "EXPECTED_CHECKOUT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+    );
+    expect(source).toContain('checkout_head=$(git rev-parse HEAD)');
+    expect(source).toContain(String.raw`checkout_head=%s\nevent_sha=%s`);
+    expect(source).toContain('"$checkout_head" "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
+    expect(source).not.toContain('\n            "$GITHUB_SHA" "$PULL_REQUEST_NUMBER"');
+  });
+
+  it("records Git reachability before, between and after branded E2E projects without weakening acceptance", () => {
+    const source = fs.readFileSync(
+      path.join(workflowDirectory, "branded-chrome-advisory.yml"),
+      "utf8",
+    );
+
+    expect(source).toContain("name: Record Git reachability before browser run");
+    expect(source).toContain(
+      "node scripts/record-git-reachability.mjs --phase before-e2e",
+    );
+    expect(source).toContain("for project in smoke regression phase2; do");
+    expect(source).toContain(
+      'npx playwright test -c playwright.branded.config.ts --project="$project"',
+    );
+    expect(source).toContain(
+      'node scripts/record-git-reachability.mjs --phase "after-$project"',
+    );
+    expect(source).toContain("name: Record Git reachability after browser run");
+    expect(source).toContain(
+      "node scripts/record-git-reachability.mjs --phase after-e2e",
+    );
+    expect(source).toContain("if: ${{ always() }}");
+    expect(source).toContain("test-results/git-reachability-before-e2e.txt");
+    expect(source).toContain("test-results/git-reachability-after-e2e.txt");
+    expect(source).toContain("xvfb-run -a npm run test:acceptance");
+    expect(source).not.toContain("continue-on-error: true");
   });
 });
