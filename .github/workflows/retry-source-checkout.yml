@@ -1,0 +1,45 @@
+name: Export immutable retry inputs
+on:
+  push:
+    branches: [audit/retry-20261001-source-checkout]
+    paths: [.github/workflows/retry-source-checkout.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.repository == 'Chris0Jeky/NavSentinel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: 17cd1d2880957073503b0d1f1f8843b21ac99e04
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+      - name: Export verified sources and tooling
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/retry-inputs
+          test "$(git rev-parse HEAD)" = 17cd1d2880957073503b0d1f1f8843b21ac99e04
+          git update-ref refs/heads/recovery-main 3665ae784577e79c60578fa5709d5c1849de3511
+          git update-ref refs/heads/recovery-integration 17cd1d2880957073503b0d1f1f8843b21ac99e04
+          git update-ref refs/heads/recovery-form b9dfed74f91d71761e36fe281a6c615ac90aac13
+          git bundle create /tmp/retry-inputs/sources.bundle refs/heads/recovery-main refs/heads/recovery-integration refs/heads/recovery-form
+          npm ci --no-fund --no-audit
+          tar -czf /tmp/retry-inputs/node_modules.tar.gz node_modules
+          cp package-lock.json /tmp/retry-inputs/package-lock.json
+          node --version > /tmp/retry-inputs/toolchain.txt
+          npm --version >> /tmp/retry-inputs/toolchain.txt
+          git rev-parse HEAD HEAD^{tree} >> /tmp/retry-inputs/toolchain.txt
+          cd /tmp/retry-inputs
+          sha256sum sources.bundle node_modules.tar.gz package-lock.json toolchain.txt > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: immutable-retry-inputs
+          path: /tmp/retry-inputs/
+          retention-days: 3
+          if-no-files-found: error
