@@ -41,6 +41,7 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/form-proof
           git rev-parse HEAD > /tmp/form-proof/red-head.txt
+          git diff > /tmp/form-proof/red-observer-only.patch
           status=0
           xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts --project=regression --retries=0 --reporter=json > /tmp/form-proof/red.json || status=$?
           test "$status" = 1
@@ -54,68 +55,53 @@ jobs:
           for(const s of r.suites) walk(s);
           JS
           git restore tests/e2e/form-submit-unmatched-replay.spec.ts
-      - name: Apply the reviewed five-file patch and pin the complete result tree
+      - name: Apply the exact reviewed patch and attest the result tree
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import base64,gzip,hashlib,subprocess
-          encoded='H4sIAAAAAAAC/9VabXPbxhH+jl9xYToJGQKgSFGyJEdxZMdpNLUSjyxPP2Qy4hE4krBBALkDRLGu/nuf3TuApF6pttOZajySCNzt7cuzu8+eHCeTiQiCaVIK2YvzyPROdDRLShWVlVaXMosvf5KlvPw5zRfhPBbjLRZ5SRara9GXw/7OeDAIw101ONyPX+yI/s7O/nDoBUGw1Wlet9vd7sQffxRBf2ff7w101ODUMMY'
-          # The patch is supplied as clear-text below; this obsolete transport
-          # variable is never decoded or executed.
+          import hashlib,subprocess
+          patch=subprocess.check_output(['git','show','6882593ff760df2af18ea6f50dae605e3dfb7e05:.reviewed-form-repair.patch'])
+          patch=patch.replace(b'\n diff --git ',b'\ndiff --git ')
+          assert hashlib.sha256(patch).hexdigest()=='8c8ac797ee54bf76ce1e80b1597baf185458b3afe3034cdfc5c60294633407b5'
+          subprocess.run(['git','apply','--index','-'],input=patch,check=True)
           PY
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-          helper=Path('extension/src/content/main_guard_helpers.ts')
-          s=helper.read_text()
-          marker='export function consumeRedirectAllowance('
-          pos=s.index(marker)
-          start=s.rfind('/**',0,pos)
-          block='''/**
-           * Retire the current gesture before child-only replay invokes page callbacks.
-           * This is deliberately independent of the replay's URL: an unrelated scoped
-           * grant must not survive just because consumeRedirect would reject that URL.
-           * Keep pendingFollowUps so a delayed follow-up to an in-task arm cannot reset
-           * the retired budget. Only a fresh gesture or independent grant can renew it.
-           */
-          export function exhaustRedirectAllowance(
-            state: RedirectAllowanceState,
-            limits: RedirectAllowanceLimits,
-          ): void {
-            state.count = limits.maxPerGesture;
-            state.sameTaskArmed = false;
-          }
-
-          '''
-          helper.write_text(s[:start]+block+s[start:])
-          p=Path('extension/src/content/main_guard.ts')
-          s=p.read_text().replace('  consumeRedirectAllowance,','  consumeRedirectAllowance,\n  exhaustRedirectAllowance,',1)
-          start=s.index('function exhaustMatchingRedirectAllowance(')
-          end=s.index('\n}\n',start)+3
-          s=s[:start]+s[end:]
-          s=s.replace('exhaustMatchingRedirectAllowance(snapshot.actionUrl);','exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS);')
-          p.write_text(s)
-          PY
-          git diff --check
-          npm run typecheck
-          npm run lint
-      - name: Verify the repaired real-browser matrix without retries
+          test "$(git write-tree)" = 4ab28e7ec5e5ed11fb8efba2ac9c05ba5c6d30f8
+          git diff --cached --check
+          git diff --cached > /tmp/form-proof/repaired.patch
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(security): retire unrelated live grants before child replay callbacks (#936)'
+          git rev-parse HEAD > /tmp/form-proof/green-head.txt
+          git rev-parse HEAD^{tree} > /tmp/form-proof/green-tree.txt
+      - run: npm run typecheck && npm run lint && npm test
+      - name: Verify the repaired browser matrix without retries
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('tests/e2e/form-submit-unmatched-replay.spec.ts')
-          p.write_text(p.read_text().replace('if (receipt === "escape") await route.abort();','if (receipt === "escape") await route.fulfill({ status: 204, body: "" });'))
-          PY
           npm run build
+          npm run check:perf-budget
           xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts tests/e2e/form-submit-child-replay.spec.ts tests/e2e/form-submit-child-authority.spec.ts --project=regression --retries=0 --reporter=json > /tmp/form-proof/green.json
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const r=JSON.parse(fs.readFileSync('/tmp/form-proof/green.json','utf8'));
+          assert.equal(r.stats.expected,14); assert.equal(r.stats.unexpected,0); assert.equal(r.stats.skipped,0); assert.equal(r.stats.flaky,0);
+          console.log(JSON.stringify(r.stats));
+          JS
+          npm run build:research-reputation
+          npm run check:perf-budget
+      - name: Publish verified repair without rewriting branch history
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 457110dd88b82cedd2f1e2b288de6ce7c94f2153
+          test "$(git rev-parse HEAD^{tree})" = 4ab28e7ec5e5ed11fb8efba2ac9c05ba5c6d30f8
+          git diff --exit-code
+          git push origin HEAD:refs/heads/codex/865-formdata-child-replay-20260925
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: form-repair-probe-${{ github.run_id }}
-          path: |
-            /tmp/form-proof/
+          name: form-repair-proof-${{ github.run_id }}
+          path: /tmp/form-proof/
           retention-days: 7
           if-no-files-found: error
