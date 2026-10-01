@@ -36,7 +36,7 @@ export interface ContentAnalysisResult {
  */
 export interface PageSnapshot {
   title: string;
-  /** Body text content (first ~5000 chars) */
+  /** Body text content (head+tail sample over ~5000 chars) */
   bodyText: string;
   /** Full innerHTML of <html> (first ~10000 chars) */
   htmlSnippet: string;
@@ -265,6 +265,16 @@ export const SCRIPT_TEXT_MAX = 30000;
  * (#786)
  */
 export const MAX_METAS = 100;
+
+/**
+ * Max chars of body text scanned for brand signals. Reduced via `boundedSample`
+ * (full head + short tail), the same tradeoff as the title channel: a head-only
+ * slice let a hostile page bury the brand/login text past the window with front
+ * padding, while the added tail only costs `max>>2` extra scanned chars.
+ * Content placed precisely in the omitted middle can still evade — inherent to
+ * the O(max) budget, backstopped by the title/imgSignals channels.
+ */
+export const MAX_BODY_TEXT = 5000;
 
 export interface KitFingerprint {
   name: string;
@@ -500,10 +510,10 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   // hidden honeypot doesn't trip the credential signals (#192).
   const hasPassword = hasVisiblePasswordField(doc);
 
-  // Body text
+  // Body text — head+tail sampled (see MAX_BODY_TEXT), never head-only.
   const body = doc.body;
   const bodyText = body
-    ? (body.innerText ?? body.textContent ?? "").slice(0, 5000).toLowerCase()
+    ? boundedSample(body.innerText ?? body.textContent ?? "", MAX_BODY_TEXT).toLowerCase()
     : "";
 
   // HTML snippet -- limited to HTML_SNIPPET_MAX chars to avoid serializing the

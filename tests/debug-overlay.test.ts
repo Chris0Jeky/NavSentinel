@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type DebugInfoType = import("../extension/src/content/debug_overlay").DebugInfo;
@@ -683,5 +685,17 @@ describe("debug_overlay", () => {
       expect(text).toContain("AdaptiveAdj: -20");
       expect(text).toContain("NavAnomaly: 55");
     });
+  });
+});
+
+describe("debug overlay loading", () => {
+  it("stays out of the always-on capture chunk (loaded only when debug is on)", () => {
+    const capture = fs.readFileSync(
+      path.resolve(process.cwd(), "extension/src/content/capture_isolated.ts"),
+      "utf8",
+    );
+    // A value import would inline the panel into capture_isolated (perf budget).
+    expect(capture).not.toMatch(/^import\s+(?!type\b)[^;]*from\s+"\.\/debug_overlay"/m);
+    expect(capture).toContain('import("./debug_overlay")');
   });
 });

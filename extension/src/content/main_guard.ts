@@ -19,10 +19,12 @@ import {
   armSameTaskRedirect,
   consumeRedirect,
   createRedirectAllowance,
+  createBlockedActionIdAllocator,
   endSameTaskRedirect,
   enforceMapSizeCap,
   matchesAnchorOpenIntent,
   pruneTimestampWindow,
+  resolveFormActionUrl,
   shouldEmitRapidPushState,
   type AnchorOpenIntent,
   type RedirectAllowanceLimits,
@@ -202,6 +204,8 @@ let pushStateTimestamps: number[] = [];
 // Cooldown anchor so a sustained rapid-pushState burst emits at most one alert per window,
 // not one per call (which would flood the priority bridge queue and drop ns-nav-blocked) (#302).
 let lastRapidPushStateEmitAt = 0;
+
+const allocateBlockedActionId = createBlockedActionIdAllocator();
 
 const blockedActions = new Map<
   string,
@@ -397,7 +401,12 @@ function consumeAnchorOpenIntent(url: string | undefined, target: string | undef
   if (mode !== "smart") return false;
   if (openCount >= MAX_OPENS_PER_GESTURE) return false;
   const event = anchorOpenIntentEvent;
-  if (!event || !matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), url, target, location.href)) return false;
+  // Resolve first: the match then compares absolute URLs, and an unresolvable
+  // URL never matches.
+  // An empty URL (about:blank) never matched a link's destination; keep it so.
+  const resolved = url === undefined || url.trim() === "" ? null : resolveAgainstBase(url);
+  if (!event || resolved === null) return false;
+  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved)) return false;
   try {
     // isTrusted is an unforgeable own property, and re-dispatching the saved
     // event with dispatchEvent() makes it false: a later replay cannot pose as
@@ -450,10 +459,6 @@ function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "n
   return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
 }
 
-function makeId(): string {
-  return `${Math.floor(nowMs())}-${Math.random().toString(16).slice(2)}`;
-}
-
 function pruneBlockedActions(): void {
   const now = nowMs();
   for (const [id, entry] of blockedActions) {
@@ -500,8 +505,9 @@ function postAllowed(params: { kind: string; url?: string; target?: string }): v
 function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQueryPrefix?: boolean }): void {
   if (url === undefined || String(url) === "") return;
   try {
-    const href = new URL(String(url), location.href).toString();
-    if (!href.startsWith("http:") && !href.startsWith("https:")) return;
+    // An unresolvable URL grants nothing.
+    const href = resolveAgainstBase(String(url));
+    if (href === null || (!href.startsWith("http:") && !href.startsWith("https:"))) return;
     postToIsolated("ns-allow-target-nav", {
       url: href,
       ttlMs: TARGET_NAV_TTL_MS,
@@ -525,7 +531,7 @@ function registerBlockedAction(params: {
   action: () => void;
 }): void {
   pruneBlockedActions();
-  const id = makeId();
+  const id = allocateBlockedActionId();
   blockedActions.set(id, {
     action: params.action,
     expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS,
@@ -560,6 +566,42 @@ const nativeEventPhase = capturedGetter<number>(Event.prototype, "eventPhase", (
 const nativeDefaultPrevented = capturedGetter<boolean>(Event.prototype, "defaultPrevented", () => false);
 const nativePreventDefault = Event.prototype.preventDefault;
 const nativeFormRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+// #900: the browser resolves a relative form action, window.open URL or link
+// against the document's base URL, and `<base href>` can move that to another
+// origin. The loader captures the platform `baseURI` getter before its async
+// import (scripts/content-loader-contract.mjs), because an early inline page
+// script could replace `Node.prototype.baseURI` before this module runs.
+// Without that capture, relative URLs get no base at all: they lose authority
+// rather than trust a getter the page may control.
+const earlyBaseURI = (globalThis as typeof globalThis & {
+  __navsentinelMainBaseURI?: (this: Node) => string;
+}).__navsentinelMainBaseURI;
+
+function documentBaseUrl(): string | null {
+  if (typeof earlyBaseURI !== "function") return null;
+  try {
+    const base = earlyBaseURI.call(document);
+    return typeof base === "string" && base !== "" ? base : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The absolute URL the browser would use now, or null when it cannot be resolved. */
+function resolveAgainstBase(url: string): string | null {
+  try {
+    return new URL(url).toString();
+  } catch {
+    // Relative: needs the captured base URL.
+  }
+  const base = documentBaseUrl();
+  if (base === null) return null;
+  try {
+    return new URL(url, base).toString();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Install a patched method on an object/prototype as a WRITABLE + CONFIGURABLE
@@ -735,14 +777,23 @@ function patchedOpen(
     return callNativeOpen(receiver, url, target, features);
   }
 
+  // #900: resolve once, against the base URL in force now, so the prompt shows
+  // and an approval opens the same absolute URL even if the page moves
+  // `<base href>` while the prompt waits. An empty URL keeps meaning about:blank.
+  const blockedUrl = url === undefined || url === "" ? url : resolveAgainstBase(url);
+  // An unresolvable URL (a non-hierarchical base such as `mailto:`, or no
+  // captured base) stays blocked with nothing to approve: the raw relative
+  // string must never reach a later native open, where it would resolve
+  // against whatever base exists then.
+  if (blockedUrl === null) return null;
   registerBlockedAction({
     kind: "window_open",
-    ...(url !== undefined ? { url: String(url) } : {}),
+    ...(blockedUrl !== undefined ? { url: blockedUrl } : {}),
     ...(target !== undefined ? { target } : {}),
     ...(features !== undefined ? { features } : {}),
     action: () => {
       recordWindowOpen();
-      callNativeOpen(receiver, url, target, features);
+      callNativeOpen(receiver, blockedUrl, target, features);
     }
   });
 
@@ -751,12 +802,7 @@ function patchedOpen(
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
   const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
-  if (!raw) return location.href;
-  try {
-    return new URL(raw, location.href).toString();
-  } catch {
-    return undefined;
-  }
+  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
 }
 
 /**

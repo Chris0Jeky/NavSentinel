@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   enforceMapSizeCap,
   pruneTimestampWindow,
   shouldEmitRapidPushState,
   gestureBranchEmissionBound,
+  createBlockedActionIdAllocator,
 } from "../extension/src/content/main_guard_helpers";
 // The REAL production constants (not a mirror), so the #377/F1 invariant below fails CI if a
 // future change to any of them would let the gesture branch flood the priority buffer.
@@ -21,6 +24,62 @@ import {
   isMainGuardAlertType,
   isFloodableAlertType,
 } from "../extension/src/content/bridge_outbound";
+
+describe("createBlockedActionIdAllocator (#933)", () => {
+  it("allocates distinct monotonic IDs without consulting ambient clock or randomness", () => {
+    const originalNow = Date.now;
+    const originalRandom = Math.random;
+    Date.now = () => {
+      throw new Error("allocator must not read Date.now");
+    };
+    Math.random = () => {
+      throw new Error("allocator must not read Math.random");
+    };
+
+    try {
+      const allocate = createBlockedActionIdAllocator();
+      expect([allocate(), allocate(), allocate()]).toEqual([
+        "blocked-action-1",
+        "blocked-action-2",
+        "blocked-action-3",
+      ]);
+    } finally {
+      Date.now = originalNow;
+      Math.random = originalRandom;
+    }
+  });
+
+  it("wires blockedActions through the monotonic allocator, not a page clock or random key", () => {
+    const source = readFileSync(resolve("extension/src/content/main_guard.ts"), "utf8");
+    const start = source.indexOf("function registerBlockedAction(");
+    const end = source.indexOf("const nativeProtoOpen", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+
+    const region = source.slice(start, end);
+    expect(source).toContain(
+      "const allocateBlockedActionId = createBlockedActionIdAllocator();",
+    );
+    expect(region).toContain("const id = allocateBlockedActionId();");
+    expect(region).not.toContain("Math.random");
+    expect(source).not.toContain("function makeId()");
+    expect(region.indexOf("const id = allocateBlockedActionId();")).toBeLessThan(
+      region.indexOf("blockedActions.set(id"),
+    );
+  });
+
+  it("remains collision-free beyond Number.MAX_SAFE_INTEGER", () => {
+    const allocate = createBlockedActionIdAllocator(9_007_199_254_740_991n);
+    expect(allocate()).toBe("blocked-action-9007199254740992");
+    expect(allocate()).toBe("blocked-action-9007199254740993");
+  });
+
+  it("keeps a large synchronous burst unique", () => {
+    const allocate = createBlockedActionIdAllocator();
+    const ids = Array.from({ length: 10_000 }, () => allocate());
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
 
 describe("enforceMapSizeCap (#301)", () => {
   const mapOf = (n: number) => {

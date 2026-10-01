@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>#900 - early baseURI getter tamper</title>
+  <script>
+    // Runs during parsing, while the MAIN-world guard is still being imported.
+    // It makes Node.prototype.baseURI claim the allowlisted localhost origin,
+    // while the real <base> below sends relative URLs to 127.0.0.2.
+    (() => {
+      const claimed = "http://localhost:" + location.port + "/";
+      Object.defineProperty(Node.prototype, "baseURI", {
+        configurable: true,
+        get() { return claimed; },
+      });
+      window.__claimedBase = claimed;
+    })();
+  </script>
+  <base href="http://127.0.0.2:9/" />
+</head>
+<body>
+  <h1>Early baseURI tamper (#900)</h1>
+  <p>The page's own baseURI getter lies; the guard must use the platform getter
+     it captured before its async import.</p>
+</body>
+</html>

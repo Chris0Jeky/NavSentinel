@@ -79,17 +79,49 @@ export function assertUiGuardRevision(content) {
 export const EARLY_MAIN_CLOCK =
   "try{const earlyNow=Date.now.bind(Date);Object.defineProperty(globalThis,'__navsentinelMainDateNow',{value:earlyNow,writable:false,configurable:false})}catch(_){}";
 
+// #900: the platform `Node.prototype.baseURI` getter, captured the same way.
+// The guard resolves relative form actions and window.open URLs against the
+// base URL; a getter an early page script replaced could report one base while
+// the browser submits against another. Only a real getter is stored.
+export const EARLY_MAIN_BASE_URI =
+  "try{const baseGetter=Object.getOwnPropertyDescriptor(Node.prototype,'baseURI').get;if(typeof baseGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainBaseURI',{value:baseGetter,writable:false,configurable:false})}catch(_){}";
+
+/** Every early native capture, in order: installed and asserted as one block. */
+export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}`;
+
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";
 
-/** Insert the early clock capture right after the loader's single 'use strict'. */
+/** Insert the early native captures right after the loader's single 'use strict'. */
 export function installEarlyMainClockText(generated) {
   if (generated.split(STRICT_MARKER).length !== 2 || !generated.includes(ASYNC_IMPORT)) {
     throw new Error("MAIN-world guard loader shape changed; early clock capture was not installed");
   }
-  const finalLoader = generated.replace(STRICT_MARKER, `${STRICT_MARKER}\n  ${EARLY_MAIN_CLOCK}`);
-  assertEarlyMainClock(finalLoader);
+  const finalLoader = generated.replace(STRICT_MARKER, `${STRICT_MARKER}\n  ${EARLY_MAIN_PRELUDE}`);
+  assertEarlyMainPrelude(finalLoader);
   return finalLoader;
+}
+
+/**
+ * The whole prelude must appear exactly once, directly after 'use strict', and
+ * before the first async import; each capture must appear exactly once too, so
+ * a stray second copy elsewhere in the loader is rejected (#900, #942).
+ */
+export function assertEarlyMainPrelude(loader) {
+  assertEarlyMainClock(loader);
+  const baseFirst = loader.indexOf(EARLY_MAIN_BASE_URI);
+  if (baseFirst < 0) throw new Error("MAIN-world guard loader is missing early baseURI capture");
+  if (loader.indexOf(EARLY_MAIN_BASE_URI, baseFirst + EARLY_MAIN_BASE_URI.length) >= 0) {
+    throw new Error("MAIN-world guard loader has more than one early baseURI capture");
+  }
+  const strict = loader.indexOf(STRICT_MARKER);
+  const prelude = loader.indexOf(EARLY_MAIN_PRELUDE);
+  if (prelude < 0 || loader.slice(strict + STRICT_MARKER.length, prelude).trim() !== "") {
+    throw new Error("MAIN-world early native prelude must directly follow 'use strict', in order");
+  }
+  if (prelude > loader.indexOf(ASYNC_IMPORT)) {
+    throw new Error("MAIN-world early native prelude must run before the async guard import");
+  }
 }
 
 /**

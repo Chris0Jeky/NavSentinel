@@ -101,7 +101,7 @@ async function pathExists(relativePath) {
 function unsafeFixtureFindings(value) {
   const text = typeof value === "string" ? value : JSON.stringify(value);
   const findings = [];
-  const urlPattern = /(?:https?:\/\/|(?<![A-Za-z0-9:+.}\-])\/\/)[^\s"'<>`)]+/giu;
+  const urlPattern = /(?:https?:\/\/|(?<![A-Za-z0-9:+.}-])\/\/)[^\s"'<>`)]+/giu;
   for (const match of text.matchAll(urlPattern)) {
     try {
       const hostname = new URL(match[0], "https://fixture.test").hostname.toLowerCase().replace(/^\[(.*)\]$/u, "$1");

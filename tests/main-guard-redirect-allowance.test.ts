@@ -6,10 +6,11 @@ import {
   consumeRedirect,
   createRedirectAllowance,
   endSameTaskRedirect,
+  resolveFormActionUrl,
   type RedirectAllowanceLimits,
   type RedirectAllowanceState,
 } from "../extension/src/content/main_guard_helpers";
-import { formSubmitIntentUrl } from "../extension/src/content/nav_authority";
+import { formSubmitIntentUrl, resolveDeclaredFormActionUrl } from "../extension/src/content/nav_authority";
 
 // #864: the MAIN world arms the form-submit allowance for a trusted click's own
 // task; the isolated world's `ns-allow` grant stays the authority afterwards.
@@ -263,5 +264,85 @@ describe("formSubmitIntentUrl (the isolated world's declared-action resolver)", 
     expect(formSubmitIntentUrl(clickTarget(`<div id="t" role="button">x</div>`, "#t"), base)).toBeNull();
     expect(formSubmitIntentUrl(clickTarget(`<button id="t">x</button>`, "#t"), base)).toBeNull();
     expect(formSubmitIntentUrl(null, base)).toBeNull();
+  });
+});
+
+// #900: Chromium submits a relative action to the document's base URL, and an
+// action that is missing, empty or only HTML whitespace to the document's own
+// URL (measured in Chromium with a cross-origin <base href>).
+// Both copies run every case: the isolated world keeps its own copy so the
+// MAIN-world guard does not load a shared chunk (see nav_authority.ts).
+describe.each([
+  ["resolveFormActionUrl (MAIN)", resolveFormActionUrl],
+  ["resolveDeclaredFormActionUrl (isolated)", resolveDeclaredFormActionUrl],
+])("%s (#900)", (_name, resolve) => {
+  const documentUrl = "https://site.test/app/page?q=1";
+  const baseUrl = "https://other.test/base/";
+
+  it("resolves a relative action against the base URL", () => {
+    expect(resolve("login", documentUrl, baseUrl)).toBe("https://other.test/base/login");
+    expect(resolve("/login", documentUrl, baseUrl)).toBe("https://other.test/login");
+    expect(resolve("https://abs.test/x", documentUrl, baseUrl)).toBe("https://abs.test/x");
+  });
+
+  it("sends a missing, empty or whitespace-only action to the document URL, not the base", () => {
+    for (const action of [null, undefined, "", " ", "\t\n ", "\f\r"]) {
+      expect(resolve(action, documentUrl, baseUrl)).toBe(documentUrl);
+    }
+  });
+
+  it("strips HTML whitespace around a non-empty action", () => {
+    expect(resolve("  login\n", documentUrl, baseUrl)).toBe("https://other.test/base/login");
+  });
+
+  it("returns null for an action that does not parse", () => {
+    expect(resolve("http://[", documentUrl, baseUrl)).toBeNull();
+  });
+});
+
+describe("resolveFormActionUrl without a captured base URL (#900)", () => {
+  // The MAIN world gets its base URL only from the loader's early getter
+  // capture. Without it a relative action has no trustworthy base.
+  const documentUrl = "https://site.test/app/page";
+
+  it("still resolves an absolute action and an empty one", () => {
+    expect(resolveFormActionUrl("https://abs.test/x", documentUrl, null)).toBe("https://abs.test/x");
+    expect(resolveFormActionUrl("", documentUrl, null)).toBe(documentUrl);
+    expect(resolveFormActionUrl(" ", documentUrl, null)).toBe(documentUrl);
+  });
+
+  it("leaves a relative action unresolved instead of guessing a base", () => {
+    expect(resolveFormActionUrl("login", documentUrl, null)).toBeNull();
+    expect(resolveFormActionUrl("/login", documentUrl, null)).toBeNull();
+  });
+
+  it("leaves a relative action unresolved against a non-hierarchical base", () => {
+    expect(resolveFormActionUrl("login", documentUrl, "data:text/plain,base")).toBeNull();
+  });
+});
+
+describe("formSubmitIntentUrl agrees with the MAIN-world resolver under <base> (#900)", () => {
+  const documentUrl = "https://site.test/app/page";
+  const baseUrl = "https://site.test/app/sub/";
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  // A child frame's click grant is restricted to the declared action and
+  // matched by exact string, so both worlds must resolve identically or a
+  // legitimate submit in a frame with <base> is prompted.
+  it.each([
+    [`<form action="pay"><button id="t">Pay</button></form>`, "https://site.test/app/sub/pay"],
+    [`<form action="/go"><input type="submit" id="t" formaction="alt"></form>`, "https://site.test/app/sub/alt"],
+    [`<form action="pay"><button id="t" formaction="">Pay</button></form>`, documentUrl],
+    [`<form action=" "><button id="t">Pay</button></form>`, documentUrl],
+    [`<form><button id="t">Pay</button></form>`, documentUrl],
+  ])("%s", (html, expected) => {
+    document.body.innerHTML = html;
+    const target = document.querySelector("#t")!;
+    const control = target as HTMLButtonElement | HTMLInputElement;
+    const raw = control.getAttribute("formaction") ?? control.form!.getAttribute("action");
+    expect(formSubmitIntentUrl(target, documentUrl, baseUrl)).toBe(expected);
+    expect(resolveFormActionUrl(raw, documentUrl, baseUrl)).toBe(expected);
   });
 });
