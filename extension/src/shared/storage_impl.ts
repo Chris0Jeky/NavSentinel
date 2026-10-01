@@ -64,6 +64,9 @@ export type SuiteSettingsUpdateMessage = {
 /** A worker response that preserves the current settings for conflict recovery. */
 export type SuiteSettingsUpdateResponse = SuiteSettings & { conflict?: true };
 
+/** A rejected worker write, serialized across the runtime message boundary (#891). */
+export type SuiteSettingsUpdateErrorResponse = { ok: false; error: string };
+
 /** Raised in an extension page when the worker rejects a stale Options patch. */
 export class SuiteSettingsConflictError extends Error {
   constructor(readonly settings: SuiteSettings) {
@@ -501,8 +504,21 @@ export async function handleSuiteSettingsUpdateMessage(
   return updateSuiteSettingsDirect(patch, expected);
 }
 
-function unwrapSuiteSettingsUpdate(response: SuiteSettingsUpdateResponse | undefined): SuiteSettings {
+function isSuiteSettingsUpdateError(
+  response: SuiteSettingsUpdateResponse | SuiteSettingsUpdateErrorResponse,
+): response is SuiteSettingsUpdateErrorResponse {
+  return "ok" in response && response.ok === false;
+}
+
+function unwrapSuiteSettingsUpdate(
+  response: SuiteSettingsUpdateResponse | SuiteSettingsUpdateErrorResponse | undefined,
+): SuiteSettings {
   if (!response) throw new Error("suite-settings update failed");
+  // The worker serializes an authorization/validation rejection so its reason
+  // survives the message boundary (#891).
+  if (isSuiteSettingsUpdateError(response)) {
+    throw new Error(response.error || "suite-settings update failed");
+  }
   if (response.conflict) {
     const { conflict: _conflict, ...settings } = response;
     throw new SuiteSettingsConflictError(settings);
@@ -515,7 +531,8 @@ export function updateSuiteSettings(partial: SuiteSettingsPatch, expected?: Suit
     // Do not fall back to a page-local write when delivery fails: it would revive
     // the lost-update race this worker boundary closes. (#558)
     return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial, ...(expected ? { expected } : {}) })
-      .then((response: SuiteSettingsUpdateResponse | undefined) => unwrapSuiteSettingsUpdate(response));
+      .then((response: SuiteSettingsUpdateResponse | SuiteSettingsUpdateErrorResponse | undefined) =>
+        unwrapSuiteSettingsUpdate(response));
   }
   // Non-extension test environments have no runtime messenger. Production page
   // contexts always do, and therefore always take the worker-owned path above.
@@ -907,8 +924,33 @@ function normalizeEventLog(value: unknown): EventLogEntry[] {
   return normalizeEventLogWithMetadata(value).entries;
 }
 
+let eventIdCounter = 0;
+
+/**
+ * Unique event ids: persistEventLogEntry dedups by id
+ * (`cur.filter((item) => item.id !== entry.id)`), so a collision silently
+ * drops the older event. The timestamp plus a per-context monotonic counter
+ * separates ids minted in the same millisecond; 96 bits of cryptographic
+ * randomness separate ids minted in different contexts.
+ *
+ * The isolated world keeps an identical copy (makeSilentNavEventId in
+ * content/capture_isolated.ts). Deliberately duplicated, not shared, following
+ * the nav_authority.ts precedent: a helper module imported across worlds makes
+ * the bundler split it into a chunk shared with the MAIN-world guard, which
+ * then loads one module later at document start.
+ */
 function makeId(): string {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  eventIdCounter = (eventIdCounter + 1) % 0xffffffff;
+  const unique = `${Date.now().toString(36)}_${eventIdCounter.toString(36)}`;
+  try {
+    const bytes = globalThis.crypto?.getRandomValues(new Uint8Array(12));
+    if (bytes) {
+      return `${unique}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+    }
+  } catch {
+    // Fall through to the Math.random fallback below.
+  }
+  return `${unique}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export async function getEventLog(): Promise<EventLogEntry[]> {

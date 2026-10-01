@@ -1,7 +1,9 @@
 # Git Workflow and Recovery
 
 This is recovery guidance, not an enforcement layer. Owner decision #499
-removed NavSentinel's repository-local command harness, tier, and hooks. Shared
+removed NavSentinel's repository-local command harness and hooks. It also
+removed the tier declaration, which a 2026-09-27 owner decision restored as a
+declaration only (`.agent-harness/tier.json`, T2, push and merge free). Shared
 runtime settings outside the repository may still apply, but this project does
 not verify or depend on them.
 

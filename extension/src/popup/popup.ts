@@ -167,7 +167,13 @@ function renderEvents(log: EventLogEntry[]): void {
     if (score > 0) {
       const scoreEl = document.createElement("div");
       scoreEl.className = `event-score event-score--${severityClass(score)}`;
-      scoreEl.innerHTML = `<div class="event-score-val">${score}</div><div class="event-score-label">${severityLabel(score)}</div>`;
+      const scoreVal = document.createElement("div");
+      scoreVal.className = "event-score-val";
+      scoreVal.textContent = String(score);
+      const scoreLabel = document.createElement("div");
+      scoreLabel.className = "event-score-label";
+      scoreLabel.textContent = severityLabel(score);
+      scoreEl.append(scoreVal, scoreLabel);
       row.appendChild(scoreEl);
     }
 
