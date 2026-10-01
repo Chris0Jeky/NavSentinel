@@ -57,6 +57,9 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // Content scripts share a hostile page DOM: head can be absent, and preload
+    // links expose extension module URLs. Keep lazy loading as native import().
+    modulePreload: false,
     rolldownOptions: {
       input: {
         onboarding: resolve(import.meta.dirname, "extension/src/onboarding/onboarding.html"),
