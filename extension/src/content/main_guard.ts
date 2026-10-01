@@ -1656,11 +1656,14 @@ function pathLooksCrossOrigin(newUrl: string): boolean {
  *
  * Returns a reason string if suspicious, or null if benign.
  */
-function checkPushStateSuspicious(url: string | URL | null | undefined, _method: string): string | null {
+function checkPushStateSuspicious(url: string | null | undefined, _method: string): string | null {
   if (isOff()) return null;
 
   const now = nowMs();
-  const urlStr = url !== null && url !== undefined ? String(url) : "";
+  // The caller coerces exactly once up front (#891). This must stay a plain
+  // read and never stringify the argument again: a stateful toString must not
+  // show the detector a different path than the one the native call committed.
+  const urlStr = url ?? "";
 
   // --- Rapid-fire detection ---
   // Track timestamps and prune old entries
@@ -1703,19 +1706,25 @@ function patchHistory(): void {
     this: History,
     data: unknown,
     unused: string,
-    url?: string | URL | null,
+    rawUrl?: string | URL | null,
   ): void {
+    // Coerce the URL exactly once, as patchedOpen does. A page-supplied object
+    // could otherwise stringify to one path for the native call and another
+    // for the detector or the telemetry below (#891). A template literal
+    // performs the same ToString as the native binding, including throwing on
+    // a Symbol; null/undefined keep their native semantics.
+    const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
     const result = nativePushState.call(this, data, unused, url);
     const reason = checkPushStateSuspicious(url, "pushState");
     if (reason) {
       postToIsolated("ns-pushstate-suspicious", {
         ts: nowMs(),
-        url: url !== null && url !== undefined ? String(url) : "",
+        url: url ?? "",
         method: "pushState",
         reason,
       });
       if (debug) {
-        console.debug("[NavSentinel] suspicious pushState", { url: String(url), reason });
+        console.debug("[NavSentinel] suspicious pushState", { url, reason });
       }
     }
     return result;
@@ -1725,19 +1734,21 @@ function patchHistory(): void {
     this: History,
     data: unknown,
     unused: string,
-    url?: string | URL | null,
+    rawUrl?: string | URL | null,
   ): void {
+    // Same single-coercion contract as patchedPushState (#891).
+    const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
     const result = nativeReplaceState.call(this, data, unused, url);
     const reason = checkPushStateSuspicious(url, "replaceState");
     if (reason) {
       postToIsolated("ns-pushstate-suspicious", {
         ts: nowMs(),
-        url: url !== null && url !== undefined ? String(url) : "",
+        url: url ?? "",
         method: "replaceState",
         reason,
       });
       if (debug) {
-        console.debug("[NavSentinel] suspicious replaceState", { url: String(url), reason });
+        console.debug("[NavSentinel] suspicious replaceState", { url, reason });
       }
     }
     return result;
