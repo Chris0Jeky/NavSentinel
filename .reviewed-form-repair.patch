@@ -1,0 +1,185 @@
+diff --git a/docs/Architecture_and_Data_Flow.md b/docs/Architecture_and_Data_Flow.md
+index 1a410b22..3e296d70 100644
+--- a/docs/Architecture_and_Data_Flow.md
++++ b/docs/Architecture_and_Data_Flow.md
+@@ -106,12 +106,21 @@ It captures blocked or replayable navigation attempts, clipboard write metadata,
+   `action` or `formaction`. A child frame's same-task submit therefore stays
+   gated, as before #864, while the same submit one task later passes.
+ 
+-A form posted into the page's own named iframe still needs an allowance (#865,
+-open). An exemption that checks the target before the `submit` and `formdata`
+-events is unsound. Handlers for those events run after the check and before the
+-browser resolves the target. They can retarget the post to `_top`, or give the
+-top window the child's name, and so navigate the tab without a prompt. The
+-regression fixture `gym/form-submit-gesture-task.html` pins both variants.
++Legacy `form.submit()` has one additional child-only path (#865): a connected
++form in the current document may submit to its own named direct child without a
++redirect allowance. Before calling page-owned `formdata` handlers, the guard
++retires the current redirect budget even when its URL differs from the replay's.
++It materializes the finalized payload without navigating, then requires the same
++direct-child WindowProxy, target name, action, method, encoding and character set.
++A form in an extension-owned closed shadow root replays those entries only after
++one final identity/state check. The page sees its original `formdata` event once;
++no top-level rollback allowance is granted for this child-only replay.
++
++Retargeting, name theft, replacement, re-entry, unsupported state, or failed
++revalidation remains blocked through the existing prompt path. `requestSubmit()`
++does not get this exemption: preserving its native trusted-submit cancellation
++semantics needs a separate design. The broader MAIN-world prototype/early-loader
++boundary remains tracked in #896; self-target callback escapes remain #898.
+ 
+ #### `location.assign` / `location.replace` are deliberately NOT patched (#458)
+ 
+ diff --git a/extension/src/content/main_guard.ts b/extension/src/content/main_guard.ts
+index ed92a25a..cf224439 100644
+--- a/extension/src/content/main_guard.ts
++++ b/extension/src/content/main_guard.ts
+@@ -22,6 +22,7 @@ import {
+   createBlockedActionIdAllocator,
+   endSameTaskRedirect,
+   enforceMapSizeCap,
++  exhaustRedirectAllowance,
+   matchesAnchorOpenIntent,
+   pruneTimestampWindow,
+   resolveChildNavigable,
+@@ -461,18 +462,6 @@ function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "n
+   return consumeRedirect(redirectAllowance, nowMs(), actionUrl, REDIRECT_LIMITS) ? "allowed" : "none";
+ }
+ 
+-/**
+- * Claim a matching redirect allowance for a direct-child replay and exhaust the
+- * rest of that gesture before page-owned `formdata` callbacks run. A later
+- * isolated-world follow-up for the same click preserves the exhausted count, so
+- * neither a nested callback nor a second same-task form can redirect elsewhere.
+- */
+-function exhaustMatchingRedirectAllowance(actionUrl: string): void {
+-  if (consumeRedirectAllowance(actionUrl) === "none") return;
+-  redirectAllowance.count = REDIRECT_LIMITS.maxPerGesture;
+-  redirectAllowance.sameTaskArmed = false;
+-}
+-
+ function pruneBlockedActions(): void {
+   const now = nowMs();
+   for (const [id, entry] of blockedActions) {
+@@ -1028,11 +1017,11 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
+     return { status: "blocked", actionUrl: initialState?.actionUrl ?? resolveFormAction(form) };
+   }
+ 
+-  // Reserve this exact child authority before constructing FormData, which
++  // Retire any current redirect authority before constructing FormData, which
+   // dispatches page-controlled callbacks synchronously. Otherwise a callback
+   // can spend the click's still-live URL-only allowance on `_top`, `_blank`, or
+   // a second same-action form while this replay is still being validated.
+-  exhaustMatchingRedirectAllowance(initialState.actionUrl);
++  exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS);
+ 
+   childReplayInProgress.add(form);
+   try {
+diff --git a/extension/src/content/main_guard_helpers.ts b/extension/src/content/main_guard_helpers.ts
+index 81895859..e724c8aa 100644
+--- a/extension/src/content/main_guard_helpers.ts
++++ b/extension/src/content/main_guard_helpers.ts
+@@ -321,6 +321,21 @@ export function applyIsolatedRedirectAllowance(
+   state.target = grant.target;
+ }
+ 
++/**
++ * Retire the current gesture before child-only replay invokes page callbacks.
++ * This is deliberately independent of the replay's URL: an unrelated scoped
++ * grant must not survive just because consumeRedirect would reject that URL.
++ * Keep pendingFollowUps so a delayed follow-up to an in-task arm cannot reset
++ * the retired budget. Only a fresh gesture or independent grant can renew it.
++ */
++export function exhaustRedirectAllowance(
++  state: RedirectAllowanceState,
++  limits: RedirectAllowanceLimits,
++): void {
++  state.count = limits.maxPerGesture;
++  state.sameTaskArmed = false;
++}
++
+ /**
+  * Spend one redirect for a submission to `actionUrl` if either allowance
+  * covers it and the gesture budget is not exhausted.
+diff --git a/tests/e2e/form-submit-unmatched-replay.spec.ts b/tests/e2e/form-submit-unmatched-replay.spec.ts
+index 6a2dca27..030d262d 100644
+--- a/tests/e2e/form-submit-unmatched-replay.spec.ts
++++ b/tests/e2e/form-submit-unmatched-replay.spec.ts
+@@ -1,7 +1,7 @@
+ /**
+  * #936: an unrelated A-scoped click must not survive a child-only replay to B.
+  * The authored page, not test-injected code, invokes both submissions. Requests
+- * to the inert escape sink are recorded and aborted to contain the baseline;
++ * to the inert escape sink are recorded and answered with no content to contain the baseline;
+  * reaching that sink is a failure even when the browser would later roll back.
+  */
+ import { chromium, expect, test, type BrowserContext } from "@playwright/test";
+@@ -42,7 +42,7 @@ async function journey(options: {
+       const receipt = new URL(request.url()).searchParams.get("receipt");
+       if (receipt !== "child" && receipt !== "escape") throw new Error("Unrecognized form receipt");
+       receipts.push(receipt);
+-      if (receipt === "escape") await route.abort();
++      if (receipt === "escape") await route.fulfill({ status: 204, body: "" });
+       else await route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Child sink</title>" });
+     });
+     const page = await context.newPage();
+diff --git a/tests/redirect-allowance-exhaustion.test.ts b/tests/redirect-allowance-exhaustion.test.ts
+new file mode 100644
+index 00000000..f62ac7f5
+--- /dev/null
++++ b/tests/redirect-allowance-exhaustion.test.ts
+@@ -0,0 +1,54 @@
++import { describe, expect, it } from "vitest";
++import {
++  applyIsolatedRedirectAllowance, armSameTaskRedirect, consumeRedirect,
++  createRedirectAllowance, exhaustRedirectAllowance,
++} from "../extension/src/content/main_guard_helpers";
++
++const limits = { ttlMs: 1500, maxPerGesture: 2, maxPendingFollowUps: 8 };
++const A = "https://declared.example/a";
++const B = "https://replay.example/b";
++const top = { restrict: false, target: "" };
++const scoped = { restrict: true, target: A };
++
++describe("retire redirect authority before child replay (#936)", () => {
++  for (const scope of [top, scoped]) {
++    it(`exhausts an existing ${scope.restrict ? "URL-bound" : "unrestricted"} grant even for an unrelated replay`, () => {
++      const state = createRedirectAllowance();
++      applyIsolatedRedirectAllowance(state, 100, { ...scope, allowRedirect: true }, limits);
++      if (scope.restrict) expect(consumeRedirect(state, 101, B, limits)).toBe(false);
++      exhaustRedirectAllowance(state, limits);
++      expect(consumeRedirect(state, 102, A, limits)).toBe(false);
++      expect(consumeRedirect(state, 102, B, limits)).toBe(false);
++    });
++  }
++
++  it("does not let an armed click's deferred follow-up renew the exhausted budget", () => {
++    const state = createRedirectAllowance();
++    armSameTaskRedirect(state, 100, 23, top, limits);
++    exhaustRedirectAllowance(state, limits);
++    expect(consumeRedirect(state, 101, A, limits)).toBe(false);
++    applyIsolatedRedirectAllowance(state, 102, { ...top, allowRedirect: true, gestureTs: 23 }, limits);
++    expect(consumeRedirect(state, 103, A, limits)).toBe(false);
++  });
++
++  it("allows a genuinely fresh click after the replay to start a new budget", () => {
++    const state = createRedirectAllowance();
++    armSameTaskRedirect(state, 100, 23, top, limits);
++    exhaustRedirectAllowance(state, limits);
++    applyIsolatedRedirectAllowance(state, 102, { ...top, allowRedirect: true, gestureTs: 23 }, limits);
++    armSameTaskRedirect(state, 200, 24, top, limits);
++    expect(consumeRedirect(state, 201, A, limits)).toBe(true);
++    applyIsolatedRedirectAllowance(state, 202, { ...top, allowRedirect: true, gestureTs: 24 }, limits);
++    expect(consumeRedirect(state, 203, A, limits)).toBe(true);
++    expect(consumeRedirect(state, 203, A, limits)).toBe(false);
++  });
++
++  it("is idempotent without a grant and does not create navigation authority", () => {
++    const state = createRedirectAllowance();
++    exhaustRedirectAllowance(state, limits);
++    exhaustRedirectAllowance(state, limits);
++    expect(consumeRedirect(state, 1, A, limits)).toBe(false);
++    expect(state.until).toBe(0);
++    expect(state.pendingFollowUps).toEqual([]);
++  });
++});
