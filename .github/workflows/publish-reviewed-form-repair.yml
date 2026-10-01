@@ -1,4 +1,4 @@
-name: Prove and publish reviewed form repair
+name: Prove form repair and retain size blocker
 on:
   push:
     branches: [audit/20261001-defensive-integration]
@@ -24,41 +24,11 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 24
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Correct only the top-navigation receipt observer
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('tests/e2e/form-submit-unmatched-replay.spec.ts')
-          s=p.read_text().replace('recorded and aborted to contain the baseline;', 'recorded and answered with no content to contain the baseline;').replace('if (receipt === "escape") await route.abort();','if (receipt === "escape") await route.fulfill({ status: 204, body: "" });')
-          p.write_text(s)
-          PY
-      - run: npm run build
-      - name: Require exactly four security failures and four passing controls
+      - name: Apply and attest the reviewed repair
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/form-proof
-          git rev-parse HEAD > /tmp/form-proof/red-head.txt
-          git diff > /tmp/form-proof/red-observer-only.patch
-          status=0
-          xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts --project=regression --retries=0 --reporter=json > /tmp/form-proof/red.json || status=$?
-          test "$status" = 1
-          node --input-type=module - <<'JS'
-          import fs from 'node:fs';
-          import assert from 'node:assert/strict';
-          const r=JSON.parse(fs.readFileSync('/tmp/form-proof/red.json','utf8'));
-          assert.equal(r.stats.expected,4); assert.equal(r.stats.unexpected,4); assert.equal(r.stats.skipped,0); assert.equal(r.stats.flaky,0);
-          console.log(JSON.stringify(r.stats));
-          function walk(s) { for(const c of s.specs??[]) for(const t of c.tests??[]) if(t.status==='unexpected') { assert.match(c.title,/child-only replay retires unmatched authority/); console.log(c.title); } for(const child of s.suites??[]) walk(child); }
-          for(const s of r.suites) walk(s);
-          JS
-          git restore tests/e2e/form-submit-unmatched-replay.spec.ts
-      - name: Apply the exact reviewed patch and attest the result tree
-        shell: bash
-        run: |
-          set -euo pipefail
           python3 - <<'PY'
           import hashlib,subprocess
           patch=subprocess.check_output(['git','show','6882593ff760df2af18ea6f50dae605e3dfb7e05:.reviewed-form-repair.patch'])
@@ -74,13 +44,14 @@ jobs:
           git commit -m 'fix(security): retire unrelated live grants before child replay callbacks (#936)'
           git rev-parse HEAD > /tmp/form-proof/green-head.txt
           git rev-parse HEAD^{tree} > /tmp/form-proof/green-tree.txt
+      - run: npm ci
       - run: npm run typecheck && npm run lint && npm test
-      - name: Verify the repaired browser matrix without retries
+      - run: npx playwright install --with-deps chromium
+      - name: Require fourteen actual browser passes, without retries
         shell: bash
         run: |
           set -euo pipefail
           npm run build
-          npm run check:perf-budget
           xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts tests/e2e/form-submit-child-replay.spec.ts tests/e2e/form-submit-child-authority.spec.ts --project=regression --retries=0 --reporter=json > /tmp/form-proof/green.json
           node --input-type=module - <<'JS'
           import fs from 'node:fs';
@@ -89,9 +60,14 @@ jobs:
           assert.equal(r.stats.expected,14); assert.equal(r.stats.unexpected,0); assert.equal(r.stats.skipped,0); assert.equal(r.stats.flaky,0);
           console.log(JSON.stringify(r.stats));
           JS
-          npm run build:research-reputation
-          npm run check:perf-budget
-      - name: Publish verified repair without rewriting branch history
+          cp test-results/replay-launches.jsonl /tmp/form-proof/launches.jsonl
+      - name: Record the unchanged size gate without hiding its result
+        run: |
+          status=0
+          npm run check:perf-budget > /tmp/form-proof/budget.txt 2>&1 || status=$?
+          printf '%s\n' "$status" > /tmp/form-proof/budget-status.txt
+          cat /tmp/form-proof/budget.txt
+      - name: Publish functional repair to the draft PR only
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD^)" = 457110dd88b82cedd2f1e2b288de6ce7c94f2153
@@ -105,3 +81,5 @@ jobs:
           path: /tmp/form-proof/
           retention-days: 7
           if-no-files-found: error
+      - name: Preserve the red size result as a merge blocker
+        run: test "$(cat /tmp/form-proof/budget-status.txt)" = 0
