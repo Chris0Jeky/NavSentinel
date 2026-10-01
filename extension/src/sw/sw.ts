@@ -30,6 +30,7 @@ import {
   isBehaviouralResetMessage,
   resumeInterruptedBehaviouralReset,
 } from "../shared/behavioural_reset";
+import { handleSmartDefaultCooldownMessage } from "../shared/smart_defaults";
 import { CHAIN_STALE_MS, RedirectChainTracker } from "../shared/redirect_chain";
 import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
@@ -667,6 +668,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });
+    return true;
+  }
+
+  if ((message as { type?: unknown }).type === "ns-smart-default-cooldown") {
+    void handleSmartDefaultCooldownMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((error) => sendResponse?.({ ok: false, error: error instanceof Error ? error.message : String(error) }));
     return true;
   }
 
