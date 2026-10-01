@@ -68,6 +68,16 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
+              // The worker broker adds a consumer to this shared module (#976).
+              // Keep it separate from OAuth/reputation instead of letting the
+              // automatic grouping fuse unrelated code under the OAuth budget.
+              // This remains a static import and is covered by total-dist limits.
+              name: "smart_defaults",
+              test: /[\\/]src[\\/]shared[\\/]smart_defaults\.ts$/,
+              entriesAware: false,
+              priority: 10
+            },
+            {
               // Keep Options presentation/operation helpers separate as the
               // settings editor grows; total-dist budget still covers both.
               name: "options-model",
