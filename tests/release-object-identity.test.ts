@@ -77,6 +77,17 @@ describe.each<ObjectFormat>(["sha1", "sha256"])("release object identity (%s)", 
     expect(assertReleaseSnapshotUnchanged(snapshot)).toBe(true);
   });
 
+  it("rejects a hash-valid tree whose non-ASCII mode resembles a supported mode", () => {
+    const root = repository(format);
+    const rawTree = git(root, ["cat-file", "tree", "HEAD^{tree}"]);
+    rawTree[0] |= 0x80;
+    const tree = git(root, ["hash-object", "--literally", "-w", "-t", "tree", "--stdin"], rawTree).toString().trim();
+    const commitBody = git(root, ["cat-file", "commit", "HEAD"]).toString().replace(/^tree [0-9a-f]+/u, `tree ${tree}`);
+    const commit = git(root, ["hash-object", "-w", "-t", "commit", "--stdin"], Buffer.from(commitBody)).toString().trim();
+    git(root, ["update-ref", "refs/heads/main", commit]);
+    expect(() => assertExactCommittedInputs(root)).toThrow(/unsupported tracked mode|malformed tree/i);
+  });
+
   it("rejects a substituted blob even when raw worktree bytes match it", () => {
     const root = repository(format);
     const commit = oid(root, "HEAD");

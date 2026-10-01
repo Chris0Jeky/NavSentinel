@@ -299,7 +299,7 @@ function readTreeEntries(repositoryRoot, tree, environment) {
         if (space < offset || nul <= space + 1 || nul + 1 + oidBytes > body.length) {
           throw integrityError(`malformed tree object ${directory.oid}`);
         }
-        const mode = body.subarray(offset, space).toString("ascii");
+        const mode = body.subarray(offset, space).toString("utf8");
         const name = decodeUtf8Path(body.subarray(space + 1, nul));
         if (name.includes("/")) throw integrityError(`non-canonical tree entry '${name}'`);
         const relativePath = directory.path ? `${directory.path}/${name}` : name;
