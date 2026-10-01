@@ -165,6 +165,27 @@ describe("native navigation dispatch through real main_guard", () => {
       expect(native).not.toHaveBeenCalled();
     });
 
+    it(`replays a blocked ${method} once on action approval with no marker (#750)`, async () => {
+      const element = form();
+      const native = method === "submit" ? submit : requestSubmit;
+      const start = messages.length;
+      element[method]();
+      await send("ns-config", { mode: "smart" });
+      const blocked = messages.slice(start).find((message) => message.type === "ns-nav-blocked");
+      expect(blocked?.kind).toBe(method === "submit" ? "form_submit" : "form_request_submit");
+      expect(native).not.toHaveBeenCalled();
+      await send("ns-allow-action", { id: blocked!.id });
+      // Allow-Once replay invokes the captured native directly: submit()
+      // fires no submit event and carries no s:1-style marker, and none is
+      // required — the isolated world's ns-allow-nav pre-approval covers the
+      // SW commit for either submit flavor (sw.ts onCommittedHandler).
+      expect(native.mock.calls).toEqual(method === "submit" ? [[]] : [[undefined]]);
+      expect(native.mock.contexts).toEqual([element]);
+      // The approval is one-shot: the same id replays nothing further.
+      await send("ns-allow-action", { id: blocked!.id });
+      expect(native).toHaveBeenCalledTimes(1);
+    });
+
     it(`keeps native ${method} exceptions observable and preserves its argument count`, async () => {
       const element = form();
       const native = method === "submit" ? submit : requestSubmit;
