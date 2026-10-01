@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -58,10 +59,11 @@ function probe(configName: string, forceDiff = false) {
       pull_request: { title: "local provenance probe", number: 1, base: { sha: commits[1] } },
     }));
     const reportPath = path.join(directory, "report.json");
-    const config = path.join(checkout, "probe.config.ts");
+    // Preserve the repository's ESM config semantics, including import.meta.url.
+    const config = path.join(checkout, "probe.config.mts");
     fs.writeFileSync(config, `
-import base from ${JSON.stringify(path.join(root, configName))};
-import { defineConfig } from ${JSON.stringify(testModule)};
+import base from ${JSON.stringify(pathToFileURL(path.join(root, configName)).href)};
+import { defineConfig } from ${JSON.stringify(pathToFileURL(testModule).href)};
 export default defineConfig(base, {
   testDir: ".", testMatch: "probe.spec.cjs", testIgnore: [],
   projects: [{ name: "checkout-probe", testMatch: "probe.spec.cjs" }],
