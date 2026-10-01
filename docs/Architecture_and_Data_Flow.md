@@ -110,6 +110,11 @@ Legacy `form.submit()` has one additional child-only path (#865): a connected
 form in the current document may submit to its own named direct child without a
 redirect allowance. Before calling page-owned `formdata` handlers, the guard
 retires the current redirect budget even when its URL differs from the replay's.
+A captured native Event timestamp also records a monotonic retirement boundary:
+click arms and deferred bridge grants at or before it cannot renew the spent
+budget. This includes replay before a MAIN document listener or before a child
+frame's isolated grant arrives. Equal-time ambiguity fails closed; a newer click
+or an explicit independent grant can still start a fresh budget.
 It materializes the finalized payload without navigating, then requires the same
 direct-child WindowProxy, target name, action, method, encoding and character set.
 A form in an extension-owned closed shadow root replays those entries only after

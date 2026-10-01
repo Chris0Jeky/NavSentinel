@@ -91,7 +91,10 @@ describe("native navigation dispatch through real main_guard", () => {
     expect(open.mock.contexts).toEqual([window]);
     const records = messages.slice(start);
     expect(records.filter((message) => message.type === "ns-nav-allowed")).toHaveLength(1);
-    expect(records.filter((message) => message.type === "ns-nav-blocked")).toHaveLength(1);
+    const blocked = records.filter((message) => message.type === "ns-nav-blocked");
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]).not.toHaveProperty("action");
+    expect(blocked[0]).not.toHaveProperty("features");
   });
 
   it("forwards off-mode popups with the original optional arguments", async () => {
@@ -101,6 +104,22 @@ describe("native navigation dispatch through real main_guard", () => {
     expect(open.mock.calls).toEqual([
       [undefined, undefined, undefined], ["https://example.test/open", undefined, undefined],
     ]);
+  });
+
+  it("preserves the submitter object and its declared destination on requestSubmit", async () => {
+    const element = form();
+    const control = document.createElement("button");
+    control.setAttribute("formaction", "https://example.test/override");
+    element.appendChild(control);
+    await send("ns-allow", { allowOpen: false, allowRedirect: true,
+      restrictRedirectTarget: true, redirectTarget: "https://example.test/override" });
+    const start = messages.length;
+    element.requestSubmit(control);
+    await send("ns-config", { mode: "smart" });
+    expect(requestSubmit.mock.calls).toEqual([[control]]);
+    expect(requestSubmit.mock.contexts).toEqual([element]);
+    expect(messages.slice(start).find((message) => message.type === "ns-nav-allowed")?.url)
+      .toBe("https://example.test/override");
   });
 
   for (const method of ["submit", "requestSubmit"] as const) {
@@ -131,6 +150,16 @@ describe("native navigation dispatch through real main_guard", () => {
       element.action = "https://example.test/changed";
       await send("ns-allow-action", { id: blocked!.id });
       expect(native).not.toHaveBeenCalled();
+    });
+
+    it(`keeps native ${method} exceptions observable and preserves its argument count`, async () => {
+      const element = form();
+      const native = method === "submit" ? submit : requestSubmit;
+      await send("ns-config", { mode: "off" });
+      const error = new TypeError("native binding failure");
+      native.mockImplementationOnce(() => { throw error; });
+      expect(() => element[method]()).toThrow(error);
+      expect(native.mock.calls).toEqual(method === "submit" ? [[]] : [[undefined]]);
     });
 
     it(`allows ${method} when protection is off without consuming a grant`, async () => {
