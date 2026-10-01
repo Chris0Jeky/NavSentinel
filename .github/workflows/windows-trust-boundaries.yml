@@ -31,6 +31,7 @@ on:
       - "tests/e2e/state-authority-campaign-inputs.json"
       - "tests/e2e/state-authority-sink.spec.ts"
       - "tests/release-input-integrity.test.ts"
+      - "tests/release-object-identity.test.ts"
       - "tests/sensitive-environment-boundary.test.ts"
       - "tests/state-authority-bootstrap-replay.test.ts"
       - "tests/state-authority-launcher-contract.test.ts"
@@ -72,6 +73,7 @@ on:
       - "tests/e2e/state-authority-campaign-inputs.json"
       - "tests/e2e/state-authority-sink.spec.ts"
       - "tests/release-input-integrity.test.ts"
+      - "tests/release-object-identity.test.ts"
       - "tests/sensitive-environment-boundary.test.ts"
       - "tests/state-authority-bootstrap-replay.test.ts"
       - "tests/state-authority-launcher-contract.test.ts"
@@ -120,6 +122,7 @@ jobs:
           tests/deterministic-release-archive.test.ts
           tests/safe-release-path.test.ts
           tests/release-input-integrity.test.ts
+          tests/release-object-identity.test.ts
           tests/sensitive-environment-boundary.test.ts
           tests/state-authority-bootstrap-replay.test.ts
           tests/state-authority-launcher-contract.test.ts
