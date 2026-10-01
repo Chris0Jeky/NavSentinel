@@ -19,6 +19,7 @@ import {
   _getPendingMutationCountForTesting,
   _flushMutationObserverRecordsForTesting,
   _feedMutationRecordsForTesting,
+  truncateUrlForAlertDetails,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
 import { registerExtensionOwnedOverlayElement } from "../extension/src/content/extension_owned_overlay";
@@ -55,6 +56,23 @@ describe("mutation_monitor module API", () => {
     const b = getMutationAlerts();
     expect(a).not.toBe(b);
     expect(a).toEqual(b);
+  });
+});
+
+describe("truncateUrlForAlertDetails (#857)", () => {
+  it("passes realistic URLs through byte-identical", () => {
+    const url = "https://evil.example.com/steal?x=1";
+    expect(truncateUrlForAlertDetails(url)).toBe(url);
+    expect(truncateUrlForAlertDetails("")).toBe("");
+    expect(truncateUrlForAlertDetails("x".repeat(200))).toBe("x".repeat(200));
+  });
+
+  it("caps pathological URLs at 200 chars plus an explicit marker", () => {
+    const truncated = truncateUrlForAlertDetails("x".repeat(201));
+    expect(truncated).toBe("x".repeat(200) + "...(truncated)");
+    expect(truncateUrlForAlertDetails("y".repeat(5 * 1024))).toHaveLength(
+      200 + "...(truncated)".length,
+    );
   });
 });
 
@@ -371,6 +389,39 @@ describe("mutation_monitor DOM integration", () => {
     const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
     expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
     expect(actionAlerts[0]!.details).toContain("evil.example.com");
+
+    form.remove();
+    stopMutationMonitor();
+  });
+
+  it("bounds alert details when an action is rewritten to a ~5KB URL (#857)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+
+    const form = document.createElement("form");
+    document.body.appendChild(form);
+    form.setAttribute("action", "/login");
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    // Unbounded interpolation would carry the whole 5KB string into
+    // `details`/`extra` and risk the storage-quota write for the log entry.
+    const longUrl = "https://evil.example.com/steal?" + "x".repeat(5 * 1024);
+    form.setAttribute("action", longUrl);
+
+    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
+
+    const actionAlerts = alerts.filter((a) => a.type === "form_action_changed");
+    expect(actionAlerts.length).toBeGreaterThanOrEqual(1);
+    const details = actionAlerts[0]!.details;
+    expect(actionAlerts[0]!.severity).toBe("high");
+    expect(details).toContain("evil.example.com");
+    expect(details).toContain("...(truncated)");
+    expect(details).not.toContain("x".repeat(1000));
+    expect(details.length).toBeLessThan(longUrl.length);
+    expect(details.length).toBeLessThanOrEqual(600);
 
     form.remove();
     stopMutationMonitor();
