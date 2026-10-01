@@ -267,12 +267,13 @@ export const SCRIPT_TEXT_MAX = 30000;
 export const MAX_METAS = 100;
 
 /**
- * Max chars of body text scanned for brand signals. Reduced via `boundedSample`
- * (full head + short tail), the same tradeoff as the title channel: a head-only
- * slice let a hostile page bury the brand/login text past the window with front
- * padding, while the added tail only costs `max>>2` extra scanned chars.
- * Content placed precisely in the omitted middle can still evade — inherent to
- * the O(max) budget, backstopped by the title/imgSignals channels.
+ * Max chars of body text scanned for brand signals. Sampled by `sampleBodyText`
+ * (single TreeWalker pass: full head + short tail), the same shape as the title
+ * channel's boundedSample: a head-only slice let a hostile page bury the
+ * brand/login text past the window with front padding, while the added tail
+ * only costs `max>>2` extra scanned chars. Content placed precisely in the
+ * omitted middle can still evade — inherent to the O(max) budget, backstopped
+ * by the title/imgSignals channels.
  */
 export const MAX_BODY_TEXT = 5000;
 
@@ -503,6 +504,154 @@ export function boundedSample(s: string, max: number): string {
   return s.slice(0, max) + " " + s.slice(tailStart);
 }
 
+/**
+ * Tags whose subtree text is never rendered, so `innerText` never includes it.
+ * sampleBodyText prunes these subtrees outright — parity with innerText, not a
+ * heuristic. Compared case-insensitively: HTML tagName is already uppercase,
+ * but inline SVG keeps its case (e.g. `<svg><script>`).
+ */
+const NON_RENDERED_TAGS: ReadonlySet<string> = new Set([
+  "SCRIPT",
+  "STYLE",
+  "NOSCRIPT",
+  "TEMPLATE",
+]);
+
+/**
+ * True when a body subtree contributes no visible text and must be pruned from
+ * the bodyText sample (#787). Three pruned classes:
+ *   - non-rendered tags (script/style/noscript/template) — innerText parity;
+ *   - the `hidden` attribute — matches innerText while the UA `[hidden]` rule
+ *     applies; the exotic override case (author CSS re-showing a `[hidden]`
+ *     subtree) is dropped here, backstopped by the title/img channels (same
+ *     tradeoff class as the #401 middle-band gap);
+ *   - INLINE display:none / visibility:hidden — the same inline-scope model as
+ *     password_field.ts (`element.style` only, never stylesheets): the exact
+ *     surface an attacker controls on a static phishing page, and readable
+ *     without layout.
+ *
+ * Deliberately NOT consulted: stylesheets, classes, computed style,
+ * `visibility:collapse`, opacity, off-screen positioning. Stylesheet-hidden
+ * brand text is therefore INCLUDED (an FP-side gap vs innerText, confined to
+ * the weak bodyText-only +10 tier); consulting getComputedStyle per element
+ * would reintroduce the layout cost this sampler exists to avoid.
+ */
+function isPrunedBodyBranch(el: Element): boolean {
+  if (NON_RENDERED_TAGS.has(el.tagName.toUpperCase())) return true;
+  if (el.hasAttribute("hidden")) return true;
+  // `.style` is absent on non-HTML elements (e.g. inside an XML document);
+  // those carry no inline style and cannot be inline-hidden.
+  const style = (el as HTMLElement).style;
+  if (!style) return false;
+  return style.display === "none" || style.visibility === "hidden";
+}
+
+/**
+ * Bounded body-text sample for brand detection (#787).
+ *
+ * Replaces the old `body.innerText` + slice: innerText forces a full-document
+ * layout plus full-text serialization on the synchronous credential-submit
+ * path, then threw all but ~5k chars away. This walks the body's text nodes
+ * once with a TreeWalker and keeps a full `max`-char head plus a `max>>2`
+ * trailing window, so the output has exactly the boundedSample shape (full
+ * head, short tail, single-space join) with O(max) memory, zero layout, and
+ * no full-document string ever materialized — a multi-MB text node
+ * contributes only slices to the two bounded buffers.
+ *
+ * Hidden-text semantics: pruned subtrees (see isPrunedBodyBranch) contribute
+ * nothing, matching innerText for the inline-hidden and non-rendered cases.
+ * Accepted gaps vs innerText, all documented on isPrunedBodyBranch:
+ * stylesheet-hidden text is included, `[hidden]` overridden visible by CSS is
+ * dropped, block boundaries join with a single space instead of a newline
+ * (detection-neutral for substring matching; a multi-word brand split across
+ * two blocks may match where innerText's newline would not), and image alt
+ * text is excluded here (covered by the imgSignals channel instead).
+ *
+ * Residual cost: the walk itself visits every text node and element once
+ * (property reads only, no layout), so time scales with node count. Any node
+ * cap would reopen the calibrated-evasion class the #401/#403 tail closed
+ * (an attacker padding N junk nodes fore AND aft of the brand), so none is
+ * applied. Case-mapping is left to the caller (buildPageSnapshot lowercases
+ * the sample), matching the old sample-then-lowercase ordering so the
+ * case-mapping work stays bounded by the sample.
+ */
+export function sampleBodyText(body: HTMLElement, max: number): string {
+  const tailLen = max >> 2;
+  const walker = body.ownerDocument!.createTreeWalker(
+    body,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node: Node): number {
+        if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+        // FILTER_REJECT prunes the whole subtree; FILTER_SKIP descends.
+        // (The filter never sees the root `body` itself.)
+        return isPrunedBodyBranch(node as Element)
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_SKIP;
+      },
+    },
+  );
+
+  const headChunks: string[] = [];
+  let headLen = 0;
+  const tailChunks: string[] = [];
+  let tailHeld = 0;
+  let tailBase = 0;
+  let total = 0;
+  let first = true;
+
+  const pushTail = (piece: string): void => {
+    // Only the trailing `tailLen` chars of the stream can survive; when one
+    // piece already covers them, its head is dropped outright.
+    const keep = piece.length > tailLen ? piece.slice(-tailLen) : piece;
+    tailChunks.push(keep);
+    tailHeld += keep.length;
+    // Amortized compaction: each held char moves O(1) times overall.
+    if (tailHeld > tailLen * 2) {
+      let drop = tailHeld - tailLen;
+      while (drop > 0 && tailBase < tailChunks.length) {
+        const c = tailChunks[tailBase]!;
+        if (c.length <= drop) {
+          drop -= c.length;
+          tailHeld -= c.length;
+          tailBase++;
+        } else {
+          tailChunks[tailBase] = c.slice(drop);
+          tailHeld -= drop;
+          drop = 0;
+        }
+      }
+      if (tailBase > 64) {
+        tailChunks.splice(0, tailBase);
+        tailBase = 0;
+      }
+    }
+  };
+
+  let node = walker.nextNode();
+  while (node) {
+    const data = node.nodeValue || "";
+    if (data) {
+      const piece = first ? data : " " + data;
+      first = false;
+      total += piece.length;
+      if (headLen < max) {
+        const take = piece.slice(0, max - headLen);
+        headChunks.push(take);
+        headLen += take.length;
+      }
+      pushTail(piece);
+    }
+    node = walker.nextNode();
+  }
+
+  if (total <= max) return headChunks.join("");
+  const tail = tailChunks.slice(tailBase).join("");
+  // The tailLen>0 guard is load-bearing: slice(-0) is slice(0), the whole
+  // buffer (#406) — only reachable with a degenerate max<4, but exact here.
+  return headChunks.join("") + " " + (tailLen > 0 ? tail.slice(-tailLen) : "");
+}
+
 /** Build a PageSnapshot from a live Document. Called in content script context. */
 export function buildPageSnapshot(doc: Document): PageSnapshot {
   // Credential-page gate: shared visible-credential-field helper (#196).
@@ -510,11 +659,11 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
   // hidden honeypot doesn't trip the credential signals (#192).
   const hasPassword = hasVisiblePasswordField(doc);
 
-  // Body text — head+tail sampled (see MAX_BODY_TEXT), never head-only.
+  // Body text — bounded TreeWalker sample (see sampleBodyText), never a full
+  // innerText serialization: innerText forces layout + full-document text
+  // serialization on the synchronous submit path (#787).
   const body = doc.body;
-  const bodyText = body
-    ? boundedSample(body.innerText ?? body.textContent ?? "", MAX_BODY_TEXT).toLowerCase()
-    : "";
+  const bodyText = body ? sampleBodyText(body, MAX_BODY_TEXT).toLowerCase() : "";
 
   // HTML snippet -- limited to HTML_SNIPPET_MAX chars to avoid serializing the
   // entire DOM (the exfil htmlPatterns derive their quantifier bounds from this).

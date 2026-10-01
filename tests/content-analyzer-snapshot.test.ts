@@ -373,3 +373,108 @@ describe("buildPageSnapshot channel bounds (#786)", () => {
     expect(snap.scriptText).toBe("var gophish = 1; ");
   });
 });
+
+describe("buildPageSnapshot bounded body sampling (#787)", () => {
+  it("excludes inline-hidden subtrees (display:none / visibility:hidden)", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form>` +
+      `<div style="display:none">PayPal hidden brand</div>` +
+      `<div style="visibility:hidden">Netflix hidden brand</div>` +
+      `<p>hello world</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).not.toContain("paypal");
+    expect(snap.bodyText).not.toContain("netflix");
+    expect(snap.bodyText).toContain("hello world");
+  });
+
+  it("excludes `hidden`-attribute subtrees", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form>` +
+      `<div hidden>PayPal hidden brand</div><p>hello world</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).not.toContain("paypal");
+    expect(snap.bodyText).toContain("hello world");
+  });
+
+  it("excludes script/style content from bodyText but keeps the scriptText channel", () => {
+    document.documentElement.innerHTML =
+      `<body><script>var paypal_config = 1;</script>` +
+      `<style>.paypal { color: red; }</style><p>hello world</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).not.toContain("paypal");
+    expect(snap.bodyText).toContain("hello world");
+    // The signal is not lost, only channelled: script text stays scannable
+    // for kit fingerprints without polluting brand bodyText.
+    expect(snap.scriptText).toContain("paypal");
+  });
+
+  it("joins text across blocks with a space", () => {
+    document.documentElement.innerHTML =
+      `<body><div>PayPal</div><div>Login</div></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).toContain("paypal");
+    expect(snap.bodyText).toContain("login");
+  });
+
+  it("hidden-only brand text does not trigger a mismatch; visible text does", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form>` +
+      `<div style="display:none">PayPal hidden brand</div></body>`;
+    document.title = "Login";
+    const hidden = analyzeSnapshot(buildPageSnapshot(document), "evil.test");
+    expect(hidden.brandMismatch).toBe(false);
+
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`;
+    document.title = "Login";
+    const visible = analyzeSnapshot(buildPageSnapshot(document), "evil.test");
+    expect(visible.brandMismatch).toBe(true);
+    expect(visible.brandDetected).toBe("PayPal");
+  });
+
+  it("never reads body.innerText (layout + full serialization)", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`;
+    const body = document.body!;
+    Object.defineProperty(body, "innerText", {
+      configurable: true,
+      get() {
+        throw new Error("buildPageSnapshot must not read body.innerText (#787)");
+      },
+    });
+    try {
+      const snap = buildPageSnapshot(document);
+      expect(snap.bodyText).toContain("paypal login");
+    } finally {
+      Reflect.deleteProperty(body, "innerText");
+    }
+  });
+
+  it("bounds a large multi-node page, keeps the tail brand, and stays fast", () => {
+    let html = `<body><form><input type="password"></form>`;
+    for (let i = 0; i < 2000; i++) {
+      html += `<p>paragraph ${i} ${"lorem ipsum dolor sit amet ".repeat(10)}</p>`;
+    }
+    html += "<p>trailer PayPal Login</p></body>";
+    document.documentElement.innerHTML = html;
+    // Neutral title: the mismatch below must come from the bodyText tail.
+    document.title = "Login";
+    const start = Date.now();
+    const snap = buildPageSnapshot(document);
+    const elapsed = Date.now() - start;
+    expect(snap.bodyText.length).toBeLessThanOrEqual(
+      MAX_BODY_TEXT + (MAX_BODY_TEXT >> 2) + 1,
+    );
+    expect(snap.bodyText).toContain("paypal");
+    expect(snap.bodyText).toContain("login");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+    // bodyText-only tier: proves the tail carried the signal, not the title.
+    expect(result.score).toBe(10);
+    // Generous wall-clock guard: the walk is property reads only (no layout,
+    // no full serialization), so even this ~0.5MB / 2000-node page must stay
+    // far under the documented <50ms analysis budget's order of magnitude.
+    expect(elapsed).toBeLessThan(2000);
+  });
+});
