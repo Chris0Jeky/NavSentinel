@@ -1,0 +1,39 @@
+name: Publish exact pointerdown test patch
+on:
+  push:
+    branches: [test/958-pointerdown-observation]
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: github.repository == 'Chris0Jeky/NavSentinel' && github.ref == 'refs/heads/test/958-pointerdown-observation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply verified test bytes and remove publication scaffolding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, pathlib, subprocess
+          name = 'tests/e2e/navsentinel.spec.ts'
+          def digest():
+              data = pathlib.Path(name).read_bytes()
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          assert digest() == 'c01e49140733ffd4a9a4a99120130acd1b7df23d', ('preimage', digest())
+          subprocess.run(['git', 'apply', '--check', 'scripts/.pointerdown-publication.patch'], check=True)
+          subprocess.run(['git', 'apply', 'scripts/.pointerdown-publication.patch'], check=True)
+          assert digest() == '7eeeb73b3b66f8a8126651e47b26b35375ed1567', ('postimage', digest())
+          print(name, digest())
+          PY
+          git diff --check
+          git add tests/e2e/navsentinel.spec.ts
+          git rm scripts/.pointerdown-publication.patch .github/workflows/publish-pointerdown-test.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(e2e): observe pointerdown authority before releasing the attack (#958)'
+          git push origin HEAD:refs/heads/test/958-pointerdown-observation
