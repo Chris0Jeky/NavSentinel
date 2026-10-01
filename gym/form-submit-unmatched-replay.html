@@ -16,6 +16,7 @@
       const target = query.get("target") === "blank" ? "_blank" : "_top";
       const control = query.get("control") === "1";
       const later = query.get("later") === "1";
+      const early = query.get("early") === "1";
       document.body.insertAdjacentHTML("beforeend", `
         <iframe name="sink" title="replay sink"></iframe>
         <form id="declared" action="form-submit-landing.html?authority=A" target="${target}">
@@ -36,18 +37,22 @@
           declared.submit();
           document.documentElement.dataset.nestedReturned = "1";
         };
-        if (later) setTimeout(escape, 0);
+        if (later) setTimeout(escape, early ? 100 : 0);
         else escape();
       });
       document.getElementById("activate").addEventListener("click", (event) => {
         event.preventDefault();
         // Child frames deliberately wait for the isolated-world grant. The
         // ordinary-submit control uses this identical timing, without a replay.
-        setTimeout(() => {
+        const start = () => {
           if (control) declared.submit();
           else replay.submit();
           document.documentElement.dataset.outerReturned = "1";
-        }, 100);
+        };
+        // The early arm enters replay in this click's own task, before the
+        // isolated MessagePort grant. Its nested callback runs after that grant.
+        if (early && !control) start();
+        else setTimeout(start, 100);
       });
     })();
   </script>

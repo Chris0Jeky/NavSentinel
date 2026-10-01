@@ -1,0 +1,43 @@
+name: Pre-grant replay adversarial proof
+on:
+  push:
+    branches: [test/936-pre-grant-replay-20261001]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NAVSENTINEL_REALISTIC_CHROME: '1'
+      NAVSENTINEL_LIVE: '0'
+      NAVSENTINEL_BRANDED_RECORD: test-results/pre-grant-browser.jsonl
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Record immutable test inputs
+        run: |
+          mkdir -p test-results
+          git rev-parse HEAD HEAD^{tree} > test-results/pre-grant-source.txt
+          /opt/google/chrome/chrome --version >> test-results/pre-grant-source.txt
+          sha256sum gym/form-submit-unmatched-replay.html tests/e2e/form-submit-unmatched-replay.spec.ts >> test-results/pre-grant-source.txt
+      - name: Run actual authored-page attack and controls without retries
+        run: xvfb-run -a npx playwright test -c playwright.branded.config.ts tests/e2e/form-submit-unmatched-replay.spec.ts tests/e2e/form-submit-child-replay.spec.ts --project=regression --workers=1 --retries=0
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: pre-grant-replay-proof
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: error
+          retention-days: 7

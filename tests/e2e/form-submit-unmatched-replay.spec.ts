@@ -24,6 +24,7 @@ async function journey(options: {
   target: "top" | "blank";
   later: boolean;
   control: boolean;
+  early?: boolean;
 }): Promise<{ receipts: string[]; formdataCount: number }> {
   const { baseUrl, gym } = await getGymBaseUrl(path.join(root, "gym"));
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "ns-unmatched-replay-"));
@@ -50,6 +51,7 @@ async function journey(options: {
       target: options.target,
       later: options.later ? "1" : "0",
       control: options.control ? "1" : "0",
+      early: options.early ? "1" : "0",
     });
     await page.goto(`${baseUrl}${fixture}?${query}`);
     if (options.enabled) await waitForNavSentinelBridge(page);
@@ -94,6 +96,16 @@ async function journey(options: {
 }
 
 for (const target of ["top", "blank"] as const) {
+  for (const enabled of [false, true]) {
+    test(`pre-grant child replay ${enabled ? "denies" : "baseline reaches"} its ${target} escape (#936) @regression`, async () => {
+      test.skip(enabled && !fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+      const result = await journey({ enabled, target, later: true, control: false, early: true });
+      expect(result.receipts.filter((value) => value === "escape")).toHaveLength(enabled ? 0 : 1);
+      expect(result.receipts.filter((value) => value === "child")).toHaveLength(1);
+      expect(result.formdataCount).toBe(1);
+    });
+  }
+
   test(`unprotected unmatched replay reaches the ${target} escape sink (#936) @regression`, async () => {
     const result = await journey({ enabled: false, target, later: false, control: false });
     expect(result.receipts.filter((value) => value === "escape")).toHaveLength(1);
