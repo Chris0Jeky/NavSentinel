@@ -1640,6 +1640,78 @@ describe("service worker handlers", () => {
   });
 
   describe("OAuth flow tracking via navigation", () => {
+    it.each([
+      {
+        name: "corroborated unexpected-domain",
+        callbackUrl: "https://unexpected.example/cb?code=synthetic-code&state=synthetic-state",
+        expectMismatch: true,
+      },
+      {
+        name: "expected-domain",
+        callbackUrl: "https://app.example.com/cb?code=synthetic-code&state=synthetic-state",
+        expectMismatch: false,
+      },
+      {
+        name: "uncorroborated unexpected-domain",
+        callbackUrl: "https://unexpected.example/sale?code=SYNTHETIC-COUPON",
+        expectMismatch: false,
+      },
+    ])("processes a cold OAuth callback ($name) against restored state", async ({
+      callbackUrl,
+      expectMismatch,
+    }) => {
+      const mock = createChromeMock();
+      const restoredFlows = {
+        "10": { expectedCallbackDomain: "app.example.com", startedAt: Date.now(), phase: "redirect" },
+        "11": { expectedCallbackDomain: "other.example.com", startedAt: Date.now(), phase: "consent" },
+      };
+      mock.chrome.storage.session._store["ns_sw:oauthFlow"] = restoredFlows;
+
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseGet = resolve; });
+      const originalGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      mock.chrome.storage.session.get = async (keys?: string | string[]) => {
+        await gate;
+        return originalGet(keys);
+      };
+      await loadSw(mock);
+
+      // The commit arrives while initial storage hydration is still blocked.
+      mock.emitCommitted({
+        tabId: 10,
+        frameId: 0,
+        url: callbackUrl,
+        transitionType: "link",
+        transitionQualifiers: ["client_redirect"],
+      });
+      expect(mock.sentMessages).toHaveLength(0);
+      expect(mock.chrome.storage.session._store["ns_sw:oauthFlow"]).toEqual(restoredFlows);
+
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      const mismatches = mock.sentMessages.filter(
+        (entry) => (entry.message as { type: string }).type === "ns-oauth-redirect-mismatch",
+      );
+      expect(mismatches).toEqual(expectMismatch ? [{
+        tabId: 10,
+        message: { type: "ns-oauth-redirect-mismatch", callbackUrl },
+      }] : []);
+      const completions = mock.sentMessages.filter(
+        (entry) => (entry.message as { type: string }).type === "ns-oauth-flow-update",
+      );
+      expect(completions).toEqual([{
+        tabId: 10,
+        message: {
+          type: "ns-oauth-flow-update",
+          flow: { expectedCallbackDomain: "app.example.com", startedAt: restoredFlows["10"].startedAt, phase: "complete" },
+        },
+      }]);
+      expect(mock.chrome.storage.session._store["ns_sw:oauthFlow"]).toEqual({
+        "11": restoredFlows["11"],
+      });
+    });
+
     it("starts a new OAuth flow when navigating to an OAuth URL", async () => {
       const mock = createChromeMock();
       await loadSw(mock);
