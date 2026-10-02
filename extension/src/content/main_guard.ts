@@ -1783,13 +1783,14 @@ function patchOpenerLocation(): void {
   // Capture the real opener reference before anyone can tamper with it.
   const realOpener = window.opener;
 
-  function recordOpenerNav(url: string): void {
+  function recordOpenerNav(url: string): string {
     lastOpenerNavTs = nowMs();
     lastOpenerNavUrl = url;
     postToIsolated("ns-dblclick-opener-nav", { url, ts: lastOpenerNavTs });
     if (debug) {
       console.debug("[NavSentinel] opener.location write intercepted", { url });
     }
+    return url;
   }
 
   // Proxy the Location object to intercept .href setter, .assign(), and .replace().
@@ -1797,43 +1798,70 @@ function patchOpenerLocation(): void {
   // directly on the real Location object returned by the get trap.
   function createLocationProxy(): typeof realOpener.location {
     const realLocation = realOpener.location;
-    try {
-      return new Proxy(realLocation, {
-        set(_target, prop, value) {
-          if (prop === "href") {
-            const url = String(value);
-            recordOpenerNav(url);
-            try { realLocation.href = value; } catch { /* cross-origin */ }
-            return true;
-          }
-          try { Reflect.set(realLocation, prop, value); } catch { /* ignore */ }
-          return true;
-        },
-        get(_target, prop) {
-          if (prop === "assign") {
-            return function assign(url: string | URL): void {
-              recordOpenerNav(String(url));
-              try { realLocation.assign(url as string); } catch { /* cross-origin */ }
-            };
-          }
-          if (prop === "replace") {
-            return function replace(url: string | URL): void {
-              recordOpenerNav(String(url));
-              try { realLocation.replace(url as string); } catch { /* cross-origin */ }
-            };
-          }
-          try {
-            const val = Reflect.get(realLocation, prop);
-            if (typeof val === "function") return val.bind(realLocation);
-            return val;
-          } catch {
-            return undefined;
-          }
-        }
-      });
-    } catch {
-      return realLocation;
+    // Native Location methods are immutable own properties: replacing them
+    // on a Proxy(realLocation) violates get invariants (#1016). Reflect lazily
+    // onto an extensible facade, preserving the native receiver and href path.
+    const facade = Object.create(null);
+    const methodCache = new Map<
+      PropertyKey,
+      [native: (...args: unknown[]) => unknown, wrapper: (...args: unknown[]) => unknown]
+    >();
+
+    function readNative(prop: PropertyKey): unknown {
+      const raw: unknown = Reflect.get(realLocation, prop, realLocation);
+      if (typeof raw !== "function") return raw;
+      const cached = methodCache.get(prop);
+      if (cached?.[0] === raw) return cached[1];
+      const nativeMethod = raw as (...args: unknown[]) => unknown;
+      let wrapper: (...args: unknown[]) => unknown;
+      if (prop === "assign" || prop === "replace") {
+        wrapper = (...args: unknown[]): unknown => {
+          // Preserve missing arguments; convert URL objects once, like native.
+          if (args.length) args[0] = recordOpenerNav(`${args[0]}`);
+          return Reflect.apply(nativeMethod, realLocation, args);
+        };
+      } else {
+        wrapper = nativeMethod.bind(realLocation);
+      }
+      methodCache.set(prop, [nativeMethod, wrapper]);
+      return wrapper;
     }
+
+    function writeNative(prop: PropertyKey, value: unknown): boolean {
+      if (prop === "href") {
+        value = recordOpenerNav(`${value}`);
+      }
+      return Reflect.set(realLocation, prop, value, realLocation);
+    }
+
+    // Configurable descriptor copies satisfy facade invariants; this is not
+    // exact native branding or unforgeable descriptor equivalence.
+    function describeNative(prop: PropertyKey): PropertyDescriptor | undefined {
+      const current = Reflect.getOwnPropertyDescriptor(realLocation, prop);
+      if (current === undefined) return undefined;
+      current.configurable = true;
+      if ("value" in current) {
+        current.value = readNative(prop);
+      } else {
+        if (current.get) current.get = current.get.bind(realLocation);
+        if (current.set) current.set = (value: unknown): void => { writeNative(prop, value); };
+      }
+      return current;
+    }
+
+    return new Proxy(facade, {
+      get: (_target, prop) => readNative(prop),
+      set: (_target, prop, value) => writeNative(prop, value),
+      has: (_target, prop) => Reflect.has(realLocation, prop),
+      ownKeys: () => Reflect.ownKeys(realLocation),
+      getPrototypeOf: () => Reflect.getPrototypeOf(realLocation),
+      getOwnPropertyDescriptor: (_target, prop) => describeNative(prop),
+      // Never lock the empty facade and recreate native Proxy invariants.
+      defineProperty: (_target, prop, desc) => desc.configurable === true && Reflect.defineProperty(realLocation, prop, desc),
+      deleteProperty: (_target, prop) => Reflect.deleteProperty(realLocation, prop),
+      preventExtensions: () => false,
+      setPrototypeOf: () => false,
+    });
   }
 
   try {
@@ -1844,16 +1872,10 @@ function patchOpenerLocation(): void {
     const openerProxy = new Proxy(realOpener, {
       set(_target, prop, value) {
         if (prop === "location") {
-          const url = String(value);
-          recordOpenerNav(url);
+          // Forward exactly the observed string; reject Symbol like native.
           // Allow the navigation to proceed so the attack surface
           // remains observable (the isolated-world will flag the click).
-          try {
-            realOpener.location = value;
-          } catch {
-            // cross-origin assignment -- browser will handle it
-          }
-          return true;
+          return Reflect.set(realOpener, prop, recordOpenerNav(`${value}`), realOpener);
         }
         try {
           Reflect.set(realOpener, prop, value);
