@@ -63,6 +63,9 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
     }) => void
   >();
   const tabCreated = createEvent<(tab: { id?: number; openerTabId?: number }) => void>();
+  const createdNavigationTarget = createEvent<
+    (details: { tabId: unknown; sourceTabId: unknown; sourceFrameId: unknown; url?: string }) => void
+  >();
   const tabRemoved = createEvent<(tabId: number) => void>();
   const tabUpdated = createEvent<
     (tabId: number, changeInfo: { status?: string; url?: string }, tab: { url?: string }) => void
@@ -129,6 +132,7 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
         onBeforeNavigate: beforeNavigate,
         onCommitted: committed,
         onErrorOccurred: errorOccurred,
+        onCreatedNavigationTarget: createdNavigationTarget,
         getAllFrames: vi.fn().mockResolvedValue([]),
       },
       tabs: {
@@ -191,6 +195,14 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
     },
     emitTabCreated(tab: { id?: number; openerTabId?: number }) {
       tabCreated.emit(tab);
+    },
+    emitCreatedNavigationTarget(details: {
+      tabId: unknown;
+      sourceTabId: unknown;
+      sourceFrameId: unknown;
+      url?: string;
+    }) {
+      createdNavigationTarget.emit(details);
     },
     emitTabRemoved(tabId: number) {
       tabRemoved.emit(tabId);
@@ -1129,6 +1141,207 @@ describe("service worker handlers", () => {
         );
       expect(toOpener(10), "deferred onCreated child (20->10) tracked").toBeDefined();
       expect(toOpener(40), "hydrated child (30->40) tracked").toBeDefined();
+    });
+  });
+
+  describe("browser creation provenance via onCreatedNavigationTarget (#496)", () => {
+    const openerNav = (url = "https://evil.test/phish") =>
+      ({ type: "ns-dblclick-opener-nav", url, ts: Date.now() });
+    const forwardedTo = (mock: ReturnType<typeof createChromeMock>, openerId: number) =>
+      mock.sentMessages.find(
+        (m) =>
+          (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child" &&
+          m.tabId === openerId,
+      );
+    const childStore = (mock: ReturnType<typeof createChromeMock>) =>
+      (mock.chrome.storage.session._store["ns_sw:childWindow"] ?? {}) as Record<
+        string,
+        { openerTabId: number; createdAt: number; openerNavObserved: boolean }
+      >;
+
+    it("registers a popup child missing tabs.openerTabId and forwards its real opener-write", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // tabs.onCreated with no opener leaves the map empty: the write is rejected.
+      mock.emitTabCreated({ id: 20 });
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(openerNav(), { tab: { id: 20 } });
+      expect(mock.sentMessages).toHaveLength(0);
+
+      // Browser creation provenance registers the same child; the genuine
+      // opener-write now forwards to the correct parent.
+      mock.emitCreatedNavigationTarget({
+        tabId: 20,
+        sourceTabId: 10,
+        sourceFrameId: 0,
+        url: "https://child.example/",
+      });
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(openerNav(), { tab: { id: 20 } });
+
+      const fwd = forwardedTo(mock, 10);
+      expect(fwd).toBeDefined();
+      expect((fwd!.message as { url: string }).url).toBe("https://evil.test/phish");
+    });
+
+    it("creation alone plus removal stays quiet and creates no grants", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitCreatedNavigationTarget({ tabId: 20, sourceTabId: 10, sourceFrameId: 0 });
+      await vi.runAllTimersAsync();
+      const expectNoGrants = () => {
+        for (const key of ["allowUntil", "allowTarget", "gestureUntil"]) {
+          expect(mock.chrome.storage.session._store[`ns_sw:${key}`] ?? {}).toEqual({});
+        }
+      };
+      expectNoGrants();
+      vi.advanceTimersByTime(1000);
+      mock.sentMessages.length = 0;
+      mock.emitTabRemoved(20);
+      await vi.runAllTimersAsync();
+
+      const types = mock.sentMessages.map((m) => (m.message as { type: string }).type);
+      expect(types).not.toContain("ns-dblclick-opener-nav-from-child");
+      expect(types).not.toContain("ns-dblclick-child-closed");
+      expect(types).not.toContain("ns-oauth-opener-manipulation");
+      // Registration alone mints no allowance, gesture, or approved-target state.
+      expectNoGrants();
+    });
+
+    it("queues creation before a gated opener-write; both survive hydration with siblings", async () => {
+      const mock = createChromeMock();
+      const now = Date.now();
+      mock.chrome.storage.session._store["ns_sw:childWindow"] = {
+        "30": { openerTabId: 40, createdAt: now, openerNavObserved: false },
+      };
+      let releaseGet!: () => void;
+      const gate = new Promise<void>((r) => { releaseGet = r; });
+      const origGet = mock.chrome.storage.session.get.bind(mock.chrome.storage.session);
+      let gated = true;
+      mock.chrome.storage.session.get = (async (keys?: string | string[]) => {
+        if (gated) {
+          gated = false;
+          await gate;
+        }
+        return origGet(keys);
+      }) as typeof mock.chrome.storage.session.get;
+
+      await loadSw(mock);
+
+      // Both arrive BEFORE hydration: creation first, then the real opener-write.
+      mock.emitCreatedNavigationTarget({ tabId: 20, sourceTabId: 10, sourceFrameId: 0 });
+      mock.dispatchRuntimeMessage(openerNav("https://evil.test/a"), { tab: { id: 20 } });
+      expect(
+        forwardedTo(mock, 10),
+        "nothing forwards before hydration",
+      ).toBeUndefined();
+
+      releaseGet();
+      await vi.runAllTimersAsync();
+
+      // The relationship persisted and forwarding ran in queued order; the
+      // restored sibling still maps to its own parent.
+      mock.dispatchRuntimeMessage(openerNav("https://evil.test/b"), { tab: { id: 30 } });
+      await vi.runAllTimersAsync();
+      const forwarded = mock.sentMessages
+        .filter((m) => (m.message as { type: string }).type === "ns-dblclick-opener-nav-from-child")
+        .map((m) => m.tabId);
+      expect(forwarded).toEqual([10, 40]);
+      const stored = childStore(mock);
+      expect(stored["20"]).toMatchObject({ openerTabId: 10 });
+      expect(stored["30"]).toMatchObject({ openerTabId: 40 });
+    });
+
+    it("either source order plus duplicates preserve the first timestamp and observed flag", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      // tabs.onCreated first, navigation-target second.
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      await vi.runAllTimersAsync();
+      const firstAt = childStore(mock)["20"]!.createdAt;
+
+      vi.advanceTimersByTime(1000);
+      mock.emitCreatedNavigationTarget({ tabId: 20, sourceTabId: 10, sourceFrameId: 0 });
+      await vi.runAllTimersAsync();
+      expect(childStore(mock)["20"]).toMatchObject({ openerTabId: 10, createdAt: firstAt });
+
+      // Reverse order on a second child: navigation-target first.
+      mock.emitCreatedNavigationTarget({ tabId: 21, sourceTabId: 11, sourceFrameId: 0 });
+      await vi.runAllTimersAsync();
+      const secondAt = childStore(mock)["21"]!.createdAt;
+      vi.advanceTimersByTime(1000);
+      mock.emitTabCreated({ id: 21, openerTabId: 11 });
+      await vi.runAllTimersAsync();
+      expect(childStore(mock)["21"]).toMatchObject({ openerTabId: 11, createdAt: secondAt });
+
+      // Duplicates before AND after the real opener-write never reset the flag:
+      // the quick close still alerts with the ORIGINAL age.
+      mock.emitCreatedNavigationTarget({ tabId: 20, sourceTabId: 10, sourceFrameId: 0 });
+      mock.dispatchRuntimeMessage(openerNav(), { tab: { id: 20 } });
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      mock.emitCreatedNavigationTarget({ tabId: 20, sourceTabId: 10, sourceFrameId: 0 });
+      const expectedAge = Date.now() - firstAt;
+      mock.sentMessages.length = 0;
+      mock.emitTabRemoved(20);
+
+      const closed = mock.sentMessages.find(
+        (m) => (m.message as { type: string }).type === "ns-dblclick-child-closed",
+      );
+      expect(closed).toBeDefined();
+      expect(closed!.tabId).toBe(10);
+      expect((closed!.message as { ageMs: number }).ageMs).toBe(expectedAge);
+    });
+
+    it("a conflicting source keeps the first parent; malformed and self IDs are ignored", async () => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      await vi.runAllTimersAsync();
+
+      mock.emitTabCreated({ id: 20, openerTabId: 10 });
+      // Conflicting provenance for the same child never reroutes it.
+      mock.emitCreatedNavigationTarget({ tabId: 20, sourceTabId: 11, sourceFrameId: 0 });
+      mock.emitTabCreated({ id: 20, openerTabId: 12 });
+      await vi.runAllTimersAsync();
+      expect(childStore(mock)["20"]).toMatchObject({ openerTabId: 10 });
+
+      mock.sentMessages.length = 0;
+      mock.dispatchRuntimeMessage(openerNav(), { tab: { id: 20 } });
+      expect(forwardedTo(mock, 10)).toBeDefined();
+      expect(forwardedTo(mock, 11)).toBeUndefined();
+      expect(forwardedTo(mock, 12)).toBeUndefined();
+
+      // Malformed and self IDs are ignored: no registration, no forwarding.
+      mock.emitCreatedNavigationTarget({ tabId: 0, sourceTabId: 10, sourceFrameId: 0 });
+      mock.emitCreatedNavigationTarget({ tabId: -5, sourceTabId: 10, sourceFrameId: 0 });
+      mock.emitCreatedNavigationTarget({ tabId: 26.5, sourceTabId: 10, sourceFrameId: 0 });
+      mock.emitCreatedNavigationTarget({ tabId: 21, sourceTabId: 0, sourceFrameId: 0 });
+      mock.emitCreatedNavigationTarget({ tabId: 22, sourceTabId: 23, sourceFrameId: -1 });
+      mock.emitCreatedNavigationTarget({ tabId: 27, sourceTabId: 10, sourceFrameId: 1.5 });
+      mock.emitCreatedNavigationTarget({
+        tabId: 28,
+        sourceTabId: undefined,
+        sourceFrameId: undefined,
+      });
+      mock.emitCreatedNavigationTarget({ tabId: 24, sourceTabId: 24, sourceFrameId: 0 });
+      mock.emitTabCreated({ id: 25, openerTabId: 25 });
+      await vi.runAllTimersAsync();
+
+      mock.sentMessages.length = 0;
+      for (const childId of [0, -5, 26.5, 21, 22, 27, 28, 24, 25]) {
+        mock.dispatchRuntimeMessage(openerNav(), { tab: { id: childId } });
+      }
+      await vi.runAllTimersAsync();
+      expect(mock.sentMessages).toHaveLength(0);
+      const stored = childStore(mock);
+      for (const key of ["0", "-5", "26.5", "21", "22", "27", "28", "24", "25"]) {
+        expect(stored[key]).toBeUndefined();
+      }
     });
   });
 
