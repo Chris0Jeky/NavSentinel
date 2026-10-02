@@ -20,10 +20,11 @@ for (const childFrame of [false, true]) {
         <div class="wrap brief-recovery"><button>Undo</button></div>`;
       document.body.appendChild(host);
       const card = host.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
-      card.animate([{ transform: "translateY(0)" }, { transform: "translateY(160px)" }], {
+      const animation = card.animate([{ transform: "translateY(0)" }, { transform: "translateY(160px)" }], {
         duration: 400, fill: "forwards",
       });
       host.shadowRoot!.querySelector("button")!.addEventListener("click", event => {
+        document.body.dataset.clickAnimationState = animation.playState;
         document.body.dataset.clickTrusted = String(event.isTrusted);
         document.body.dataset.clickCount = String(Number(document.body.dataset.clickCount ?? 0) + 1);
       });
@@ -46,6 +47,7 @@ for (const childFrame of [false, true]) {
     expect(await scope.evaluate(() => ({
       trusted: document.body.dataset.clickTrusted,
       count: document.body.dataset.clickCount,
-    }))).toEqual({ trusted: "true", count: "1" });
+      animationState: document.body.dataset.clickAnimationState,
+    }))).toEqual({ trusted: "true", count: "1", animationState: "finished" });
   });
 }
