@@ -1353,7 +1353,33 @@ chrome.tabs.onCreated.addListener((tab) => {
   }
   onCreatedHandler(tabId, openerTabId);
 });
+// #496: sized HTTP popups can omit tabs.openerTabId. This browser event
+// supplies creation provenance; the existing opener-write handler still
+// requires a report from the registered child before forwarding a signal.
+// Creation grants no navigation authority. Never infer a relationship from URL.
+chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
+  const tabId = details.tabId;
+  const openerTabId = details.sourceTabId;
+  const sourceFrameId = details.sourceFrameId;
+  if (typeof tabId !== "number" || !Number.isInteger(tabId) || tabId <= 0) return;
+  if (typeof openerTabId !== "number" || !Number.isInteger(openerTabId) || openerTabId <= 0) return;
+  if (tabId === openerTabId) return;
+  if (typeof sourceFrameId !== "number" || !Number.isInteger(sourceFrameId) || sourceFrameId < 0) return;
+  // Subscribe at arrival, before a later opener-write queues its continuation.
+  // Registration must follow restoration so hydration cannot overwrite it.
+  if (!swState.hydrated) {
+    void hydrateReady.then(() => onCreatedHandler(tabId, openerTabId));
+    return;
+  }
+  onCreatedHandler(tabId, openerTabId);
+});
 function onCreatedHandler(tabId: number, openerTabId: number): void {
+  if (!Number.isInteger(tabId) || tabId <= 0) return;
+  if (!Number.isInteger(openerTabId) || openerTabId <= 0) return;
+  if (tabId === openerTabId) return;
+  // Both event sources can report one child. Preserve its first relationship,
+  // original age and observed-write flag, including on conflicting duplicates.
+  if (childWindowByTab.has(tabId)) return;
   pruneStaleChildWindows();
   childWindowByTab.set(tabId, {
     openerTabId,
