@@ -61,6 +61,7 @@ import {
   type ProvingGroundRole,
   type ProvingGroundSinkReceipt,
 } from "./proving_ground_fake_sink";
+import { createIssue593DiagnosticsWriter } from "./issue593-diagnostics";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -235,9 +236,16 @@ async function waitForSafeWindow(
   }
 }
 
+// Durable local root for #593 diagnostics: a later Playwright invocation clears
+// test-results/, so each lane also keeps a run-scoped copy under artifacts/issue593.
+const issue593DiagnosticsWriter = createIssue593DiagnosticsWriter(
+  path.resolve(__dirname, "..", "..", "artifacts", "issue593"),
+);
+
 async function attachDiagnostics(testInfo: TestInfo, observation: Observation): Promise<void> {
   const output = testInfo.outputPath(`${observation.mode}-${observation.arm.id}-diagnostics.json`);
-  fs.writeFileSync(output, `${JSON.stringify(observation, null, 2)}\n`, "utf8");
+  const serialized = `${JSON.stringify(observation, null, 2)}\n`;
+  issue593DiagnosticsWriter(testInfo.project.outputDir, output, serialized);
   await testInfo.attach(`${observation.mode}-${observation.arm.id}-diagnostics`, {
     path: output,
     contentType: "application/json",
