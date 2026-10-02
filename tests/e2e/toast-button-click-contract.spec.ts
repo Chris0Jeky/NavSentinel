@@ -9,7 +9,7 @@ for (const childFrame of [false, true]) {
       ? '<iframe style="width:400px;height:400px" srcdoc="<body></body>"></iframe>'
       : "<body></body>");
     const scope = childFrame ? page.frames().find(frame => frame.parentFrame() === page.mainFrame())! : page;
-    await scope.evaluate(() => {
+    await scope.evaluate(async () => {
       const host = document.createElement("div");
       host.id = "__navsentinel_toast_host";
       host.attachShadow({ mode: "open" }).innerHTML = `
@@ -24,11 +24,25 @@ for (const childFrame of [false, true]) {
         duration: 400, fill: "forwards",
       });
       host.shadowRoot!.querySelector("button")!.addEventListener("click", event => {
-        document.body.dataset.clickAnimationState = animation.playState;
+        document.body.dataset.clickTop = String(card.getBoundingClientRect().top);
         document.body.dataset.clickTrusted = String(event.isTrusted);
         document.body.dataset.clickCount = String(Number(document.body.dataset.clickCount ?? 0) + 1);
       });
+      // Begin the helper during observed motion, after animation startup's
+      // initially stable geometry. Do not wait for the animation to finish.
+      await animation.ready;
+      await new Promise<void>(resolve => {
+        const observeMotion = () => {
+          const top = card.getBoundingClientRect().top;
+          if (top > 20) {
+            document.body.dataset.motionStartTop = String(top);
+            resolve();
+          } else requestAnimationFrame(observeMotion);
+        };
+        requestAnimationFrame(observeMotion);
+      });
     });
+    expect(Number(await scope.evaluate(() => document.body.dataset.motionStartTop))).toBeLessThan(180);
 
     // A delayed coordinate command can land after the sampled button moves.
     // Keep the actual browser input; hold only this harness API's dispatch so
@@ -47,7 +61,9 @@ for (const childFrame of [false, true]) {
     expect(await scope.evaluate(() => ({
       trusted: document.body.dataset.clickTrusted,
       count: document.body.dataset.clickCount,
-      animationState: document.body.dataset.clickAnimationState,
-    }))).toEqual({ trusted: "true", count: "1", animationState: "finished" });
+    }))).toEqual({ trusted: "true", count: "1" });
+    // Measure the rendered endpoint at native input delivery, independently of
+    // the helper and of WAAPI's completion bookkeeping.
+    expect(Number(await scope.evaluate(() => document.body.dataset.clickTop))).toBeCloseTo(180, 1);
   });
 }
