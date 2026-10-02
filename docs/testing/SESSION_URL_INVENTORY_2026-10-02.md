@@ -33,26 +33,26 @@ refer to the snapshot identified above.
 | Separate `pendingDecision` v2 records | Full URLs are SHA-256-hashed for exact context/destination binding; stored origins retain scheme/host/port. The reconstructed URL fields are origins/hashes rather than raw full destinations. | 30s eligibility; hydration drops expired/malformed records and awaits a sanitized write. Listing/consumption removes expired records; navigation and tab removal perform awaited cleanup. No idle timer. |
 
 Manager field definitions and persistence:
-[session_state.ts](../../extension/src/shared/session_state.ts#L36).
+[session_state.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/session_state.ts#L36).
 Navigation producers/consumers:
-[sw.ts](../../extension/src/sw/sw.ts#L759),
-[allow-target matching](../../extension/src/sw/sw.ts#L1293),
-[forward polling](../../extension/src/sw/sw.ts#L947),
-[commit state](../../extension/src/sw/sw.ts#L1115),
-[update-time delivery](../../extension/src/sw/sw.ts#L1447).
+[sw.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L759),
+[allow-target matching](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L1293),
+[forward polling](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L947),
+[commit state](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L1115),
+[update-time delivery](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L1447).
 Content return/freshness behavior:
-[capture_isolated.ts](../../extension/src/content/capture_isolated.ts#L1287).
+[capture_isolated.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/content/capture_isolated.ts#L1287).
 Silent-event producer and admitted schema:
-[capture builder](../../extension/src/content/capture_isolated.ts#L832),
-[storage_impl.ts](../../extension/src/shared/storage_impl.ts#L753).
+[capture builder](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/content/capture_isolated.ts#L832),
+[storage_impl.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/storage_impl.ts#L753).
 Redirect classifier/pruning:
-[redirect_chain.ts](../../extension/src/shared/redirect_chain.ts#L123).
+[redirect_chain.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/redirect_chain.ts#L123).
 OAuth producer/pruning:
-[sw.ts](../../extension/src/sw/sw.ts#L213),
-[OAuth helpers](../../extension/src/content/oauth_monitor.ts#L36).
+[sw.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L213),
+[OAuth helpers](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/content/oauth_monitor.ts#L36).
 Pending-decision reconstruction/hashing:
-[pending_decision.ts](../../extension/src/shared/pending_decision.ts#L388),
-[store](../../extension/src/sw/pending_decision_store.ts#L94).
+[pending_decision.ts](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/pending_decision.ts#L388),
+[store](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/pending_decision_store.ts#L94).
 
 ## Hydration and restart limits
 
@@ -62,8 +62,8 @@ string `expectedCallbackDomain`, not a hostname-only value. Current domain-only
 producers therefore do not establish that every admitted or restored OAuth record
 is domain-only. The same distinction applies to `silentEvent` and redirect-chain
 objects. Hydration does not prune valid records by age.
-[validators](../../extension/src/shared/session_state.ts#L150),
-[original-object restore](../../extension/src/shared/session_state.ts#L407).
+[validators](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/session_state.ts#L150),
+[original-object restore](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/session_state.ts#L407).
 
 Hydration retries a failed read once. After both reads fail, handlers can run
 against memory, but writes remain suppressed for that worker's lifetime so an
@@ -71,15 +71,15 @@ empty cache does not overwrite unread session state. The next worker startup can
 hydrate again. Persistence is fire-and-forget and can fail; tab deletion removes
 all manager maps before a batch write. The separate pending-decision store awaits
 its reconstruction/cleanup writes.
-[manager hydration/persistence](../../extension/src/shared/session_state.ts#L286),
-[pending-decision hydration](../../extension/src/sw/pending_decision_store.ts#L173).
+[manager hydration/persistence](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/session_state.ts#L286),
+[pending-decision hydration](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/pending_decision_store.ts#L173).
 
 `ns-get-chain-info` can prune the backing redirect map without persisting it. A
 subsequent worker can restore the still-stored chain until another write/cleanup
 reconciles it. Likewise, conditional forward expiry and no-age rollback/baseline
 records cannot be described as bounded physical idle retention.
-[chain read](../../extension/src/sw/sw.ts#L976),
-[forward branches](../../extension/src/sw/sw.ts#L947).
+[chain read](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L976),
+[forward branches](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/sw/sw.ts#L947).
 
 ## Existing proof and remaining gaps
 
@@ -101,14 +101,14 @@ recycling or an approved data boundary. The principal gaps found in this read ar
 - an OAuth record seeded before hydration followed by mismatch processing.
 
 Test seams:
-[session-state](../../tests/session-state.test.ts#L463),
-[tab-key validation](../../tests/session-state-tabkeys.test.ts),
-[rollback](../../tests/sw-rollback.test.ts#L840),
-[content freshness](../../tests/rollback-staleness.test.ts#L26),
-[redirect chains](../../tests/redirect-chain.test.ts#L176),
-[OAuth](../../tests/oauth-monitor.test.ts),
-[worker OAuth](../../tests/sw-handlers.test.ts#L1643),
-[pending-decision store](../../tests/pending-decision-store.test.ts#L140).
+[session-state](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/session-state.test.ts#L463),
+[tab-key validation](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/session-state-tabkeys.test.ts),
+[rollback](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/sw-rollback.test.ts#L840),
+[content freshness](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/rollback-staleness.test.ts#L26),
+[redirect chains](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/redirect-chain.test.ts#L176),
+[OAuth](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/oauth-monitor.test.ts),
+[worker OAuth](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/sw-handlers.test.ts#L1643),
+[pending-decision store](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/tests/pending-decision-store.test.ts#L140).
 
 At this snapshot, eight focused suites passed with 361 tests: session-state,
 tab-key validation, worker rollback, redirect chains, pending-decision store and
@@ -133,7 +133,7 @@ questions in #176, not approvals inferred here.
 owner reset-boundary decision: current behavioral reset covers outcomes, adaptive
 scores, event log and domain profiles, while session navigation/pending decisions
 remain outside it. No user configuration or session data was deleted.
-[reset lanes](../../extension/src/shared/behavioural_reset.ts#L47).
+[reset lanes](https://github.com/Chris0Jeky/NavSentinel/blob/cebe78839e0659f33a97372070def1d3233e20c9/extension/src/shared/behavioural_reset.ts#L47).
 
 `ACTION_ITEMS.md` remains the human queue; AI-19 is the current cursor. This
 inventory does not claim a human Gate-3 pass or close either owner decision.
