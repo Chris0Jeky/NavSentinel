@@ -64,6 +64,10 @@
       const HOOK_TIMEOUT_MS = 5000;
       const SETTLE_TIMEOUT_MS = 3000;
       const READY_TIMEOUT_MS = 5000;
+      // The public marker trails bridge verification by one message hop. A
+      // positive margin prevents writes that finish inside that hop from being
+      // misclassified as pre-verification evidence (#954).
+      const MIN_READY_GAP_MS = 5;
       const now = () => Math.round(performance.now() * 10) / 10;
 
       const check = {
@@ -81,26 +85,45 @@
         const resolved = check.writes.filter((write) => write.resolvedAt !== null);
         const refused = check.writes.filter((write) => write.error !== null);
         const beforeReady = resolved.filter((write) => check.readyAt === null || write.resolvedAt < check.readyAt);
+        const firstResolvedAt = resolved.reduce(
+          (min, write) => Math.min(min, write.resolvedAt),
+          Number.POSITIVE_INFINITY,
+        );
+        const lastResolvedAt = resolved.reduce((max, write) => Math.max(max, write.resolvedAt), 0);
+        const normalizedFirst = Number.isFinite(firstResolvedAt) ? firstResolvedAt : null;
+        const normalizedLast = lastResolvedAt || null;
+        const burstSpreadMs = normalizedFirst === null || normalizedLast === null
+          ? null
+          : Math.round((normalizedLast - normalizedFirst) * 10) / 10;
+        const readyGapMs = check.readyAt === null || normalizedLast === null
+          ? null
+          : Math.round((check.readyAt - normalizedLast) * 10) / 10;
         return {
           attempted: check.writes.length,
           resolved: resolved.length,
           refused: refused.length,
           pending: check.writes.length - resolved.length - refused.length,
           beforeReady: beforeReady.length,
-          lastResolvedAt: resolved.reduce((max, write) => Math.max(max, write.resolvedAt), 0) || null,
+          firstResolvedAt: normalizedFirst,
+          lastResolvedAt: normalizedLast,
+          burstSpreadMs,
+          readyGapMs,
           firstError: refused[0]?.error ?? null,
         };
       };
 
       const render = () => {
         const s = summary();
-        root.dataset.pressureMode = check.mode;
-        root.dataset.pressureState = check.state;
-        root.dataset.pressureReason = check.reason;
-        root.dataset.pressureAttempted = String(s.attempted);
-        root.dataset.pressureResolved = String(s.resolved);
-        root.dataset.pressureRefused = String(s.refused);
-        root.dataset.pressureBeforeReady = String(s.beforeReady);
+        const data = root.dataset;
+        data.pressureMode = check.mode;
+        data.pressureState = check.state;
+        data.pressureReason = check.reason;
+        data.pressureAttempted = String(s.attempted);
+        data.pressureResolved = String(s.resolved);
+        data.pressureRefused = String(s.refused);
+        data.pressureBeforeReady = String(s.beforeReady);
+        data.pressureBurstSpreadMs = s.burstSpreadMs === null ? "" : String(s.burstSpreadMs);
+        data.pressureReadyGapMs = s.readyGapMs === null ? "" : String(s.readyGapMs);
         const panel = document.getElementById("self-check");
         const state = document.getElementById("self-check-state");
         const detail = document.getElementById("self-check-detail");
@@ -121,7 +144,8 @@
           `arm: ${check.mode}`,
           `writes: ${s.resolved}/${s.attempted} finished, ${s.refused} refused, ${s.pending} pending`,
           `finished before the bridge-ready marker: ${s.beforeReady}/${s.attempted}`,
-          `hook seen: ${check.hookAt === null ? "-" : `${check.hookAt} ms`}; burst: ${check.burstAt === null ? "-" : `${check.burstAt} ms`}; last write: ${s.lastResolvedAt === null ? "-" : `${s.lastResolvedAt} ms`}; bridge-ready marker: ${check.readyAt === null ? "-" : `${check.readyAt} ms`}`,
+          `burst spread: ${s.burstSpreadMs === null ? "-" : `${s.burstSpreadMs} ms`}; ready gap: ${s.readyGapMs === null ? "-" : `${s.readyGapMs} ms`} (minimum ${MIN_READY_GAP_MS} ms)`,
+          `hook seen: ${check.hookAt === null ? "-" : `${check.hookAt} ms`}; burst: ${check.burstAt === null ? "-" : `${check.burstAt} ms`}; first write: ${s.firstResolvedAt === null ? "-" : `${s.firstResolvedAt} ms`}; last write: ${s.lastResolvedAt === null ? "-" : `${s.lastResolvedAt} ms`}; bridge-ready marker: ${check.readyAt === null ? "-" : `${check.readyAt} ms`}`,
         ].join("\n");
       };
 
@@ -169,7 +193,17 @@
           finish("retry", `${s.attempted - s.beforeReady} write(s) finished after the bridge-ready marker; reload to try again.`);
           return;
         }
-        finish("valid", `${s.attempted}/${s.attempted} writes finished before it.`);
+        if (s.readyGapMs === null || s.readyGapMs < MIN_READY_GAP_MS) {
+          finish(
+            "retry",
+            `The bridge-ready marker followed the last write by only ${s.readyGapMs ?? "an unknown"} ms; require at least ${MIN_READY_GAP_MS} ms to exclude the verification-to-marker hop.`,
+          );
+          return;
+        }
+        finish(
+          "valid",
+          `${s.attempted}/${s.attempted} writes finished before it with a ${s.readyGapMs} ms ready gap.`,
+        );
       };
 
       const burst = () => {

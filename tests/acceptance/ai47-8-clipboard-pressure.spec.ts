@@ -42,6 +42,7 @@ const LOOPBACK_HOSTS = ["localhost", "127.0.0.1"];
 const CONSOLE_NOISE = [/favicon\.ico/];
 const PRESSURE_FIXTURE = "/clickfix-06-clipboard-pressure.html";
 const PRESSURE_ATTEMPTS = 3;
+const PRESSURE_TIMING_SAMPLES = 10;
 const FLOOD_WRITES = 40;
 
 test.setTimeout(240_000);
@@ -53,6 +54,8 @@ type SelfCheck = {
   resolved: number;
   refused: number;
   beforeReady: number;
+  burstSpreadMs: number | null;
+  readyGapMs: number | null;
 };
 
 /** Every distinct toast text seen on the page during the window. */
@@ -86,6 +89,27 @@ function mentionsLoopback(value: unknown): string[] {
   return LOOPBACK_HOSTS.filter((host) => text.includes(host));
 }
 
+async function waitForEventLogQuiescence(
+  session: AcceptanceSession,
+  timeoutMs = 6_000,
+): Promise<Array<Record<string, unknown>>> {
+  const deadline = Date.now() + timeoutMs;
+  let previous = await session.eventLog();
+  let stableSamples = 0;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const current = await session.eventLog();
+    if (JSON.stringify(current) === JSON.stringify(previous)) {
+      stableSamples += 1;
+      if (stableSamples >= 3) return current;
+    } else {
+      previous = current;
+      stableSamples = 0;
+    }
+  }
+  throw new Error("TEST_INVALID: event log did not quiesce after a discarded pressure load");
+}
+
 async function readSelfCheck(page: Page): Promise<SelfCheck> {
   return page.evaluate(() => {
     const data = document.documentElement.dataset;
@@ -96,6 +120,8 @@ async function readSelfCheck(page: Page): Promise<SelfCheck> {
       resolved: Number(data.pressureResolved ?? "0"),
       refused: Number(data.pressureRefused ?? "0"),
       beforeReady: Number(data.pressureBeforeReady ?? "0"),
+      burstSpreadMs: data.pressureBurstSpreadMs ? Number(data.pressureBurstSpreadMs) : null,
+      readyGapMs: data.pressureReadyGapMs ? Number(data.pressureReadyGapMs) : null,
     };
   });
 }
@@ -132,15 +158,19 @@ async function loadValidPressureArm(
   session: AcceptanceSession,
   arm: "benign" | "attack",
 ): Promise<{ page: Page; check: SelfCheck; logBefore: Array<Record<string, unknown>> }> {
-  const page = await session.newPage();
-  await page.bringToFront();
   const url = session.url(`${PRESSURE_FIXTURE}?mode=${arm}`, "localhost");
+  let page: Page | null = null;
   let check: SelfCheck | null = null;
   let logBefore: Array<Record<string, unknown>> = [];
   for (let attempt = 1; attempt <= PRESSURE_ATTEMPTS; attempt++) {
+    if (page) {
+      await page.close();
+      await waitForEventLogQuiescence(session);
+    }
     logBefore = await session.eventLog();
-    if (attempt === 1) await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
-    else await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    page = await session.newPage();
+    await page.bringToFront();
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await page.waitForFunction(
       () => ["valid", "retry", "failed", "idle"].includes(document.documentElement.dataset.pressureState ?? ""),
       null,
@@ -149,10 +179,8 @@ async function loadValidPressureArm(
     check = await readSelfCheck(page);
     session.observe(`${arm} arm load ${attempt} self-check`, JSON.stringify(check));
     if (check.state !== "retry") break;
-    // Let any receipts from the discarded load land before the next baseline.
-    await page.waitForTimeout(1000);
   }
-  if (!check) throw new Error("TEST_INVALID: the pressure fixture never reported a self-check");
+  if (!check || !page) throw new Error("TEST_INVALID: the pressure fixture never reported a self-check");
   const expectedWrites = FLOOD_WRITES + (arm === "attack" ? 1 : 0);
   // "retry" after every attempt means the window was never exercised (TEST_INVALID);
   // "failed" means the bridge never reported ready, which is a product failure.
@@ -164,11 +192,47 @@ async function loadValidPressureArm(
     refused: 0,
     beforeReady: expectedWrites,
   });
+  expect(check.readyGapMs, "the self-check requires a measured post-write ready gap").not.toBeNull();
   const markers = await session.requireReady(page);
   expect(markers.capture).toBe("1");
   expect(markers.bridge).toBe("1");
   return { page, check, logBefore };
 }
+
+async function collectPressureTimingSamples(session: AcceptanceSession): Promise<SelfCheck[]> {
+  const samples: SelfCheck[] = [];
+  const url = session.url(`${PRESSURE_FIXTURE}?mode=benign`, "localhost");
+  for (let index = 1; index <= PRESSURE_TIMING_SAMPLES; index++) {
+    const page = await session.newPage();
+    await page.bringToFront();
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      await page.waitForFunction(
+        () => ["valid", "retry", "failed"].includes(document.documentElement.dataset.pressureState ?? ""),
+        null,
+        { timeout: 20_000 },
+      );
+      const check = await readSelfCheck(page);
+      samples.push(check);
+      session.observe(`clipboard-pressure timing sample ${index}`, JSON.stringify({
+        state: check.state,
+        burstSpreadMs: check.burstSpreadMs,
+        readyGapMs: check.readyGapMs,
+        reason: check.reason,
+      }));
+    } finally {
+      await page.close();
+      await waitForEventLogQuiescence(session);
+    }
+  }
+  expect(samples).toHaveLength(PRESSURE_TIMING_SAMPLES);
+  expect(
+    samples.every((sample) => sample.burstSpreadMs !== null && sample.readyGapMs !== null),
+    "every timing sample records burst spread and the marker gap",
+  ).toBe(true);
+  return samples;
+}
+
 
 test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboard flood keeps the command-like receipt (#599, #947)", async ({}, testInfo) => {
   const session = await AcceptanceSession.open(testInfo, "AI-47.8-former-AI-37-PR599");
@@ -229,11 +293,22 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
       session.observe("clipboard permission set through", `${route} for ${pressureOrigin}`);
     });
 
-    const benign = await session.step("6. pressure page, benign arm: the self-check reads VALID (40 writes finished before the bridge-ready marker)", async () =>
+    await session.step("6. collect ten branded-browser samples of burst spread and the bridge-marker gap", async () => {
+      const samples = await collectPressureTimingSamples(session);
+      const readyGaps = samples.map((sample) => sample.readyGapMs).filter((value): value is number => value !== null);
+      const burstSpreads = samples.map((sample) => sample.burstSpreadMs).filter((value): value is number => value !== null);
+      session.observe("clipboard-pressure timing summary", JSON.stringify({
+        samples: samples.length,
+        readyGapMs: { min: Math.min(...readyGaps), max: Math.max(...readyGaps) },
+        burstSpreadMs: { min: Math.min(...burstSpreads), max: Math.max(...burstSpreads) },
+      }));
+    });
+
+    const benign = await session.step("7. pressure page, benign arm: the self-check reads VALID with a bounded ready gap", async () =>
       loadValidPressureArm(session, "benign"));
     if (!benign) throw new Error("TEST_INVALID: the benign arm did not load");
 
-    await session.step("7. benign arm: no ClickFix or clipboard warning, no clickfix_detected, no bridge_buffer_overflow", async () => {
+    await session.step("8. benign arm: no ClickFix or clipboard warning, no clickfix_detected, no bridge_buffer_overflow", async () => {
       const toasts = await toastsDuring(benign.page, 3000);
       session.note(`benign-arm toasts: ${JSON.stringify(toasts)}`);
       await session.screenshot(benign.page, "pressure-benign-arm");
@@ -248,18 +323,18 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
     }, { soft: true });
     await benign.page.close();
 
-    const attack = await session.step("8. pressure page, attack arm: the self-check reads VALID (40 benign writes then the command-like one, all before the marker)", async () =>
+    const attack = await session.step("9. pressure page, attack arm: the self-check reads VALID with a bounded ready gap", async () =>
       loadValidPressureArm(session, "attack"));
     if (!attack) throw new Error("TEST_INVALID: the attack arm did not load");
 
-    await session.step("9. attack arm: the fake-verification clipboard warning is shown without any click", async () => {
+    await session.step("10. attack arm: the fake-verification clipboard warning is shown without any click", async () => {
       const warning = await waitForWarning(attack.page, 8000);
       session.note(`attack-arm warning: ${JSON.stringify(warning)}`);
       await session.screenshot(attack.page, "pressure-attack-arm");
       expect(warning, "the command-like receipt must survive the flood and raise the warning").not.toBeNull();
     }, { soft: true });
 
-    await session.step("10. the event log has the attack arm's clickfix_detected, no bridge_buffer_overflow, and no raw clipboard value", async () => {
+    await session.step("11. the event log has the attack arm's clickfix_detected, no bridge_buffer_overflow, and no raw clipboard value", async () => {
       await expect.poll(async () => kindCount(await session.eventLog(), "clickfix_detected"), { timeout: 5000 })
         .toBe(kindCount(attack.logBefore, "clickfix_detected") + 1);
       const log = await session.eventLog("event log after the attack arm");
@@ -280,7 +355,7 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
     }, { soft: true });
     await attack.page.close();
 
-    await session.step("11. no new console errors on the pages, Options or service worker", async () => {
+    await session.step("12. no new console errors on the pages, Options or service worker", async () => {
       const errors = session.consoleErrors(CONSOLE_NOISE);
       session.note(`console errors: ${JSON.stringify(errors)}`);
       expect(errors).toEqual([]);
