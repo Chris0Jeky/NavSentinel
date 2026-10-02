@@ -727,7 +727,9 @@ function callNativeOpen(
   target?: string,
   features?: string
 ): Window | null {
-  return (nativeProtoOpen || nativeOpen).call(thisArg, url, target, features);
+  // Named DOM properties can make the prototype capture a non-function.
+  const native = typeof nativeProtoOpen === "function" ? nativeProtoOpen : nativeOpen;
+  return native.call(thisArg, url, target, features);
 }
 
 const RESERVED_TARGETS = new Set(["_top", "_parent", "_blank"]);
