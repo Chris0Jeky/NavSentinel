@@ -434,3 +434,52 @@ describe("release script integration", () => {
     ]);
   });
 });
+
+const pathIdentityEnvironment = createSanitizedGitEnvironment(process.env);
+function pathGit(root: string, ...args: string[]): Buffer {
+  return execFileSync("git", args, { cwd: root, env: pathIdentityEnvironment, stdio: ["ignore", "pipe", "pipe"] });
+}
+function pathFixture(format: "sha1" | "sha256", name: string): string {
+  const root = makeTempRoot("path-identity");
+  pathGit(root, "init", "-q", `--object-format=${format}`);
+  pathGit(root, "config", "core.autocrlf", "false");
+  pathGit(root, "config", "user.name", "Path Identity Fixture");
+  pathGit(root, "config", "user.email", "path-identity@example.invalid");
+  pathGit(root, "config", "commit.gpgsign", "false");
+  const target = path.join(root, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, "identical blob bytes\n");
+  pathGit(root, "add", ".");
+  pathGit(root, "commit", "-qm", "exact path fixture");
+  expect(pathGit(root, "ls-files", "-z")).toEqual(Buffer.from(`${name}\0`, "utf8"));
+  return root;
+}
+
+for (const format of ["sha1", "sha256"] as const) {
+  describe(`release path byte identity (${format})`, () => {
+    for (const name of ["\uFEFFproof.txt", "\uFEFFfolder/proof.txt"]) {
+      it(`preserves the leading U+FEFF in ${JSON.stringify(name)}`, () => {
+        const root = pathFixture(format, name);
+        expect(assertExactCommittedInputs(root).entries.map((entry) => entry.path)).toEqual([name]);
+      });
+
+      it(`rejects a same-content worktree alias for ${JSON.stringify(name)}`, () => {
+        const root = pathFixture(format, name);
+        const before = pathGit(root, "rev-parse", "HEAD");
+        const first = name.split("/")[0]!;
+        fs.renameSync(path.join(root, first), path.join(root, first.slice(1)));
+        // Neither the commit nor the index changed. Only the filesystem name
+        // differs; attesting the equal-content alias would attest the wrong path.
+        expect(pathGit(root, "rev-parse", "HEAD")).toEqual(before);
+        expect(pathGit(root, "ls-files", "-z")).toEqual(Buffer.from(`${name}\0`, "utf8"));
+        expect(() => assertExactCommittedInputs(root)).toThrow(/missing|untracked/i);
+      });
+    }
+
+    it("keeps a U+FEFF in a later path component without normalizing it", () => {
+      const name = "folder/\uFEFFproof.txt";
+      const root = pathFixture(format, name);
+      expect(assertExactCommittedInputs(root).entries.map((entry) => entry.path)).toEqual([name]);
+    });
+  });
+}

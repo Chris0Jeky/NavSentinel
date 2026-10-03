@@ -44,7 +44,9 @@ const PRESERVED_GIT_IDENTITY_KEYS = new Set([
   "GIT_COMMITTER_NAME",
   "GIT_COMMITTER_EMAIL",
 ]);
-const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+// Git paths are byte identities, not text documents. Preserve a leading U+FEFF
+// rather than interpreting it as an encoding signature and stripping it.
+const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function integrityError(message) {
   return new Error(`Release input integrity failure: ${message}`);
