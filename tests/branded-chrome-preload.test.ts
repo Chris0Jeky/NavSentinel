@@ -284,7 +284,7 @@ describe("branded-chrome-preload control parity (M0 #1018)", () => {
         NAVSENTINEL_BRANDED_CHROME: custom,
         NAVSENTINEL_REALISTIC_CHROME: realistic,
       });
-      const options: LaunchOptions = { args: [], ignoreDefaultArgs: ignored };
+      const options: LaunchOptions = { args: [], ...(ignored === undefined ? {} : { ignoreDefaultArgs: ignored }) };
       await harness.chromium.launchPersistentContext("/tmp/ud-control", options);
       const actual = harness.nativeCalls[0]!.options;
       expect(actual.executablePath).toBe(custom);
@@ -293,7 +293,7 @@ describe("branded-chrome-preload control parity (M0 #1018)", () => {
       expect(actual.chromiumSandbox).toBe(realistic === "1" ? true : undefined);
       expect(harness.contexts[0]?.__browser.sessionCreated).toBe(false);
       expect(harness.contexts[0]?.__session.sendCalls).toEqual([]);
-      expect(options).toEqual({ args: [], ignoreDefaultArgs: ignored });
+      expect(options).toEqual(ignored === undefined ? { args: [] } : { args: [], ignoreDefaultArgs: ignored });
     });
   }
 
