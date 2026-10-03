@@ -303,8 +303,16 @@ export class AcceptanceSession {
     const session = await this.context.newCDPSession(probe);
     type Version = { versionId: string; scriptURL: string; runningStatus: string };
     const versions = new Map<string, Version>();
+    let stopArmedVersionId: string | null = null;
+    let stopObserved = false;
     session.on("ServiceWorker.workerVersionUpdated", ({ versions: updates }: { versions: Version[] }) => {
-      for (const version of updates) if (version.scriptURL === workerUrl) versions.set(version.versionId, version);
+      for (const version of updates) {
+        if (version.scriptURL !== workerUrl) continue;
+        versions.set(version.versionId, version);
+        if (stopArmedVersionId !== null && version.versionId === stopArmedVersionId && version.runningStatus === "stopped") {
+          stopObserved = true;
+        }
+      }
     });
     const waitFor = async (predicate: () => boolean, message: string, timeoutMs = 8000) => {
       const deadline = Date.now() + timeoutMs;
@@ -315,8 +323,9 @@ export class AcceptanceSession {
       await session.send("ServiceWorker.enable");
       await waitFor(() => [...versions.values()].some((version) => version.runningStatus === "running"), "extension service worker version not visible to DevTools");
       const running = [...versions.values()].find((version) => version.runningStatus === "running")!;
+      stopArmedVersionId = running.versionId;
       await session.send("ServiceWorker.stopWorker", { versionId: running.versionId });
-      await waitFor(() => versions.get(running.versionId)?.runningStatus === "stopped", "extension service worker did not stop");
+      await waitFor(() => stopObserved, "extension service worker did not stop");
       this.note(`service worker stopped at ${new Date().toISOString()}`);
       // Wake it through an ordinary extension surface, as a user would.
       await probe.goto(this.extensionUrl("src/options/options.html"), { waitUntil: "load" });

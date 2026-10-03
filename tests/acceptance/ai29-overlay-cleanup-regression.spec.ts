@@ -130,9 +130,9 @@ test("AI-29 regression: setting surfaces, mutation-01 fallback, load-time trap c
       const email = await page.locator("input[type=email]").first().boundingBox();
       const hit = await hitTargetId(page, { x: email!.x + 5, y: email!.y + email!.height / 2 });
       session.note(`mutation-01 card ${JSON.stringify(card)}; timing "${timing}"; hit at email field: ${hit}`);
-      await session.screenshot(page, "4-mutation01-hidden");
       await clickToastButton(page, page, "Undo", "brief");
       await expect.poll(() => visible(page, "#malicious-overlay"), { timeout: 1500 }).toBe(true);
+      await session.screenshot(page, "4-mutation01-restored");
       expect(card.text).toContain("Overlay hidden; still watching");
       expect(card.buttons).toEqual(["Undo"]);
       expect(timing).toMatch(/human fallback timer/i);
@@ -161,7 +161,6 @@ test("AI-29 regression: setting surfaces, mutation-01 fallback, load-time trap c
       const card = (await toastCards(page)).find((candidate) => candidate.brief)!;
       const link = await page.locator(".real-link").boundingBox();
       const hit = await hitTargetId(page, { x: link!.x + link!.width / 2, y: link!.y + link!.height / 2 });
-      await session.screenshot(page, "5b-evasion02-auto-hidden");
       // Undo within its 2 s window; the trap must return without any click being synthesized or replayed.
       await page.evaluate(() => {
         const state = (window as unknown as { __nsAccHide: { trapClicks: number } }).__nsAccHide;
@@ -169,6 +168,7 @@ test("AI-29 regression: setting surfaces, mutation-01 fallback, load-time trap c
       });
       await clickToastButton(page, page, "Undo", "brief");
       await expect.poll(() => visible(page, "#trap"), { timeout: 1500 }).toBe(true);
+      await session.screenshot(page, "5b-evasion02-restored");
       await page.waitForTimeout(800);
       const trapClicks = await page.evaluate(() => (window as unknown as { __nsAccHide: { trapClicks: number } }).__nsAccHide.trapClicks);
       session.note(`evasion-02 card ${JSON.stringify(card)}; Real Link hit ${hit}; trap clicks after Undo ${trapClicks}`);
@@ -294,9 +294,9 @@ test("AI-29 regression: child-frame nesting lab — exact Undo, hostile persiste
       expect(await visible(page, "#media-frame"), "outer synthetic media frame remains").toBe(true);
       expect(await visible(frame, "#underlay"), "Nested frame content exposed").toBe(true);
       await expect.poll(() => briefCardCount(frame), { timeout: 1500, intervals: [25] }).toBe(1);
-      await session.screenshot(page, "7-exact-hidden");
       await clickToastButton(page, frame, "Undo", "brief");
       await expect.poll(() => visible(frame, "#exact-overlay-frame"), { timeout: 1500 }).toBe(true);
+      await session.screenshot(page, "7-exact-restored");
       await page.waitForTimeout(800);
       expect(await visible(frame, "#exact-overlay-frame"), "restored ad stays").toBe(true);
       expect(opened.length - openedBefore, "no tab").toBe(0);
