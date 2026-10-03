@@ -4,7 +4,8 @@
  * Detects suspicious foreground overlays and post-load DOM manipulations:
  *   1. Opt-in bounded scan of foreground overlays present after DOM readiness
  *   2. Delayed overlay injection (position: fixed/absolute/sticky, large coverage, high z-index)
- *   3. Form action attribute changes (especially cross-domain)
+ *   3. Form action attribute changes, including submitter
+ *      formaction/formmethod overrides (especially cross-domain)
  *   4. Password field injection into existing forms
  *   5. Suspicious iframe injection (hidden, tiny, or cross-domain)
  *
@@ -226,9 +227,45 @@ let scarceAlertedElements = new WeakSet<Element>();
  */
 const originalFormActions = new WeakMap<Element, string>();
 
+/**
+ * Tracks original submitter-override values for buttons/inputs observed at
+ * startup. A submitter `formaction` OVERRIDES the form action at submit time
+ * with no `action`-attribute mutation, and `formmethod` can downgrade a POST
+ * submission to GET (leaking credentials into the URL/query, history, and
+ * server logs) — so both need the same baseline-and-alert treatment as the
+ * form action itself. (#812)
+ *
+ * Key: the submitter Element, Value: the original attribute string (or "" if absent).
+ */
+const originalSubmitterFormactions = new WeakMap<Element, string>();
+const originalSubmitterFormmethods = new WeakMap<Element, string>();
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Maximum characters of one page-derived URL interpolated into an alert
+ * `details` string. Attribute values are unbounded — a multi-MB `action`
+ * would otherwise flow verbatim into the event `extra`, and the single
+ * `storage.local.set` write of the whole log array would fail quota, burn
+ * all retries, and lose the entry, letting a page suppress its own
+ * form-tampering telemetry. (#857)
+ */
+const MAX_DETAILS_URL_CHARS = 200;
+
+/** Marker appended when `truncateUrlForAlertDetails` cuts a URL short. */
+const TRUNCATED_URL_SUFFIX = "...(truncated)";
+
+/**
+ * Bound a page-derived URL for interpolation into an alert `details` string.
+ * Realistic URLs pass through byte-identical; pathological ones are cut to
+ * MAX_DETAILS_URL_CHARS plus an explicit truncation marker. (#857)
+ */
+export function truncateUrlForAlertDetails(url: string): string {
+  if (url.length <= MAX_DETAILS_URL_CHARS) return url;
+  return url.slice(0, MAX_DETAILS_URL_CHARS) + TRUNCATED_URL_SUFFIX;
+}
 
 function hostFromUrl(url: string): string | null {
   try {
@@ -290,7 +327,8 @@ function suspiciousIframeScheme(src: string): string | null {
  *  - `suspicious_iframe`  hostile frame injected after load.
  *  - `form_action_changed` at HIGH severity only — a cross-domain action rewrite
  *    is the credential-redirect signal; same-origin rewrites are ordinary SPA
- *    churn and stay floodable.
+ *    churn and stay floodable. Submitter `formaction` rewrites share this
+ *    type, so a cross-domain submitter rewrite is scarce by the same rule. (#812)
  *
  * Dynamic overlay alerts are deliberately NOT scarce: they require layout-bound
  * checks (`getComputedStyle` per element) the cap exists to bound, and they
@@ -344,7 +382,7 @@ const OBSERVE_CONFIG: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ["action", "type", "src", "srcdoc", "style", "class"],
+  attributeFilter: ["action", "formaction", "formmethod", "type", "src", "srcdoc", "style", "class"],
 };
 
 function tryGetShadowRoot(el: Element): ShadowRoot | null {
@@ -395,6 +433,7 @@ function observeShadowRoot(sr: ShadowRoot): void {
       shadowObserversByHost.set(host, shadowObs);
 
       snapshotFormActions(current);
+      snapshotSubmitterOverrides(current);
 
       const nested = current.querySelectorAll("*");
       for (let i = 0; i < nested.length; i++) {
@@ -672,15 +711,111 @@ function checkFormActionChange(form: Element): void {
   if (current === original) return;
 
   const crossDomain = current ? isCrossDomain(current) : false;
+  // Truncate AFTER the equality comparison above: two URLs differing only
+  // past the cap are still a genuine change and must alert. (#857)
   const detail = crossDomain
-    ? `Form action changed to cross-domain URL: "${current}" (was "${original}")`
-    : `Form action changed: "${current}" (was "${original}")`;
+    ? `Form action changed to cross-domain URL: "${truncateUrlForAlertDetails(current)}" (was "${truncateUrlForAlertDetails(original)}")`
+    : `Form action changed: "${truncateUrlForAlertDetails(current)}" (was "${truncateUrlForAlertDetails(original)}")`;
 
   pushAlert({
     type: "form_action_changed",
     severity: crossDomain ? "high" : "medium",
     element: form,
     details: detail,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Snapshot baseline submitter overrides alongside `snapshotFormActions`.
+ * Every button/input is recorded — not just ones already carrying the
+ * attributes — so a plain submitter gaining a hostile override post-load
+ * alerts instead of silently becoming its own baseline. (#812)
+ */
+function snapshotSubmitterOverrides(doc: Document | ShadowRoot): void {
+  const submitters = doc.querySelectorAll("button, input");
+  for (let i = 0; i < submitters.length; i++) {
+    const submitter = submitters[i]!;
+    if (!originalSubmitterFormactions.has(submitter)) {
+      originalSubmitterFormactions.set(submitter, submitter.getAttribute("formaction") ?? "");
+    }
+    if (!originalSubmitterFormmethods.has(submitter)) {
+      originalSubmitterFormmethods.set(submitter, submitter.getAttribute("formmethod") ?? "");
+    }
+  }
+}
+
+function checkSubmitterFormactionChange(submitter: Element): void {
+  if (submitter.tagName !== "BUTTON" && submitter.tagName !== "INPUT") return;
+
+  const original = originalSubmitterFormactions.get(submitter);
+  const current = submitter.getAttribute("formaction") ?? "";
+  if (original === undefined) {
+    // First time seeing this submitter -- record its override, don't alert
+    originalSubmitterFormactions.set(submitter, current);
+    return;
+  }
+  if (current === original) return;
+
+  const crossDomain = current ? isCrossDomain(current) : false;
+  // Truncate AFTER the equality comparison above: two URLs differing only
+  // past the cap are still a genuine change and must alert. (#857)
+  // The "Submitter formaction changed" prefix is load-bearing: the event-log
+  // sanitizer redacts exactly this shape before persisting. (#902)
+  const detail = crossDomain
+    ? `Submitter formaction changed to cross-domain URL: "${truncateUrlForAlertDetails(current)}" (was "${truncateUrlForAlertDetails(original)}")`
+    : `Submitter formaction changed: "${truncateUrlForAlertDetails(current)}" (was "${truncateUrlForAlertDetails(original)}")`;
+
+  pushAlert({
+    type: "form_action_changed",
+    severity: crossDomain ? "high" : "medium",
+    element: submitter,
+    details: detail,
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Effective submission method for a submitter override, mirroring the
+ * `isGetForm` fallback chain in main_guard.ts at the attribute level: a
+ * present submitter formmethod wins, otherwise the owning form's method,
+ * otherwise GET. (#812)
+ */
+function effectiveSubmitMethod(submitterMethod: string, form: Element | null): string {
+  const raw = submitterMethod || form?.getAttribute("method") || "get";
+  return raw.toLowerCase();
+}
+
+function checkSubmitterFormmethodChange(submitter: Element): void {
+  if (submitter.tagName !== "BUTTON" && submitter.tagName !== "INPUT") return;
+
+  const original = originalSubmitterFormmethods.get(submitter);
+  const current = submitter.getAttribute("formmethod") ?? "";
+  if (original === undefined) {
+    // First time seeing this submitter -- record its override, don't alert
+    originalSubmitterFormmethods.set(submitter, current);
+    return;
+  }
+  if (current === original) return;
+
+  // Only a POST-to-GET downgrade alerts: GET submissions leak credentials
+  // into the URL/query, history, and server logs. Upgrades, lateral changes,
+  // and case-only rewrites are not exfil signals. The comparison is over the
+  // EFFECTIVE method, so a formmethod added to (or removed from) a submitter
+  // on a POST form is still judged against the POST it overrides. (#812)
+  const owner = submitter as HTMLButtonElement | HTMLInputElement;
+  const form = owner.form ?? submitter.closest("form");
+  const wasPost = effectiveSubmitMethod(original, form) === "post";
+  const nowGet = effectiveSubmitMethod(current, form) === "get";
+  if (!wasPost || !nowGet) return;
+
+  // Both sides are pinned to 3-4 chars by the post/get comparisons above (or
+  // empty, deferring to the form), so no #857-style truncation is needed.
+  pushAlert({
+    type: "form_action_changed",
+    severity: "medium",
+    element: submitter,
+    details: `Submitter formmethod downgraded from POST to GET (was "${original}", now "${current}")`,
     timestamp: Date.now(),
   });
 }
@@ -943,7 +1078,10 @@ function processRemovedNode(node: Node): void {
  *   `checkFormActionChange` still runs: it is layout-free, it keeps the
  *   `originalFormActions` baselines accurate (dropping it would corrupt later
  *   comparisons), and `pushAlert` admits only its HIGH/cross-domain result into
- *   the reserve. (#413)
+ *   the reserve. (#413) `checkSubmitterFormactionChange` /
+ *   `checkSubmitterFormmethodChange` likewise still run: both are layout-free
+ *   attribute reads, and `pushAlert` admits only the HIGH/cross-domain
+ *   submitter result into the reserve. (#812)
  */
 function processAttributeChange(record: MutationRecord, scarceOnly = false): void {
   const target = record.target;
@@ -951,6 +1089,14 @@ function processAttributeChange(record: MutationRecord, scarceOnly = false): voi
 
   if (record.attributeName === "action") {
     checkFormActionChange(target);
+  }
+
+  if (record.attributeName === "formaction") {
+    checkSubmitterFormactionChange(target);
+  }
+
+  if (record.attributeName === "formmethod") {
+    checkSubmitterFormmethodChange(target);
   }
 
   if (record.attributeName === "type" && target.tagName === "INPUT") {
@@ -1215,8 +1361,9 @@ export function startMutationMonitor(
   restoredOverlayCleanupExclusions = new WeakSet();
   initialOverlayAlerted = false;
 
-  // Snapshot current form actions so we can detect changes later
+  // Snapshot current form actions and submitter overrides so we can detect changes later
   snapshotFormActions(doc);
+  snapshotSubmitterOverrides(doc);
 
   observer = new MutationObserver(onMutations);
   observer.observe(doc.documentElement, OBSERVE_CONFIG);

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Child-form allowance authority boundary (#688)</title>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    iframe { width: 720px; height: 420px; border: 1px solid #999; }
+  </style>
+</head>
+<body>
+  <h1>Child-form allowance authority boundary (#688)</h1>
+  <p>The embedded page starts a trusted-click legacy submit to its named child,
+     then tries to retarget that same authority to the top-level page during
+     <code>formdata</code>.</p>
+  <iframe
+    id="source"
+    name="source"
+    title="child form authority source"
+    src="form-submit-child-replay.html?mode=allowance-retarget-top"
+  ></iframe>
+</body>
+</html>
