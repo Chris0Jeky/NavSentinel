@@ -157,7 +157,9 @@ if (selector) {
         return original.call(this, userDataDir, options);
       }
       const realistic = process.env.NAVSENTINEL_REALISTIC_CHROME === "1";
-      const extraIgnored = ["--disable-extensions"];
+      // Native controls retain Playwright's extension isolation. Only an arm
+      // loading unpacked extensions needs the default disable flag removed.
+      const extraIgnored = extensions.length ? ["--disable-extensions"] : [];
       if (realistic) {
         extraIgnored.push(...REALISM_DISTORTING_SWITCHES);
         const features = playwrightDisableFeaturesSwitch(undefined);
