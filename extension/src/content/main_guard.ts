@@ -1704,63 +1704,26 @@ const nativePushState = History.prototype.pushState;
 const nativeReplaceState = History.prototype.replaceState;
 
 function patchHistory(): void {
-  const patchedPushState = function (
-    this: History,
-    data: unknown,
-    unused: string,
-    rawUrl?: string | URL | null,
-  ): void {
-    // Coerce the URL exactly once, as patchedOpen does. A page-supplied object
-    // could otherwise stringify to one path for the native call and another
-    // for the detector or the telemetry below (#891). A template literal
-    // performs the same ToString as the native binding, including throwing on
-    // a Symbol; null/undefined keep their native semantics.
-    const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
-    const result = nativePushState.call(this, data, unused, url);
-    const reason = checkPushStateSuspicious(url, "pushState");
-    if (reason) {
-      postToIsolated("ns-pushstate-suspicious", {
-        ts: nowMs(),
-        url: url ?? "",
-        method: "pushState",
-        reason,
-      });
-      if (debug) {
-        console.debug("[NavSentinel] suspicious pushState", { url, reason });
+  for (const [method, native] of [["pushState", nativePushState], ["replaceState", nativeReplaceState]] as const) {
+    const patchedHistory = function (this: History, _data: unknown, _unused: string): void {
+      const args = arguments; // eslint-disable-line prefer-rest-params -- Preserve supplied arity and native function.length.
+      // Forward actual arity so the native still rejects missing required arguments.
+      if (args.length < 2) return Reflect.apply(native, this, args);
+      const rawUrl = args[2] as string | URL | null | undefined;
+      // Native and observer share one ToString; Symbol still throws (#891).
+      const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
+      if (args.length > 2) args[2] = url;
+      const result = Reflect.apply(native, this, args);
+      const reason = checkPushStateSuspicious(url, method);
+      if (reason) {
+        postToIsolated("ns-pushstate-suspicious", { ts: nowMs(), url: url ?? "", method, reason });
+        if (debug) console.debug(`[NavSentinel] suspicious ${method}`, { url, reason });
       }
-    }
-    return result;
-  };
-
-  const patchedReplaceState = function (
-    this: History,
-    data: unknown,
-    unused: string,
-    rawUrl?: string | URL | null,
-  ): void {
-    // Same single-coercion contract as patchedPushState (#891).
-    const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
-    const result = nativeReplaceState.call(this, data, unused, url);
-    const reason = checkPushStateSuspicious(url, "replaceState");
-    if (reason) {
-      postToIsolated("ns-pushstate-suspicious", {
-        ts: nowMs(),
-        url: url ?? "",
-        method: "replaceState",
-        reason,
-      });
-      if (debug) {
-        console.debug("[NavSentinel] suspicious replaceState", { url, reason });
-      }
-    }
-    return result;
-  };
-  // Observational hooks only (they call the native and report; never block), so
-  // install them WRITABLE + CONFIGURABLE — hardening these to non-writable broke
-  // strict-mode SPA routers that reassign history.pushState (grey screen on
-  // claude.ai and other TanStack/React-Router apps). See softPatchProto.
-  softPatchProto(History.prototype, "pushState", patchedPushState, "History.prototype.pushState");
-  softPatchProto(History.prototype, "replaceState", patchedReplaceState, "History.prototype.replaceState");
+      return result;
+    };
+    // Observational hooks stay wrappable by strict-mode SPA routers.
+    softPatchProto(History.prototype, method, patchedHistory, `History.prototype.${method}`);
+  }
 }
 
 /**
