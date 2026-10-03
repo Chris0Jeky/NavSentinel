@@ -1472,7 +1472,7 @@ window.addEventListener(
     // Only a VERIFIED bridge pins its session — that prevents post-verification
     // hijack by a *different* session. An unverified session has not proven
     // legitimacy, so a fresh init (e.g. the real isolated world arriving after a
-    // hostile page raced an init first) is allowed to take over the handshake
+    // hostile page raced an init first) are allowed to take over the handshake
     // instead of being locked out.
     //
     // Residual init-auth limits (best-effort; the session travels in a
@@ -1537,29 +1537,35 @@ window.addEventListener(
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
 
+  // Share the unchanged successful-write receipt across text, item and
+  // non-text fallback paths without retaining the clipboard contents.
+  function recordClipboardWrite(contentLength: number, cmdLike: boolean): void {
+    postToIsolated("ns-clipboard-write", {
+      ts: nowMs(), contentLength, looksLikeCommand: cmdLike,
+    });
+  }
+
   if (nativeClipboardWriteText) {
     try {
-      navigator.clipboard.writeText = function (data: string): Promise<void> {
-        // Capture metadata before calling native (data may be GC'd), but
-        // only send the bridge message after the write succeeds so that
-        // failed writes (permission denied, no user gesture) do not cause
-        // false ClickFix detections.
-        const cmdLike = looksLikeCommand(data);
-        const len = data.length;
-        return nativeClipboardWriteText!(data).then((result) => {
-          postToIsolated("ns-clipboard-write", {
-            ts: nowMs(),
-            contentLength: len,
+      navigator.clipboard.writeText = async function (data: string): Promise<void> {
+        // WebIDL string conversion is observable and may throw. An async
+        // wrapper preserves native Promise rejection, including missing args.
+        const text = `${data}`;
+        const cmdLike = looksLikeCommand(text);
+        const len = text.length;
+        // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted data from explicit undefined.
+        if (arguments.length) arguments[0] = text;
+        // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
+        const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
+        // Failed native writes must not produce a successful-write receipt.
+        recordClipboardWrite(len, cmdLike);
+        if (debug) {
+          console.debug("[NavSentinel] clipboard.writeText intercepted", {
+            length: len,
             looksLikeCommand: cmdLike,
           });
-          if (debug) {
-            console.debug("[NavSentinel] clipboard.writeText intercepted", {
-              length: len,
-              looksLikeCommand: cmdLike,
-            });
-          }
-          return result;
-        });
+        }
+        return result;
       };
     } catch {
       // clipboard.writeText may not be configurable in all contexts
@@ -1579,11 +1585,7 @@ function patchClipboard(): void {
               if (item.types.includes("text/plain")) {
                 item.getType("text/plain").then((blob) => {
                   blob.text().then((text) => {
-                    postToIsolated("ns-clipboard-write", {
-                      ts: nowMs(),
-                      contentLength: text.length,
-                      looksLikeCommand: looksLikeCommand(text),
-                    });
+                    recordClipboardWrite(text.length, looksLikeCommand(text));
                   }).catch(() => {});
                 }).catch(() => {});
                 inspected = true;
@@ -1594,11 +1596,7 @@ function patchClipboard(): void {
             // ClipboardItem API may not be fully available
           }
           if (!inspected) {
-            postToIsolated("ns-clipboard-write", {
-              ts: nowMs(),
-              contentLength: -1,
-              looksLikeCommand: false,
-            });
+            recordClipboardWrite(-1, false);
           }
           if (debug) {
             console.debug("[NavSentinel] clipboard.write intercepted");
