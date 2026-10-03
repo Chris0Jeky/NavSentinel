@@ -145,8 +145,7 @@ function clearBridgeHandshakeTimer(): void {
  * forever — the `bridgeSession && data.session !== bridgeSession` guard would
  * then reject the real isolated world's init, permanently disabling the bridge
  * while messages buffer and drop. Releasing the half-open state lets a fresh
- * init (any session) re-establish the bridge instead of deadlocking.
- * Buffered messages are preserved for it.
+ * init (any session) re-establish. Buffered messages are preserved for it.
  */
 function failBridgeHandshake(): void {
   bridgeHandshakeTimer = 0;
@@ -1473,7 +1472,7 @@ window.addEventListener(
     // Only a VERIFIED bridge pins its session — that prevents post-verification
     // hijack by a *different* session. An unverified session has not proven
     // legitimacy, so a fresh init (e.g. the real isolated world arriving after a
-    // hostile page raced an init first and then stalls) is allowed to take over the handshake
+    // hostile page raced an init first) are allowed to take over the handshake
     // instead of being locked out.
     //
     // Residual init-auth limits (best-effort; the session travels in a
@@ -1538,6 +1537,14 @@ window.addEventListener(
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
 
+  // Share the unchanged successful-write receipt across text, item and
+  // non-text fallback paths without retaining the clipboard contents.
+  function recordClipboardWrite(contentLength: number, cmdLike: boolean): void {
+    postToIsolated("ns-clipboard-write", {
+      ts: nowMs(), contentLength, looksLikeCommand: cmdLike,
+    });
+  }
+
   if (nativeClipboardWriteText) {
     try {
       navigator.clipboard.writeText = async function (data: string): Promise<void> {
@@ -1551,11 +1558,7 @@ function patchClipboard(): void {
         // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
         const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
         // Failed native writes must not produce a successful-write receipt.
-        postToIsolated("ns-clipboard-write", {
-          ts: nowMs(),
-          contentLength: len,
-          looksLikeCommand: cmdLike,
-        });
+        recordClipboardWrite(len, cmdLike);
         if (debug) {
           console.debug("[NavSentinel] clipboard.writeText intercepted", {
             length: len,
@@ -1582,11 +1585,7 @@ function patchClipboard(): void {
               if (item.types.includes("text/plain")) {
                 item.getType("text/plain").then((blob) => {
                   blob.text().then((text) => {
-                    postToIsolated("ns-clipboard-write", {
-                      ts: nowMs(),
-                      contentLength: text.length,
-                      looksLikeCommand: looksLikeCommand(text),
-                    });
+                    recordClipboardWrite(text.length, looksLikeCommand(text));
                   }).catch(() => {});
                 }).catch(() => {});
                 inspected = true;
@@ -1597,11 +1596,7 @@ function patchClipboard(): void {
             // ClipboardItem API may not be fully available
           }
           if (!inspected) {
-            postToIsolated("ns-clipboard-write", {
-              ts: nowMs(),
-              contentLength: -1,
-              looksLikeCommand: false,
-            });
+            recordClipboardWrite(-1, false);
           }
           if (debug) {
             console.debug("[NavSentinel] clipboard.write intercepted");
