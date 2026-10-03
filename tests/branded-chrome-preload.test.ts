@@ -227,7 +227,7 @@ describe("branded-chrome-preload control parity (M0 #1018)", () => {
     expect(second.realistic).toBe(false);
   });
 
-  it("realistic mode shares launch flags, sandbox, proxy and ignoreDefaultArgs across arms", async () => {
+  it("realistic mode shares settings while only the extension arm enables extensions", async () => {
     const custom = realPath.resolve("test-ext/custom-chrome/chrome");
     const recordFile = realPath.resolve("fake-record.jsonl");
     const proxy = { server: "http://127.0.0.1:8080" };
@@ -255,7 +255,7 @@ describe("branded-chrome-preload control parity (M0 #1018)", () => {
       expect(options.proxy).toEqual(proxy);
       expect(options.executablePath).toBe(custom);
       expect(options.ignoreDefaultArgs).toEqual(
-        expect.arrayContaining(["--existing", "--disable-extensions", FEATURE_SWITCH]),
+        expect.arrayContaining(["--existing", FEATURE_SWITCH]),
       );
       expect(options.args).toEqual(
         expect.arrayContaining([
@@ -266,9 +266,36 @@ describe("branded-chrome-preload control parity (M0 #1018)", () => {
         ]),
       );
     }
-    expect(controlOpts.ignoreDefaultArgs).toEqual(extOpts.ignoreDefaultArgs);
+    expect(controlOpts.ignoreDefaultArgs).not.toContain("--disable-extensions");
+    expect(extOpts.ignoreDefaultArgs).toContain("--disable-extensions");
+    expect((extOpts.ignoreDefaultArgs as string[]).filter((arg) => arg !== "--disable-extensions"))
+      .toEqual(controlOpts.ignoreDefaultArgs);
     expect(controlOpts.args).toEqual(extOpts.args);
   });
+
+  for (const realistic of ["0", "1"]) {
+    it.each([
+      { label: "unspecified defaults", ignored: undefined },
+      { label: "explicit defaults", ignored: false },
+      { label: "unrelated ignored argument", ignored: ["--existing"] },
+    ])(`native control retains extension isolation with $label (realistic=${realistic}, #1020)`, async ({ ignored }) => {
+      const custom = realPath.resolve("test-ext/custom-chrome/chrome");
+      const harness = boot({
+        NAVSENTINEL_BRANDED_CHROME: custom,
+        NAVSENTINEL_REALISTIC_CHROME: realistic,
+      });
+      const options: LaunchOptions = { args: [], ignoreDefaultArgs: ignored };
+      await harness.chromium.launchPersistentContext("/tmp/ud-control", options);
+      const actual = harness.nativeCalls[0]!.options;
+      expect(actual.executablePath).toBe(custom);
+      expect(actual.ignoreDefaultArgs).not.toContain("--disable-extensions");
+      if (Array.isArray(ignored)) expect(actual.ignoreDefaultArgs).toContain("--existing");
+      expect(actual.chromiumSandbox).toBe(realistic === "1" ? true : undefined);
+      expect(harness.contexts[0]?.__browser.sessionCreated).toBe(false);
+      expect(harness.contexts[0]?.__session.sendCalls).toEqual([]);
+      expect(options).toEqual({ args: [], ignoreDefaultArgs: ignored });
+    });
+  }
 
   it("preserves ignoreDefaultArgs true", async () => {
     const custom = realPath.resolve("test-ext/custom-chrome/chrome");
