@@ -226,18 +226,6 @@ function assertSelfContainedObjectStore(repositoryRoot, environment) {
   }
 }
 
-function splitNulRecords(buffer) {
-  const records = [];
-  let start = 0;
-  while (start < buffer.length) {
-    const end = buffer.indexOf(0, start);
-    if (end === -1) throw integrityError("unterminated NUL record from git ls-tree");
-    if (end > start) records.push(buffer.subarray(start, end));
-    start = end + 1;
-  }
-  return records;
-}
-
 function decodeUtf8Path(pathBytes) {
   try {
     return UTF8_DECODER.decode(pathBytes);
@@ -246,89 +234,106 @@ function decodeUtf8Path(pathBytes) {
   }
 }
 
+// cat-file reports the requested OID even when a loose object's filename no
+// longer matches its content. Authenticate exactly the bytes we consume, not
+// only Git's projection of their type, paths or history.
+function readGitObjects(repositoryRoot, objects, environment) {
+  if (objects.length === 0) return new Map();
+  const unique = new Map();
+  for (const object of objects) {
+    if (!HASH_RE.test(object.oid) || !["commit", "tree", "blob"].includes(object.type)) {
+      throw integrityError("invalid object request");
+    }
+    const previous = unique.get(object.oid);
+    if (previous && previous.type !== object.type) throw integrityError("conflicting object types");
+    unique.set(object.oid, object);
+  }
+  const input = Buffer.from(`${[...unique.keys()].join("\n")}\n`, "ascii");
+  const result = gitInvocation(repositoryRoot, ["cat-file", "--batch"], {
+    environment, input, encoding: null, maxBuffer: 1024 * 1024 * 1024,
+  });
+  if (result.error || result.status !== 0) throw formatGitFailure(["cat-file", "--batch"], result);
+  const output = result.stdout;
+  const contents = new Map();
+  let offset = 0;
+  for (const { oid, type } of unique.values()) {
+    const newline = output.indexOf(0x0a, offset);
+    if (newline === -1) throw integrityError(`missing cat-file header for ${oid}`);
+    const header = output.subarray(offset, newline).toString("ascii");
+    const match = /^([0-9a-f]{40}|[0-9a-f]{64}) (commit|tree|blob) (0|[1-9]\d*)$/.exec(header);
+    if (!match || match[1] !== oid || match[2] !== type) {
+      throw integrityError(`unexpected cat-file response for ${oid}: '${header}'`);
+    }
+    const size = Number(match[3]);
+    const start = newline + 1;
+    const end = start + size;
+    if (!Number.isSafeInteger(size) || !Number.isSafeInteger(end) ||
+        end >= output.length || output[end] !== 0x0a) {
+      throw integrityError(`invalid or truncated cat-file body for ${oid}`);
+    }
+    const body = output.subarray(start, end);
+    const actual = createHash(oid.length === 40 ? "sha1" : "sha256")
+      .update(`${type} ${size}\0`, "ascii").update(body).digest("hex");
+    if (actual !== oid) throw integrityError(`object hash mismatch for ${type} ${oid}`);
+    contents.set(oid, body);
+    offset = end + 1;
+  }
+  if (offset !== output.length) throw integrityError("unexpected trailing bytes from git cat-file --batch");
+  return contents;
+}
+
 function readTreeEntries(repositoryRoot, tree, environment) {
-  const output = runReleaseGit(
-    repositoryRoot,
-    ["ls-tree", "-rz", "--full-tree", tree],
-    { environment, encoding: null },
-  );
   const entries = [];
   const canonicalPaths = new Map();
-
-  for (const record of splitNulRecords(output)) {
-    const tab = record.indexOf(0x09);
-    if (tab === -1) throw integrityError("malformed git ls-tree record");
-    const header = record.subarray(0, tab).toString("ascii");
-    const match = /^(\d{6}) (blob|tree|commit) ([0-9a-f]{40}|[0-9a-f]{64})$/.exec(header);
-    if (!match) throw integrityError(`malformed git ls-tree header '${header}'`);
-    const [, mode, type, oid] = match;
-    const relativePath = decodeUtf8Path(record.subarray(tab + 1));
-    assertValidRelativePath(relativePath);
-
-    const collisionKey = canonicalPathKey(relativePath);
-    const existing = canonicalPaths.get(collisionKey);
-    if (existing && existing !== relativePath) {
-      throw integrityError(`filesystem case collision between '${existing}' and '${relativePath}'`);
+  let pending = [{ path: "", oid: tree, type: "tree" }];
+  // Parse only authenticated binary tree bodies. A second ls-tree invocation
+  // could otherwise project a different object between verification and use.
+  while (pending.length > 0) {
+    const trees = readGitObjects(repositoryRoot, pending, environment);
+    const next = [];
+    for (const directory of pending) {
+      const body = trees.get(directory.oid);
+      const oidBytes = directory.oid.length / 2;
+      let offset = 0;
+      while (offset < body.length) {
+        const space = body.indexOf(0x20, offset);
+        const nul = body.indexOf(0, space + 1);
+        if (space < offset || nul <= space + 1 || nul + 1 + oidBytes > body.length) {
+          throw integrityError(`malformed tree object ${directory.oid}`);
+        }
+        const mode = body.subarray(offset, space).toString("utf8");
+        const name = decodeUtf8Path(body.subarray(space + 1, nul));
+        if (name.includes("/")) throw integrityError(`non-canonical tree entry '${name}'`);
+        const relativePath = directory.path ? `${directory.path}/${name}` : name;
+        assertValidRelativePath(relativePath);
+        const key = canonicalPathKey(relativePath);
+        if (canonicalPaths.has(key)) {
+          throw integrityError(`filesystem case collision or duplicate tree path '${relativePath}'`);
+        }
+        canonicalPaths.set(key, relativePath);
+        const oid = body.subarray(nul + 1, nul + 1 + oidBytes).toString("hex");
+        offset = nul + 1 + oidBytes;
+        if (mode === "40000") {
+          next.push({ path: relativePath, oid, type: "tree" });
+          continue;
+        }
+        if (mode === "160000") throw integrityError(`gitlink '${relativePath}' is not a supported release input`);
+        if (mode === "120000") throw integrityError(`symbolic link '${relativePath}' is not a supported release input`);
+        if (!SUPPORTED_TRACKED_MODES.has(mode)) {
+          throw integrityError(`unsupported tracked mode ${mode} for release input '${relativePath}'`);
+        }
+        entries.push({ path: relativePath, mode, oid });
+      }
     }
-    canonicalPaths.set(collisionKey, relativePath);
-
-    if (mode === "160000" || type === "commit") {
-      throw integrityError(`gitlink '${relativePath}' is not a supported release input`);
-    }
-    if (mode === "120000") {
-      throw integrityError(`symbolic link '${relativePath}' is not a supported release input`);
-    }
-    if (!SUPPORTED_TRACKED_MODES.has(mode) || type !== "blob") {
-      throw integrityError(
-        `unsupported tracked mode/type ${mode} ${type} for release input '${relativePath}'`,
-      );
-    }
-    entries.push({ path: relativePath, mode, oid });
+    pending = next;
   }
   entries.sort((left, right) => left.path.localeCompare(right.path, "en"));
   return entries;
 }
 
 function readCommittedBlobs(repositoryRoot, entries, environment) {
-  if (entries.length === 0) return new Map();
-  const input = Buffer.from(`${entries.map((entry) => entry.oid).join("\n")}\n`, "ascii");
-  const result = gitInvocation(repositoryRoot, ["cat-file", "--batch"], {
-    environment,
-    input,
-    encoding: null,
-    maxBuffer: 1024 * 1024 * 1024,
-  });
-  if (result.error || result.status !== 0) {
-    throw formatGitFailure(["cat-file", "--batch"], result);
-  }
-
-  const output = result.stdout;
-  const blobs = new Map();
-  let offset = 0;
-  for (const entry of entries) {
-    const newline = output.indexOf(0x0a, offset);
-    if (newline === -1) throw integrityError(`missing cat-file header for '${entry.path}'`);
-    const header = output.subarray(offset, newline).toString("ascii");
-    const match = /^([0-9a-f]{40}|[0-9a-f]{64}) blob (\d+)$/.exec(header);
-    if (!match || match[1] !== entry.oid) {
-      throw integrityError(`unexpected cat-file response for '${entry.path}': '${header}'`);
-    }
-    const size = Number(match[2]);
-    if (!Number.isSafeInteger(size) || size < 0) {
-      throw integrityError(`invalid blob size for '${entry.path}'`);
-    }
-    const contentStart = newline + 1;
-    const contentEnd = contentStart + size;
-    if (contentEnd >= output.length || output[contentEnd] !== 0x0a) {
-      throw integrityError(`truncated cat-file response for '${entry.path}'`);
-    }
-    blobs.set(entry.path, Buffer.from(output.subarray(contentStart, contentEnd)));
-    offset = contentEnd + 1;
-  }
-  if (offset !== output.length) {
-    throw integrityError("unexpected trailing bytes from git cat-file --batch");
-  }
-  return blobs;
+  const objects = readGitObjects(repositoryRoot, entries.map((entry) => ({ ...entry, type: "blob" })), environment);
+  return new Map(entries.map((entry) => [entry.path, objects.get(entry.oid)]));
 }
 
 function trackedDirectorySet(entries) {
@@ -475,19 +480,25 @@ function assertNoUntrackedProjectInputs(repositoryRoot, entries, excludedPrefixe
   visit("");
 }
 
-function resolveIdentity(repositoryRoot, environment) {
-  const commit = String(
-    runReleaseGit(repositoryRoot, ["rev-parse", "--verify", "HEAD^{commit}"], { environment }),
-  );
-  const tree = String(
-    runReleaseGit(repositoryRoot, ["rev-parse", "--verify", "HEAD^{tree}"], { environment }),
-  );
-  if (!HASH_RE.test(commit) || !HASH_RE.test(tree)) {
-    throw integrityError(`Git returned a non-full commit/tree identity (${commit}, ${tree})`);
+function readCommitIdentity(repositoryRoot, commit, environment) {
+  const body = readGitObjects(repositoryRoot, [{ oid: commit, type: "commit" }], environment).get(commit);
+  const headerEnd = body.indexOf(Buffer.from("\n\n"));
+  if (headerEnd < 0) throw integrityError(`malformed commit headers for ${commit}`);
+  const headers = body.subarray(0, headerEnd).toString("utf8").split("\n");
+  const tree = headers[0].startsWith("tree ") ? headers[0].slice(5) : "";
+  const parents = headers.filter((line) => line.startsWith("parent ")).map((line) => line.slice(7));
+  if (!HASH_RE.test(tree) || tree.length !== commit.length ||
+      headers.slice(1).some((line) => line.startsWith("tree ")) ||
+      parents.some((parent) => !HASH_RE.test(parent) || parent.length !== commit.length)) {
+    throw integrityError(`malformed tree/parent identity in commit ${commit}`);
   }
-  runReleaseGit(repositoryRoot, ["cat-file", "-e", `${commit}^{commit}`], { environment });
-  runReleaseGit(repositoryRoot, ["cat-file", "-e", `${tree}^{tree}`], { environment });
-  return { commit, tree };
+  return { commit, tree, parents };
+}
+
+function resolveIdentity(repositoryRoot, environment) {
+  const commit = String(runReleaseGit(repositoryRoot, ["rev-parse", "--verify", "HEAD"], { environment }));
+  if (!HASH_RE.test(commit)) throw integrityError(`Git returned a non-full commit identity (${commit})`);
+  return readCommitIdentity(repositoryRoot, commit, environment);
 }
 
 function normalizeAllowedPaths(paths) {
@@ -550,7 +561,10 @@ export function assertReleaseSnapshotUnchanged(snapshot, options = {}) {
     throw integrityError("Git index changed after the release snapshot");
   }
 
-  const entries = snapshot.entries.map((entry) => ({ ...entry }));
+  const entries = readTreeEntries(root, identity.tree, environment);
+  if (JSON.stringify(entries) !== JSON.stringify(snapshot.entries)) {
+    throw integrityError("committed tree entries changed after the release snapshot");
+  }
   const blobs = readCommittedBlobs(root, entries, environment);
   for (const entry of entries) {
     assertTrackedFilesystemEntry(
@@ -614,19 +628,11 @@ export function assertReleaseCommitScope(initialSnapshot, releaseSnapshot, optio
   const environment = createSanitizedGitEnvironment(
     options.environment ?? process.env,
   );
-  const parentLine = String(
-    runReleaseGit(
-      releaseSnapshot.repositoryRoot,
-      ["rev-list", "--parents", "-n", "1", releaseSnapshot.commit],
-      { environment },
-    ),
-  );
-  const commitAndParents = parentLine.split(/\s+/u).filter(Boolean);
-  if (
-    commitAndParents.length !== 2 ||
-    commitAndParents[0] !== releaseSnapshot.commit ||
-    commitAndParents[1] !== initialSnapshot.commit
-  ) {
+  // rev-list can hide parents through grafts or commit-graph projections.
+  // Parentage must come from the same authenticated raw object as its tree.
+  const identity = readCommitIdentity(releaseSnapshot.repositoryRoot, releaseSnapshot.commit, environment);
+  if (identity.tree !== releaseSnapshot.tree) throw integrityError("release tree differs from its snapshot");
+  if (identity.parents.length !== 1 || identity.parents[0] !== initialSnapshot.commit) {
     throw integrityError(
       `release commit must have exactly the attested initial commit ${initialSnapshot.commit} as its parent`,
     );

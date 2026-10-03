@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
+import { deflateSync } from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -379,6 +380,42 @@ describe("release input integrity", () => {
 });
 
 describe("release script integration", () => {
+  it("rejects substituted committed bytes before the release command can mutate metadata", () => {
+    const root = copyRepositoryForReleaseTest();
+    const runDryRelease = () => spawnSync(process.execPath, ["scripts/release.mjs", "patch", "--dry-run"], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 10_000,
+      env: { ...process.env, NAVSENTINEL_BUILD_PROFILE: "interaction-only" },
+    });
+    const clean = runDryRelease();
+    expect(clean.error).toBeUndefined();
+    expect(clean.status, `${clean.stdout}\n${clean.stderr}`).toBe(0);
+    expect(clean.stdout).toContain("[dry-run] No changes made.");
+
+    const head = runGit(root, ["rev-parse", "HEAD"]);
+    const blob = runGit(root, ["rev-parse", "HEAD:CHANGELOG.md"]);
+    const changed = Buffer.concat([
+      fs.readFileSync(path.join(root, "CHANGELOG.md")), Buffer.from("\nSubstituted release notes.\n"),
+    ]);
+    const objectPath = path.join(root, ".git", "objects", blob.slice(0, 2), blob.slice(2));
+    fs.rmSync(objectPath);
+    fs.writeFileSync(objectPath, deflateSync(Buffer.concat([Buffer.from(`blob ${changed.length}\0`), changed])));
+    fs.writeFileSync(path.join(root, "CHANGELOG.md"), changed);
+    // Git returns the forged object bytes and the worktree matches those bytes.
+    // Rejection must be for the OID mismatch, not a missing import or dirty file.
+    expect(execFileSync("git", ["cat-file", "blob", blob], { cwd: root })).toEqual(changed);
+    const metadata = RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)));
+    const result = runDryRelease();
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/object hash mismatch for blob/i);
+    expect(result.stdout).not.toContain("[dry-run] No changes made.");
+    expect(runGit(root, ["rev-parse", "HEAD"])).toBe(head);
+    expect(runGit(root, ["tag", "--list"])).toBe("");
+    expect(RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)))).toEqual(metadata);
+  }, 30_000);
+
   it("fails closed when git status is clean but raw project bytes differ", () => {
     const root = copyRepositoryForReleaseTest();
     const runDryRelease = () => spawnSync(process.execPath, ["scripts/release.mjs", "patch", "--dry-run"], {
