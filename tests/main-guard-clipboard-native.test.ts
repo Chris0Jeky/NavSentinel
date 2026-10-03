@@ -35,7 +35,7 @@ function boot(sink?: Sink) {
   const clipboard = { writeText: native };
   const sandbox = {
     exports: {}, navigator: { clipboard }, nativeClipboardWriteText: native,
-    nativeClipboardWrite: undefined, debug: false, nowMs: () => 123,
+    nativeClipboardWrite: undefined, nativeApply: Reflect.apply, debug: false, nowMs: () => 123,
     postToIsolated: (type: string, payload: Record<string, unknown>) => receipts.push({ type, payload }),
   };
   vm.runInNewContext(executable, sandbox, { filename: "actual-clipboard-patch.js" });

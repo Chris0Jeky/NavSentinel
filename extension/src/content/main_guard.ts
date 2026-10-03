@@ -1539,27 +1539,27 @@ function patchClipboard(): void {
 
   if (nativeClipboardWriteText) {
     try {
-      navigator.clipboard.writeText = function (data: string): Promise<void> {
-        // Capture metadata before calling native (data may be GC'd), but
-        // only send the bridge message after the write succeeds so that
-        // failed writes (permission denied, no user gesture) do not cause
-        // false ClickFix detections.
-        const cmdLike = looksLikeCommand(data);
-        const len = data.length;
-        return nativeClipboardWriteText!(data).then((result) => {
-          postToIsolated("ns-clipboard-write", {
-            ts: nowMs(),
-            contentLength: len,
+      navigator.clipboard.writeText = async function (data: string): Promise<void> {
+        // WebIDL string conversion is observable and may throw. An async
+        // wrapper preserves native Promise rejection, including missing args.
+        const text = `${data}`;
+        const cmdLike = looksLikeCommand(text);
+        const len = text.length;
+        if (arguments.length) arguments[0] = text;
+        const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
+        // Failed native writes must not produce a successful-write receipt.
+        postToIsolated("ns-clipboard-write", {
+          ts: nowMs(),
+          contentLength: len,
+          looksLikeCommand: cmdLike,
+        });
+        if (debug) {
+          console.debug("[NavSentinel] clipboard.writeText intercepted", {
+            length: len,
             looksLikeCommand: cmdLike,
           });
-          if (debug) {
-            console.debug("[NavSentinel] clipboard.writeText intercepted", {
-              length: len,
-              looksLikeCommand: cmdLike,
-            });
-          }
-          return result;
-        });
+        }
+        return result;
       };
     } catch {
       // clipboard.writeText may not be configurable in all contexts
