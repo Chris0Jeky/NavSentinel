@@ -7,6 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 import { AcceptanceSession, repoRoot, toastState, trustedClick } from "./acceptance_harness";
+import { proceedDestinationUrl, waitForProceedDestination } from "./proceed_destination";
 
 const PR_608_MERGE = "595903af89ff3bfb526e71de68f71f8c9459e6d1";
 
@@ -98,15 +99,12 @@ test("AI-47.2 / former AI-39: Proceed once lives only in the popup, opens exactl
       );
       const decision = listed.decisions[0]!;
       const before = tabCount(session);
+      const expectedDestination = proceedDestinationUrl(page.url(), marker);
       const opened = session.context.waitForEvent("page", { timeout: 8000 });
       await popup.click(".pending-proceed", 2);
       const destination = await opened;
-      await destination.waitForLoadState("domcontentloaded");
-      await expect.poll(() => destination.url()).toContain(`/acceptance/dest/${marker}/landing.html`);
-      expect(destination.url()).toContain(`probe=${marker}`);
-      expect(destination.url()).toContain(`#frag-${marker}`);
-      expect(await destination.evaluate(() => document.documentElement.dataset.acceptanceOpener)).toBe("false");
-      expect(await destination.evaluate(() => window.opener === null)).toBe(true);
+      session.note(`mouse destination initial URL: ${destination.url() || "<empty>"}`);
+      await waitForProceedDestination(destination, expectedDestination);
       await page.waitForTimeout(1500);
       expect(tabCount(session), "a double-click must open exactly one tab").toBe(before + 1);
       await session.screenshot(destination, "proceed-once-destination");
@@ -138,12 +136,12 @@ test("AI-47.2 / former AI-39: Proceed once lives only in the popup, opens exactl
       }
       expect(focused, "Proceed once is reachable with Tab").toBe("pending-proceed");
       const before = tabCount(session);
+      const expectedDestination = proceedDestinationUrl(page.url(), keyboardMarker);
       const opened = session.context.waitForEvent("page", { timeout: 8000 });
       await popup.press("Enter");
       const destination = await opened;
-      await destination.waitForLoadState("domcontentloaded");
-      expect(destination.url()).toContain(`/acceptance/dest/${keyboardMarker}/landing.html`);
-      expect(await destination.evaluate(() => window.opener === null)).toBe(true);
+      session.note(`keyboard destination initial URL: ${destination.url() || "<empty>"}`);
+      await waitForProceedDestination(destination, expectedDestination);
       await page.waitForTimeout(1000);
       expect(tabCount(session)).toBe(before + 1);
       await destination.close();
