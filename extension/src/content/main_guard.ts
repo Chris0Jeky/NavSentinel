@@ -145,7 +145,8 @@ function clearBridgeHandshakeTimer(): void {
  * forever — the `bridgeSession && data.session !== bridgeSession` guard would
  * then reject the real isolated world's init, permanently disabling the bridge
  * while messages buffer and drop. Releasing the half-open state lets a fresh
- * init (any session) re-establish. Buffered messages are preserved for it.
+ * init (any session) re-establish the bridge instead of deadlocking.
+ * Buffered messages are preserved for it.
  */
 function failBridgeHandshake(): void {
   bridgeHandshakeTimer = 0;
@@ -1472,7 +1473,7 @@ window.addEventListener(
     // Only a VERIFIED bridge pins its session — that prevents post-verification
     // hijack by a *different* session. An unverified session has not proven
     // legitimacy, so a fresh init (e.g. the real isolated world arriving after a
-    // hostile page raced an init first) is allowed to take over the handshake
+    // hostile page raced an init first and then stalls) is allowed to take over the handshake
     // instead of being locked out.
     //
     // Residual init-auth limits (best-effort; the session travels in a
@@ -1545,7 +1546,9 @@ function patchClipboard(): void {
         const text = `${data}`;
         const cmdLike = looksLikeCommand(text);
         const len = text.length;
+        // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted data from explicit undefined.
         if (arguments.length) arguments[0] = text;
+        // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
         const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
         // Failed native writes must not produce a successful-write receipt.
         postToIsolated("ns-clipboard-write", {
