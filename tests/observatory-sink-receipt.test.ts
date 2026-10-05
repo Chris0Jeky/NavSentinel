@@ -69,19 +69,18 @@ describe("observatory sink receipt promotion", () => {
     expect(() => parseSource(overlayWithReceipt(receipt))).toThrow("SINK_RECEIPT_INVALID");
   });
 
-  // Legacy decision: null/missing consequence/targetId are NOT legitimate legacy
-  // inputs. Pre-fix sinkRows coerced invalid tokens to null and kept the row,
-  // which is the bug above. Existing fixtures that omit these fields
-  // (experiments/evidence-observatory/tests/model.test.mjs overlay() omits
-  // targetId; hidden() omits both) and the fake-sink producer spread
-  // `...(targetId ? { targetId } : {})` never waived offline promotion: the
-  // recorder binding requires an armed targetId, so a targetless or
-  // consequenceless row is a proven invalid receipt and must throw rather than
-  // be widened into a null-bearing row.
+  it("accepts a targetless receipt from the active overlay sink producer", () => {
+    const receipt = validReceipt();
+    delete receipt.targetId;
+    const parsed = parseSource(overlayWithReceipt(receipt));
+    const row = (parsed.cases[0] as any).events.find((e: any) => e.kind === "sink.snapshot.row");
+    expect(row.data.consequence).toBe("wrong-target-navigation");
+    expect(row.data.targetId).toBeNull();
+  });
+
   it.each([
     ["missing consequence", { ...validReceipt(), consequence: undefined }],
     ["null consequence", { ...validReceipt(), consequence: null }],
-    ["missing targetId", { ...validReceipt(), targetId: undefined }],
     ["null targetId", { ...validReceipt(), targetId: null }],
   ])("legacy case: %s is an invalid receipt, not a null-bearing row", (_name, receipt) => {
     // JSON drops undefined keys, matching fixtures that omit the field.
