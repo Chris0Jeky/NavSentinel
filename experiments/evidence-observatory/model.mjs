@@ -87,8 +87,9 @@ function sinkRows(value, expectedScenario) {
       throw new Error('SINK_RECEIPT_INVALID');
     }
     // No raw targets, query strings, source URLs, wall-clock timestamps or payloads.
-    return { sequence: r.sequence, runId: r.runId, role: r.role, consequence: token(r.consequence),
-      targetId: token(r.targetId), method: 'GET', sentinelSha256: r.sentinelSha256 };
+    return { sequence: r.sequence, runId: r.runId, role: r.role,
+      consequence: requireValue(token(r.consequence), 'SINK_RECEIPT_INVALID'),
+      targetId: requireValue(token(r.targetId), 'SINK_RECEIPT_INVALID'), method: 'GET', sentinelSha256: r.sentinelSha256 };
   });
 }
 function assess(c) {
