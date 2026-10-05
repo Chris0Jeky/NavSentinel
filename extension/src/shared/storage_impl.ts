@@ -1286,7 +1286,7 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
     ...(partial.url !== undefined ? { url: capEventString(minimizeEventUrl(partial.url)) } : {}),
     ...(partial.destHost !== undefined ? { destHost: capEventString(partial.destHost) } : {}),
-    ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
+    ...(partial.score !== undefined && Number.isFinite(partial.score) ? { score: partial.score } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
     // malformed runtime append message could carry non-string reasons; left raw, the
     // entry would fail isEventLogEntry and persistEventLogEntry's re-validation would
