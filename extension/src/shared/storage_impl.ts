@@ -1680,7 +1680,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   if (e.site !== undefined) out.site = capEventString(e.site);
   if (e.url !== undefined) out.url = capEventString(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = capEventString(e.destHost);
-  if (typeof e.score === "number" && Number.isFinite(e.score) && e.score >= 0 && e.score <= 100) out.score = e.score;
+  if (typeof e.score === "number" && Number.isFinite(e.score) && e.score >= 0 && e.score <= 1000) out.score = e.score;
   // reasons elements are already strings here (isEventLogEntry pre-filtered them in
   // normalizeEventLog); sanitizeCodeList only applies the count (32) + per-string-length (80) caps.
   const reasons = sanitizeCodeList(e.reasons);
