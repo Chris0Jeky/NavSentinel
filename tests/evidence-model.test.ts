@@ -73,3 +73,28 @@ describe("minimized extension evidence", () => {
     expect(JSON.stringify(result)).not.toContain("unrecognized-free-text-xyz");
   });
 });
+
+describe("projectEvidence reason limits", () => {
+  it("deduplicates and filters reasons before applying the 16-code limit", () => {
+    const alternating = Array.from({ length: 20 }, (_, i) =>
+      ["no_accessible_name", "nrs_cross_site", "not_a_registry_code_xyz"][i % 3]!);
+    const [row] = projectEvidence([event({ reasons: alternating })]);
+    expect(row?.reasons).toEqual(["no_accessible_name", "nrs_cross_site"]);
+
+    const distinct = [
+      "no_accessible_name", "minimal_accessible_name", "overlay_large_interactive",
+      "overlay_medium_interactive", "intent_mismatch_under_interactive",
+      "retargeted_target_mismatch", "overlay_high_zindex", "overlay_elevated_zindex",
+      "invisible_but_clickable", "near_invisible_opacity", "low_opacity",
+      "cursor_pointer_no_affordance", "keyboard_activation", "legit_modal_backdrop",
+      "composite_escalation", "nrs_new_tab_window", "nrs_cross_site", "nrs_fast_attempt",
+      "nrs_user_activation_active", "nrs_multiple_attempts",
+    ];
+    const [capped] = projectEvidence([event({ reasons: [...alternating, ...distinct] })]);
+    expect(capped?.reasons).toHaveLength(16);
+    expect(capped?.reasons).toEqual([
+      "no_accessible_name", "nrs_cross_site",
+      ...distinct.filter(code => code !== "no_accessible_name" && code !== "nrs_cross_site"),
+    ].slice(0, 16));
+  });
+});
