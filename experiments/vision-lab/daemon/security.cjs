@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const Core = require('../shared/core.js');
+const JOURNAL_MAX_BYTES = 4 * 1024 * 1024;
 const hash = text => crypto.createHash('sha256').update(text).digest('hex');
 const digest = event => hash(JSON.stringify(Core.normalizeEvent(event)));
 const randomToken = () => crypto.randomBytes(32).toString('base64url');
@@ -43,7 +44,7 @@ class Ledger {
     this.state={schema:1,anchor:'0'.repeat(64),baseSequence:0,nextSequence:1,entries:[]};
     if(fs.existsSync(this.file)){
       if(fs.lstatSync(this.file).isSymbolicLink()) throw new Error('Refusing symlinked journal');
-      if(fs.statSync(this.file).size>4*1024*1024) throw new Error('Journal exceeds size limit');
+      if(fs.statSync(this.file).size>JOURNAL_MAX_BYTES) throw new Error('Journal exceeds size limit');
       this.state=JSON.parse(fs.readFileSync(this.file,'utf8'));
       if(!this.verify()) throw new Error('Journal integrity check failed; no data was overwritten');
       if(this.state.entries.length>this.limit) throw new Error('Journal exceeds configured row bound');
@@ -80,8 +81,15 @@ class Ledger {
     const old=structuredClone(this.state);
     const e={sequence:this.state.nextSequence++,timestamp:new Date().toISOString(),previous:this.state.entries.at(-1)?.hash||this.state.anchor,data:JSON.parse(encoded)};
     e.hash=this.entryHash(e);this.state.entries.push(e);
-    while(this.state.entries.length>this.limit){const dropped=this.state.entries.shift();this.state.anchor=dropped.hash;this.state.baseSequence=dropped.sequence;}
-    try {this.persist();}catch(error){this.state=old;throw error;}
+    try {
+      // Bound the actual UTF-8 journal, including entry/hash overhead, by the
+      // same limit used at startup. Retain the newest receipt and exact chain.
+      while(this.state.entries.length>this.limit||Buffer.byteLength(JSON.stringify(this.state))>JOURNAL_MAX_BYTES){
+        if(this.state.entries.length<=1)throw new Error('Journal exceeds size limit');
+        const dropped=this.state.entries.shift();this.state.anchor=dropped.hash;this.state.baseSequence=dropped.sequence;
+      }
+      this.persist();
+    }catch(error){this.state=old;throw error;}
     return structuredClone(e);
   }
   snapshot(){return structuredClone({...this.state,verified:this.verify(),integrityMeaning:'Local hash-chain consistency, not an external signature or proof against an OS-level attacker'});}
