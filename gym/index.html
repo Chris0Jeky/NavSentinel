@@ -186,10 +186,37 @@
   </ol>
 
   <h2>URL userinfo obfuscation</h2>
-  <p>A sign-in page whose URL hides the host behind an @ userinfo prefix, contrasted with the real Google host.</p>
+  <p>Non-submitting local URL models: a userinfo prefix versus a first-party hostname. The declared URLs do not change the local page origin.</p>
   <ol>
     <li><a href="userinfo-obfuscated-login.html">Userinfo - accounts.google.com@collector.example</a></li>
-    <li><a href="userinfo-real-google-login.html">Userinfo - real Google sign-in (contrast)</a></li>
+    <li><a href="userinfo-real-google-login.html">Userinfo - first-party URL model (contrast)</a></li>
+  </ol>
+
+  <h2>Contained identity URL models</h2>
+  <p>These local mock pages never submit credentials. Their canonical and form URLs are inputs to model tests, not proof of their served origin, browser address-bar display, or extension efficacy. Never enter real credentials.</p>
+
+  <h3>Browser-in-the-browser</h3>
+  <ol>
+    <li><a href="bitb-oauth-window.html">BitB - fake OAuth window model</a></li>
+    <li><a href="bitb-first-party-window.html">BitB - first-party URL model (contrast)</a></li>
+  </ol>
+
+  <h3>Mixed-script homograph</h3>
+  <ol>
+    <li><a href="homograph-mixed-script-login.html">Homograph - mixed-script PayPal lookalike</a></li>
+    <li><a href="homograph-real-paypal-login.html">Homograph - first-party URL model (contrast)</a></li>
+  </ol>
+
+  <h3>Homoglyph typosquat</h3>
+  <ol>
+    <li><a href="typosquat-paypa1-login.html">Typosquat - paypa1.com URL model</a></li>
+    <li><a href="typosquat-paypal-login.html">Typosquat - first-party URL model (contrast)</a></li>
+  </ol>
+
+  <h3>Subdomain stuffing</h3>
+  <ol>
+    <li><a href="subdomain-stuffing-login.html">Subdomain stuffing - paypal.login.billing-example.invalid</a></li>
+    <li><a href="subdomain-real-paypal-login.html">Subdomain stuffing - first-party URL model (contrast)</a></li>
   </ol>
 
   <p class="note">Run with <code>npm run gym:serve</code> from the repo root, or <code>python -m http.server 5173</code> from the <code>gym</code> folder.</p>
