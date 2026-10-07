@@ -59,9 +59,19 @@ class Ledger {
   }
   persist(){
     const temp=`${this.file}.${process.pid}.tmp`;
-    const fd=fs.openSync(temp,'w',0o600);
-    try {fs.writeFileSync(fd,JSON.stringify(this.state));fs.fsyncSync(fd);} finally {fs.closeSync(fd);}
-    fs.renameSync(temp,this.file);
+    // An occupied path may be a foreign file or link. Do not truncate it or
+    // clean it up: ownership starts only after exclusive creation succeeds.
+    const fd=fs.openSync(temp,'wx',0o600);
+    try {
+      try {fs.writeFileSync(fd,JSON.stringify(this.state));fs.fsyncSync(fd);} finally {fs.closeSync(fd);}
+      fs.renameSync(temp,this.file);
+    } catch(error) {
+      try {fs.rmSync(temp,{force:true});}
+      catch(cleanupError) {
+        throw new AggregateError([error,cleanupError],'Journal write failed and temporary-file cleanup failed');
+      }
+      throw error;
+    }
   }
   append(data){
     if(!this.verify())throw new Error('Journal integrity failed');
