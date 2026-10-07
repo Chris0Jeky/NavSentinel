@@ -59,7 +59,19 @@ for (const [fixture, destination] of [
       ]);
       expect(attempts).toEqual([]);
       expect(page.url()).toBe("about:blank");
-      await expect(page.locator("form")).toBeVisible();
+      // After a CSP-canceled submit, locator assertions can wait forever for
+      // a navigation that will not commit. Read this fixed form's surviving
+      // document and painted geometry directly; do not remove the visibility
+      // or destination assertions, reload the page, or swallow the timeout.
+      await expect.poll(() => page.evaluate(() => {
+        const form = document.querySelector("form");
+        if (!form) return null;
+        const bounds = form.getBoundingClientRect();
+        return { href: location.href, connected: form.isConnected,
+          visible: getComputedStyle(form).visibility === "visible" && bounds.width > 0 && bounds.height > 0,
+          action: form.action, method: form.method };
+      })).toEqual({ href: "about:blank", connected: true, visible: true,
+        action: destination, method: "post" });
     });
   }
 }
