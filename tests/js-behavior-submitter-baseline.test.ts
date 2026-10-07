@@ -159,4 +159,116 @@ describe("submitter action baselines", () => {
       expect.anything()
     );
   });
+
+  it("treats an exactly-empty formaction as the current document over a hostile action and cross-origin base", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    const base = document.createElement("base");
+    base.href = "https://evil.example/base/";
+    document.head.appendChild(base);
+    document.body.innerHTML = `
+      <form action="https://phish.example/login">
+        <input type="password" value="not-observed">
+        <button type="submit" formaction="">Continue</button>
+      </form>
+    `;
+    const form = document.querySelector("form") as HTMLFormElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).not.toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.anything()
+    );
+  });
+
+  it("resolves a relative formaction against a cross-origin base", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    const base = document.createElement("base");
+    base.href = "https://evil.example/base/";
+    document.head.appendChild(base);
+    document.body.innerHTML = `
+      <form action="${location.origin}/safe-endpoint">
+        <input type="password" value="not-observed">
+        <button type="submit" formaction="collect">Continue</button>
+      </form>
+    `;
+    const form = document.querySelector("form") as HTMLFormElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.objectContaining({
+        actionDynamicallyChanged: false,
+        hasCredentialFields: true,
+        isCrossOrigin: true,
+        destinationOrigin: "https://evil.example",
+      })
+    );
+  });
+
+  it("does not flag a same-origin relative action", () => {
+    const postSignal = vi.fn<PostSignalFn>();
+    const base = document.createElement("base");
+    base.href = `${location.origin}/application/`;
+    document.head.appendChild(base);
+    document.body.innerHTML = `
+      <form action="login">
+        <input type="password" value="not-observed">
+        <button type="submit">Continue</button>
+      </form>
+    `;
+    const form = document.querySelector("form") as HTMLFormElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+
+    initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+    form.dispatchEvent(
+      new SubmitEvent("submit", { bubbles: true, submitter: button })
+    );
+
+    expect(postSignal).not.toHaveBeenCalledWith(
+      "ns-js-form-submit-suspicious",
+      expect.anything()
+    );
+  });
+
+  it.each([
+    ["absent", ""],
+    ["exactly empty", ' action=""'],
+  ])(
+    "uses the document URL when the form action is %s under a cross-origin base",
+    (_label, actionAttr) => {
+      const postSignal = vi.fn<PostSignalFn>();
+      const base = document.createElement("base");
+      base.href = "https://evil.example/base/";
+      document.head.appendChild(base);
+      document.body.innerHTML = `
+        <form${actionAttr}>
+          <input type="password" value="not-observed">
+          <button type="submit">Continue</button>
+        </form>
+      `;
+      const form = document.querySelector("form") as HTMLFormElement;
+      const button = document.querySelector("button") as HTMLButtonElement;
+
+      initJsBehaviorMonitor({ debug: false, mode: "smart", postSignal });
+      form.dispatchEvent(
+        new SubmitEvent("submit", { bubbles: true, submitter: button })
+      );
+
+      expect(button.hasAttribute("formaction")).toBe(false);
+      expect(postSignal).not.toHaveBeenCalledWith(
+        "ns-js-form-submit-suspicious",
+        expect.anything()
+      );
+    }
+  );
 });
