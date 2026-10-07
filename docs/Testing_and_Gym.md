@@ -105,7 +105,7 @@ Current unit coverage lives in:
 - `tests/psl-domain.test.ts`
 - `tests/nrs.test.ts`
 - `tests/scoring.property.test.ts`
-- `tests/statemachine-timing.test.ts`
+- `tests/state-machine.test.ts`
 - `tests/prompt-telemetry.test.ts`
 - `tests/clickfix-detector.test.ts`
 - `tests/nrs-dblclick.test.ts`
@@ -677,11 +677,16 @@ If E2E fails in CI, check these first:
 
 ## Current evidence work
 
-As measured on 2026-08-07 at `main` (`332c48d`) with
-`npx vitest run --reporter=dot`, the local regression baseline is 3,010 passing
-unit tests in 100 files, and 14 Playwright spec files are present under
-`tests/e2e/`. The previous figure in this paragraph (2,874 tests in 95 files,
-2026-07-10) was stale. These counts are volatile engineering snapshots: verify
+As measured on 2026-10-07 at `main` (`f8b4c80d`) with
+`npx vitest run --reporter=dot`, the local unit run covers 4,352 tests in 215
+files (4,342 passed, 1 skipped, 9 failed). The 9 failures are all in
+`tests/proving-ground-fake-sink.test.ts` and
+`tests/observatory-sink-health.test.ts`, which cannot bind loopback port 46124
+on that Windows host (`listen EACCES`; the port sits in a Windows
+excluded-TCP range), so they are an environment limit rather than a regression
+signal. 52 Playwright spec files are present under `tests/e2e/`. The previous
+figure in this paragraph (3,010 tests in 100 files and 14 specs, 2026-08-07) was
+stale. These counts are volatile engineering snapshots: verify
 them live before reuse and keep them out of user-facing copy. Regression
 coverage does not establish efficacy.
 
