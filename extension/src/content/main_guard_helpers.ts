@@ -397,6 +397,13 @@ export function matchesAnchorOpenIntent(
   return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
 }
 
+// A non-writable binding does not freeze a captured function's `.call`.
+// Pin invocation before the loader's async gap and call that primitive directly.
+// The module-time fallback preserves older loaders, but is not an early capture.
+const applyCapturedMain = (globalThis as typeof globalThis & {
+  __navsentinelMainApply?: typeof Reflect.apply;
+}).__navsentinelMainApply ?? Reflect.apply;
+
 /**
  * Form target for the subframe self-exemption (#1055).
  * The caller supplies the getter captured at MAIN-world startup. Null means
@@ -417,7 +424,7 @@ export function readCapturedAttribute(
 ): string | null | undefined {
   if (!nativeGetAttribute) return undefined;
   try {
-    const value = nativeGetAttribute.call(element, name);
+    const value = applyCapturedMain(nativeGetAttribute, element, [name]);
     if (value === null) return null;
     return typeof value === "string" ? value : undefined;
   } catch {
@@ -438,7 +445,7 @@ export function readCapturedClosest(
 ): Element | null | undefined {
   if (!nativeClosest) return undefined;
   try {
-    const value = nativeClosest.call(element, selector);
+    const value = applyCapturedMain(nativeClosest, element, [selector]);
     if (value === null) return null;
     return value instanceof Element ? value : undefined;
   } catch {
@@ -452,7 +459,7 @@ export function readCapturedFormTarget(
 ): string | null {
   if (!nativeTargetGetter) return null;
   try {
-    const value = nativeTargetGetter.call(form);
+    const value = applyCapturedMain(nativeTargetGetter, form, []);
     return typeof value === "string" ? value : null;
   } catch {
     return null;

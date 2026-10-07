@@ -84,12 +84,15 @@ describe("popup intent uses the captured readers (#1063)", () => {
     }
     const typeReads = callsNamed("findPopupIntentSource", "readCapturedAttribute");
     expect(typeReads).toHaveLength(1);
-    expect(typeReads[0].arguments[1] && ts.isStringLiteral(typeReads[0].arguments[1]) && typeReads[0].arguments[1].text).toBe("type");
-    expect(typeReads[0].arguments[2] && ts.isIdentifier(typeReads[0].arguments[2]) && typeReads[0].arguments[2].text).toBe("nativeGetAttribute");
+    const typeName = typeReads[0]?.arguments[1];
+    expect(typeName && ts.isStringLiteral(typeName) && typeName.text).toBe("type");
+    const typeReader = typeReads[0]?.arguments[2];
+    expect(typeReader && ts.isIdentifier(typeReader) && typeReader.text).toBe("nativeGetAttribute");
 
     const nameReads = callsNamed("attrLength", "readCapturedAttribute");
     expect(nameReads).toHaveLength(1);
-    expect(nameReads[0].arguments[2] && ts.isIdentifier(nameReads[0].arguments[2]) && nameReads[0].arguments[2].text).toBe("nativeGetAttribute");
+    const nameReader = nameReads[0]?.arguments[2];
+    expect(nameReader && ts.isIdentifier(nameReader) && nameReader.text).toBe("nativeGetAttribute");
 
     for (const fn of ["findPopupIntentSource", "attrLength"]) {
       const text = declaration(fn).getText(source);
