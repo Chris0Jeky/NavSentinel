@@ -97,8 +97,19 @@ export const EARLY_MAIN_FORM_TARGET =
 export const EARLY_MAIN_GET_ATTRIBUTE =
   "try{const getAttribute=Element.prototype.getAttribute;if(typeof getAttribute==='function')Object.defineProperty(globalThis,'__navsentinelMainGetAttribute',{value:getAttribute,writable:false,configurable:false})}catch(_){}";
 
+// #1063: Element.prototype.closest, captured before the async guard import.
+// Popup-intent ancestor checks must not trust a method an early page script replaced.
+export const EARLY_MAIN_CLOSEST =
+  "try{const closest=Element.prototype.closest;if(typeof closest==='function')Object.defineProperty(globalThis,'__navsentinelMainClosest',{value:closest,writable:false,configurable:false})}catch(_){}";
+
+// #1060/#1062/#1065: captured DOM functions remain page-visible objects.
+// Capture the invocation primitive too; callers use its [[Call]] directly,
+// never a mutable .call/.apply property on a captured function or Reflect.
+export const EARLY_MAIN_APPLY =
+  "try{const apply=Reflect.apply;if(typeof apply==='function')Object.defineProperty(globalThis,'__navsentinelMainApply',{value:apply,writable:false,configurable:false})}catch(_){}";
+
 /** Every early native capture, in order: installed and asserted as one block. */
-export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}`;
+export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}${EARLY_MAIN_APPLY}`;
 
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";
@@ -140,6 +151,22 @@ export function assertEarlyMainPrelude(loader) {
   }
   if (attrFirst < targetFirst) {
     throw new Error("MAIN-world early getAttribute capture must follow the form target capture");
+  }
+  const closestFirst = loader.indexOf(EARLY_MAIN_CLOSEST);
+  if (closestFirst < 0) throw new Error("MAIN-world guard loader is missing early closest capture");
+  if (loader.indexOf(EARLY_MAIN_CLOSEST, closestFirst + EARLY_MAIN_CLOSEST.length) >= 0) {
+    throw new Error("MAIN-world guard loader has more than one early closest capture");
+  }
+  if (closestFirst < attrFirst) {
+    throw new Error("MAIN-world early closest capture must follow the getAttribute capture");
+  }
+  const applyFirst = loader.indexOf(EARLY_MAIN_APPLY);
+  if (applyFirst < 0) throw new Error("MAIN-world guard loader is missing early apply capture");
+  if (loader.indexOf(EARLY_MAIN_APPLY, applyFirst + EARLY_MAIN_APPLY.length) >= 0) {
+    throw new Error("MAIN-world guard loader has more than one early apply capture");
+  }
+  if (applyFirst < closestFirst) {
+    throw new Error("MAIN-world early apply capture must follow the closest capture");
   }
   const strict = loader.indexOf(STRICT_MARKER);
   const prelude = loader.indexOf(EARLY_MAIN_PRELUDE);
