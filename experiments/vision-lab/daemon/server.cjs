@@ -14,7 +14,8 @@ function respond(res,status,data,headers={}){
   res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...headers});res.end(body);
 }
 function bodyJson(req){return new Promise((resolve,reject)=>{
-  if(!String(req.headers['content-type']||'').toLowerCase().startsWith('application/json'))return reject(Object.assign(new Error('JSON content type required'),{status:415}));
+  const mediaType=String(req.headers['content-type']||'').split(';',1)[0].trim().toLowerCase();
+  if(mediaType!=='application/json')return reject(Object.assign(new Error('JSON content type required'),{status:415}));
   let size=0,chunks=[],done=false;
   req.on('data',chunk=>{size+=chunk.length;if(size>16384){if(!done){done=true;reject(Object.assign(new Error('Request exceeds 16 KiB'),{status:413}));}return;}chunks.push(chunk);});
   req.on('end',()=>{if(done)return;try{const data=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!data||typeof data!=='object'||Array.isArray(data))throw new Error();resolve(data);}catch{reject(Object.assign(new Error('Invalid JSON object'),{status:400}));}});
