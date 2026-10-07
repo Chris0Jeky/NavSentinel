@@ -249,10 +249,12 @@ for (const budget of budgets) {
     // the pre-package build output. package.mjs normalizes it to LF so the
     // measured artifact is identical on Windows and hosted Linux.
     const packagedLicensePath = path.join(distDir, "LICENSE");
-    if (!fs.existsSync(packagedLicensePath)) {
-      const license = fs.readFileSync(licensePath, "utf8").replace(/\r\n?/g, "\n");
-      sizeBytes += Buffer.byteLength(license);
-    }
+    // The packager replaces an existing build license too. Subtract those
+    // already-counted bytes and always project the normalized root GPL text.
+    const license = fs.readFileSync(licensePath, "utf8").replace(/\r\n?/g, "\n");
+    const existingLicenseBytes = fs.existsSync(packagedLicensePath)
+      ? fs.statSync(packagedLicensePath).size : 0;
+    sizeBytes += Buffer.byteLength(license) - existingLicenseBytes;
     matchInfo = `${target} (including packaged LICENSE)`;
   } else {
     const dir = path.dirname(path.join(distDir, budget.glob));
