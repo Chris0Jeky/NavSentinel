@@ -1069,6 +1069,68 @@ describe("appendEvent", () => {
     expect(log[0]!.extra).toEqual({ tabId: 42 });
   });
 
+  describe("non-finite-event-score is omitted", () => {
+    it("non-finite-event-score score: Number.NaN omits score but keeps the entry", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { appendEvent } = await import("../extension/src/shared/storage");
+      await appendEvent({ kind: "nav_click_block", site: "evil.example", score: Number.NaN });
+
+      const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+      expect(log).toHaveLength(1);
+      expect("score" in log[0]!).toBe(false);
+    });
+
+    it("non-finite-event-score score: Number.POSITIVE_INFINITY omits score but keeps the entry", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { appendEvent } = await import("../extension/src/shared/storage");
+      await appendEvent({ kind: "nav_click_block", site: "evil.example", score: Number.POSITIVE_INFINITY });
+
+      const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+      expect(log).toHaveLength(1);
+      expect("score" in log[0]!).toBe(false);
+    });
+
+    it("non-finite-event-score score: Number.NEGATIVE_INFINITY omits score but keeps the entry", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { appendEvent } = await import("../extension/src/shared/storage");
+      await appendEvent({ kind: "nav_click_block", site: "evil.example", score: Number.NEGATIVE_INFINITY });
+
+      const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+      expect(log).toHaveLength(1);
+      expect("score" in log[0]!).toBe(false);
+    });
+
+    it("non-finite-event-score score: 0 is preserved exactly", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { appendEvent } = await import("../extension/src/shared/storage");
+      await appendEvent({ kind: "nav_click_block", site: "evil.example", score: 0 });
+
+      const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+      expect(log).toHaveLength(1);
+      expect(log[0]!.score).toBe(0);
+    });
+
+    it("non-finite-event-score score: 85 is preserved exactly", async () => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+      const { appendEvent } = await import("../extension/src/shared/storage");
+      await appendEvent({ kind: "nav_click_block", site: "evil.example", score: 85 });
+
+      const log = store[EVENT_LOG_KEY] as Array<Record<string, unknown>>;
+      expect(log).toHaveLength(1);
+      expect(log[0]!.score).toBe(85);
+    });
+  });
+
   it("persists a sanitized path, dropping path/query/fragment tokens (RI-06)", async () => {
     const { chrome, store } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
