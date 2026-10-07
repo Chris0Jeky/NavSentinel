@@ -2,6 +2,10 @@ import type { GestureToken, Mode } from "./types";
 
 let activeToken: GestureToken | null = null;
 
+/**
+ * Intentionally unconsumed in production pending the roadmap gesture-correlation task (P2-08).
+ * Unit tests call it; shipped code does not.
+ */
 export function getActiveToken(): GestureToken | null {
   if (!activeToken) return null;
   if (performance.now() > activeToken.expiresAt) {
