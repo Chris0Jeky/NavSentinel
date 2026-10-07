@@ -53,9 +53,9 @@ class Ledger {
   entryHash(entry){ return hash(JSON.stringify({sequence:entry.sequence,timestamp:entry.timestamp,previous:entry.previous,data:entry.data})); }
   verify(){
     const s=this.state;
-    if(!s||s.schema!==1||!Array.isArray(s.entries)||!Number.isInteger(s.baseSequence)||!Number.isInteger(s.nextSequence)||typeof s.anchor!=='string'||!/^[a-f0-9]{64}$/.test(s.anchor))return false;
+    if(!s||s.schema!==1||!Array.isArray(s.entries)||!Number.isSafeInteger(s.baseSequence)||s.baseSequence<0||!Number.isSafeInteger(s.nextSequence)||s.nextSequence<1||typeof s.anchor!=='string'||!/^[a-f0-9]{64}$/.test(s.anchor))return false;
     let prev=s.anchor,seq=s.baseSequence;
-    for(const e of s.entries){ if(e.previous!==prev||e.sequence!==++seq||e.hash!==this.entryHash(e))return false;prev=e.hash; }
+    for(const e of s.entries){ if(!e||typeof e!=='object'||Array.isArray(e)||!Number.isSafeInteger(e.sequence)||e.sequence<1||e.previous!==prev||e.sequence!==++seq||e.hash!==this.entryHash(e))return false;prev=e.hash; }
     return s.nextSequence===seq+1;
   }
   persist(){
@@ -76,6 +76,8 @@ class Ledger {
   }
   append(data){
     if(!this.verify())throw new Error('Journal integrity failed');
+    // Reserve a representable next counter; never persist rounded duplicates.
+    if(this.state.nextSequence===Number.MAX_SAFE_INTEGER)throw new Error('Journal sequence capacity reached');
     const encoded=JSON.stringify(data);
     if(Buffer.byteLength(encoded)>8192)throw new Error('Receipt exceeds byte limit');
     const old=structuredClone(this.state);
