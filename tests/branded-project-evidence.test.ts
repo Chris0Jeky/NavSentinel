@@ -69,7 +69,7 @@ describe("branded project evidence retention", () => {
 
   it("wires retention before fail-fast exit and uploads the persistent copies", () => {
     const workflow = readFileSync(".github/workflows/branded-chrome-advisory.yml", "utf8");
-    const loop = /for project in smoke regression phase2; do([\s\S]*?)          done/.exec(workflow)?.[1];
+    const loop = /for project in smoke regression phase2; do([\s\S]*?) {10}done/.exec(workflow)?.[1];
     assert.ok(loop);
     const retain = loop.indexOf('node scripts/retain-branded-project-evidence.mjs "$project"');
     assert.ok(retain > loop.indexOf("xvfb-run -a npx playwright test"));
