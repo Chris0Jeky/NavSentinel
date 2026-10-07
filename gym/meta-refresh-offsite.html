@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Continue</title>
+  <link rel="canonical" href="https://shop.example/continue" />
+  <meta http-equiv="refresh" content="0;url=https://account-check.example/login" />
+  <style>
+    body { font-family: sans-serif; background: #f6f7f9; margin: 0; }
+    .note { margin: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; }
+    .card { width: 380px; margin: 24px auto; background: #fff; border-radius: 12px; padding: 28px; }
+    label { display: block; font-size: 12px; margin-bottom: 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; }
+    button { background: #222; color: #fff; border: 0; border-radius: 4px; padding: 10px 16px; }
+  </style>
+</head>
+<body>
+  <p class="note">Gym fixture: a credential page whose meta refresh sends the browser to a different site. The form itself stays on shop.example. No script runs.</p>
+  <form class="card" action="https://shop.example/session" method="post">
+    <h1>Continue</h1>
+    <p>Your session is moving to the account check.</p>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" />
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" />
+    <button type="submit">Continue</button>
+  </form>
+</body>
+</html>

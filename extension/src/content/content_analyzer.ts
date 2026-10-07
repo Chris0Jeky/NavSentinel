@@ -980,6 +980,39 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
   return { suspicious: reasons.length > 0, reasons };
 }
 
+/**
+ * Credential page whose meta refresh target is a different registrable domain.
+ * Relative and same-site targets are not lures. data: and javascript: targets
+ * stay with the Suspicious-Meta-Refresh kit fingerprint.
+ */
+function crossSiteMetaRefreshReason(snapshot: PageSnapshot, currentDomain: string): string | null {
+  if (!snapshot.hasPasswordField) return null;
+  const currentReg = getRegistrableDomain(normalizeHost(currentDomain));
+  if (!currentReg) return null;
+  const base = snapshot.baseUrl && snapshot.baseUrl !== "about:blank"
+    ? snapshot.baseUrl
+    : `https://${hostForUrl(currentDomain)}/`;
+  for (let i = 0; i < snapshot.metaTags.length; i++) {
+    const tag = snapshot.metaTags[i]!;
+    if (tag.name !== "refresh") continue;
+    const match = /url\s*=\s*([^;\s]+)/i.exec(tag.content);
+    const raw = match?.[1]?.trim().replace(/^['"]|['"]$/g, "");
+    if (!raw || /^(?:data|javascript):/i.test(raw)) continue;
+    let target: URL;
+    try {
+      target = new URL(raw, base);
+    } catch {
+      continue;
+    }
+    if (target.protocol !== "http:" && target.protocol !== "https:") continue;
+    const targetReg = getRegistrableDomain(normalizeHost(target.hostname));
+    if (targetReg && targetReg !== currentReg) {
+      return `Meta refresh navigates to a different site: ${targetReg}`;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Main analysis function (pure -- operates on PageSnapshot)
 // ---------------------------------------------------------------------------
@@ -1017,6 +1050,15 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
     result.kitName = kit.name;
     result.score += 40;
     result.reasons.push(`Phishing kit signature detected: ${kit.name}`);
+  }
+
+  // A credential page that meta-refreshes onto another registrable domain is a
+  // navigation lure. Same-site refreshes stay quiet. data: and javascript:
+  // targets are already covered by the Suspicious-Meta-Refresh kit fingerprint.
+  const refreshReason = crossSiteMetaRefreshReason(snapshot, currentDomain);
+  if (refreshReason) {
+    result.score += 25;
+    result.reasons.push(refreshReason);
   }
 
   // 3. Suspicious form actions
