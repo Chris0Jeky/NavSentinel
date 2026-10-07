@@ -20,6 +20,15 @@ function bodyJson(req){return new Promise((resolve,reject)=>{
   req.on('end',()=>{if(done)return;try{const data=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!data||typeof data!=='object'||Array.isArray(data))throw new Error();resolve(data);}catch{reject(Object.assign(new Error('Invalid JSON object'),{status:400}));}});
   req.on('error',reject);
 });}
+function localRequestUrl(target,origin){
+  // Neither listener is an HTTP proxy. Keep routing in the checked Host's
+  // origin and contain URL parser failures before the async listener returns.
+  if(typeof target!=='string'||!target.startsWith('/')||target.startsWith('//')||target.includes('#'))return null;
+  try{
+    const url=new URL(target,origin);
+    return url.origin===origin?url:null;
+  }catch{return null;}
+}
 function staticFile(res,pathname,{lab=false}={}){
   let decoded;try{decoded=decodeURIComponent(pathname);}catch{return respond(res,400,{error:'Bad path'});}
   if(decoded.includes('\0')||decoded.includes('\\'))return respond(res,400,{error:'Bad path'});
@@ -68,7 +77,8 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
       if(req.headers.host!==expectedHost)return respond(res,403,{error:'Unexpected Host'});
       if(req.headers.origin && req.headers.origin!==expectedOrigin)return respond(res,403,{error:'Cross-origin requests are not accepted'});
       if(req.headers['sec-fetch-site']==='cross-site')return respond(res,403,{error:'Cross-site request rejected'});
-      const url=new URL(req.url,expectedOrigin);
+      const url=localRequestUrl(req.url,expectedOrigin);
+      if(!url)return respond(res,400,{error:'Invalid local request target'});
       if(url.pathname==='/api/health'&&req.method==='GET')return respond(res,200,{version:Core.VERSION,uptimeSeconds:Math.floor((Date.now()-started)/1000),mode:'cooperative intent broker',osHooks:false,labPort:actualLabPort,fixtureAdapter:fixtureAdapter()});
       if(!url.pathname.startsWith('/api/')){
         if(req.method!=='GET'&&req.method!=='HEAD')return respond(res,405,{error:'Method not allowed'});
@@ -155,7 +165,8 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
     if(req.headers.host!==`127.0.0.1:${actualLabPort}`)return respond(res,403,{error:'Unexpected Host'});
     if(req.headers.origin&&req.headers.origin!==expectedOrigin)return respond(res,403,{error:'Cross-origin requests are not accepted'});
     if(req.headers['sec-fetch-site']==='cross-site')return respond(res,403,{error:'Cross-site request rejected'});
-    const url=new URL(req.url,expectedOrigin);
+    const url=localRequestUrl(req.url,expectedOrigin);
+    if(!url)return respond(res,400,{error:'Invalid local request target'});
     if(url.pathname==='/broker-effects'&&req.method==='GET')return respond(res,200,{fixtureOnly:true,...brokerEffects});
     if(url.pathname==='/broker-effect'){
       if(req.method!=='POST')return respond(res,405,{error:'Method not allowed'});
