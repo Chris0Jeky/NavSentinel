@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'" />
   <title>Sign in - Google Accounts</title>
   <link rel="canonical" href="https://accounts.google.com/ServiceLogin" />
   <style>
@@ -15,7 +16,7 @@
   </style>
 </head>
 <body>
-  <p class="note">Gym contrast: the same sign-in layout, and the page URL is the real accounts.google.com host with no userinfo.</p>
+  <p class="note">Synthetic URL-model contrast. The canonical URL declares accounts.google.com with no userinfo; this local page is not Google sign-in. Submission is disabled by Content Security Policy. Never enter real credentials.</p>
   <form class="card" action="https://accounts.google.com/ServiceLogin" method="post">
     <h1>Google</h1>
     <p>Sign in</p>
