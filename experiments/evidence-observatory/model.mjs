@@ -243,6 +243,10 @@ function nativeTrace(raw, source) {
       if (input.kind === 'control.completed') c.facts.legitimateCompletions++;
       if (input.kind === 'observer.gap') c.gaps.push('OBSERVER_GAP_EVENT');
       if (input.kind === 'fault.injected') c.gaps.push('INTENTIONAL_FAULT_EXPERIMENT');
+      // Lifecycle evidence overrides optimistic terminal health flags. A later
+      // restart cannot make an interrupted observation interval continuous.
+      if ((input.kind === 'worker.stopped' || input.kind === 'worker.restarted') &&
+          !c.gaps.includes('WORKER_OBSERVATION_INTERRUPTED')) c.gaps.push('WORKER_OBSERVATION_INTERRUPTED');
       c.events.push(e); ids.add(id);
     }
     if (c.events[0]?.kind !== 'run.start' || c.events[0]?.elapsedMs !== o.startedMs || c.events.at(-1)?.kind !== 'observation.end' || c.events.at(-1)?.elapsedMs !== o.endedMs) c.gaps.push('WINDOW_BOUNDARIES_MISSING');
