@@ -27,6 +27,7 @@ import {
   pruneTimestampWindow,
   resolveChildNavigable,
   resolveFormActionUrl,
+  readCapturedFormTarget,
   shouldEmitRapidPushState,
   type ChildNavigableView,
   type AnchorOpenIntent,
@@ -603,6 +604,16 @@ const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
   formPrototype,
   "acceptCharset",
 )?.get as NativeStringGetter<HTMLFormElement> | undefined;
+// #1055: the loader captures HTMLFormElement.prototype.target before the async
+// import. This module can run after an early page script, so the self-exemption
+// prefers that capture and uses the module-level descriptor only when it is absent.
+const earlyFormTarget = (globalThis as typeof globalThis & {
+  __navsentinelMainFormTarget?: (this: HTMLFormElement) => string;
+}).__navsentinelMainFormTarget;
+const nativeFormTargetGetter =
+  typeof earlyFormTarget === "function"
+    ? earlyFormTarget
+    : nativeGetOwnPropertyDescriptor(formPrototype, "target")?.get as NativeStringGetter<HTMLFormElement> | undefined;
 const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
   nodePrototype,
   "isConnected",
@@ -1196,8 +1207,10 @@ function dispatchFormSubmit(
     postAllowed(kind, childReplay.actionUrl);
     return;
   }
+  const capturedFormTarget = readCapturedFormTarget(form, nativeFormTargetGetter);
   if (childReplay.status === "not-child" &&
-      ((isSubframe() && isFormSelfTarget(form.target)) || consumeRedirectAllowance(actionUrl) !== "none")) {
+      ((isSubframe() && capturedFormTarget !== null && isFormSelfTarget(capturedFormTarget)) ||
+        consumeRedirectAllowance(actionUrl) !== "none")) {
     allow();
     return;
   }
