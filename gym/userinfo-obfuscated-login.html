@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'" />
+  <title>Sign in - Google Accounts</title>
+  <link rel="canonical" href="https://accounts.google.com@collector.example/login" />
+  <style>
+    body { font-family: sans-serif; background: #f0f4f9; margin: 0; }
+    .note { margin: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; }
+    .card { width: 400px; margin: 24px auto; background: #fff; border-radius: 16px; padding: 28px; }
+    .shown { font-family: ui-monospace, monospace; font-size: 13px; }
+    label { display: block; font-size: 12px; margin-bottom: 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; }
+    button { background: #1a73e8; color: #fff; border: 0; border-radius: 4px; padding: 10px 16px; }
+  </style>
+</head>
+<body>
+  <p class="note">Synthetic URL-model fixture. The canonical URL declares an accounts.google.com-looking userinfo prefix with collector.example as its host. Submission is disabled by Content Security Policy. Never enter real credentials.</p>
+  <form class="card" action="https://collector.example/login" method="post">
+    <h1>Google</h1>
+    <p>Sign in</p>
+    <p class="shown">https://accounts.google.com/ServiceLogin</p>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" />
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" />
+    <button type="submit">Next</button>
+  </form>
+</body>
+</html>
