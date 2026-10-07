@@ -60,6 +60,11 @@ export async function readWorkerSnapshot(root, scriptURL, { timeoutMs = 8000 } =
         response.decisions.some(d => !d || !['overlay-suppressed', 'overlay-reasserted'].includes(d.code))) throw new Error('WORKER_RESPONSE_INVALID');
     return { epoch: response.epoch, decisions: response.decisions.map(d => ({ code: d.code })) };
   } finally {
-    await root.send('Target.detachFromTarget', { sessionId });
+    try {
+      await root.send('Target.detachFromTarget', { sessionId });
+    } catch {
+      // Detach is best-effort cleanup: a failure here must not mask
+      // the snapshot result or the informative evaluate/detach error.
+    }
   }
 }
