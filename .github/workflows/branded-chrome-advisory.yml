@@ -99,10 +99,15 @@ jobs:
           for project in smoke regression phase2; do
             status=0
             xvfb-run -a npx playwright test -c playwright.branded.config.ts --project="$project" || status=$?
+            retention_status=0
+            node scripts/retain-branded-project-evidence.mjs "$project" || retention_status=$?
             node scripts/record-git-reachability.mjs --phase "after-$project"
             test -s "test-results/git-reachability-after-$project.txt"
             if [ "$status" -ne 0 ]; then
               exit "$status"
+            fi
+            if [ "$retention_status" -ne 0 ]; then
+              exit "$retention_status"
             fi
           done
 
@@ -126,5 +131,6 @@ jobs:
             test-results/
             playwright-report/
             artifacts/acceptance/
+            artifacts/branded/
           if-no-files-found: warn
           retention-days: 14
