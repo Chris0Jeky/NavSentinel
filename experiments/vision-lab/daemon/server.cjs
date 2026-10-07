@@ -171,7 +171,18 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
       const kind=url.searchParams.get('kind');if(!Object.hasOwn(sinkCounts,kind))return respond(res,400,{error:'Invalid sink'});
       if(!['GET','POST'].includes(req.method))return respond(res,405,{error:'Method not allowed'});
       // Drain and discard. No field, password, command, body or query is logged.
-      req.resume();sinkCounts[kind]++;return respond(res,200,{fixtureOnly:true,kind,count:sinkCounts[kind],message:'Inert loopback sink reached'});
+      if(req.method==='GET'){req.resume();sinkCounts[kind]++;return respond(res,200,{fixtureOnly:true,kind,count:sinkCounts[kind],message:'Inert loopback sink reached'});}
+      const SINK_BODY_CAP=16384;
+      let sinkSize=0,sinkOversize=false;
+      await new Promise(resolve=>{
+        req.on('data',chunk=>{sinkSize+=chunk.length;if(sinkSize>SINK_BODY_CAP&&!sinkOversize){sinkOversize=true;req.pause();resolve();}});
+        req.on('end',resolve);
+        req.on('error',resolve);
+        req.on('close',resolve);
+      });
+      if(sinkOversize||sinkSize>SINK_BODY_CAP){res.once('finish',()=>req.destroy());return respond(res,413,{error:'Request exceeds 16 KiB'},{Connection:'close'});}
+      if(!req.complete)return respond(res,400,{error:'Incomplete sink request'});
+      sinkCounts[kind]++;return respond(res,200,{fixtureOnly:true,kind,count:sinkCounts[kind],message:'Inert loopback sink reached'});
     }
     if(url.pathname==='/lab-state'&&req.method==='GET')return respond(res,200,{fixtureOnly:true,counts:sinkCounts});
     if(req.method!=='GET')return respond(res,405,{error:'Method not allowed'});
