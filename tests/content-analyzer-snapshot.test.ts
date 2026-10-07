@@ -121,6 +121,70 @@ describe("buildPageSnapshot title cap (#401)", () => {
   });
 });
 
+describe("buildPageSnapshot title middle-band omission (#408)", () => {
+  // Accepted bound: boundedSample keeps a full head plus a short tail. A brand
+  // placed in [MAX_TITLE_LEN, len - (MAX_TITLE_LEN >> 2)) never reaches the
+  // title channel. These cases pin that omission and the independent
+  // visible-body / image backstops. They do not scan the whole title.
+  function calibratedMiddleBrandTitle(): string {
+    return "x".repeat(MAX_TITLE_LEN) + "PayPal" + "y".repeat(MAX_TITLE_LEN >> 2);
+  }
+
+  function snapshotWithCalibratedTitle(bodyHtml: string) {
+    document.documentElement.innerHTML = bodyHtml;
+    document.title = calibratedMiddleBrandTitle();
+    return buildPageSnapshot(document);
+  }
+
+  function expectBoundedTitleMiss(title: string): void {
+    expect(document.title).toContain("PayPal");
+    expect(document.title.length).toBeGreaterThan(MAX_TITLE_LEN + (MAX_TITLE_LEN >> 2));
+    expect(title).not.toContain("paypal");
+    expect(title.length).toBeLessThanOrEqual(MAX_TITLE_LEN + (MAX_TITLE_LEN >> 2) + 1);
+  }
+
+  it("drops a brand calibrated into the omitted middle, so the title channel misses", () => {
+    const snap = snapshotWithCalibratedTitle(
+      `<body><form><input type="password"></form><p>hello</p></body>`,
+    );
+    expectBoundedTitleMiss(snap.title);
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(false);
+    expect(result.brandDetected).toBeUndefined();
+    expect(result.reasons.some((r) => r.includes("PayPal"))).toBe(false);
+  });
+
+  it("still flags a visible body brand when the title channel misses", () => {
+    const snap = snapshotWithCalibratedTitle(
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`,
+    );
+    expectBoundedTitleMiss(snap.title);
+    expect(snap.bodyText).toContain("paypal");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+    expect(result.score).toBe(10);
+    expect(result.reasons[0]).toContain("(bodyText)");
+    expect(result.reasons[0]).not.toContain("(title");
+  });
+
+  it("still flags an image brand when the title channel misses", () => {
+    const snap = snapshotWithCalibratedTitle(
+      `<body><form><input type="password"></form>` +
+      `<img alt="paypal logo" src="https://cdn.example/logo.png"></body>`,
+    );
+    expectBoundedTitleMiss(snap.title);
+    expect(snap.imgSignals).toContain("paypal");
+    expect(snap.bodyText).not.toContain("paypal");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+    expect(result.score).toBe(15);
+    expect(result.reasons[0]).toContain("(img)");
+    expect(result.reasons[0]).not.toContain("(title");
+  });
+});
+
 describe("buildPageSnapshot imgSignals cap (#401)", () => {
   it("bounds a single multi-MB data-URI src but keeps the alt brand keyword", () => {
     const bigSrc = "data:image/png;base64," + "a".repeat(MAX_IMG_ATTR * 20);
