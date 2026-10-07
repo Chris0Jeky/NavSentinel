@@ -403,6 +403,28 @@ export function matchesAnchorOpenIntent(
  * the getter is missing, threw, or returned a non-string, so the exemption
  * must not be granted. An empty string is a real self target and is distinct.
  */
+/**
+ * Content attribute for a MAIN-world gate decision (#1061).
+ * Undefined means the captured reader is missing, threw, or returned a
+ * non-string. Null means the attribute is absent. Those are different:
+ * an empty action is a real document submit, and a failed read must not
+ * become one.
+ */
+export function readCapturedAttribute(
+  element: Element,
+  name: string,
+  nativeGetAttribute: ((this: Element, qualifiedName: string) => string | null) | undefined,
+): string | null | undefined {
+  if (!nativeGetAttribute) return undefined;
+  try {
+    const value = nativeGetAttribute.call(element, name);
+    if (value === null) return null;
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function readCapturedFormTarget(
   form: HTMLFormElement,
   nativeTargetGetter: ((this: HTMLFormElement) => string) | undefined,

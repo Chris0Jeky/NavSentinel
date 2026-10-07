@@ -92,8 +92,13 @@ export const EARLY_MAIN_BASE_URI =
 export const EARLY_MAIN_FORM_TARGET =
   "try{const targetGetter=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,'target').get;if(typeof targetGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainFormTarget',{value:targetGetter,writable:false,configurable:false})}catch(_){}";
 
+// #1061: Element.prototype.getAttribute, captured before the async guard import.
+// Action and method decisions must not trust a method an early page script replaced.
+export const EARLY_MAIN_GET_ATTRIBUTE =
+  "try{const getAttribute=Element.prototype.getAttribute;if(typeof getAttribute==='function')Object.defineProperty(globalThis,'__navsentinelMainGetAttribute',{value:getAttribute,writable:false,configurable:false})}catch(_){}";
+
 /** Every early native capture, in order: installed and asserted as one block. */
-export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}`;
+export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}`;
 
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";
@@ -127,6 +132,14 @@ export function assertEarlyMainPrelude(loader) {
   }
   if (targetFirst < baseFirst) {
     throw new Error("MAIN-world early form target capture must follow the baseURI capture");
+  }
+  const attrFirst = loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE);
+  if (attrFirst < 0) throw new Error("MAIN-world guard loader is missing early getAttribute capture");
+  if (loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE, attrFirst + EARLY_MAIN_GET_ATTRIBUTE.length) >= 0) {
+    throw new Error("MAIN-world guard loader has more than one early getAttribute capture");
+  }
+  if (attrFirst < targetFirst) {
+    throw new Error("MAIN-world early getAttribute capture must follow the form target capture");
   }
   const strict = loader.indexOf(STRICT_MARKER);
   const prelude = loader.indexOf(EARLY_MAIN_PRELUDE);
