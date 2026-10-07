@@ -6,6 +6,7 @@ import {
   EARLY_MAIN_BASE_URI,
   EARLY_MAIN_CLOCK,
   EARLY_MAIN_FORM_TARGET,
+  EARLY_MAIN_CLOSEST,
   EARLY_MAIN_GET_ATTRIBUTE,
   EARLY_MAIN_PRELUDE,
   installEarlyMainClockText,
@@ -47,7 +48,7 @@ describe("MAIN-world early baseURI capture (#900)", () => {
     // Separated from the clock capture: the prelude block no longer follows 'use strict' intact.
     expect(() => assertEarlyMainPrelude(installed.replace(
       EARLY_MAIN_PRELUDE,
-      `${EARLY_MAIN_CLOCK}void 0;${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}`,
+      `${EARLY_MAIN_CLOCK}void 0;${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}`,
     ))).toThrow(/directly follow/);
     const moved = GENERATED.replace("'use strict';", `'use strict';\n  ${EARLY_MAIN_CLOCK}`).replace(
       "await import(",

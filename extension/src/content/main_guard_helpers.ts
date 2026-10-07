@@ -425,6 +425,27 @@ export function readCapturedAttribute(
   }
 }
 
+/**
+ * Ancestor match for a MAIN-world popup-intent decision (#1063).
+ * Undefined means the captured reader is missing, threw, or returned a
+ * non-element. Null means nothing matched. A failed read must not be
+ * treated as "no ancestor".
+ */
+export function readCapturedClosest(
+  element: Element,
+  selector: string,
+  nativeClosest: ((this: Element, selector: string) => Element | null) | undefined,
+): Element | null | undefined {
+  if (!nativeClosest) return undefined;
+  try {
+    const value = nativeClosest.call(element, selector);
+    if (value === null) return null;
+    return value instanceof Element ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function readCapturedFormTarget(
   form: HTMLFormElement,
   nativeTargetGetter: ((this: HTMLFormElement) => string) | undefined,

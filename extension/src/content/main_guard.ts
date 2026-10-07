@@ -28,6 +28,7 @@ import {
   resolveChildNavigable,
   resolveFormActionUrl,
   readCapturedAttribute,
+  readCapturedClosest,
   readCapturedFormTarget,
   shouldEmitRapidPushState,
   type ChildNavigableView,
@@ -275,7 +276,7 @@ function textLength(el: Element): number {
 }
 
 function attrLength(el: Element, name: string): number {
-  const value = el.getAttribute(name);
+  const value = readCapturedAttribute(el, name, nativeGetAttribute);
   if (!value) return 0;
   return Math.min(value.length, 80);
 }
@@ -304,17 +305,22 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
   if (!target || typeof (target as Node).nodeType !== "number") return null;
   if ((target as Node).nodeType !== Node.ELEMENT_NODE) return null;
   const el = target as Element;
-  if (el.closest("a")) return null;
+  // Undefined (unreadable) and a real ancestor both refuse the arm. Only a
+  // confirmed miss continues. A replaced closest must not hide that anchor.
+  const anchor = readCapturedClosest(el, "a", nativeClosest);
+  if (anchor !== null) return null;
   // Walk outward like the original value-selector did (skipping non-matching
   // inputs), but compare `type` ASCII case-insensitively: the keyword is
   // enumerated, so `type="SUBMIT"` submits while `[type='submit']` misses it.
   // Programmatic on purpose — see findSubmitControl in nav_authority.ts. (#820)
   let current: Element | null = el;
   while (current) {
-    const candidate: Element | null = current.closest("button, input");
+    const candidate = readCapturedClosest(current, "button, input", nativeClosest);
     if (!candidate) return null;
     if (candidate.tagName.toLowerCase() === "button") return candidate;
-    const type = (candidate.getAttribute("type") ?? "").toLowerCase();
+    const typeAttr = readCapturedAttribute(candidate, "type", nativeGetAttribute);
+    if (typeAttr === undefined) return null;
+    const type = (typeAttr ?? "").toLowerCase();
     if (type === "button" || type === "submit") return candidate;
     current = candidate.parentElement;
   }
@@ -595,6 +601,15 @@ const earlyGetAttribute = (globalThis as typeof globalThis & {
 }).__navsentinelMainGetAttribute;
 const nativeGetAttribute =
   typeof earlyGetAttribute === "function" ? earlyGetAttribute : nativeElementGetAttribute;
+// #1063: the loader captures closest before the async import. Popup-intent
+// ancestor checks prefer that capture and use the module-level method only
+// when it is absent.
+const nativeElementClosest = Element.prototype.closest;
+const earlyClosest = (globalThis as typeof globalThis & {
+  __navsentinelMainClosest?: (this: Element, selector: string) => Element | null;
+}).__navsentinelMainClosest;
+const nativeClosest =
+  typeof earlyClosest === "function" ? earlyClosest : nativeElementClosest;
 const nativeDocumentQuerySelector = Document.prototype.querySelector;
 const nativeCreateElement = Document.prototype.createElement;
 const nativeAttachShadow = Element.prototype.attachShadow;
