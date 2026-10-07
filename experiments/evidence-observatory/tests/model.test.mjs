@@ -17,13 +17,13 @@ function overlay(overrides = {}) {
     repository_head: 'a'.repeat(40), extension_build_sha256: 'b'.repeat(64), browser: { version: '143.0.7499.4' }, profile: 'proving_ground', outcome: 'BLOCKED_PRE_HARM', valid: true,
     network_violations: [], blocked_external_attempts: [], oracle: { type: 'independent_harm', sink_receipt_count: 0,
       observation: { baselineReceiptCount: 1, protectedReceiptCount: 0, trustedUnderlyingClicksCompleted: 1 },
-      sink_snapshot: { receipts: [{ sequence: 1, runId: 'previous-run', scenarioId: 'NS-ADV-UI-004', role: 'attack', consequence: 'wrong-target-navigation', method: 'GET', sentinelSha256: 'd'.repeat(64) }], invalidAttempts: [] } }, ...overrides };
+      sink_snapshot: { receipts: [{ sequence: 1, runId: 'previous-run', scenarioId: 'NS-ADV-UI-004', role: 'attack', consequence: 'wrong-target-navigation', targetId: 'unit-attack-harm', method: 'GET', sentinelSha256: 'd'.repeat(64) }], invalidAttempts: [] } }, ...overrides };
   raw.oracle.local_receipt_sha256 = sha256(JSON.stringify({ sinkSnapshot: raw.oracle.sink_snapshot, observation: raw.oracle.observation }));
   return raw;
 }
 function hidden() {
   return { mode: 'protected', arm: { id: 'top-assign-100', role: 'attack', expectation: 'blocked-pre-harm' }, sinkReceiptsBefore: 0, sinkReceiptsAfter: 1,
-    sinkReceipts: [{ sequence: 1, runId: 'run-1', scenarioId: 'issue-593-hidden-media-layer-modelled', role: 'attack', method: 'GET', sentinelSha256: 'd'.repeat(64) }],
+    sinkReceipts: [{ sequence: 1, runId: 'run-1', scenarioId: 'issue-593-hidden-media-layer-modelled', role: 'attack', consequence: 'wrong-target-navigation', targetId: 'unit-attack-harm', method: 'GET', sentinelSha256: 'd'.repeat(64) }],
     diagnostics: [{ frame: 'parent', phase: 'parent-ready', at: 100 }, { frame: 'child', phase: 'executing', at: 10 }],
     pageErrors: [], fixtureEgressViolations: [], invalidSinkAttempts: [], topReturnedToFixture: true,
     fixtureUrl: 'http://localhost/?password=DO_NOT_EXPORT', toastText: 'DO_NOT_EXPORT' };
