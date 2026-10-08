@@ -285,7 +285,7 @@ function reconcileSettings(
   incoming?: SettingsRecord,
 ): SettingsRecord {
   const result: SettingsRecord = incoming ? { ...incoming } : {};
-  for (const key in draft) {
+  for (const key of Object.keys(draft)) {
     const value = draft[key];
     if (value && typeof value === "object") {
       const nested = reconcileSettings(
