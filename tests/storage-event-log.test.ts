@@ -83,7 +83,7 @@ describe("event-log malformed append (non-string fields surface at build time)",
     vi.restoreAllMocks();
   });
 
-  it("persists a numeric runtime id as a string instead of silently dropping the entry", async () => {
+  it("persists a numeric runtime id with a fresh string ID instead of dropping the entry", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
 
@@ -91,10 +91,26 @@ describe("event-log malformed append (non-string fields surface at build time)",
 
     await appendEvent({ kind: "nav_click_block", id: 123 as unknown as string });
 
-    // Resolved: the entry must actually be persisted with the coerced string id.
+    // Preserve the event without assigning a malformed producer's identity.
     const log = await getEventLog();
-    const entry = log.find((item) => item.id === "123");
-    expect(entry).toBeDefined();
-    expect(typeof entry!.id).toBe("string");
+    expect(log).toHaveLength(1);
+    expect(typeof log[0]!.id).toBe("string");
+    expect(log[0]!.id.length).toBeGreaterThan(0);
+    expect(log[0]!.id).not.toBe("123");
+  });
+
+  it("preserves an existing string ID and repeated malformed-ID events", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendEvent, getEventLog } = await import("../extension/src/shared/storage");
+
+    await appendEvent({ kind: "nav_click_block", id: "123", ts: 1 });
+    await appendEvent({ kind: "nav_click_block", id: 123 as unknown as string, ts: 2 });
+    await appendEvent({ kind: "nav_click_block", id: 123 as unknown as string, ts: 3 });
+
+    const log = await getEventLog();
+    expect(log.map((entry) => entry.ts).sort()).toEqual([1, 2, 3]);
+    expect(log.find((entry) => entry.id === "123")?.ts).toBe(1);
+    expect(new Set(log.map((entry) => entry.id)).size).toBe(3);
   });
 });

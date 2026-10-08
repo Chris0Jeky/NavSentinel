@@ -1286,7 +1286,7 @@ function coerceEventLogString(value: unknown): string | undefined {
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
   const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra, partial.kind, partial.reasons);
-  const coercedId = coerceEventLogString(partial.id) ?? makeId();
+  const coercedId = typeof partial.id === "string" ? partial.id : makeId();
   const coercedSite = coerceEventLogString(partial.site);
   const coercedUrl = coerceEventLogString(partial.url);
   const coercedDestHost = coerceEventLogString(partial.destHost);
