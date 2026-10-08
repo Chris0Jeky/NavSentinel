@@ -1274,18 +1274,31 @@ function sanitizeEventExtra(
   }
 }
 
+/**
+ * Normalize runtime string fields before write-path validation can silently
+ * evict them. Nullish fields stay absent; other values become bounded strings.
+ */
+function coerceEventLogString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return typeof value === "string" ? value : String(value);
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
   const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra, partial.kind, partial.reasons);
+  const coercedId = coerceEventLogString(partial.id) ?? makeId();
+  const coercedSite = coerceEventLogString(partial.site);
+  const coercedUrl = coerceEventLogString(partial.url);
+  const coercedDestHost = coerceEventLogString(partial.destHost);
   return {
-    id: capEventString(partial.id ?? makeId()),
+    id: capEventString(coercedId),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(pageSite === undefined ? {} : { pageSite }),
-    ...(partial.site !== undefined ? { site: capEventString(partial.site) } : {}),
+    ...(coercedSite !== undefined ? { site: capEventString(coercedSite) } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
-    ...(partial.url !== undefined ? { url: capEventString(minimizeEventUrl(partial.url)) } : {}),
-    ...(partial.destHost !== undefined ? { destHost: capEventString(partial.destHost) } : {}),
+    ...(coercedUrl !== undefined ? { url: capEventString(minimizeEventUrl(coercedUrl)) } : {}),
+    ...(coercedDestHost !== undefined ? { destHost: capEventString(coercedDestHost) } : {}),
     ...(partial.score !== undefined && Number.isFinite(partial.score) ? { score: partial.score } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
     // malformed runtime append message could carry non-string reasons; left raw, the
