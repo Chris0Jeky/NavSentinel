@@ -50,7 +50,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   }
   if(message.type==='disable'){
    const origin=matchOrigin(message.origin);s.enabledOrigins=s.enabledOrigins.filter(x=>x!==origin);await chrome.storage.local.set({enabledOrigins:s.enabledOrigins});await syncRegistration(s.enabledOrigins);
-   const tabs=await chrome.tabs.query({});await Promise.all(tabs.filter(t=>Number.isInteger(t.id)).map(t=>chrome.tabs.sendMessage(t.id,{type:'ns-disable',origin}).catch(()=>{})));const live=await contexts();for(const [key,value]of Object.entries(live))if(value.origin===origin)delete live[key];await saveContexts(live);return {enabled:false,reloadRecommended:true};
+   const tabs=await chrome.tabs.query({});const targets=tabs.filter(t=>Number.isInteger(t.id));const outcomes=await Promise.allSettled(targets.map(t=>chrome.tabs.sendMessage(t.id,{type:'ns-disable',origin})));const failedTabIds=outcomes.map((outcome,index)=>outcome.status==='rejected'?targets[index].id:null).filter(id=>Number.isInteger(id));const live=await contexts();for(const [key,value]of Object.entries(live))if(value.origin===origin)delete live[key];await saveContexts(live);return {enabled:false,reloadRecommended:true,failedCount:failedTabIds.length,failedTabIds};
   }
   if(message.type==='clear'){
    const tabs=await chrome.tabs.query({});
