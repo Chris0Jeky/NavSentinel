@@ -33,6 +33,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
    if(typeof message.localId!=='string'||!/^ns-[a-f0-9-]{36}$/.test(message.localId))throw Error('Invalid local consequence ID');
    const input=C.normalizeEvent({...message.event,source:sender.url,actor:'browser-content',evidence:'sensor',context:{tab:String(sender.tab.id),frame:String(sender.frameId),document:sender.documentId,navigation:sender.documentId,actionId:message.localId}});
    const result=C.evaluate(input,{mode:'smart'}),receipt=C.publicReceipt(input,result,{sourceKind:'live-extension'});
+   if(message.effect!==undefined&&message.effect!=='suppressed'&&message.effect!=='held')throw Error('Invalid effect');
    receipt.id=message.localId;receipt.tabId=sender.tab.id;receipt.frameId=sender.frameId;receipt.effect=message.effect==='suppressed'?'overlay-suppressed':message.effect==='held'?'captured-action-held':'observed';
    // Logs are not the enforcement oracle. Keep only purpose-limited, normalized metadata.
    s.records.push(receipt);s.records=s.records.slice(-MAX_ROWS);await chrome.storage.local.set({records:s.records});
