@@ -116,9 +116,12 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
         const event={...declared,id,journeyId,actor:role==='agent'?'research-agent':'local-operator',evidence:'declared'};
         const allowed=fixtureKind(event)==='auto'||(event.action==='navigate'&&Core.origin(event.destination)==='https://reference.test');
         if(!allowed&&!event.signals.includes('agent_outside_scope'))event.signals.push('agent_outside_scope');
-        // There is deliberately no shell executor. Missing taint metadata never authorizes one.
-        if(event.action==='shell-paste')return respond(res,422,{error:'Shell execution is not a supported capability',decision:'block'});
         const canonical=Core.normalizeEvent(event),result=Core.evaluate(canonical,{mode:'smart'});
+        // There is deliberately no shell executor. Missing taint metadata never authorizes one.
+        if(event.action==='shell-paste'){
+          addReceipt(canonical,{...result,decision:'block',wouldDecide:'block'},'decision',id);
+          return respond(res,422,{error:'Shell execution is not a supported capability',decision:'block'});
+        }
         const record={id,event:canonical,result,caller:role,expiresAt:now+60000,approved:false};
         const receipt=addReceipt(canonical,result,'decision',id);
         let capability=null;
