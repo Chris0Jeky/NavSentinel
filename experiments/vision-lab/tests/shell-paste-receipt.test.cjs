@@ -1,13 +1,10 @@
-import { after, before, test } from "node:test";
-import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const { createService } = require("../experiments/vision-lab/daemon/server.cjs");
-const scenarios = require("../experiments/vision-lab/shared/scenarios.js");
+const { after, before, test } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { createService } = require("../daemon/server.cjs");
+const scenarios = require("../shared/scenarios.js");
 
 let service;
 let dir;
