@@ -307,7 +307,11 @@ async function trustCurrentSite(): Promise<void> {
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
-  await addTrustedDomain(reg);
+  try {
+    await addTrustedDomain(reg);
+  } catch (e) {
+    console.warn("[NavSentinel] trust save failed:", e);
+  }
   try {
     await appendEvent({ kind: "cred_trust_domain", site: reg });
   } catch (e) {
@@ -321,7 +325,11 @@ async function untrustCurrentSite(): Promise<void> {
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
-  await removeTrustedDomain(reg);
+  try {
+    await removeTrustedDomain(reg);
+  } catch (e) {
+    console.warn("[NavSentinel] untrust save failed:", e);
+  }
   try {
     await appendEvent({ kind: "cred_untrust_domain", site: reg });
   } catch (e) {
