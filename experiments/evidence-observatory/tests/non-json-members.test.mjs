@@ -13,7 +13,7 @@ function temporary(t) {
 }
 
 test('mixed-suffix directory members are not silently dropped', t => {
-  for (const stray of ['bad.JSON', 'trace.json.bak', 'notes.txt']) {
+  for (const stray of ['bad.JSON', 'trace.json.bak', 'trace.jsonl', 'trace.json.tmp', 'notes.bak', 'notes.txt']) {
     const dir = temporary(t);
     fs.writeFileSync(path.join(dir, 'good.json'), JSON.stringify(demonstration()));
     fs.writeFileSync(path.join(dir, stray), JSON.stringify({ contradicting: true }));
