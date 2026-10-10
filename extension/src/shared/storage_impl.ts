@@ -231,7 +231,7 @@ function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | unde
       merged.defaultMode,
       normalizeProtectionMode(cur.defaultMode, DEFAULT_SUITE_SETTINGS.nav.defaultMode),
     ),
-    debug: merged.debug,
+    debug: merged.debug === true,
     autoDismissOverlays: merged.autoDismissOverlays === true,
   };
 }
@@ -254,6 +254,24 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   );
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
   next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
+  next.credential.promptOnUntrustedDomain =
+    typeof next.credential.promptOnUntrustedDomain === "boolean"
+      ? next.credential.promptOnUntrustedDomain
+      : true;
+  next.credential.promptOnMediumRisk =
+    typeof next.credential.promptOnMediumRisk === "boolean"
+      ? next.credential.promptOnMediumRisk
+      : true;
+  next.credential.blockHttpPasswordSubmit =
+    typeof next.credential.blockHttpPasswordSubmit === "boolean"
+      ? next.credential.blockHttpPasswordSubmit
+      : true;
+  next.credential.warnOnPaste =
+    typeof next.credential.warnOnPaste === "boolean" ? next.credential.warnOnPaste : true;
+  next.credential.similarity.enabled =
+    typeof next.credential.similarity.enabled === "boolean"
+      ? next.credential.similarity.enabled
+      : true;
   next.credential.mediumRiskThreshold = clampInt(
     next.credential.mediumRiskThreshold,
     0,
