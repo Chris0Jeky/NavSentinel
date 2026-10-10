@@ -29,6 +29,76 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
+test("History retains required arguments and ordinary state updates (#1022) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
+  const profileRoot = path.resolve(__dirname, "../../test-results");
+  fs.mkdirSync(profileRoot, { recursive: true });
+  const profile = fs.mkdtempSync(path.join(profileRoot, "history-native-"));
+  if (!path.resolve(profile).startsWith(`${profileRoot}${path.sep}`)) throw new Error("History profile escaped test-results");
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(profile, {
+      headless: false,
+      timeout: 60_000,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseUrl}/level1-basic-opacity.html`, { waitUntil: "domcontentloaded" });
+    await waitForNavSentinelBridge(page);
+    const results = await page.evaluate(() => {
+      return (["pushState", "replaceState"] as const).map((method) => {
+        const fn = history[method];
+        const requiredErrors = [[], [{ probe: method }]].map((args) => {
+          const before = JSON.stringify({ href: location.href, state: history.state });
+          let errorName: string | undefined;
+          try { Reflect.apply(fn, history, args); }
+          catch (error) { errorName = (error as Error).name; }
+          return {
+            errorName,
+            unchanged: before === JSON.stringify({ href: location.href, state: history.state }),
+          };
+        });
+        const beforeHref = location.href;
+        const state = { probe: method };
+        const twoArgumentReturn = Reflect.apply(fn, history, [state, ""]);
+        const twoArguments = {
+          hrefUnchanged: location.href === beforeHref,
+          state: history.state,
+          returnedUndefined: twoArgumentReturn === undefined,
+        };
+        const expectedHref = new URL(`/history-native-${method}`, location.href).href;
+        const threeArgumentReturn = Reflect.apply(fn, history, [state, "", expectedHref]);
+        return {
+          method, length: fn.length, requiredErrors, twoArguments,
+          threeArguments: {
+            hrefMatches: location.href === expectedHref,
+            state: history.state,
+            returnedUndefined: threeArgumentReturn === undefined,
+          },
+        };
+      });
+    });
+    for (const result of results) {
+      expect(result.length, `${result.method} native arity`).toBe(2);
+      expect(result.requiredErrors).toEqual([
+        { errorName: "TypeError", unchanged: true },
+        { errorName: "TypeError", unchanged: true },
+      ]);
+      expect(result.twoArguments).toEqual({
+        hrefUnchanged: true, state: { probe: result.method }, returnedUndefined: true,
+      });
+      expect(result.threeArguments).toEqual({
+        hrefMatches: true, state: { probe: result.method }, returnedUndefined: true,
+      });
+    }
+  } finally {
+    await context?.close();
+    if (gym) await gym.close();
+    fs.rmSync(profile, { recursive: true, force: false });
+  }
+});
+
 test("SPA router can wrap history.pushState without a grey screen @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
 
