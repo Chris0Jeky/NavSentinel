@@ -60,6 +60,9 @@ export function collectInputs(input) {
       total += bytes.length;
       if (total > LIMITS.totalBytes) throw new Error('TOTAL_SIZE_LIMIT');
       inputs.push(bytes);
+    } else if (/\.json|\.(?:bak|txt)$/i.test(path.basename(target))) {
+      // Input-like suffixes must not turn a partial collection into silent success.
+      throw new Error('NON_JSON_MEMBER_PRESENT');
     }
   };
   walk(root, 0);
