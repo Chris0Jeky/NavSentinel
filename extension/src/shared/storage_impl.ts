@@ -1655,8 +1655,12 @@ type PromptOutcomeStorageResponse =
   | { ok: true }
   | { ok: false; error: string; code?: "unauthorized" };
 
-function isOptionalFiniteNumber(value: unknown): boolean {
-  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+function isBoundedNumber(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function isOptionalBoundedNumber(value: unknown, min: number, max: number): boolean {
+  return value === undefined || isBoundedNumber(value, min, max);
 }
 
 function isOptionalStringArray(value: unknown): boolean {
@@ -1786,8 +1790,7 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     typeof entry.domain === "string" &&
     (entry.destDomain === undefined || typeof entry.destDomain === "string") &&
     (type === "nav" || type === "cred") &&
-    typeof entry.score === "number" &&
-    Number.isFinite(entry.score) &&
+    isBoundedNumber(entry.score, 0, 1000) &&
     (
       outcome === "allow" ||
       outcome === "allow_once" ||
@@ -1800,10 +1803,10 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     isOptionalStringArray(entry.reasons) &&
     // Enriched replay fields (P5-C1) — all optional; validate shape so the
     // verify-step never rejects a record the (sanitized) writer produced.
-    isOptionalFiniteNumber(entry.cds) &&
-    isOptionalFiniteNumber(entry.navAnomalyScore) &&
-    isOptionalFiniteNumber(entry.adaptiveAdj) &&
-    isOptionalFiniteNumber(entry.thresholdUsed) &&
+    isOptionalBoundedNumber(entry.cds, 0, 1000) &&
+    isOptionalBoundedNumber(entry.navAnomalyScore, 0, 15) &&
+    isOptionalBoundedNumber(entry.adaptiveAdj, -15, 15) &&
+    isOptionalBoundedNumber(entry.thresholdUsed, 30, 100) &&
     isOptionalStringArray(entry.nrsFactors) &&
     (entry.elementContext === undefined || (typeof entry.elementContext === "object" && entry.elementContext !== null));
 }
@@ -2113,6 +2116,9 @@ function buildPromptOutcomeRecord(
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
+  // Reject corrupt scores; optional replay fields use their producer's bounds.
+  if (Number.isFinite(partial.score) &&
+    !isBoundedNumber(partial.score, 0, 1000)) return undefined;
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
@@ -2123,10 +2129,10 @@ function buildPromptOutcomeRecord(
     outcome: partial.outcome,
     ...(reasons !== undefined ? { reasons } : {}),
     ...(nrsFactors !== undefined && nrsFactors.length > 0 ? { nrsFactors } : {}),
-    ...(Number.isFinite(partial.cds) ? { cds: partial.cds } : {}),
-    ...(Number.isFinite(partial.navAnomalyScore) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
-    ...(Number.isFinite(partial.adaptiveAdj) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
-    ...(Number.isFinite(partial.thresholdUsed) ? { thresholdUsed: partial.thresholdUsed } : {}),
+    ...(isBoundedNumber(partial.cds, 0, 1000) ? { cds: partial.cds } : {}),
+    ...(isBoundedNumber(partial.navAnomalyScore, 0, 15) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
+    ...(isBoundedNumber(partial.adaptiveAdj, -15, 15) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
+    ...(isBoundedNumber(partial.thresholdUsed, 30, 100) ? { thresholdUsed: partial.thresholdUsed } : {}),
     ...(elementContext !== undefined ? { elementContext } : {})
   };
 }
