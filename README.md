@@ -1,5 +1,7 @@
 # Heedline
 
+<p align="center"><img src="docs/assets/NavSentinel-loop.svg" alt="NavSentinel workflow, animated" width="100%"></p>
+
 Local-first Chrome MV3 interaction guard: it checks deceptive navigation and risky browser actions, explains why it intervened, and makes no runtime network calls.
 
 > **Pre-alpha.** Not efficacy-validated, independently audited, or in the Chrome Web Store. The product was renamed from NavSentinel to Heedline on 2026-09-27; formal trademark clearance is still pending before any store submission (AI-19). The GitHub repository stays `NavSentinel` on purpose so existing installs keep their data. Use a repository build for development and dogfooding, not as a sole security control.
