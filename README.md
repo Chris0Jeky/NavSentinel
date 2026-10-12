@@ -54,7 +54,7 @@ Four runtime surfaces, wired from `extension/manifest.json`, all frames, `docume
 
 ```mermaid
 flowchart TB
-  subgraph page["Page — every frame, document_start"]
+  subgraph page["Page - every frame, document_start"]
     main["MAIN world<br/>main_guard.ts<br/>open · form submit · clipboard · opener.location"]
     isoNav["ISOLATED world<br/>capture_isolated.ts<br/>click capture · CDS/NRS · overlay · ClickFix · DoubleClick"]
     isoCred["ISOLATED world<br/>credential_guard.ts<br/>password submit · paste risk"]
@@ -142,7 +142,7 @@ Deterministic Gym (Vite, port 5173):
 npm run gym:serve
 ```
 
-Then open the served index. It covers navigation levels, real-world and stress scenarios, ClickFix, DoubleClickjacking, redirect chains, content fingerprinting, DOM mutation, pushState abuse, OAuth fixtures, evasion composites, CSP/SRI, history traversal, and contained identity URL models. Fixtures are local and inert; ClickFix pages use a sentinel clipboard value, not a runnable command.
+Then open the served index. It covers navigation levels, real-world and stress scenarios, ClickFix, DoubleClickjacking, redirect chains, content fingerprinting, DOM mutation, pushState abuse, OAuth fixtures, evasion composites, CSP/SRI, history traversal, URL userinfo models, and contained identity URL models. Fixtures are local and inert; ClickFix pages use a sentinel clipboard value, not a runnable command.
 
 The following is local research only and produces a **non-release** artifact:
 
