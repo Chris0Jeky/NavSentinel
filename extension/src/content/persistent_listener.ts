@@ -19,8 +19,8 @@ function register(r: Registration): void {
 
 /**
  * Add a listener that is re-added whenever the document's children are
- * replaced. The observer callback is O(records) and does nothing unless a
- * child was removed, which on ordinary pages never happens after parsing.
+ * changed. Document childList records come only from parsing the doctype and
+ * root element and from rewrites, so ordinary pages see no callbacks after load.
  */
 export function addPersistentListener(
   target: EventTarget,
@@ -33,11 +33,9 @@ export function addPersistentListener(
   register(r);
   if (observer) return;
   observer = new MutationObserver((records) => {
-    for (const record of records) {
-      if (record.removedNodes.length === 0) continue;
-      for (const reg of registrations) register(reg);
-      return;
-    }
+    // Any childList record: document.open() on an already childless document
+    // erases the listeners but queues only an addedNodes record.
+    if (records.length > 0) for (const reg of registrations) register(reg);
   });
   observer.observe(document, { childList: true });
 }

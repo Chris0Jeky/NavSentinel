@@ -50,6 +50,22 @@ describe("addPersistentListener", () => {
     expect(listener).toHaveBeenCalledTimes(3);
   });
 
+  it("re-adds after an added-only record on an already childless document", async () => {
+    const add = await load();
+    const listener = vi.fn();
+    add(document, "submit", listener);
+    document.replaceChildren(); // childless: the later open() queues no removal
+    await tick();
+    await tick();
+
+    document.removeEventListener("submit", listener, true); // document.open() on the childless document
+    document.appendChild(document.createElement("html")); // the write: addedNodes only
+    await tick();
+    await tick();
+    submit();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("does not touch listeners on ordinary DOM mutations", async () => {
     const add = await load();
     add(document, "submit", vi.fn());

@@ -121,6 +121,30 @@ test("document.open() + write(login form) + close() keeps the credential guard (
   });
 });
 
+test("document.open() on an already childless document keeps the credential guard (#1105 review) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  // Task 1 empties the document (the doctype is a child too); task 2 opens it. open() on a childless document
+  // erases the listeners but queues only an addedNodes record for the write.
+  await withVictimPage(async (page, attacker) => {
+    await page.evaluate(() => document.replaceChildren());
+    await page.waitForTimeout(100);
+    await page.evaluate(REWRITE, LOGIN_FORM);
+    await expect(page.locator("#go")).toBeVisible();
+    await expectGuardIntercepts(page, attacker);
+  });
+});
+
+test("a second document.open() keeps the credential guard (#1105 review) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(async (page, attacker) => {
+    await page.evaluate(REWRITE, "<p>first rewrite</p>");
+    await page.waitForTimeout(100);
+    await page.evaluate(REWRITE, LOGIN_FORM);
+    await expect(page.locator("#go")).toBeVisible();
+    await expectGuardIntercepts(page, attacker);
+  });
+});
+
 test("document.open() keeps the paste warning (#1105) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   await withVictimPage(async (page) => {
