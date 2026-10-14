@@ -231,7 +231,7 @@ function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | unde
       merged.defaultMode,
       normalizeProtectionMode(cur.defaultMode, DEFAULT_SUITE_SETTINGS.nav.defaultMode),
     ),
-    debug: merged.debug,
+    debug: merged.debug === true,
     autoDismissOverlays: merged.autoDismissOverlays === true,
   };
 }
@@ -254,6 +254,24 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   );
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
   next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
+  next.credential.promptOnUntrustedDomain =
+    typeof next.credential.promptOnUntrustedDomain === "boolean"
+      ? next.credential.promptOnUntrustedDomain
+      : true;
+  next.credential.promptOnMediumRisk =
+    typeof next.credential.promptOnMediumRisk === "boolean"
+      ? next.credential.promptOnMediumRisk
+      : true;
+  next.credential.blockHttpPasswordSubmit =
+    typeof next.credential.blockHttpPasswordSubmit === "boolean"
+      ? next.credential.blockHttpPasswordSubmit
+      : true;
+  next.credential.warnOnPaste =
+    typeof next.credential.warnOnPaste === "boolean" ? next.credential.warnOnPaste : true;
+  next.credential.similarity.enabled =
+    typeof next.credential.similarity.enabled === "boolean"
+      ? next.credential.similarity.enabled
+      : true;
   next.credential.mediumRiskThreshold = clampInt(
     next.credential.mediumRiskThreshold,
     0,
@@ -1274,18 +1292,31 @@ function sanitizeEventExtra(
   }
 }
 
+/**
+ * Normalize runtime string fields before write-path validation can silently
+ * evict them. Nullish fields stay absent; other values become bounded strings.
+ */
+function coerceEventLogString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return typeof value === "string" ? value : String(value);
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
   const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra, partial.kind, partial.reasons);
+  const coercedId = typeof partial.id === "string" ? partial.id : makeId();
+  const coercedSite = coerceEventLogString(partial.site);
+  const coercedUrl = coerceEventLogString(partial.url);
+  const coercedDestHost = coerceEventLogString(partial.destHost);
   return {
-    id: capEventString(partial.id ?? makeId()),
+    id: capEventString(coercedId),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(pageSite === undefined ? {} : { pageSite }),
-    ...(partial.site !== undefined ? { site: capEventString(partial.site) } : {}),
+    ...(coercedSite !== undefined ? { site: capEventString(coercedSite) } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
-    ...(partial.url !== undefined ? { url: capEventString(minimizeEventUrl(partial.url)) } : {}),
-    ...(partial.destHost !== undefined ? { destHost: capEventString(partial.destHost) } : {}),
+    ...(coercedUrl !== undefined ? { url: capEventString(minimizeEventUrl(coercedUrl)) } : {}),
+    ...(coercedDestHost !== undefined ? { destHost: capEventString(coercedDestHost) } : {}),
     ...(partial.score !== undefined && Number.isFinite(partial.score) ? { score: partial.score } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
     // malformed runtime append message could carry non-string reasons; left raw, the
@@ -1642,8 +1673,12 @@ type PromptOutcomeStorageResponse =
   | { ok: true }
   | { ok: false; error: string; code?: "unauthorized" };
 
-function isOptionalFiniteNumber(value: unknown): boolean {
-  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+function isBoundedNumber(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function isOptionalBoundedNumber(value: unknown, min: number, max: number): boolean {
+  return value === undefined || isBoundedNumber(value, min, max);
 }
 
 function isOptionalStringArray(value: unknown): boolean {
@@ -1762,7 +1797,7 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   return out;
 }
 
-function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
+function isPromptOutcomeEntry(value: unknown, strictReplayFields = true): value is PromptOutcomeEntry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
   const type = entry.type;
@@ -1773,8 +1808,7 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     typeof entry.domain === "string" &&
     (entry.destDomain === undefined || typeof entry.destDomain === "string") &&
     (type === "nav" || type === "cred") &&
-    typeof entry.score === "number" &&
-    Number.isFinite(entry.score) &&
+    isBoundedNumber(entry.score, 0, 1000) &&
     (
       outcome === "allow" ||
       outcome === "allow_once" ||
@@ -1787,10 +1821,10 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     isOptionalStringArray(entry.reasons) &&
     // Enriched replay fields (P5-C1) — all optional; validate shape so the
     // verify-step never rejects a record the (sanitized) writer produced.
-    isOptionalFiniteNumber(entry.cds) &&
-    isOptionalFiniteNumber(entry.navAnomalyScore) &&
-    isOptionalFiniteNumber(entry.adaptiveAdj) &&
-    isOptionalFiniteNumber(entry.thresholdUsed) &&
+    (!strictReplayFields || (isOptionalBoundedNumber(entry.cds, 0, 1000) &&
+    isOptionalBoundedNumber(entry.navAnomalyScore, 0, 15) &&
+    isOptionalBoundedNumber(entry.adaptiveAdj, -15, 15) &&
+    isOptionalBoundedNumber(entry.thresholdUsed, 30, 100))) &&
     isOptionalStringArray(entry.nrsFactors) &&
     (entry.elementContext === undefined || (typeof entry.elementContext === "object" && entry.elementContext !== null));
 }
@@ -1799,7 +1833,8 @@ function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
   if (!Array.isArray(value)) return [];
   const normalized: PromptOutcomeEntry[] = [];
   for (const entry of value) {
-    if (!isPromptOutcomeEntry(entry)) continue;
+    // The writer omits corrupt optional scalars; required fields stay strict.
+    if (!isPromptOutcomeEntry(entry, false)) continue;
     const record = buildPromptOutcomeRecord(entry);
     if (record) normalized.push(record);
   }
@@ -2100,6 +2135,9 @@ function buildPromptOutcomeRecord(
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
+  // Reject corrupt scores; optional replay fields use their producer's bounds.
+  if (Number.isFinite(partial.score) &&
+    !isBoundedNumber(partial.score, 0, 1000)) return undefined;
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
@@ -2110,10 +2148,10 @@ function buildPromptOutcomeRecord(
     outcome: partial.outcome,
     ...(reasons !== undefined ? { reasons } : {}),
     ...(nrsFactors !== undefined && nrsFactors.length > 0 ? { nrsFactors } : {}),
-    ...(Number.isFinite(partial.cds) ? { cds: partial.cds } : {}),
-    ...(Number.isFinite(partial.navAnomalyScore) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
-    ...(Number.isFinite(partial.adaptiveAdj) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
-    ...(Number.isFinite(partial.thresholdUsed) ? { thresholdUsed: partial.thresholdUsed } : {}),
+    ...(isBoundedNumber(partial.cds, 0, 1000) ? { cds: partial.cds } : {}),
+    ...(isBoundedNumber(partial.navAnomalyScore, 0, 15) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
+    ...(isBoundedNumber(partial.adaptiveAdj, -15, 15) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
+    ...(isBoundedNumber(partial.thresholdUsed, 30, 100) ? { thresholdUsed: partial.thresholdUsed } : {}),
     ...(elementContext !== undefined ? { elementContext } : {})
   };
 }
