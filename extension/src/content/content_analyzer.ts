@@ -670,17 +670,20 @@ function sampleHtml(doc: Document): string {
   while (count <= HTML_FAST_PATH_MAX_ELEMENTS && walker.nextNode()) count++;
   if (count <= HTML_FAST_PATH_MAX_ELEMENTS) return html.innerHTML.slice(0, HTML_SNIPPET_MAX);
   // Huge DOM: shallow-copy nodes in document order into an inert document (no
-  // script runs, nothing loads) until the estimated markup passes the cap, then
-  // serialize only that copy. Approximate, not byte-identical to the fast path.
+  // script runs, nothing loads) until the markup passes the cap, then serialize
+  // only that copy. Every charge is a lower bound on what the node serializes to
+  // (opening tag only, so void elements are not overcharged; escaping only adds),
+  // so the copy always covers the real prefix. It differs from the fast path only
+  // where innerHTML reaches past childNodes, such as <template> contents.
   const inert = doc.implementation.createHTMLDocument("");
   const out = inert.createElement("html");
   let budget = HTML_SNIPPET_MAX;
   const copy = (from: Node, to: Node): void => {
     for (let n = from.firstChild; n && budget > 0; n = n.nextSibling) {
-      budget -= 1 + (n.nodeValue?.length ?? 0);
+      budget -= n.nodeValue?.length ?? 0;
       if (n.nodeType === 1) {
         const el = n as Element;
-        budget -= el.localName.length * 2 + 5;
+        budget -= el.localName.length + 2;
         for (let i = 0; i < el.attributes.length; i++) {
           const a = el.attributes[i]!;
           budget -= a.name.length + a.value.length + 4;

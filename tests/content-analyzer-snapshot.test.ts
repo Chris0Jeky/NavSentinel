@@ -50,11 +50,14 @@ describe("buildPageSnapshot htmlSnippet cap", () => {
   });
 
   it("never serializes a live subtree of a 200k-element page (#1085)", () => {
+    // 2,000 void <br> elements (8,000 chars) put the form near the end of the
+    // prefix: an estimate that charged closing tags would stop before it.
     document.documentElement.innerHTML =
-      '<head></head><body><form style="display: none" action="/c"><input type="password"></form></body>';
+      '<head></head><body>' + "<br>".repeat(2000) + '<form style="display: none" action="/c"><input type="password"></form></body>';
     const tail = document.createElement("div");
     tail.innerHTML = "<i>x</i>".repeat(200_000);
     document.body.append(tail);
+    const expected = document.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
     // Throw from the serializing getters for every node of the live page; the
     // bounded copy lives in its own inert document, so its getters still work.
     const spies = (["innerHTML", "outerHTML"] as const).map((property) => {
@@ -66,9 +69,8 @@ describe("buildPageSnapshot htmlSnippet cap", () => {
     });
     try {
       const snapshot = buildPageSnapshot(document);
-      expect(snapshot.htmlSnippet.length).toBeLessThanOrEqual(HTML_SNIPPET_MAX);
-      expect(snapshot.htmlSnippet.length).toBeGreaterThan(HTML_SNIPPET_MAX / 2);
-      expect(snapshot.htmlSnippet).toMatch(/^<head><\/head><body><form style="display: none"/);
+      // Same prefix as a full serialization (no <template> here), built without one.
+      expect(snapshot.htmlSnippet).toBe(expected);
       // The htmlSnippet-only "display: none" pattern still fires on the bounded copy.
       expect(analyzeSnapshot(snapshot, "bank.test").kitName).toBe("Exfil-Hidden-Form");
     } finally {
