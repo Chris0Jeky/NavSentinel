@@ -88,7 +88,10 @@ const budgets = [
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    maxKB: 30,
+    // Bumped 30 -> 30.5 (#1085): main sat 49 bytes under 30KB (30,671 B) and the bounded huge-DOM htmlSnippet
+    // copy adds ~0.5KB (31,168 B). #1100 independently raises this to 31.5; with both landed the chunk measures
+    // ~31.5KB, so whichever merges second must re-measure and keep the larger ceiling.
+    maxKB: 30.5,
   },
   {
     label: "service worker",
