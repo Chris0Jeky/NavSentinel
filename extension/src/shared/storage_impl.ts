@@ -1797,7 +1797,7 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   return out;
 }
 
-function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
+function isPromptOutcomeEntry(value: unknown, strictReplayFields = true): value is PromptOutcomeEntry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
   const type = entry.type;
@@ -1821,10 +1821,10 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     isOptionalStringArray(entry.reasons) &&
     // Enriched replay fields (P5-C1) — all optional; validate shape so the
     // verify-step never rejects a record the (sanitized) writer produced.
-    isOptionalBoundedNumber(entry.cds, 0, 1000) &&
+    (!strictReplayFields || (isOptionalBoundedNumber(entry.cds, 0, 1000) &&
     isOptionalBoundedNumber(entry.navAnomalyScore, 0, 15) &&
     isOptionalBoundedNumber(entry.adaptiveAdj, -15, 15) &&
-    isOptionalBoundedNumber(entry.thresholdUsed, 30, 100) &&
+    isOptionalBoundedNumber(entry.thresholdUsed, 30, 100))) &&
     isOptionalStringArray(entry.nrsFactors) &&
     (entry.elementContext === undefined || (typeof entry.elementContext === "object" && entry.elementContext !== null));
 }
@@ -1833,7 +1833,8 @@ function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
   if (!Array.isArray(value)) return [];
   const normalized: PromptOutcomeEntry[] = [];
   for (const entry of value) {
-    if (!isPromptOutcomeEntry(entry)) continue;
+    // The writer omits corrupt optional scalars; required fields stay strict.
+    if (!isPromptOutcomeEntry(entry, false)) continue;
     const record = buildPromptOutcomeRecord(entry);
     if (record) normalized.push(record);
   }
