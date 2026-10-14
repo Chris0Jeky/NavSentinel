@@ -88,7 +88,9 @@ const budgets = [
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    maxKB: 30,
+    // Bumped 30 -> 30.5 (#1105): re-adding the document listeners after document.open() (persistent_listener.ts,
+    // one shared MutationObserver) takes the bundle from 30.0KB to 30.29KB.
+    maxKB: 30.5,
   },
   {
     label: "service worker",
