@@ -229,6 +229,16 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
+- **AI-48** — PR #1100 (issue #1084, P1), branch `fix/credential-resubmit-retarget`, code head
+  `75a68cd1` (later commits on the branch are documentation only). Scope: after the user approves a credential
+  submit, a page that retargets the resumed POST (formaction, form.action, method, target, an inserted `<base>`)
+  is stopped and re-prompted with the real host; a second move is blocked. Check in branded Chrome with the
+  unpacked build of that head: (1) a normal login on a real site still goes through after "Proceed once";
+  (2) on the local fixture used by `tests/e2e/credential-resubmit-retarget.spec.ts` (or any page whose submit
+  handler swaps `formaction` to another site), the second prompt names the new host and Cancel sends nothing.
+  Known gaps, not part of this gate: new-window and `_top` retargets (#1099), Firefox (#1101).
+  Reply `AI-48 done; Gate-3 passed at 75a68cd1` or describe what differed.
+
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
