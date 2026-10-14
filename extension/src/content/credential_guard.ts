@@ -240,6 +240,9 @@ function handleFormData(evt: Event): void {
   // (a new window, _top, _parent). Empty the entry list the browser is about to
   // send: measured in Chromium, that POST then carries no form data.
   if (!b.moved) return;
+  // No page formdata listener may put the entries back: the guard is first in
+  // the path (window capture, document_start).
+  evt.stopImmediatePropagation();
   const fd = (evt as FormDataEvent).formData;
   const names: string[] = [];
   fd.forEach((_, k) => names.push(k));
