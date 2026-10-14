@@ -171,6 +171,112 @@ function isHttpsUrl(url: string): boolean {
   }
 }
 
+// Not a mutation if the resolved destination is byte-identical. Otherwise compare
+// at the granularity the risk model uses (registrable domain), plus an explicit
+// https->http downgrade, so a benign same-site www->api action resolution is not
+// hard-blocked while a cross-site swap or scheme downgrade still is (R1 finding 4).
+// Opaque-host schemes (data:/blob:/mailto:) all map to an empty registrable, so an
+// opaque->opaque swap must NOT be treated as equal (R2 L1) -- the byte-identical
+// fast path already lets a truly-unchanged opaque action through.
+function actionMoved(assessedActionUrl: string, liveActionUrl: string): boolean {
+  if (liveActionUrl === assessedActionUrl) return false;
+  const liveReg = registrableOf(liveActionUrl);
+  const assessedReg = registrableOf(assessedActionUrl);
+  const sameRegistrable = liveReg !== "" && assessedReg !== "" && liveReg === assessedReg;
+  const downgraded = isHttpsUrl(assessedActionUrl) && !isHttpsUrl(liveActionUrl);
+  return !sameRegistrable || downgraded;
+}
+
+// #1084: requestSubmit re-dispatches a trusted submit event that handleSubmit lets
+// through, so page `submit` listeners run AFTER the last destination check and
+// BEFORE the browser reads the action, method and target. Bind the resumed
+// submission to the destination in force when it resumed.
+type Destination = { action: string; method: string; target: string };
+
+function resolveDestination(form: HTMLFormElement, submitter: HTMLElement | null): Destination {
+  const attr = (name: string, formName: string): string =>
+    submitter?.hasAttribute(name) ? submitter.getAttribute(name) || "" : form.getAttribute(formName) ?? "";
+  return {
+    action: resolveActionUrl(form, submitter),
+    method: attr("formmethod", "method").trim().toLowerCase(),
+    // A form with no target falls back to the first <base target>, which page
+    // script can also insert during the event.
+    target: attr("formtarget", "target") || (document.querySelector("base[target]")?.getAttribute("target") ?? "")
+  };
+}
+
+function destinationMoved(approved: Destination, live: Destination): boolean {
+  return actionMoved(approved.action, live.action) || approved.method !== live.method || approved.target !== live.target;
+}
+
+type ResumeBinding = {
+  form: HTMLFormElement;
+  submitter: HTMLElement | null;
+  approved: Destination;
+  /** The re-entrant submit event handleSubmit let through, once seen. */
+  event?: Event;
+  moved: boolean;
+};
+
+let resumeBinding: ResumeBinding | null = null;
+// One automatic re-check per moved resubmission (settleResumeBinding).
+const recheckRequested = new WeakSet<HTMLFormElement>();
+const rechecking = new WeakSet<HTMLFormElement>();
+
+// `formdata` fires once every submit listener has run. Measured in Chromium, the
+// action, method, target and base URL are already fixed by then (formdata-time
+// changes to any of them are ignored), so this reads exactly the destination the
+// browser will use. formdata is not cancelable; settleResumeBinding cancels.
+function handleFormData(evt: Event): void {
+  const b = resumeBinding;
+  if (!b || evt.target !== b.form) return;
+  // A page's own `new FormData(form)` inside its submit listener also fires
+  // formdata; only the submission's own one counts (submit dispatch finished and
+  // not cancelled).
+  if (!b.event || b.event.eventPhase !== Event.NONE || b.event.defaultPrevented) return;
+  b.moved = destinationMoved(b.approved, resolveDestination(b.form, b.submitter));
+}
+
+function settleResumeBinding(b: ResumeBinding): void {
+  if (!b.moved) return;
+  // Cancels the planned form navigation in this frame and its child frames.
+  // ponytail: measured in Chromium, a POST into a NEW window (target moved to
+  // _blank or an unknown name) is not cancelable from here; closing that needs
+  // the resumed submit kept away from page listeners (tracked follow-up).
+  window.stop();
+  const liveHost = actionHost(resolveActionUrl(b.form, b.submitter));
+  void appendEvent({
+    kind: "cred_submit_prompt",
+    site: normalizeHost(location.hostname),
+    url: location.href,
+    destHost: liveHost,
+    extra: { error: "action_mutated_during_resubmit", liveDestHost: liveHost }
+  }).catch((err) => {
+    console.warn("[NavSentinel] event log append failed (action_mutated_during_resubmit):", err);
+  });
+  // A page handler that sets the same destination on every submit (legacy SSO
+  // forms do) would otherwise be blocked forever. Assess the destination it
+  // moved to, once: handleSubmit intercepts this submit before any page
+  // listener, so the user is prompted for the real destination. A second move
+  // blocks.
+  if (!rechecking.has(b.form)) {
+    recheckRequested.add(b.form);
+    try {
+      b.form.requestSubmit(b.submitter);
+      return;
+    } catch {
+      // The submitter left the form; block below.
+    } finally {
+      recheckRequested.delete(b.form);
+    }
+  }
+  rechecking.delete(b.form);
+  showToast({
+    message: "This form's destination changed after the security check, so the submission was blocked. Resubmit to re-check it.",
+    timeoutMs: 10000
+  });
+}
+
 function resumeSubmit(
   form: HTMLFormElement,
   submitter: HTMLElement | null,
@@ -180,6 +286,13 @@ function resumeSubmit(
   // bypass so our own handler lets that re-entrant event through (and consumes it
   // via consumeAllowNext at the top of handleSubmit, before any await).
   markAllowNext(form);
+  const binding: ResumeBinding = {
+    form,
+    submitter,
+    approved: resolveDestination(form, submitter),
+    moved: false
+  };
+  resumeBinding = binding;
 
   try {
     form.requestSubmit(submitter);
@@ -215,6 +328,8 @@ function resumeSubmit(
     // lingering and bypassing assessment + the action-mutation re-check on the next
     // submit. (#282: the bypass is a WeakSet one-shot — presence is the token, no TTL.)
     allowNextSubmit.delete(form);
+    resumeBinding = null;
+    settleResumeBinding(binding);
   }
 }
 
@@ -240,21 +355,7 @@ async function blockIfActionMutated(
   const submitterReassociated =
     (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
     submitter.form !== form;
-  // Not a mutation if the resolved destination is byte-identical AND the submitter
-  // still belongs to this form.
-  if (!submitterReassociated && liveActionUrl === assessedActionUrl) return false;
-  // Compare at the granularity the risk model uses (registrable domain), plus an
-  // explicit https->http downgrade, so a benign same-site www->api action
-  // resolution is not hard-blocked while a cross-site swap or scheme downgrade
-  // still is (R1 finding 4). Opaque-host schemes (data:/blob:/mailto:) all map to
-  // an empty registrable, so an opaque->opaque swap must NOT be treated as equal
-  // (R2 L1) -- the byte-identical fast path above already lets a truly-unchanged
-  // opaque action through.
-  const liveReg = registrableOf(liveActionUrl);
-  const assessedReg = registrableOf(assessedActionUrl);
-  const sameRegistrable = liveReg !== "" && assessedReg !== "" && liveReg === assessedReg;
-  const downgraded = isHttpsUrl(assessedActionUrl) && !isHttpsUrl(liveActionUrl);
-  if (!submitterReassociated && sameRegistrable && !downgraded) return false;
+  if (!submitterReassociated && !actionMoved(assessedActionUrl, liveActionUrl)) return false;
 
   const liveHost = actionHost(liveActionUrl);
   await appendEvent({
@@ -276,7 +377,12 @@ async function blockIfActionMutated(
 async function handleSubmit(evt: SubmitEvent): Promise<void> {
   const form = evt.target;
   if (!(form instanceof HTMLFormElement) || !isPasswordForm(form)) return;
-  if (consumeAllowNext(form)) return;
+  if (consumeAllowNext(form)) {
+    if (resumeBinding?.form === form) resumeBinding.event = evt;
+    return;
+  }
+  if (recheckRequested.delete(form)) rechecking.add(form);
+  else rechecking.delete(form);
 
   // #227.5: when the guard is disabled, do not interpose at all. Only interpose
   // (preventDefault + synthetic resubmit) when the cached mode is not "off". While
@@ -637,3 +743,4 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 
 document.addEventListener("submit", (e) => void handleSubmit(e), true);
 document.addEventListener("paste", (e) => void handlePaste(e), true);
+window.addEventListener("formdata", handleFormData, true);
