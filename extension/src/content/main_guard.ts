@@ -268,8 +268,21 @@ function setAllowOnce(url?: string): void {
 }
 
 function textLength(el: Element): number {
-  const text = (el.textContent ?? "").replace(/\s+/g, "");
-  return Math.min(text.length, 80);
+  // Include empty elements in the budget so text-free subtrees cannot hide unbounded work.
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL);
+  let length = 0;
+  let charsLeft = 65536;
+  for (let nodesLeft = 4096; nodesLeft > 0 && charsLeft > 0; nodesLeft--) {
+    const node = walker.nextNode();
+    if (!node) break;
+    if (node.nodeType !== Node.TEXT_NODE) continue;
+    const text = (node as Text).data;
+    for (let i = 0; i < text.length && charsLeft > 0; i++, charsLeft--) {
+      if (!/\s/.test(text[i]!) && ++length === 80) return length;
+    }
+  }
+  // shortcut: names beyond the scan budgets may be missed; use explicit metadata for such controls.
+  return length;
 }
 
 function attrLength(el: Element, name: string): number {
@@ -321,12 +334,11 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
 
 function hasMeaningfulName(el: Element): boolean {
   return (
-    textLength(el) +
-      attrLength(el, "aria-label") +
+    attrLength(el, "aria-label") +
       attrLength(el, "title") +
       attrLength(el, "value") +
       attrLength(el, "alt") >
-    0
+    0 || textLength(el) > 0
   );
 }
 
@@ -1340,8 +1352,8 @@ function findSuspiciousShadowAnchor(e: MouseEvent): HTMLAnchorElement | null {
     if (!(node instanceof HTMLAnchorElement)) continue;
     if (node.target.toLowerCase() !== "_blank") continue;
     if (!(node.getRootNode() instanceof ShadowRoot)) continue;
-    const nameLen = textLength(node) + attrLength(node, "aria-label") + attrLength(node, "title");
-    if (nameLen > 0 && hasVisibleBox(node)) continue;
+    const named = attrLength(node, "aria-label") + attrLength(node, "title") > 0 || textLength(node) > 0;
+    if (named && hasVisibleBox(node)) continue;
     return node;
   }
   return null;
