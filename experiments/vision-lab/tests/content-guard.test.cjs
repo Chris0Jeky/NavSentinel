@@ -3,7 +3,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const root=path.resolve(__dirname,'..');
 const src=fs.readFileSync(path.join(root,'extension/content.js'),'utf8');
 const NSCore=require('../shared/core.js');
-function load(){
+function load(over={}){
   const sent=[],notices=[],handlers={};
   const window={addEventListener:(t,f)=>{handlers[t]=f;}};
   class Element{matches(){return true;}}
@@ -29,7 +29,7 @@ function load(){
   const context={NSCore:CoreBridge,crypto:require('node:crypto').webcrypto,location:{href:'https://site.test/',origin:'https://site.test'},
     window,document,chrome,MutationObserver:class{observe(){}disconnect(){}},Element,HTMLFormElement,HTMLAnchorElement,
     getComputedStyle:()=>({position:'static',pointerEvents:'auto',opacity:'1'}),setTimeout:()=>0,
-    innerWidth:1024,innerHeight:768,URL,console};
+    innerWidth:1024,innerHeight:768,URL,console,...over};
   vm.runInNewContext(src,context,{timeout:1000});
   return {context,handlers,sent,notices,Element,HTMLFormElement};
 }
@@ -73,4 +73,24 @@ test('normal cross-origin navigation is not held',async()=>{
   h.handlers.click(clickEvent(anchor,counts));
   assert.equal(counts.prevented,0);
   assert.equal(sensors(h.sent).length,0);
+});
+test('transparent overlay with invalid destination is hidden without sensor report',async()=>{
+  const calls=[];
+  class A{}
+  const a=new A();
+  a.href='javascript:void(0)';
+  a.isConnected=true;
+  a.getBoundingClientRect=()=>({width:1000,height:700,left:0,top:0});
+  a.contains=()=>false;
+  a.style={setProperty:(k,v,p)=>calls.push([k,v,p]),getPropertyValue:()=>'',getPropertyPriority:()=>''};
+  let scan;
+  const h=load({HTMLAnchorElement:A,setTimeout:f=>{scan=f;return 0;},getComputedStyle:()=>({position:'fixed',pointerEvents:'auto',opacity:'0'})});
+  h.context.document.documentElement={append(){}};
+  h.context.document.querySelectorAll=()=>[a];
+  h.context.document.elementsFromPoint=()=>[{matches:()=>true}];
+  await tick();
+  scan();
+  assert.deepEqual(calls,[['display','none','important']]);
+  assert.equal(sensors(h.sent).length,0);
+  assert.ok(h.notices.some(t=>t.includes('invalid destination')));
 });

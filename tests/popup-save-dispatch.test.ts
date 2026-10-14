@@ -133,6 +133,52 @@ describe("popup save dispatch (real module)", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "nav_reputation_late_warn",
+    "mutation_alert",
+    "nav_rollback",
+    "nav_blank_prompt",
+  ] as const)("renders a persistent warning for scoreless %s (#219)", async (kind) => {
+    state.log = [{
+      id: "scoreless-alert", ts: Date.now(), kind, site: "example.com",
+      ...(kind === "mutation_alert" ? { extra: { severity: "high" } } : {}),
+    }];
+    el("refreshBtn").click();
+    await flush();
+
+    const note = el("gaugeNote");
+    const gauge = el("shieldArc");
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toContain("Threat alert recorded, no risk score");
+    expect(gauge.getAttribute("aria-label")).toBe(note.textContent);
+    expect(gauge.querySelector("span")?.textContent).toBe("!");
+    expect(gauge.getAttribute("aria-label")).not.toMatch(/^Tab risk score:/);
+
+    el("refreshBtn").click();
+    await flush();
+    expect(note.hidden).toBe(false);
+    expect(gauge.querySelector("span")?.textContent).toBe("!");
+  });
+
+  it("keeps a clean page on the clear zero gauge (#219 control)", () => {
+    expect(el("gaugeNote").hidden).toBe(true);
+    expect(el("shieldArc").getAttribute("aria-label")).toBe("Tab risk score: 0");
+    expect(el("shieldArc").querySelector("span")?.textContent).toBe("0");
+  });
+
+  it("retains a scored block instead of replacing it with a scoreless warning (#219)", async () => {
+    const now = Date.now();
+    state.log = [
+      { id: "scored-block", ts: now - 1, kind: "nav_click_block", site: "example.com", score: 80 },
+      { id: "scoreless-alert", ts: now, kind: "nav_rollback", site: "example.com" },
+    ];
+    el("refreshBtn").click();
+    await flush();
+    expect(el("gaugeNote").hidden).toBe(true);
+    expect(el("shieldArc").getAttribute("aria-label")).toBe("Tab risk score: 80");
+    expect(el("shieldArc").querySelector("span")?.textContent).toBe("80");
+  });
+
   it("a rejected nav-mode save warns and resyncs the seg from persisted truth", async () => {
     state.updateBehavior = "reject";
     segButton("navSeg", "strict").click();
