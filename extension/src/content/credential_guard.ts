@@ -187,35 +187,32 @@ function actionMoved(assessedActionUrl: string, liveActionUrl: string): boolean 
   return !sameRegistrable || downgraded;
 }
 
+const DEST_CHANGED_MSG =
+  "This form's destination changed after the security check, so the submission was blocked. Resubmit to re-check it.";
+
 // #1084: requestSubmit re-dispatches a trusted submit event that handleSubmit lets
 // through, so page `submit` listeners run AFTER the last destination check and
 // BEFORE the browser reads the action, method and target. Bind the resumed
-// submission to the destination in force when it resumed.
-type Destination = { action: string; method: string; target: string };
-
-function resolveDestination(form: HTMLFormElement, submitter: HTMLElement | null): Destination {
+// submission to the destination in force when it resumed: the action (with
+// actionMoved's tolerance) plus the exact method and target.
+function resolveDestination(form: HTMLFormElement, submitter: HTMLElement | null): [string, string] {
   const attr = (name: string, formName: string): string =>
-    submitter?.hasAttribute(name) ? submitter.getAttribute(name) || "" : form.getAttribute(formName) ?? "";
-  return {
-    action: resolveActionUrl(form, submitter),
-    method: attr("formmethod", "method").trim().toLowerCase(),
-    // A form with no target falls back to the first <base target>, which page
-    // script can also insert during the event.
-    target: attr("formtarget", "target") || (document.querySelector("base[target]")?.getAttribute("target") ?? "")
-  };
-}
-
-function destinationMoved(approved: Destination, live: Destination): boolean {
-  return actionMoved(approved.action, live.action) || approved.method !== live.method || approved.target !== live.target;
+    (submitter?.hasAttribute(name) ? submitter.getAttribute(name) : form.getAttribute(formName)) ?? "";
+  // A form with no target falls back to the first <base target>.
+  return [
+    resolveActionUrl(form, submitter),
+    attr("formmethod", "method").trim().toLowerCase() + " " +
+      (attr("formtarget", "target") || document.querySelector("base[target]")?.getAttribute("target"))
+  ];
 }
 
 type ResumeBinding = {
   form: HTMLFormElement;
   submitter: HTMLElement | null;
-  approved: Destination;
-  /** The re-entrant submit event handleSubmit let through, once seen. */
+  approved: [string, string];
+  /** The resumed submit event; handleSubmit records it ahead of every page listener. */
   event?: Event;
-  moved: boolean;
+  moved?: boolean;
 };
 
 let resumeBinding: ResumeBinding | null = null;
@@ -233,8 +230,10 @@ function handleFormData(evt: Event): void {
   // A page's own `new FormData(form)` inside its submit listener also fires
   // formdata; only the submission's own one counts (submit dispatch finished and
   // not cancelled).
-  if (!b.event || b.event.eventPhase !== Event.NONE || b.event.defaultPrevented) return;
-  b.moved = destinationMoved(b.approved, resolveDestination(b.form, b.submitter));
+  const e = b.event;
+  if (!e || e.eventPhase || e.defaultPrevented) return;
+  const [action, rest] = resolveDestination(b.form, b.submitter);
+  b.moved = actionMoved(b.approved[0], action) || rest !== b.approved[1];
 }
 
 function settleResumeBinding(b: ResumeBinding): void {
@@ -242,24 +241,21 @@ function settleResumeBinding(b: ResumeBinding): void {
   // Cancels the planned form navigation in this frame and its child frames.
   // ponytail: measured in Chromium, a POST into a NEW window (target moved to
   // _blank or an unknown name) is not cancelable from here; closing that needs
-  // the resumed submit kept away from page listeners (tracked follow-up).
+  // the resumed submit kept away from page listeners (#1099).
   window.stop();
-  const liveHost = actionHost(resolveActionUrl(b.form, b.submitter));
   void appendEvent({
     kind: "cred_submit_prompt",
     site: normalizeHost(location.hostname),
     url: location.href,
-    destHost: liveHost,
-    extra: { error: "action_mutated_during_resubmit", liveDestHost: liveHost }
-  }).catch((err) => {
-    console.warn("[NavSentinel] event log append failed (action_mutated_during_resubmit):", err);
-  });
+    destHost: actionHost(resolveActionUrl(b.form, b.submitter)),
+    extra: { error: "action_mutated_during_resubmit" }
+  }).catch(console.warn);
   // A page handler that sets the same destination on every submit (legacy SSO
   // forms do) would otherwise be blocked forever. Assess the destination it
   // moved to, once: handleSubmit intercepts this submit before any page
   // listener, so the user is prompted for the real destination. A second move
   // blocks.
-  if (!rechecking.has(b.form)) {
+  if (!rechecking.delete(b.form)) {
     recheckRequested.add(b.form);
     try {
       b.form.requestSubmit(b.submitter);
@@ -270,11 +266,7 @@ function settleResumeBinding(b: ResumeBinding): void {
       recheckRequested.delete(b.form);
     }
   }
-  rechecking.delete(b.form);
-  showToast({
-    message: "This form's destination changed after the security check, so the submission was blocked. Resubmit to re-check it.",
-    timeoutMs: 10000
-  });
+  showToast({ message: DEST_CHANGED_MSG, timeoutMs: 10000 });
 }
 
 function resumeSubmit(
@@ -289,8 +281,7 @@ function resumeSubmit(
   const binding: ResumeBinding = {
     form,
     submitter,
-    approved: resolveDestination(form, submitter),
-    moved: false
+    approved: resolveDestination(form, submitter)
   };
   resumeBinding = binding;
 
@@ -368,7 +359,7 @@ async function blockIfActionMutated(
     console.warn("[NavSentinel] event log append failed (action_mutated):", err);
   });
   showToast({
-    message: "This form's destination changed after the security check, so the submission was blocked. Resubmit to re-check it.",
+    message: DEST_CHANGED_MSG,
     timeoutMs: 10000
   });
   return true;
@@ -741,6 +732,8 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
   }
 }
 
-document.addEventListener("submit", (e) => void handleSubmit(e), true);
+// Window capture, registered at document_start: ahead of every page submit
+// listener, so page script cannot stop a submit before the guard sees it.
+window.addEventListener("submit", (e) => void handleSubmit(e), true);
 document.addEventListener("paste", (e) => void handlePaste(e), true);
 window.addEventListener("formdata", handleFormData, true);
