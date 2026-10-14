@@ -276,7 +276,7 @@ function textLength(el: Element): number {
     const node = walker.nextNode();
     if (!node) break;
     if (node.nodeType !== Node.TEXT_NODE) continue;
-    const text = (node as Text).data;
+    const text = (node as Text).substringData(0, charsLeft); // never materialize an attacker-sized node
     for (let i = 0; i < text.length && charsLeft > 0; i++, charsLeft--) {
       if (!/\s/.test(text[i]!) && ++length === 80) return length;
     }

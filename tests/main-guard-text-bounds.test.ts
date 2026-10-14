@@ -41,7 +41,17 @@ describe("MAIN-world popup text bounds (#1086)", () => {
     el.append(tail);
     Object.defineProperty(el, "textContent", { get: () => { throw new Error("subtree serialized"); } });
     Object.defineProperty(tail, "data", { get: () => { throw new Error("tail read"); } });
+    Object.defineProperty(tail, "substringData", { value: () => { throw new Error("tail read"); } });
     expect(textLength(el)).toBe(80);
+  });
+
+  it("never materializes a huge text node in full", () => {
+    const el = document.createElement("button");
+    const big = document.createTextNode(" ".repeat(1_000_000) + "Continue");
+    el.append(big);
+    const sub = vi.spyOn(big, "substringData"); // a browser substringData copies only the requested range
+    expect(textLength(el)).toBe(0);
+    expect(sub).toHaveBeenCalledWith(0, 65536);
   });
 
   it("bounds scans of a huge whitespace text node", () => {
