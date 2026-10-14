@@ -229,6 +229,18 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
+- **AI-53** — PR #1077, branch `muse/ns-c58ec0a4-0-20261008-034226`, code head `d800db25`
+  (later commits on the branch are documentation only). Scope: popup UI. A failed trust or untrust write now
+  leaves the popup showing persisted truth (refresh still runs, no unhandled rejection) and no longer logs a
+  `cred_trust_domain` / `cred_untrust_domain` success event for a mutation that did not persist. Check in
+  branded Chrome with the unpacked build of that head: (1) on a normal site open the popup, press **Trust**:
+  status turns to trusted, **Untrust** appears, and Options > event log gains exactly one trust event;
+  (2) press **Untrust**: status returns to observing and the log gains one untrust event;
+  (3) optional failure probe: in the popup's DevTools console run
+  `chrome.storage.local.set = () => Promise.reject(new Error("x"))`, press **Trust**: the popup stays
+  "observing", the console shows "trust save failed", and the event log gains no trust event.
+  Reply `AI-53 done; Gate-3 passed at d800db25` or describe what differed.
+
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
