@@ -1,14 +1,13 @@
 /**
- * #1105: does a page that rewrites its own document with
- * `document.open(); document.write(<login form>); document.close()` strip the
- * credential guard's submit listener, so a password POST to a new host is no
- * longer intercepted?
+ * #1105: a page that rewrites itself with
+ * `document.open(); document.write(<login form>); document.close()` must not
+ * strip the credential guard.
  *
  * The HTML spec's "document open steps" erase every event listener on the
- * document, its descendants and the window, and the guard registers its
- * `submit` listener at document_start, before any page script can call
- * `document.open()`. Both hosts are fake and served by request interception, so
- * every POST is counted at the network boundary.
+ * document, its descendants and the window, and the guard registers at
+ * document_start, before any page script runs. The guard re-adds its listeners
+ * through `persistent_listener.ts`. Both hosts are fake and served by request
+ * interception, so every POST is counted at the network boundary.
  */
 import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import fs from "node:fs";
@@ -16,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
-import { clickModalButton, getServiceWorker, waitForCredentialModal } from "./extension_test_utils";
+import { clickModalButton, getServiceWorker, waitForCredentialModal, waitForToastText } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,7 +56,7 @@ async function withVictimPage(run: (page: Page, attacker: string[]) => Promise<v
             promptOnMediumRisk: false,
             mediumRiskThreshold: 100,
             blockHttpPasswordSubmit: false,
-            warnOnPaste: false,
+            warnOnPaste: true,
             similarity: { enabled: true, maxDistance: 2 },
           },
           logLimit: 300,
@@ -106,20 +105,29 @@ test("control: a login form injected without document.open() is intercepted (#11
   });
 });
 
-test("document.open() + write(login form) + close() currently BYPASSES the credential guard (#1105) @regression", async () => {
+const REWRITE = (html: string): void => {
+  document.open();
+  document.write(`<!doctype html><html><body>${html}</body></html>`);
+  document.close();
+};
+
+test("document.open() + write(login form) + close() keeps the credential guard (#1105) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
-  // Measured (Chromium, #1105): document.open() erases the guard's document
-  // listener, so the form written afterwards POSTs the canary to the attacker
-  // with no prompt. The same holds for the window-capture listener on #1100.
-  // Flip (remove test.fail) when the guard re-registers after document.open().
-  test.fail();
+  // Before the fix this POSTed the canary to the attacker with no prompt.
   await withVictimPage(async (page, attacker) => {
-    await page.evaluate((html) => {
-      document.open();
-      document.write(`<!doctype html><html><body>${html}</body></html>`);
-      document.close();
-    }, LOGIN_FORM);
+    await page.evaluate(REWRITE, LOGIN_FORM);
     await expect(page.locator("#go")).toBeVisible();
     await expectGuardIntercepts(page, attacker);
+  });
+});
+
+test("document.open() keeps the paste warning (#1105) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(async (page) => {
+    await page.evaluate(REWRITE, LOGIN_FORM);
+    await page.evaluate(() => {
+      document.getElementById("password")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true }));
+    });
+    await waitForToastText(page, "You pasted into a password field on an untrusted domain");
   });
 });

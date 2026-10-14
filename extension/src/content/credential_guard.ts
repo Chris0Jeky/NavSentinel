@@ -19,6 +19,7 @@ import {
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 import { queryPasswordInputs } from "./password_field";
+import { addPersistentListener } from "./persistent_listener";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
 
@@ -635,5 +636,6 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
   }
 }
 
-document.addEventListener("submit", (e) => void handleSubmit(e), true);
-document.addEventListener("paste", (e) => void handlePaste(e), true);
+// #1105: document.open() erases these; the helper re-adds them.
+addPersistentListener(document, "submit", (e) => void handleSubmit(e as SubmitEvent));
+addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
