@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
   trustBehavior: "ok" as "ok" | "reject",
   untrustBehavior: "ok" as "ok" | "reject",
   log: [] as EventLogEntry[],
+  appended: [] as Array<{ kind: string; site?: string }>,
   openOptionsPage: vi.fn(),
 }));
 
@@ -80,7 +81,9 @@ vi.mock("../extension/src/shared/storage", async (original) => {
       state.trusted = state.trusted.filter((d) => d !== domain);
     },
     getEventLog: async (): Promise<EventLogEntry[]> => [...state.log],
-    appendEvent: async (): Promise<void> => {},
+    appendEvent: async (ev: { kind: string; site?: string }): Promise<void> => {
+      state.appended.push(ev);
+    },
   };
 });
 
@@ -104,6 +107,7 @@ describe("popup trust saves resync from persisted truth on failure", () => {
     state.trustBehavior = "ok";
     state.untrustBehavior = "ok";
     state.log = [];
+    state.appended = [];
     state.openOptionsPage.mockReset();
     vi.stubGlobal("chrome", {
       tabs: { query: async () => [{ url: state.tabUrl }] },
@@ -127,6 +131,18 @@ describe("popup trust saves resync from persisted truth on failure", () => {
     vi.restoreAllMocks();
   });
 
+  it("successful trust and untrust still append their events", async () => {
+    el("trustBtn").click();
+    await flush();
+    expect(state.appended).toEqual([{ kind: "cred_trust_domain", site: "example.com" }]);
+    el("untrustBtn").click();
+    await flush();
+    expect(state.appended).toEqual([
+      { kind: "cred_trust_domain", site: "example.com" },
+      { kind: "cred_untrust_domain", site: "example.com" },
+    ]);
+  });
+
   it("a rejected addTrustedDomain still refreshes UI state and leaves no unhandled rejection", async () => {
     expect(el("trustStatus").textContent?.trim()).toBe("observing");
     const baselineReads = state.trustedReads;
@@ -147,6 +163,8 @@ describe("popup trust saves resync from persisted truth on failure", () => {
       // Persisted truth is unchanged and the UI resyncs to it (still
       // observing, Trust still offered) instead of stranding.
       expect(state.trusted).toEqual([]);
+      // No success event is logged for a mutation that did not persist.
+      expect(state.appended).toEqual([]);
       expect(el("trustStatus").textContent?.trim()).toBe("observing");
       expect(el<HTMLButtonElement>("trustBtn").hidden).toBe(false);
       // The failed write warns (recordConfig/appendEvent pattern) …
@@ -182,6 +200,7 @@ describe("popup trust saves resync from persisted truth on failure", () => {
       // Persisted truth is unchanged and the UI resyncs to it (still
       // trusted, Untrust still offered) instead of stranding.
       expect(state.trusted).toEqual(["example.com"]);
+      expect(state.appended).toEqual([]);
       expect(el("trustStatus").textContent?.trim()).toBe("trusted");
       expect(el<HTMLButtonElement>("untrustBtn").hidden).toBe(false);
       // The failed write warns (recordConfig/appendEvent pattern) …

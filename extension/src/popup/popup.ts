@@ -307,15 +307,16 @@ async function trustCurrentSite(): Promise<void> {
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
+  // Only log the event when the mutation persisted; refresh either way.
   try {
     await addTrustedDomain(reg);
+    try {
+      await appendEvent({ kind: "cred_trust_domain", site: reg });
+    } catch (e) {
+      console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e);
+    }
   } catch (e) {
     console.warn("[NavSentinel] trust save failed:", e);
-  }
-  try {
-    await appendEvent({ kind: "cred_trust_domain", site: reg });
-  } catch (e) {
-    console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e);
   }
   await refreshUi();
 }
@@ -325,15 +326,16 @@ async function untrustCurrentSite(): Promise<void> {
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
+  // Only log the event when the mutation persisted; refresh either way.
   try {
     await removeTrustedDomain(reg);
+    try {
+      await appendEvent({ kind: "cred_untrust_domain", site: reg });
+    } catch (e) {
+      console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e);
+    }
   } catch (e) {
     console.warn("[NavSentinel] untrust save failed:", e);
-  }
-  try {
-    await appendEvent({ kind: "cred_untrust_domain", site: reg });
-  } catch (e) {
-    console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e);
   }
   await refreshUi();
 }
