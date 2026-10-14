@@ -1770,45 +1770,53 @@ describe("credential_guard", () => {
     });
 
     // The guard only trusts the browser's own formdata; dispatchEvent is untrusted.
-    function trustedFormData(): Event {
+    function trustedFormData(formData = new FormData()): Event {
       const ev = new Event("formdata", { bubbles: true });
       Object.defineProperty(ev, "isTrusted", { value: true });
+      Object.defineProperty(ev, "formData", { value: formData });
       return ev;
     }
 
-    function formWithButton(): { form: HTMLFormElement; btn: HTMLButtonElement; planned: string[] } {
+    function formWithButton(): { form: HTMLFormElement; btn: HTMLButtonElement; planned: string[]; sent: string[][] } {
       const form = createPasswordForm("https://example.com/session");
+      form.querySelector("input")?.setAttribute("name", "password");
       const btn = document.createElement("button");
       btn.type = "submit";
       form.appendChild(btn);
       const planned: string[] = [];
+      const sent: string[][] = [];
       stubRequestSubmit(
         form,
         vi.fn((submitter?: HTMLElement | null) => {
           const ev = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: submitter ?? null });
           form.dispatchEvent(ev);
           if (ev.defaultPrevented) return;
-          form.dispatchEvent(trustedFormData());
+          const fd = new FormData(form);
+          form.dispatchEvent(trustedFormData(fd));
+          const names: string[] = [];
+          fd.forEach((_, k) => names.push(k));
+          sent.push(names);
           planned.push(submitter?.getAttribute("formaction") ?? form.getAttribute("action") ?? "");
         }),
       );
-      return { form, btn, planned };
+      return { form, btn, planned, sent };
     }
 
     it("lets an unchanged resumed submit through without cancelling it", async () => {
       mockShowModal.mockResolvedValue("proceed_once");
-      const { form, btn, planned } = formWithButton();
+      const { form, btn, planned, sent } = formWithButton();
 
       await dispatchSubmit(form, btn);
 
       expect(planned).toEqual(["https://example.com/session"]);
+      expect(sent[0]).toContain("password");
       expect(stopSpy).not.toHaveBeenCalled();
       expect(mockShowModal).toHaveBeenCalledTimes(1);
     });
 
     it("cancels a resumed submit a page listener retargets, then re-checks the new destination", async () => {
       mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
-      const { form, btn, planned } = formWithButton();
+      const { form, btn, planned, sent } = formWithButton();
       let pageRuns = 0;
       form.addEventListener("submit", () => {
         pageRuns += 1;
@@ -1819,6 +1827,7 @@ describe("credential_guard", () => {
       await flushMicrotasks();
 
       expect(planned).toEqual(["https://attacker.test/collect"]);
+      expect(sent).toEqual([[]]); // #1099: emptied, for a POST stop() cannot cancel
       expect(stopSpy).toHaveBeenCalledTimes(1); // the planned POST is cancelled
       expect(mockShowModal).toHaveBeenCalledTimes(2); // re-check prompted for the moved destination
       expect(pageRuns).toBe(1); // the re-check submit never reached the page listener
