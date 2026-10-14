@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 import {
   boundedSample,
   buildPageSnapshot,
@@ -22,6 +23,59 @@ import {
 // slice<->constant link, so a future edit that re-hardcoded the slice (e.g.
 // slice(0, 5000)) while leaving the constant at 10000 would be caught here.
 describe("buildPageSnapshot htmlSnippet cap", () => {
+  it("preserves native serialization for ordinary markup and detector fixtures", () => {
+    document.documentElement.innerHTML = `<head><title>A &amp; B</title>
+      <script>if (a < b) window.marker = "&";</script><style>a > b { color: red }</style></head>
+      <body><!--marker--><form style="display: none" data-value="&quot;&amp;&nbsp;&lt;&gt;">
+      <input type="password"><textarea>&lt;&amp;&nbsp;</textarea></form>
+      <template><b>template &amp; text</b></template>
+      <svg><use href="#icon"></use></svg><xml:label data:kind="colon"></xml:label></body>`;
+    const expected = document.documentElement.innerHTML;
+    const snapshot = buildPageSnapshot(document);
+    expect(snapshot.htmlSnippet).toBe(expected);
+    expect(analyzeSnapshot(snapshot, "bank.test")).toEqual(
+      analyzeSnapshot({ ...snapshot, htmlSnippet: expected }, "bank.test"),
+    );
+    expect(analyzeSnapshot(snapshot, "bank.test").phishingKitMatch).toBeTruthy();
+  });
+
+  it("preserves detector verdicts on the existing phishing-kit Gym fixture", () => {
+    document.documentElement.innerHTML = readFileSync("gym/content-fp-02-phishing-kit.html", "utf8");
+    const expected = document.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
+    const snapshot = buildPageSnapshot(document);
+    expect(snapshot.htmlSnippet).toBe(expected);
+    const result = analyzeSnapshot(snapshot, "bank.test");
+    expect(result).toEqual(analyzeSnapshot({ ...snapshot, htmlSnippet: expected }, "bank.test"));
+    expect(result.phishingKitMatch).toBe(true);
+  });
+
+  it("never serializes a live subtree of a 200k-element page (#1085)", () => {
+    document.documentElement.innerHTML =
+      '<head></head><body><form style="display: none" action="/c"><input type="password"></form></body>';
+    const tail = document.createElement("div");
+    tail.innerHTML = "<i>x</i>".repeat(200_000);
+    document.body.append(tail);
+    // Throw from the serializing getters for every node of the live page; the
+    // bounded copy lives in its own inert document, so its getters still work.
+    const spies = (["innerHTML", "outerHTML"] as const).map((property) => {
+      const get = Object.getOwnPropertyDescriptor(Element.prototype, property)!.get!;
+      return vi.spyOn(Element.prototype, property, "get").mockImplementation(function (this: Element) {
+        if (this.ownerDocument === document) throw new Error(`live ${property} serialized`);
+        return get.call(this);
+      });
+    });
+    try {
+      const snapshot = buildPageSnapshot(document);
+      expect(snapshot.htmlSnippet.length).toBeLessThanOrEqual(HTML_SNIPPET_MAX);
+      expect(snapshot.htmlSnippet.length).toBeGreaterThan(HTML_SNIPPET_MAX / 2);
+      expect(snapshot.htmlSnippet).toMatch(/^<head><\/head><body><form style="display: none"/);
+      // The htmlSnippet-only "display: none" pattern still fires on the bounded copy.
+      expect(analyzeSnapshot(snapshot, "bank.test").kitName).toBe("Exfil-Hidden-Form");
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  }, 30_000); // Building 200k live elements in happy-dom is the slow part, not the snapshot.
+
   it("caps htmlSnippet length at HTML_SNIPPET_MAX for oversized DOM", () => {
     document.documentElement.innerHTML = "x".repeat(HTML_SNIPPET_MAX + 5000);
     const snap = buildPageSnapshot(document);
