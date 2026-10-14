@@ -229,6 +229,14 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
+- **AI-49** — PR #1098 (issue #1086), branch `fix/popup-text-bounds`, code head
+  `3a96e53f` (later commits on the branch are documentation only). Scope: the MAIN-world popup gate reads a
+  bounded number of text nodes/characters for a control's name. Check in branded Chrome with the unpacked build
+  of that head: (1) an ordinary named popup trigger (button or link with visible text under 80 characters) still
+  opens its popup exactly as on `main`; (2) a page whose popup anchor holds a very large subtree (thousands of
+  nodes) neither stalls on click nor changes verdict for a short visible name. Reply `AI-49 done; Gate-3 passed
+  at 3a96e53f` or describe what differed.
+
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
