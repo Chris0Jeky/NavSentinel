@@ -83,7 +83,8 @@ const budgets = [
   {
     label: "main_guard (MAIN world)",
     glob: "assets/main_guard.ts-*.js",
-    maxKB: 20,
+    // Bumped 20 -> 20.5 (#1086): main sat at 20.0KB (100%) and the bounded popup-name text walk adds ~0.1KB.
+    maxKB: 20.5,
   },
   {
     label: "credential_guard (content script)",
