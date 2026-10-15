@@ -229,6 +229,11 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
+- **AI-48 to AI-54**: seven PRs, batched as owner action `ns-gate3-batch-20261014` in the agent-hq inbox
+  (2026-10-14). #1100 (AI-48) and #1103 (AI-50, stacked on #1100) are credential resubmit retargets. #1098 (AI-49)
+  is the popup-name text bound. #1104 (AI-51) is the credential snapshot bound. #1072 (AI-52) is CRXJS 3. #1077
+  (AI-53) is popup trust after failed writes. #1106 (AI-54) keeps the content guards through `document.open()`.
+  Each procedure and code head is in that PR branch's `ACTION_ITEMS.md`. Merge order: #1100 before #1103.
 - **AI-52** — PR #1072 (issue #462), branch `codex/crxjs-v3-hmr-462`, code head
   `a7b84a15` (later commits on the branch are documentation only). Scope: build-pipeline change only
   (CRXJS 2.7.1 to 3.0.0, with `chunkFileNames` keeping the `capture_isolated`, `main_guard` and
