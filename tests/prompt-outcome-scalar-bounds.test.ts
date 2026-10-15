@@ -177,4 +177,26 @@ describe("prompt outcome scalar bounds", () => {
     expect(outcomes[0]!.adaptiveAdj).toBe(-5);
     expect(outcomes[0]!.thresholdUsed).toBe(65);
   });
+
+  it.each([
+    ["cds", 1001], ["navAnomalyScore", 16], ["adaptiveAdj", -16],
+    ["thresholdUsed", 101], ["cds", Number.NaN], ["cds", "bad"],
+  ])("keeps imported and stored rows but omits invalid %s (%s)", async (field, value) => {
+    const entry = {
+      id: "optional", ts: Date.now(), domain: "example.com", type: "nav",
+      score: 50, outcome: "allow", [field]: value,
+    };
+    stubChrome({ "sentinelsuite:prompt_outcomes_v1": [entry] });
+    const { importAll, getPromptOutcomes, isPromptOutcomeStorageMessage } =
+      await import("../extension/src/shared/storage");
+    expect(isPromptOutcomeStorageMessage({ type: "ns-prompt-outcome-append", entry })).toBe(false);
+    for (const imported of [true, false]) {
+      if (imported) await importAll({ promptOutcomes: [entry] });
+      else stubChrome({ "sentinelsuite:prompt_outcomes_v1": [entry] });
+      const outcomes = await getPromptOutcomes();
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0]).toMatchObject({ id: "optional", score: 50 });
+      expect(outcomes[0]).not.toHaveProperty(field);
+    }
+  });
 });
