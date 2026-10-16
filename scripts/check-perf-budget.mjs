@@ -90,8 +90,9 @@ const budgets = [
     glob: "assets/credential_guard.ts-*.js",
     // Bumped 30 -> 31.5 (#1084, P1): main sat 49 bytes under 30KB and the re-entrant submit retarget fix (formdata
     // destination check, window-capture listener, one re-check prompt) adds ~1.06KB after compaction (31.0KB).
-    // #1085's bounded huge-DOM htmlSnippet copy (which alone had asked for 30.5) fits under this same ceiling after
-    // a byte trim in the same chunk; the cap was not raised for it.
+    // #1085 (bounded huge-DOM htmlSnippet copy) and #1105 (document.open() listener re-registration) each asked for
+    // 30.5 alone. Both fit under this ceiling together (31,901 B measured) after #1085 dropped the credential
+    // prompt stylesheet's base indent, so the cap was not raised for them.
     maxKB: 31.5,
   },
   {
