@@ -251,6 +251,13 @@ live.
   `tests/e2e/credential-resubmit-retarget.spec.ts` with a `_blank` retarget, any new tab receives no password and
   the original tab re-prompts for the new host. Reply `AI-50 done; Gate-3 passed at 2c8bf6e4` or describe what
   differed.
+- **AI-49** — PR #1098 (issue #1086), branch `fix/popup-text-bounds`, code head
+  `38c0b97a` (later commits on the branch are documentation only). Scope: the MAIN-world popup gate reads a
+  bounded number of text nodes/characters for a control's name. Check in branded Chrome with the unpacked build
+  of that head: (1) an ordinary named popup trigger (button or link with visible text under 80 characters) still
+  opens its popup exactly as on `main`; (2) a page whose popup anchor holds a very large subtree (thousands of
+  nodes) neither stalls on click nor changes verdict for a short visible name. Reply `AI-49 done; Gate-3 passed
+  at 38c0b97a` or describe what differed.
 - **AI-51** — PR #1104 (issue #1085), branch `fix/credential-snapshot-bounds`, code head
   `ba083f81` (later commits on the branch are documentation only). Scope: credential-path performance
   only. The submit-time page snapshot no longer serializes the whole document on pages with more than 10,000
