@@ -258,6 +258,13 @@ live.
   opens its popup exactly as on `main`; (2) a page whose popup anchor holds a very large subtree (thousands of
   nodes) neither stalls on click nor changes verdict for a short visible name. Reply `AI-49 done; Gate-3 passed
   at 38c0b97a` or describe what differed.
+- **AI-51** — PR #1104 (issue #1085), branch `fix/credential-snapshot-bounds`, code head
+  `ba083f81` (later commits on the branch are documentation only). Scope: credential-path performance
+  only. The submit-time page snapshot no longer serializes the whole document on pages with more than 10,000
+  elements. Check in branded Chrome with the unpacked build of that head: (1) a normal login on a real site still
+  goes through as before; (2) on a local page with a password form and about 200,000 extra elements (for example
+  `"<i>x</i>".repeat(200000)` appended to the body), submitting does not stall visibly before Heedline responds.
+  Reply `AI-51 done; Gate-3 passed at ba083f81` or describe what differed.
 - **AI-53** — PR #1077, branch `muse/ns-c58ec0a4-0-20261008-034226`, code head `d800db25`
   (later commits on the branch are documentation only). Scope: popup UI. A failed trust or untrust write now
   leaves the popup showing persisted truth (refresh still runs, no unhandled rejection) and no longer logs a
