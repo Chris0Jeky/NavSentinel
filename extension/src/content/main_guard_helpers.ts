@@ -397,6 +397,25 @@ export function matchesAnchorOpenIntent(
   return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
 }
 
+/**
+ * Form target for the subframe self-exemption (#1055).
+ * The caller supplies the getter captured at MAIN-world startup. Null means
+ * the getter is missing, threw, or returned a non-string, so the exemption
+ * must not be granted. An empty string is a real self target and is distinct.
+ */
+export function readCapturedFormTarget(
+  form: HTMLFormElement,
+  nativeTargetGetter: ((this: HTMLFormElement) => string) | undefined,
+): string | null {
+  if (!nativeTargetGetter) return null;
+  try {
+    const value = nativeTargetGetter.call(form);
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
 
 /**

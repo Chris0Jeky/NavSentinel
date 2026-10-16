@@ -86,8 +86,14 @@ export const EARLY_MAIN_CLOCK =
 export const EARLY_MAIN_BASE_URI =
   "try{const baseGetter=Object.getOwnPropertyDescriptor(Node.prototype,'baseURI').get;if(typeof baseGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainBaseURI',{value:baseGetter,writable:false,configurable:false})}catch(_){}";
 
+// #1055: the platform HTMLFormElement target getter, captured before the async
+// guard import. The subframe self-exemption must not trust a getter an early
+// page script replaced. Only a real getter is stored.
+export const EARLY_MAIN_FORM_TARGET =
+  "try{const targetGetter=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,'target').get;if(typeof targetGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainFormTarget',{value:targetGetter,writable:false,configurable:false})}catch(_){}";
+
 /** Every early native capture, in order: installed and asserted as one block. */
-export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}`;
+export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}`;
 
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";
@@ -113,6 +119,14 @@ export function assertEarlyMainPrelude(loader) {
   if (baseFirst < 0) throw new Error("MAIN-world guard loader is missing early baseURI capture");
   if (loader.indexOf(EARLY_MAIN_BASE_URI, baseFirst + EARLY_MAIN_BASE_URI.length) >= 0) {
     throw new Error("MAIN-world guard loader has more than one early baseURI capture");
+  }
+  const targetFirst = loader.indexOf(EARLY_MAIN_FORM_TARGET);
+  if (targetFirst < 0) throw new Error("MAIN-world guard loader is missing early form target capture");
+  if (loader.indexOf(EARLY_MAIN_FORM_TARGET, targetFirst + EARLY_MAIN_FORM_TARGET.length) >= 0) {
+    throw new Error("MAIN-world guard loader has more than one early form target capture");
+  }
+  if (targetFirst < baseFirst) {
+    throw new Error("MAIN-world early form target capture must follow the baseURI capture");
   }
   const strict = loader.indexOf(STRICT_MARKER);
   const prelude = loader.indexOf(EARLY_MAIN_PRELUDE);
