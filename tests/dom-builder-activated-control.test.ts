@@ -6,7 +6,7 @@
  * target as siblings or unrelated elements, and descendants that escape their
  * link to sit over other content, keep their leaf-based attack signals.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildClickContextFromEvents,
   type ClickCapture,
@@ -16,7 +16,15 @@ import { computeCDS, hasAccessibleName } from "../extension/src/shared/scoring";
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  // happy-dom has no text layout. Model a visible direct-text glyph at the
+  // shared click point, while zero-width format characters paint no width.
+  vi.spyOn(Range.prototype, "getClientRects").mockImplementation(function (this: Range) {
+    const width = /[^\s\u200b-\u200d\ufeff]/u.test(this.toString()) ? 120 : 0;
+    return [new DOMRect(0, 0, width, 24)] as unknown as DOMRectList;
+  });
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 /** happy-dom lays nothing out; give an element a real-looking box. */
 function withRect<T extends Element>(el: T, w: number, h: number): T {
@@ -195,6 +203,84 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(cds).toBe(60);
   });
 
+  it("a zero-width direct text node does not make a concealed child visibly painted (#886)", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    link.appendChild(document.createTextNode("\u200b"));
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toEqual(["intent_mismatch_under_interactive", "invisible_but_clickable"]);
+  });
+
+  it("direct text outside the click point does not hide a concealed child (#886)", () => {
+    vi.mocked(Range.prototype.getClientRects).mockReturnValue(
+      [new DOMRect(80, 80, 20, 20)] as unknown as DOMRectList,
+    );
+    const link = el("a", { href: "https://evil.example/" });
+    link.appendChild(document.createTextNode("Visible elsewhere"));
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
+  it("off-point transparent link text cannot hide a translucent overlay (#886 review)", () => {
+    vi.mocked(Range.prototype.getClientRects).mockReturnValue(
+      [new DOMRect(80, 0, 40, 24)] as unknown as DOMRectList,
+    );
+    const link = el("a", { href: "https://evil.example/", style: "color:transparent" });
+    link.appendChild(document.createTextNode("Hidden"));
+    const layer = el("span", { style: "position:absolute;inset:0;opacity:0.1" }, link);
+    const ctx = click([layer, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("intent_mismatch_under_interactive");
+  });
+
+  it.each([
+    ["transparent color", "color:transparent"],
+    ["near-transparent color", "color:rgba(0,0,0,0.01)"],
+    ["hidden visibility", "visibility:hidden"],
+  ])("on-point %s text cannot hide a concealed child (#886)", (_label, style) => {
+    const link = el("a", { href: "https://evil.example/", style });
+    link.appendChild(document.createTextNode("Hidden"));
+    const leaf = el("span", { style: "opacity:0.01;visibility:visible" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
+  it("keeps effective ancestor opacity when re-rooting a clicked child (#886)", () => {
+    const wrapper = el("div", { style: "opacity:0.01" });
+    const link = el("a", { href: "https://evil.example/" }, wrapper);
+    const leaf = el("span", {}, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, wrapper, document.body]);
+    expect(ctx.top.opacity).toBeCloseTo(0.01);
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
+  it("counts an opaque-looking slotted child under a concealed shadow wrapper (#886)", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    const host = withRect(document.createElement("x-surface"), 120, 24);
+    link.appendChild(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const wrapper = document.createElement("div");
+    wrapper.style.opacity = "0.01";
+    const slot = document.createElement("slot");
+    wrapper.appendChild(slot);
+    shadow.appendChild(wrapper);
+    const leaf = el("span", {}, host);
+    leaf.textContent = "Continue";
+    Object.defineProperty(leaf, "assignedSlot", { value: slot });
+
+    const ctx = click([leaf, host, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
   it("an invisible wrapper between the clicked child and its link blocks the re-root", () => {
     const link = el("a", { href: "https://evil.example/" });
     const wrapper = el("div", { style: "opacity:0.01" }, link);
@@ -232,6 +318,55 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     leaf.textContent = "Continue";
     const ctx = click([leaf, link, document.body]);
     expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
+  it("a hidden link background does not count as a visible affordance (#886 rv-928-vis M2)", () => {
+    const link = el("a", {
+      href: "https://evil.example/",
+      style: "background-color: rgb(51, 51, 51); visibility:hidden",
+    });
+    const leaf = el("span", { style: "opacity:0.01;visibility:visible" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
+  });
+
+  it("a transparent control cannot absorb a concealed child via its text (#886 rv-928-vis HIGH)", () => {
+    const link = el("a", { href: "https://evil.example/", style: "opacity:0" });
+    link.appendChild(document.createTextNode("Visible"));
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toEqual(
+      expect.arrayContaining(["invisible_but_clickable", "intent_mismatch_under_interactive"]),
+    );
+  });
+
+  it("a transparent control cannot absorb a concealed child via its background (#886)", () => {
+    const link = el("a", {
+      href: "https://evil.example/",
+      style: "opacity:0;background-color: rgb(51, 51, 51)",
+    });
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(computeCDS(ctx).reasonCodes).toEqual(
+      expect.arrayContaining(["invisible_but_clickable", "intent_mismatch_under_interactive"]),
+    );
+  });
+
+  it("a spoofed assignedSlot cycle fails closed instead of hanging (#886 rv-924-geom H2)", () => {
+    const link = el("a", { href: "https://evil.example/" });
+    const leaf = el("span", { style: "opacity:0.01" }, link);
+    leaf.textContent = "Continue";
+    Object.defineProperty(leaf, "assignedSlot", { value: leaf });
+    const ctx = click([leaf, link, document.body]);
+    expect(ctx.top.tag).toBe("SPAN");
+    expect(ctx.top.opacity).toBe(0);
     expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
   });
 
