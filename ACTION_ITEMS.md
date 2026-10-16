@@ -251,6 +251,13 @@ live.
   `tests/e2e/credential-resubmit-retarget.spec.ts` with a `_blank` retarget, any new tab receives no password and
   the original tab re-prompts for the new host. Reply `AI-50 done; Gate-3 passed at 2c8bf6e4` or describe what
   differed.
+- **AI-49** — PR #1098 (issue #1086), branch `fix/popup-text-bounds`, code head
+  `38c0b97a` (later commits on the branch are documentation only). Scope: the MAIN-world popup gate reads a
+  bounded number of text nodes/characters for a control's name. Check in branded Chrome with the unpacked build
+  of that head: (1) an ordinary named popup trigger (button or link with visible text under 80 characters) still
+  opens its popup exactly as on `main`; (2) a page whose popup anchor holds a very large subtree (thousands of
+  nodes) neither stalls on click nor changes verdict for a short visible name. Reply `AI-49 done; Gate-3 passed
+  at 38c0b97a` or describe what differed.
 - **AI-53** — PR #1077, branch `muse/ns-c58ec0a4-0-20261008-034226`, code head `d800db25`
   (later commits on the branch are documentation only). Scope: popup UI. A failed trust or untrust write now
   leaves the popup showing persisted truth (refresh still runs, no unhandled rejection) and no longer logs a
