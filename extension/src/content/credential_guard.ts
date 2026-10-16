@@ -236,14 +236,24 @@ function handleFormData(evt: Event): void {
   if (!e || e.eventPhase || e.defaultPrevented) return;
   const [action, rest] = resolveDestination(b.form, b.submitter);
   b.moved ||= actionMoved(b.approved[0], action) || rest !== b.approved[1];
+  // #1099: window.stop() cannot cancel a POST aimed at another browsing context
+  // (a new window, _top, _parent). Empty the entry list the browser is about to
+  // send: measured in Chromium, that POST then carries no form data.
+  if (!b.moved) return;
+  // No page formdata listener may put the entries back: the guard is first in
+  // the path (window capture, document_start).
+  evt.stopImmediatePropagation();
+  const fd = (evt as FormDataEvent).formData;
+  const names: string[] = [];
+  fd.forEach((_, k) => names.push(k));
+  for (const k of names) fd.delete(k);
 }
 
 function settleResumeBinding(b: ResumeBinding): void {
   if (!b.moved) return;
-  // Cancels the planned form navigation in this frame and its child frames.
-  // ponytail: measured in Chromium, a POST into a NEW window (target moved to
-  // _blank or an unknown name) is not cancelable from here; closing that needs
-  // the resumed submit kept away from page listeners (#1099).
+  // Cancels the planned form navigation in this frame and its child frames. A
+  // POST aimed at another browsing context still goes out, emptied by
+  // handleFormData (#1099).
   window.stop();
   void appendEvent({
     kind: "cred_submit_prompt",

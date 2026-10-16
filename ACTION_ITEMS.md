@@ -243,6 +243,14 @@ live.
   handler swaps `formaction` to another site), the second prompt names the new host and Cancel sends nothing.
   Known gaps, not part of this gate: new-window and `_top` retargets (#1099), Firefox (#1101).
   Reply `AI-48 done; Gate-3 passed at 75a68cd1` or describe what differed.
+- **AI-50** — PR #1103 (issue #1099), branch `fix/credential-retarget-other-contexts`, stacked on #1100, code head
+  `2c8bf6e4` (later commits on the branch are documentation only). Scope: when the page moves the resumed
+  credential POST into a new window (`_blank` or an unknown name) or to `_top`/`_parent` from an iframe, that POST
+  now goes out with no form data. Check in branded Chrome with the unpacked build of that head (popup blocker on):
+  (1) a normal login on a real site still goes through after "Proceed once"; (2) on the local fixture used by
+  `tests/e2e/credential-resubmit-retarget.spec.ts` with a `_blank` retarget, any new tab receives no password and
+  the original tab re-prompts for the new host. Reply `AI-50 done; Gate-3 passed at 2c8bf6e4` or describe what
+  differed.
 
 ### Integration closeout receipt
 
