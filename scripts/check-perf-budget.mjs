@@ -88,9 +88,11 @@ const budgets = [
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    // Bumped 30 -> 30.5 (#1105): re-adding the document listeners after document.open() (persistent_listener.ts,
-    // one shared MutationObserver) takes the bundle from 30.0KB to 30.29KB.
-    maxKB: 30.5,
+    // Bumped 30 -> 31.5 (#1084, P1): main sat 49 bytes under 30KB and the re-entrant submit retarget fix (formdata
+    // destination check, window-capture listener, one re-check prompt) adds ~1.06KB after compaction (31.0KB).
+    // #1105's document.open() listener re-registration (persistent_listener.ts, which alone had asked for 30.5) fits
+    // under this same ceiling; the cap was not raised for it.
+    maxKB: 31.5,
   },
   {
     label: "service worker",
