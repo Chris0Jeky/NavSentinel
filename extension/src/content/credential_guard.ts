@@ -19,6 +19,7 @@ import {
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 import { queryPasswordInputs } from "./password_field";
+import { addPersistentListener } from "./persistent_listener";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
 
@@ -746,6 +747,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 
 // Window capture, registered at document_start: ahead of every page submit
 // listener, so page script cannot stop a submit before the guard sees it.
-window.addEventListener("submit", (e) => void handleSubmit(e), true);
-document.addEventListener("paste", (e) => void handlePaste(e), true);
-window.addEventListener("formdata", handleFormData, true);
+// #1105: document.open() erases these (window included); the helper re-adds them.
+addPersistentListener(window, "submit", (e) => void handleSubmit(e as SubmitEvent));
+addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
+addPersistentListener(window, "formdata", handleFormData);
