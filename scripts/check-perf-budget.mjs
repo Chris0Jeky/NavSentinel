@@ -88,7 +88,9 @@ const budgets = [
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    maxKB: 30,
+    // Bumped 30 -> 31.5 (#1084, P1): main sat 49 bytes under 30KB and the re-entrant submit retarget fix (formdata
+    // destination check, window-capture listener, one re-check prompt) adds ~1.06KB after compaction (31.0KB).
+    maxKB: 31.5,
   },
   {
     label: "service worker",

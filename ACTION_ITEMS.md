@@ -234,6 +234,23 @@ live.
   is the popup-name text bound. #1104 (AI-51) is the credential snapshot bound. #1072 (AI-52) is CRXJS 3. #1077
   (AI-53) is popup trust after failed writes. #1106 (AI-54) keeps the content guards through `document.open()`.
   Each procedure and code head is in that PR branch's `ACTION_ITEMS.md`. Merge order: #1100 before #1103.
+- **AI-48** — PR #1100 (issue #1084, P1), branch `fix/credential-resubmit-retarget`, code head
+  `75a68cd1` (later commits on the branch are documentation only). Scope: after the user approves a credential
+  submit, a page that retargets the resumed POST (formaction, form.action, method, target, an inserted `<base>`)
+  is stopped and re-prompted with the real host; a second move is blocked. Check in branded Chrome with the
+  unpacked build of that head: (1) a normal login on a real site still goes through after "Proceed once";
+  (2) on the local fixture used by `tests/e2e/credential-resubmit-retarget.spec.ts` (or any page whose submit
+  handler swaps `formaction` to another site), the second prompt names the new host and Cancel sends nothing.
+  Known gaps, not part of this gate: new-window and `_top` retargets (#1099), Firefox (#1101).
+  Reply `AI-48 done; Gate-3 passed at 75a68cd1` or describe what differed.
+- **AI-50** — PR #1103 (issue #1099), branch `fix/credential-retarget-other-contexts`, stacked on #1100, code head
+  `2c8bf6e4` (later commits on the branch are documentation only). Scope: when the page moves the resumed
+  credential POST into a new window (`_blank` or an unknown name) or to `_top`/`_parent` from an iframe, that POST
+  now goes out with no form data. Check in branded Chrome with the unpacked build of that head (popup blocker on):
+  (1) a normal login on a real site still goes through after "Proceed once"; (2) on the local fixture used by
+  `tests/e2e/credential-resubmit-retarget.spec.ts` with a `_blank` retarget, any new tab receives no password and
+  the original tab re-prompts for the new host. Reply `AI-50 done; Gate-3 passed at 2c8bf6e4` or describe what
+  differed.
 - **AI-53** — PR #1077, branch `muse/ns-c58ec0a4-0-20261008-034226`, code head `d800db25`
   (later commits on the branch are documentation only). Scope: popup UI. A failed trust or untrust write now
   leaves the popup showing persisted truth (refresh still runs, no unhandled rejection) and no longer logs a
