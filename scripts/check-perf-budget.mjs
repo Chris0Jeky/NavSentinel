@@ -88,10 +88,11 @@ const budgets = [
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    // Bumped 30 -> 30.5 (#1085): main sat 49 bytes under 30KB (30,671 B) and the bounded huge-DOM htmlSnippet
-    // copy adds ~0.5KB (31,168 B). #1100 independently raises this to 31.5; with both landed the chunk measures
-    // ~31.5KB, so whichever merges second must re-measure and keep the larger ceiling.
-    maxKB: 30.5,
+    // Bumped 30 -> 31.5 (#1084, P1): main sat 49 bytes under 30KB and the re-entrant submit retarget fix (formdata
+    // destination check, window-capture listener, one re-check prompt) adds ~1.06KB after compaction (31.0KB).
+    // #1085's bounded huge-DOM htmlSnippet copy (which alone had asked for 30.5) fits under this same ceiling after
+    // a byte trim in the same chunk; the cap was not raised for it.
+    maxKB: 31.5,
   },
   {
     label: "service worker",
