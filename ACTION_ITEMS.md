@@ -258,7 +258,28 @@ live.
   opens its popup exactly as on `main`; (2) a page whose popup anchor holds a very large subtree (thousands of
   nodes) neither stalls on click nor changes verdict for a short visible name. Reply `AI-49 done; Gate-3 passed
   at 38c0b97a` or describe what differed.
+- **AI-53** — PR #1077, branch `muse/ns-c58ec0a4-0-20261008-034226`, code head `d800db25`
+  (later commits on the branch are documentation only). Scope: popup UI. A failed trust or untrust write now
+  leaves the popup showing persisted truth (refresh still runs, no unhandled rejection) and no longer logs a
+  `cred_trust_domain` / `cred_untrust_domain` success event for a mutation that did not persist. Check in
+  branded Chrome with the unpacked build of that head: (1) on a normal site open the popup, press **Trust**:
+  status turns to trusted, **Untrust** appears, and Options > event log gains exactly one trust event;
+  (2) press **Untrust**: status returns to observing and the log gains one untrust event;
+  (3) optional failure probe: in the popup's DevTools console run
+  `chrome.storage.local.set = () => Promise.reject(new Error("x"))`, press **Trust**: the popup stays
+  "observing", the console shows "trust save failed", and the event log gains no trust event.
+  Reply `AI-53 done; Gate-3 passed at d800db25` or describe what differed.
 
+- **AI-54** — PR #1106 (issue #1105), branch `test/document-open-guard`, code head `9258f7bf` (later commits on the
+  branch are documentation only). Scope: a page that calls `document.open()` no longer strips the credential guard's
+  `submit` and `paste` listeners (they are re-added through one shared `MutationObserver` on `document`). Check in
+  branded Chrome with the unpacked build of that head: (1) on a page whose script runs
+  `document.open(); document.write('<form method=post action="https://other.example/x"><input type=password name=p value=x><button id=go>Go</button></form>'); document.close()`,
+  clicking Go still shows the "Credential submit blocked" prompt and Cancel sends nothing to the other host;
+  (2) a normal login on a real site still prompts (when risky) or goes through after "Proceed once" as before.
+  The local fixture is `tests/e2e/credential-document-open.spec.ts`. Known gaps, not part of this gate: a submit
+  dispatched in the same task as `document.close()` (before the observer runs), the MAIN-world and disabled
+  js-behaviour listeners, Firefox. Reply `AI-54 done; Gate-3 passed at 9258f7bf` or describe what differed.
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:
