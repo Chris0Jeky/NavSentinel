@@ -10,7 +10,7 @@ import { startProvingGroundEgressFence, type ProvingGroundEgressAttempt } from "
 // profile with the guarded method. This is a WebIDL compatibility comparison,
 // not an extension-disabled attack arm or a clipboard-prevention claim.
 test("clipboard writeText preserves native conversion, copied contents and Promise errors (#1024) @regression", async ({}, testInfo) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000); // up to ~38 bounded settles (#1108) on a broken clipboard still report diagnostics
   const extensionPath = path.resolve("extension/dist");
   test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
   const server = http.createServer((_request, response) => {
@@ -71,8 +71,8 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
         for (const name of ["string", "number", "null", "undefined", "boolean", "BigInt", "URL", "stateful", "Symbol", "missing", "throwing"]) {
           // Establish a known fixture value before any clipboard read, and see
           // it land, so a stale earlier row (number vs BigInt share "847293")
-          // cannot pass for this row's write. Nothing samples pre-existing
-          // clipboard contents, even on a rejected write.
+          // cannot pass for this row's write. A rejected write is never read
+          // after its own call; only the fixture sentinel is.
           reads = 0;
           await Reflect.apply(native, clipboard, ["NS_FIXTURE_SENTINEL"]);
           const fixture = await settle("NS_FIXTURE_SENTINEL");
