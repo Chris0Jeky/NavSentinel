@@ -50,13 +50,32 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
       const rows: Array<{
         arm: string; name: string; syncError: string | null; promise: boolean;
         error: string | null; conversionsAtReturn: number; conversions: number;
-        copied: string | null; expected: string | null;
+        copied: string | null; expected: string | null; fixture: string; reads: number;
       }> = [];
+      // Under xvfb the X11 clipboard can briefly serve an older value after a
+      // resolved write (#1108). Read until the value just written appears.
+      // ponytail: a 2 s window would also hide a guard that resolves before its
+      // write lands; the attached read counts show how long each row needed.
+      let reads = 0;
+      const settle = async (want: string): Promise<string> => {
+        let seen = await clipboard.readText();
+        reads++;
+        for (let i = 0; seen !== want && i < 40; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          seen = await clipboard.readText();
+          reads++;
+        }
+        return seen;
+      };
       for (const [arm, write] of [["native", native], ["guarded", guarded]] as const) {
         for (const name of ["string", "number", "null", "undefined", "boolean", "BigInt", "URL", "stateful", "Symbol", "missing", "throwing"]) {
-          // Establish a known fixture value before any clipboard read. Nothing
-          // samples pre-existing clipboard contents, even on a rejected write.
+          // Establish a known fixture value before any clipboard read, and see
+          // it land, so a stale earlier row (number vs BigInt share "847293")
+          // cannot pass for this row's write. Nothing samples pre-existing
+          // clipboard contents, even on a rejected write.
+          reads = 0;
           await Reflect.apply(native, clipboard, ["NS_FIXTURE_SENTINEL"]);
+          const fixture = await settle("NS_FIXTURE_SENTINEL");
           let conversions = 0;
           let expected: string | null = null;
           const args: unknown[] = [];
@@ -89,8 +108,8 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
           // Accepted writes must expose the actual fixture text. Rejected calls
           // are inspected only for their Promise/error contract, never read.
           const copied = expected !== null && syncError === null && error === null
-            ? await clipboard.readText() : null;
-          rows.push({ arm, name, syncError, promise, error, conversionsAtReturn, conversions, copied, expected });
+            ? await settle(expected) : null;
+          rows.push({ arm, name, syncError, promise, error, conversionsAtReturn, conversions, copied, expected, fixture, reads });
         }
       }
       await Reflect.apply(native, clipboard, [""]);
@@ -110,6 +129,7 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
     expect(result.guardedLength).toBe(1);
     expect(result.rows).toHaveLength(22);
     for (const row of result.rows) {
+      expect(row.fixture, `${row.arm}/${row.name} fixture sentinel landed`).toBe("NS_FIXTURE_SENTINEL");
       expect(row.syncError, `${row.arm}/${row.name} must return rather than throw`).toBeNull();
       expect(row.promise, `${row.arm}/${row.name}`).toBe(true);
       const expectedError = row.name === "Symbol" || row.name === "missing" ? "TypeError"
