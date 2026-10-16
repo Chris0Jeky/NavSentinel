@@ -211,6 +211,53 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+### Retroactive Gate-3 checks (AI-48 to AI-54)
+
+Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
+Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
+(`scripts/check-perf-budget.mjs`), and Chris runs its branded-Chrome check afterwards on the merged build. A
+failure gets a revert PR for that merge commit. Build the merge commit (`npm ci`, `npm run build`), load
+`extension/dist` unpacked, and reply `AI-xx done; Gate-3 passed at <merge commit>` or describe what differed.
+PR #1072 (AI-52, CRXJS 3) is not on this list: it stays open on its recorded Windows hold, which is separate from
+Gate-3.
+
+| AI | PR | Merged head | Human result |
+| --- | --- | --- | --- |
+| AI-48 | #1100 credential resubmit retarget | `598b94c8` (merged 2026-10-16) | OPEN — not run |
+| AI-50 | #1103 retarget into other windows | `2c7a232c` (merged 2026-10-16) | OPEN — not run |
+| AI-49 | #1098 popup-name text bound | not merged (PR head `d08bf6b6`); record the merge commit | OPEN — not run |
+| AI-51 | #1104 credential snapshot bound | not merged (PR head `f4d7bab4`); record the merge commit | OPEN — not run |
+| AI-53 | #1077 popup trust after failed writes | not merged (PR head `a84a4907`); record the merge commit | OPEN — not run |
+| AI-54 | #1106 guards through `document.open()` | not merged (PR head `b685d897`); record the merge commit | OPEN — not run |
+
+Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-48 (#1100):** (1) a normal login on a real site still goes through after "Proceed once"; (2) on the
+  fixture in `tests/e2e/credential-resubmit-retarget.spec.ts` (or any page whose submit handler swaps
+  `formaction` to another site), the second prompt names the new host and Cancel sends nothing. Not part of
+  this check: Firefox (#1101).
+- **AI-50 (#1103):** with the popup blocker on, (1) a normal login still goes through after "Proceed once";
+  (2) on the same fixture with a `_blank` retarget, any new tab receives no password and the original tab
+  re-prompts for the new host.
+- **AI-49 (#1098):** (1) an ordinary named popup trigger (visible text under 80 characters) opens its popup
+  exactly as before; (2) a page whose popup anchor holds thousands of nodes neither stalls on click nor
+  changes verdict for a short visible name.
+- **AI-51 (#1104):** (1) a normal login still goes through as before; (2) on a local page with a password form
+  and about 200,000 extra elements (`"<i>x</i>".repeat(200000)` appended to the body), submitting does not
+  stall visibly before Heedline responds. The prompt's stylesheet lost only indentation in this PR; it should
+  look unchanged.
+- **AI-53 (#1077):** (1) on a normal site press **Trust** in the popup: status turns trusted, **Untrust**
+  appears, Options > event log gains exactly one trust event; (2) press **Untrust**: status returns to
+  observing, one untrust event; (3) optional: in the popup's DevTools run
+  `chrome.storage.local.set = () => Promise.reject(new Error("x"))`, press **Trust**: the popup stays
+  observing, the console shows "trust save failed", and no trust event is logged.
+- **AI-54 (#1106):** (1) on a page whose script runs
+  `document.open(); document.write('<form method=post action="https://other.example/x"><input type=password name=p value=x><button id=go>Go</button></form>'); document.close()`,
+  clicking Go still shows the "Credential submit blocked" prompt and Cancel sends nothing to the other host;
+  (2) a normal login still prompts (when risky) or goes through after "Proceed once". The local fixture is
+  `tests/e2e/credential-document-open.spec.ts`. Not part of this check: a submit dispatched in the same task
+  as `document.close()`, the MAIN-world and disabled js-behaviour listeners, Firefox.
+
 ### Branch-held Gate-3 items
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
