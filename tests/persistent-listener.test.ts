@@ -77,6 +77,22 @@ describe("addPersistentListener", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("keeps a still-attached listener ahead of later page listeners on re-registration", async () => {
+    const add = await load();
+    const order: string[] = [];
+    const guard = () => order.push("guard");
+    const page = (e: Event) => { order.push("page"); e.stopImmediatePropagation(); };
+    add(window, "submit", guard);
+    window.addEventListener("submit", page, true);
+    document.appendChild(document.createComment("x")); // page-triggered document childList record
+    await tick();
+    await tick();
+    window.dispatchEvent(new Event("submit"));
+    window.removeEventListener("submit", page, true);
+    window.removeEventListener("submit", guard, true);
+    expect(order).toEqual(["guard", "page"]);
+  });
+
   it("shares one observer across registrations and also re-adds window listeners", async () => {
     const observe = vi.spyOn(MutationObserver.prototype, "observe");
     const add = await load();

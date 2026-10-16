@@ -12,8 +12,8 @@ const registrations: Registration[] = [];
 let observer: MutationObserver | null = null;
 
 function register(r: Registration): void {
-  // Remove-then-add with the same function and capture flag is idempotent.
-  r.target.removeEventListener(r.type, r.listener, r.capture);
+  // Adding the same function and capture flag again is a no-op that keeps its place,
+  // so a page that adds a document child cannot move the guard behind its own listener.
   r.target.addEventListener(r.type, r.listener, r.capture);
 }
 
