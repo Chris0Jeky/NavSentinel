@@ -52,7 +52,7 @@ JavaScript-behaviour instrumentation (`fetch` / XHR / `sendBeacon` wrappers) is 
 
 ## Architecture
 
-Four runtime surfaces, wired from `extension/manifest.json`, all frames, `document_start`:
+Four runtime surfaces, wired from `extension/manifest.json`. The three content scripts run in all frames at `document_start`; the service worker and the extension-origin UI do not:
 
 ```mermaid
 flowchart TB
