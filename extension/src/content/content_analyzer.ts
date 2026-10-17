@@ -652,6 +652,50 @@ export function sampleBodyText(body: HTMLElement, max: number): string {
   return headChunks.join("") + " " + (tailLen > 0 ? tail.slice(-tailLen) : "");
 }
 
+/**
+ * Element count above which htmlSnippet comes from a bounded copy instead of
+ * serializing the whole document on the synchronous submit path (#1085).
+ * ponytail: element count is a proxy for serialization cost; a page with few
+ * nodes but a multi-MB text or attribute still takes the innerHTML path. Gate on
+ * markup size as well if that shows up in a profile.
+ */
+export const HTML_FAST_PATH_MAX_ELEMENTS = 10000;
+
+/** First HTML_SNIPPET_MAX chars of the document markup, without serializing a huge DOM. */
+function sampleHtml(doc: Document): string {
+  const html = doc.documentElement;
+  // Counting stops at the threshold, so the gate costs the same on a 200k-element page.
+  const walker = doc.createTreeWalker(html, 1); // NodeFilter.SHOW_ELEMENT
+  let count = 0;
+  while (count <= HTML_FAST_PATH_MAX_ELEMENTS && walker.nextNode()) count++;
+  if (count <= HTML_FAST_PATH_MAX_ELEMENTS) return html.innerHTML.slice(0, HTML_SNIPPET_MAX);
+  // Huge DOM: shallow-copy nodes in document order into an inert document (no
+  // script runs, nothing loads) until the markup passes the cap, then serialize
+  // only that copy. Every charge is a lower bound on what the node serializes to
+  // (opening tag only, so void elements are not overcharged; escaping only adds),
+  // so the copy always covers the real prefix. It differs from the fast path only
+  // where innerHTML reaches past childNodes, such as <template> contents.
+  const inert = doc.implementation.createHTMLDocument("");
+  const out = inert.createElement("html");
+  let budget = HTML_SNIPPET_MAX;
+  const copy = (from: Node, to: Node): void => {
+    for (let n = from.firstChild; n && budget > 0; n = n.nextSibling) {
+      budget -= n.nodeValue?.length ?? 0;
+      if (n.nodeType === 1) {
+        const el = n as Element;
+        budget -= el.localName.length + 2;
+        for (let i = 0; i < el.attributes.length; i++) {
+          const a = el.attributes[i]!;
+          budget -= a.name.length + a.value.length + 4;
+        }
+      }
+      copy(n, to.appendChild(inert.importNode(n, false)));
+    }
+  };
+  copy(html, out);
+  return out.innerHTML.slice(0, HTML_SNIPPET_MAX);
+}
+
 /** Build a PageSnapshot from a live Document. Called in content script context. */
 export function buildPageSnapshot(doc: Document): PageSnapshot {
   // Credential-page gate: shared visible-credential-field helper (#196).
@@ -667,7 +711,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
 
   // HTML snippet -- limited to HTML_SNIPPET_MAX chars to avoid serializing the
   // entire DOM (the exfil htmlPatterns derive their quantifier bounds from this).
-  const htmlSnippet = doc.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
+  const htmlSnippet = sampleHtml(doc);
 
   // Script text -- each script sliced to the remaining budget BEFORE concat,
   // so the intermediate string never exceeds SCRIPT_TEXT_MAX (a concat-then-

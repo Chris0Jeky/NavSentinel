@@ -226,7 +226,7 @@ Gate-3.
 | AI-48 | #1100 credential resubmit retarget | `598b94c8` (merged 2026-10-16) | OPEN — not run |
 | AI-50 | #1103 retarget into other windows | `2c7a232c` (merged 2026-10-16) | OPEN — not run |
 | AI-49 | #1098 popup-name text bound | merge commit `dce69fe3` (merged 2026-10-16) | OPEN — not run |
-| AI-51 | #1104 credential snapshot bound | not merged (PR head `db5667cb`); record the merge commit | OPEN — not run |
+| AI-51 | #1104 credential snapshot bound | merge commit `fbe7648a` (merged 2026-10-17) | OPEN — not run |
 | AI-53 | #1077 popup trust after failed writes | merge commit `aa39a7b2` (merged 2026-10-16) | OPEN — not run |
 | AI-54 | #1106 guards through `document.open()` | merge commit `d2cbf115` (merged 2026-10-16) | OPEN — not run |
 
