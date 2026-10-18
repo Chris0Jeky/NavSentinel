@@ -1714,6 +1714,20 @@ const nativePushState = History.prototype.pushState;
 const nativeReplaceState = History.prototype.replaceState;
 
 function patchHistory(): void {
+  function recordHistoryNav(url: string | null | undefined, method: "pushState" | "replaceState", reason: string | null): void {
+    if (reason) {
+      postToIsolated("ns-pushstate-suspicious", {
+        ts: nowMs(),
+        url: url ?? "",
+        method,
+        reason,
+      });
+      if (debug) {
+        console.debug(`[NavSentinel] suspicious ${method}`, { url, reason });
+      }
+    }
+  }
+
   const patchedPushState = function (
     this: History,
     data: unknown,
@@ -1727,18 +1741,7 @@ function patchHistory(): void {
     // a Symbol; null/undefined keep their native semantics.
     const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
     const result = nativePushState.call(this, data, unused, url);
-    const reason = checkPushStateSuspicious(url, "pushState");
-    if (reason) {
-      postToIsolated("ns-pushstate-suspicious", {
-        ts: nowMs(),
-        url: url ?? "",
-        method: "pushState",
-        reason,
-      });
-      if (debug) {
-        console.debug("[NavSentinel] suspicious pushState", { url, reason });
-      }
-    }
+    recordHistoryNav(url, "pushState", checkPushStateSuspicious(url, "pushState"));
     return result;
   };
 
@@ -1751,18 +1754,7 @@ function patchHistory(): void {
     // Same single-coercion contract as patchedPushState (#891).
     const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
     const result = nativeReplaceState.call(this, data, unused, url);
-    const reason = checkPushStateSuspicious(url, "replaceState");
-    if (reason) {
-      postToIsolated("ns-pushstate-suspicious", {
-        ts: nowMs(),
-        url: url ?? "",
-        method: "replaceState",
-        reason,
-      });
-      if (debug) {
-        console.debug("[NavSentinel] suspicious replaceState", { url, reason });
-      }
-    }
+    recordHistoryNav(url, "replaceState", checkPushStateSuspicious(url, "replaceState"));
     return result;
   };
   // Observational hooks only (they call the native and report; never block), so
@@ -1817,12 +1809,11 @@ function patchOpenerLocation(): void {
       [native: (...args: unknown[]) => unknown, wrapper: (...args: unknown[]) => unknown]
     >();
 
-    function readNative(prop: PropertyKey): unknown {
-      const raw: unknown = Reflect.get(realLocation, prop, realLocation);
-      if (typeof raw !== "function") return raw;
+    function readNative(_target: unknown, prop: PropertyKey): unknown {
+      const nativeMethod = Reflect.get(realLocation, prop) as unknown;
+      if (typeof nativeMethod !== "function") return nativeMethod;
       const cached = methodCache.get(prop);
-      if (cached?.[0] === raw) return cached[1];
-      const nativeMethod = raw as (...args: unknown[]) => unknown;
+      if (cached?.[0] === nativeMethod) return cached[1];
       let wrapper: (...args: unknown[]) => unknown;
       if (prop === "assign" || prop === "replace") {
         wrapper = (...args: unknown[]): unknown => {
@@ -1833,39 +1824,37 @@ function patchOpenerLocation(): void {
       } else {
         wrapper = nativeMethod.bind(realLocation);
       }
-      methodCache.set(prop, [nativeMethod, wrapper]);
+      methodCache.set(prop, [nativeMethod as (...args: unknown[]) => unknown, wrapper]);
       return wrapper;
     }
 
-    function writeNative(prop: PropertyKey, value: unknown): boolean {
+    function writeNative(_target: unknown, prop: PropertyKey, value: unknown): boolean {
       if (prop === "href") {
         value = recordOpenerNav(`${value}`);
       }
-      return Reflect.set(realLocation, prop, value, realLocation);
-    }
-
-    // Configurable descriptor copies satisfy facade invariants; this is not
-    // exact native branding or unforgeable descriptor equivalence.
-    function describeNative(prop: PropertyKey): PropertyDescriptor | undefined {
-      const current = Reflect.getOwnPropertyDescriptor(realLocation, prop);
-      if (current === undefined) return undefined;
-      current.configurable = true;
-      if ("value" in current) {
-        current.value = readNative(prop);
-      } else {
-        if (current.get) current.get = current.get.bind(realLocation);
-        if (current.set) current.set = (value: unknown): void => { writeNative(prop, value); };
-      }
-      return current;
+      return Reflect.set(realLocation, prop, value);
     }
 
     return new Proxy(facade, {
-      get: (_target, prop) => readNative(prop),
-      set: (_target, prop, value) => writeNative(prop, value),
+      get: readNative,
+      set: writeNative,
       has: (_target, prop) => Reflect.has(realLocation, prop),
       ownKeys: () => Reflect.ownKeys(realLocation),
       getPrototypeOf: () => Reflect.getPrototypeOf(realLocation),
-      getOwnPropertyDescriptor: (_target, prop) => describeNative(prop),
+      // Configurable descriptor copies satisfy facade invariants; this is not
+      // exact native branding or unforgeable descriptor equivalence.
+      getOwnPropertyDescriptor(_target, prop) {
+        const current = Reflect.getOwnPropertyDescriptor(realLocation, prop);
+        if (!current) return undefined;
+        current.configurable = true;
+        if ("value" in current) {
+          current.value = readNative(null, prop);
+        } else {
+          if (current.get) current.get = current.get.bind(realLocation);
+          if (current.set) current.set = (value: unknown): void => { writeNative(null, prop, value); };
+        }
+        return current;
+      },
       // Never lock the empty facade and recreate native Proxy invariants.
       defineProperty: (_target, prop, desc) => desc.configurable === true && Reflect.defineProperty(realLocation, prop, desc),
       deleteProperty: (_target, prop) => Reflect.deleteProperty(realLocation, prop),
@@ -1879,13 +1868,13 @@ function patchOpenerLocation(): void {
 
     // Watch for direct property assignment: window.opener.location = url
     // We proxy the opener object so we can intercept .location sets.
-    const openerProxy = new Proxy(realOpener, {
+    let openerProxy = new Proxy(realOpener, {
       set(_target, prop, value) {
         if (prop === "location") {
           // Forward exactly the observed string; reject Symbol like native.
           // Allow the navigation to proceed so the attack surface
           // remains observable (the isolated-world will flag the click).
-          return Reflect.set(realOpener, prop, recordOpenerNav(`${value}`), realOpener);
+          return Reflect.set(realOpener, prop, recordOpenerNav(`${value}`));
         }
         try {
           Reflect.set(realOpener, prop, value);
@@ -1913,14 +1902,13 @@ function patchOpenerLocation(): void {
     // window.opener after the proxy is installed.
     // Preserve setter so pages that intentionally do `window.opener = null`
     // (a common security hardening pattern) still work correctly.
-    let openerDisowned = false;
     Object.defineProperty(window, "opener", {
-      get() { return openerDisowned ? null : openerProxy; },
+      get() { return openerProxy; },
       set(value) {
         // Allow disowning the opener (security best practice) but do not
         // allow replacing it with an arbitrary object.
         if (value === null || value === undefined) {
-          openerDisowned = true;
+          openerProxy = null;
         }
         // Silently ignore other assignments; the proxy stays in place.
       },
