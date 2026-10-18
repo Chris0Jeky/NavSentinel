@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 import {
   boundedSample,
   buildPageSnapshot,
   analyzeSnapshot,
   HTML_SNIPPET_MAX,
+  MAX_BODY_TEXT,
   MAX_IMG_ATTR,
   MAX_TITLE_LEN,
   MAX_FORMS,
@@ -21,6 +23,61 @@ import {
 // slice<->constant link, so a future edit that re-hardcoded the slice (e.g.
 // slice(0, 5000)) while leaving the constant at 10000 would be caught here.
 describe("buildPageSnapshot htmlSnippet cap", () => {
+  it("preserves native serialization for ordinary markup and detector fixtures", () => {
+    document.documentElement.innerHTML = `<head><title>A &amp; B</title>
+      <script>if (a < b) window.marker = "&";</script><style>a > b { color: red }</style></head>
+      <body><!--marker--><form style="display: none" data-value="&quot;&amp;&nbsp;&lt;&gt;">
+      <input type="password"><textarea>&lt;&amp;&nbsp;</textarea></form>
+      <template><b>template &amp; text</b></template>
+      <svg><use href="#icon"></use></svg><xml:label data:kind="colon"></xml:label></body>`;
+    const expected = document.documentElement.innerHTML;
+    const snapshot = buildPageSnapshot(document);
+    expect(snapshot.htmlSnippet).toBe(expected);
+    expect(analyzeSnapshot(snapshot, "bank.test")).toEqual(
+      analyzeSnapshot({ ...snapshot, htmlSnippet: expected }, "bank.test"),
+    );
+    expect(analyzeSnapshot(snapshot, "bank.test").phishingKitMatch).toBeTruthy();
+  });
+
+  it("preserves detector verdicts on the existing phishing-kit Gym fixture", () => {
+    document.documentElement.innerHTML = readFileSync("gym/content-fp-02-phishing-kit.html", "utf8");
+    const expected = document.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
+    const snapshot = buildPageSnapshot(document);
+    expect(snapshot.htmlSnippet).toBe(expected);
+    const result = analyzeSnapshot(snapshot, "bank.test");
+    expect(result).toEqual(analyzeSnapshot({ ...snapshot, htmlSnippet: expected }, "bank.test"));
+    expect(result.phishingKitMatch).toBe(true);
+  });
+
+  it("never serializes a live subtree of a 200k-element page (#1085)", () => {
+    // 2,000 void <br> elements (8,000 chars) put the form near the end of the
+    // prefix: an estimate that charged closing tags would stop before it.
+    document.documentElement.innerHTML =
+      '<head></head><body>' + "<br>".repeat(2000) + '<form style="display: none" action="/c"><input type="password"></form></body>';
+    const tail = document.createElement("div");
+    tail.innerHTML = "<i>x</i>".repeat(200_000);
+    document.body.append(tail);
+    const expected = document.documentElement.innerHTML.slice(0, HTML_SNIPPET_MAX);
+    // Throw from the serializing getters for every node of the live page; the
+    // bounded copy lives in its own inert document, so its getters still work.
+    const spies = (["innerHTML", "outerHTML"] as const).map((property) => {
+      const get = Object.getOwnPropertyDescriptor(Element.prototype, property)!.get!;
+      return vi.spyOn(Element.prototype, property, "get").mockImplementation(function (this: Element) {
+        if (this.ownerDocument === document) throw new Error(`live ${property} serialized`);
+        return get.call(this);
+      });
+    });
+    try {
+      const snapshot = buildPageSnapshot(document);
+      // Same prefix as a full serialization (no <template> here), built without one.
+      expect(snapshot.htmlSnippet).toBe(expected);
+      // The htmlSnippet-only "display: none" pattern still fires on the bounded copy.
+      expect(analyzeSnapshot(snapshot, "bank.test").kitName).toBe("Exfil-Hidden-Form");
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  }, 30_000); // Building 200k live elements in happy-dom is the slow part, not the snapshot.
+
   it("caps htmlSnippet length at HTML_SNIPPET_MAX for oversized DOM", () => {
     document.documentElement.innerHTML = "x".repeat(HTML_SNIPPET_MAX + 5000);
     const snap = buildPageSnapshot(document);
@@ -117,6 +174,70 @@ describe("buildPageSnapshot title cap (#401)", () => {
     document.documentElement.innerHTML = "<head></head><body></body>";
     document.title = "PayPal Login";
     expect(buildPageSnapshot(document).title).toBe("paypal login");
+  });
+});
+
+describe("buildPageSnapshot title middle-band omission (#408)", () => {
+  // Accepted bound: boundedSample keeps a full head plus a short tail. A brand
+  // placed in [MAX_TITLE_LEN, len - (MAX_TITLE_LEN >> 2)) never reaches the
+  // title channel. These cases pin that omission and the independent
+  // visible-body / image backstops. They do not scan the whole title.
+  function calibratedMiddleBrandTitle(): string {
+    return "x".repeat(MAX_TITLE_LEN) + "PayPal" + "y".repeat(MAX_TITLE_LEN >> 2);
+  }
+
+  function snapshotWithCalibratedTitle(bodyHtml: string) {
+    document.documentElement.innerHTML = bodyHtml;
+    document.title = calibratedMiddleBrandTitle();
+    return buildPageSnapshot(document);
+  }
+
+  function expectBoundedTitleMiss(title: string): void {
+    expect(document.title).toContain("PayPal");
+    expect(document.title.length).toBeGreaterThan(MAX_TITLE_LEN + (MAX_TITLE_LEN >> 2));
+    expect(title).not.toContain("paypal");
+    expect(title.length).toBeLessThanOrEqual(MAX_TITLE_LEN + (MAX_TITLE_LEN >> 2) + 1);
+  }
+
+  it("drops a brand calibrated into the omitted middle, so the title channel misses", () => {
+    const snap = snapshotWithCalibratedTitle(
+      `<body><form><input type="password"></form><p>hello</p></body>`,
+    );
+    expectBoundedTitleMiss(snap.title);
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(false);
+    expect(result.brandDetected).toBeUndefined();
+    expect(result.reasons.some((r) => r.includes("PayPal"))).toBe(false);
+  });
+
+  it("still flags a visible body brand when the title channel misses", () => {
+    const snap = snapshotWithCalibratedTitle(
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`,
+    );
+    expectBoundedTitleMiss(snap.title);
+    expect(snap.bodyText).toContain("paypal");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+    expect(result.score).toBe(10);
+    expect(result.reasons[0]).toContain("(bodyText)");
+    expect(result.reasons[0]).not.toContain("(title");
+  });
+
+  it("still flags an image brand when the title channel misses", () => {
+    const snap = snapshotWithCalibratedTitle(
+      `<body><form><input type="password"></form>` +
+      `<img alt="paypal logo" src="https://cdn.example/logo.png"></body>`,
+    );
+    expectBoundedTitleMiss(snap.title);
+    expect(snap.imgSignals).toContain("paypal");
+    expect(snap.bodyText).not.toContain("paypal");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+    expect(result.score).toBe(15);
+    expect(result.reasons[0]).toContain("(img)");
+    expect(result.reasons[0]).not.toContain("(title");
   });
 });
 
@@ -276,6 +397,58 @@ describe("buildPageSnapshot effective base URL (#785)", () => {
   });
 });
 
+describe("buildPageSnapshot bodyText cap (wave-2 slice 1, A5)", () => {
+  it("bounds an oversized body to ~MAX_BODY_TEXT chars", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>${"x".repeat(MAX_BODY_TEXT * 3)}</p></body>`;
+    expect(buildPageSnapshot(document).bodyText.length).toBeLessThanOrEqual(
+      MAX_BODY_TEXT + (MAX_BODY_TEXT >> 2) + 1,
+    );
+  });
+
+  it("keeps head-window content unchanged (no regression in [0, max))", () => {
+    // Brand at ~700 -- inside the old head-only window, so both orderings keep
+    // it; a 50/50 head+tail split would have dropped it.
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>${"a".repeat(700)}PayPal Login${"c".repeat(MAX_BODY_TEXT)}</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).toContain("paypal");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+  });
+
+  it("keeps a tail-buried brand keyword visible (head-only would drop it)", () => {
+    // Brand/login terms after MAX_BODY_TEXT of padding -- the pre-fix
+    // slice(0, 5000) dropped them, hiding the signal from detectBrand.
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>${"x".repeat(MAX_BODY_TEXT * 2)} PayPal Login</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).toContain("paypal");
+    expect(snap.bodyText).toContain("login");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+  });
+
+  it("pins the accepted tradeoff: a mid-omitted keyword stays invisible", () => {
+    // boundedSample keeps a full head + short tail; content calibrated into the
+    // omitted middle is the inherent O(max) gap (same as the title channel).
+    const pad = "z".repeat(MAX_BODY_TEXT);
+    const tail = "z".repeat(MAX_BODY_TEXT >> 2);
+    document.documentElement.innerHTML =
+      `<body><p>${pad}NEEDLE${tail}end</p></body>`;
+    // NEEDLE sits just past the head boundary with calibrated trailing padding.
+    expect(buildPageSnapshot(document).bodyText).not.toContain("needle");
+  });
+
+  it("does not truncate a small body and still lowercases it", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`;
+    expect(buildPageSnapshot(document).bodyText).toContain("paypal login");
+  });
+});
+
 describe("buildPageSnapshot channel bounds (#786)", () => {
   it("caps metaTags at MAX_METAS in document order", () => {
     const metas = Array.from(
@@ -318,5 +491,110 @@ describe("buildPageSnapshot channel bounds (#786)", () => {
     document.documentElement.innerHTML = `<body><script>var gophish = 1;</script></body>`;
     const snap = buildPageSnapshot(document);
     expect(snap.scriptText).toBe("var gophish = 1; ");
+  });
+});
+
+describe("buildPageSnapshot bounded body sampling (#787)", () => {
+  it("excludes inline-hidden subtrees (display:none / visibility:hidden)", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form>` +
+      `<div style="display:none">PayPal hidden brand</div>` +
+      `<div style="visibility:hidden">Netflix hidden brand</div>` +
+      `<p>hello world</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).not.toContain("paypal");
+    expect(snap.bodyText).not.toContain("netflix");
+    expect(snap.bodyText).toContain("hello world");
+  });
+
+  it("excludes `hidden`-attribute subtrees", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form>` +
+      `<div hidden>PayPal hidden brand</div><p>hello world</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).not.toContain("paypal");
+    expect(snap.bodyText).toContain("hello world");
+  });
+
+  it("excludes script/style content from bodyText but keeps the scriptText channel", () => {
+    document.documentElement.innerHTML =
+      `<body><script>var paypal_config = 1;</script>` +
+      `<style>.paypal { color: red; }</style><p>hello world</p></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).not.toContain("paypal");
+    expect(snap.bodyText).toContain("hello world");
+    // The signal is not lost, only channelled: script text stays scannable
+    // for kit fingerprints without polluting brand bodyText.
+    expect(snap.scriptText).toContain("paypal");
+  });
+
+  it("joins text across blocks with a space", () => {
+    document.documentElement.innerHTML =
+      `<body><div>PayPal</div><div>Login</div></body>`;
+    const snap = buildPageSnapshot(document);
+    expect(snap.bodyText).toContain("paypal");
+    expect(snap.bodyText).toContain("login");
+  });
+
+  it("hidden-only brand text does not trigger a mismatch; visible text does", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form>` +
+      `<div style="display:none">PayPal hidden brand</div></body>`;
+    document.title = "Login";
+    const hidden = analyzeSnapshot(buildPageSnapshot(document), "evil.test");
+    expect(hidden.brandMismatch).toBe(false);
+
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`;
+    document.title = "Login";
+    const visible = analyzeSnapshot(buildPageSnapshot(document), "evil.test");
+    expect(visible.brandMismatch).toBe(true);
+    expect(visible.brandDetected).toBe("PayPal");
+  });
+
+  it("never reads body.innerText (layout + full serialization)", () => {
+    document.documentElement.innerHTML =
+      `<body><form><input type="password"></form><p>PayPal Login</p></body>`;
+    const body = document.body!;
+    Object.defineProperty(body, "innerText", {
+      configurable: true,
+      get() {
+        throw new Error("buildPageSnapshot must not read body.innerText (#787)");
+      },
+    });
+    try {
+      const snap = buildPageSnapshot(document);
+      expect(snap.bodyText).toContain("paypal login");
+    } finally {
+      Reflect.deleteProperty(body, "innerText");
+    }
+  });
+
+  it("bounds a large multi-node page, keeps the tail brand, and stays fast", () => {
+    let html = `<body><form><input type="password"></form>`;
+    for (let i = 0; i < 2000; i++) {
+      html += `<p>paragraph ${i} ${"lorem ipsum dolor sit amet ".repeat(10)}</p>`;
+    }
+    html += "<p>trailer PayPal Login</p></body>";
+    document.documentElement.innerHTML = html;
+    // Neutral title: the mismatch below must come from the bodyText tail.
+    document.title = "Login";
+    const start = Date.now();
+    const snap = buildPageSnapshot(document);
+    const elapsed = Date.now() - start;
+    expect(snap.bodyText.length).toBeLessThanOrEqual(
+      MAX_BODY_TEXT + (MAX_BODY_TEXT >> 2) + 1,
+    );
+    expect(snap.bodyText).toContain("paypal");
+    expect(snap.bodyText).toContain("login");
+    const result = analyzeSnapshot(snap, "evil.test");
+    expect(result.brandMismatch).toBe(true);
+    expect(result.brandDetected).toBe("PayPal");
+    // bodyText-only tier: proves the tail carried the signal, not the title.
+    expect(result.score).toBe(10);
+    // Generous wall-clock guard: the walk is property reads only (no layout,
+    // no full serialization), so even this ~0.5MB / 2000-node page must stay
+    // far under the documented <50ms analysis budget's order of magnitude.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

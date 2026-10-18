@@ -2,6 +2,7 @@ import {
   chromium,
   expect,
   type BrowserContext,
+  type Frame,
   type Locator,
   type Page,
   type Route,
@@ -44,6 +45,7 @@ export type NativeExerciseResult =
 
 type Probe = {
   page: Page;
+  frame: Frame;
   type: ProbeType;
   target: string;
   trusted: boolean;
@@ -157,7 +159,7 @@ export class CorpusReplayHarness {
       await context.exposeBinding(
         harness.probeBinding,
         (source, value: unknown) => {
-          harness.recordProbe(source.page, value);
+          harness.recordProbe(source.page, source.frame, value);
         },
       );
       await context.addInitScript((binding) => {
@@ -225,8 +227,8 @@ export class CorpusReplayHarness {
     this.invalid ??= code;
   }
 
-  private recordProbe(page: Page, value: unknown): void {
-    const record = value as Partial<Omit<Probe, "page">>;
+  private recordProbe(page: Page, frame: Frame, value: unknown): void {
+    const record = value as Partial<Omit<Probe, "page" | "frame">>;
     if (
       !record ||
       !["pointerdown", "click", "submit", "keydown"].includes(
@@ -240,6 +242,7 @@ export class CorpusReplayHarness {
     }
     this.probes.push({
       page,
+      frame,
       type: record.type as ProbeType,
       target: record.target,
       trusted: record.trusted,
@@ -526,10 +529,17 @@ export class CorpusReplayHarness {
     }
 
     const expected = await Promise.all(
-      expectations.map(async (entry) => ({
-        type: entry.type,
-        target: await this.targetKey(entry.target),
-      })),
+      expectations.map(async (entry) => {
+        const element = await entry.target.elementHandle();
+        if (!element) throw new CorpusReplayInvalid("input_unavailable");
+        try {
+          const frame = await element.ownerFrame();
+          if (!frame) throw new CorpusReplayInvalid("input_unavailable");
+          return { type: entry.type, frame, target: await this.targetKey(entry.target) };
+        } finally {
+          await element.dispose();
+        }
+      }),
     );
     if (expected.some((entry) => !entry.target)) {
       throw new CorpusReplayInvalid("input_unavailable");
@@ -551,6 +561,7 @@ export class CorpusReplayHarness {
               this.probes.slice(probeBefore).some(
                 (probe) =>
                   probe.page === page &&
+                  probe.frame === entry.frame &&
                   probe.type === entry.type &&
                   probe.target === entry.target &&
                   probe.trusted,

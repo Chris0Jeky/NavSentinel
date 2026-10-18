@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const programmeRoot = path.join(root, "docs", "security-program");
-const registryRoot = path.join(programmeRoot, "registry");
+const _registryRoot = path.join(programmeRoot, "registry");
 const checkOnly = process.argv.includes("--check");
 
 async function readJson(relativePath) {

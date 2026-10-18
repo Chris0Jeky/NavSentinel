@@ -827,6 +827,7 @@ describe("SW integration: state persistence through session storage", () => {
           onBeforeNavigate: beforeNavigate,
           onCommitted: committed,
           onErrorOccurred: errorOccurred,
+          onCreatedNavigationTarget: createEvent(),
         },
         tabs: {
           onCreated: tabCreated,

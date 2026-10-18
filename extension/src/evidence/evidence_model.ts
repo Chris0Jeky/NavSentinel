@@ -51,10 +51,16 @@ export function evidenceHostname(value: unknown): string | null {
  */
 export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (code: string) => boolean = isJournalReasonCode): EvidenceEvent[] {
   const events: EvidenceEvent[] = [];
+  let droppedTimestamps = 0;
   for (const entry of log.slice(-MAX_EVIDENCE_EVENTS)) {
-    if (!entry || !kinds.has(entry.kind) || !Number.isFinite(entry.ts)) continue;
+    if (!entry || !kinds.has(entry.kind)) continue;
+    // A NaN/Infinity/missing ts (or one outside the Date range) cannot become an ISO
+    // timestamp, so the entry stays out of the projection -- but count it and warn
+    // instead of dropping it silently: a corrupt clock or a tampered journal entry
+    // is exactly the kind of gap an evidence view must not hide.
+    if (!Number.isFinite(entry.ts)) { droppedTimestamps++; continue; }
     const date = new Date(entry.ts);
-    if (!Number.isFinite(date.getTime())) continue;
+    if (!Number.isFinite(date.getTime())) { droppedTimestamps++; continue; }
     const event: EvidenceEvent = {
       id: `event-${events.length + 1}`,
       timestamp: date.toISOString(),
@@ -73,6 +79,11 @@ export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (co
       event.score = Math.min(100, entry.score);
     }
     events.push(event);
+  }
+  if (droppedTimestamps > 0) {
+    console.warn(
+      `[NavSentinel] evidence: excluded ${droppedTimestamps} entr${droppedTimestamps === 1 ? "y" : "ies"} with invalid timestamps`,
+    );
   }
   // Retention remains insertion-bounded above. Within that retained snapshot,
   // imported timestamps determine chronology; stable ties keep insertion order.
@@ -97,8 +108,8 @@ export type EvidenceCategory = "all" | "navigation" | "credential" | "activity";
 export function evidenceCategory(kind: EventKind): Exclude<EvidenceCategory, "all"> {
   return kind.startsWith("cred_") ? "credential" : kind.startsWith("nav_") ? "navigation" : "activity";
 }
-export function filterEvidence(events: readonly EvidenceEvent[], query: string, category: EvidenceCategory, scoredOnly: boolean): EvidenceEvent[] {
-  const needle = query.trim().toLowerCase().slice(0, 253);
+export function filterEvidence(events: readonly EvidenceEvent[], query: string | null | undefined, category: EvidenceCategory, scoredOnly: boolean): EvidenceEvent[] {
+  const needle = String(query ?? "").trim().toLowerCase().slice(0, 253);
   return events.filter(event =>
     (category === "all" || evidenceCategory(event.kind) === category) &&
     (!scoredOnly || event.score !== undefined) &&

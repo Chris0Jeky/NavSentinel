@@ -14,12 +14,22 @@ function respond(res,status,data,headers={}){
   res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',...headers});res.end(body);
 }
 function bodyJson(req){return new Promise((resolve,reject)=>{
-  if(!String(req.headers['content-type']||'').toLowerCase().startsWith('application/json'))return reject(Object.assign(new Error('JSON content type required'),{status:415}));
+  const mediaType=String(req.headers['content-type']||'').split(';',1)[0].trim().toLowerCase();
+  if(mediaType!=='application/json')return reject(Object.assign(new Error('JSON content type required'),{status:415}));
   let size=0,chunks=[],done=false;
   req.on('data',chunk=>{size+=chunk.length;if(size>16384){if(!done){done=true;reject(Object.assign(new Error('Request exceeds 16 KiB'),{status:413}));}return;}chunks.push(chunk);});
   req.on('end',()=>{if(done)return;try{const data=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!data||typeof data!=='object'||Array.isArray(data))throw new Error();resolve(data);}catch{reject(Object.assign(new Error('Invalid JSON object'),{status:400}));}});
   req.on('error',reject);
 });}
+function localRequestUrl(target,origin){
+  // Neither listener is an HTTP proxy. Keep routing in the checked Host's
+  // origin and contain URL parser failures before the async listener returns.
+  if(typeof target!=='string'||!target.startsWith('/')||target.startsWith('//')||target.includes('#'))return null;
+  try{
+    const url=new URL(target,origin);
+    return url.origin===origin?url:null;
+  }catch{return null;}
+}
 function staticFile(res,pathname,{lab=false}={}){
   let decoded;try{decoded=decodeURIComponent(pathname);}catch{return respond(res,400,{error:'Bad path'});}
   if(decoded.includes('\0')||decoded.includes('\\'))return respond(res,400,{error:'Bad path'});
@@ -68,7 +78,8 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
       if(req.headers.host!==expectedHost)return respond(res,403,{error:'Unexpected Host'});
       if(req.headers.origin && req.headers.origin!==expectedOrigin)return respond(res,403,{error:'Cross-origin requests are not accepted'});
       if(req.headers['sec-fetch-site']==='cross-site')return respond(res,403,{error:'Cross-site request rejected'});
-      const url=new URL(req.url,expectedOrigin);
+      const url=localRequestUrl(req.url,expectedOrigin);
+      if(!url)return respond(res,400,{error:'Invalid local request target'});
       if(url.pathname==='/api/health'&&req.method==='GET')return respond(res,200,{version:Core.VERSION,uptimeSeconds:Math.floor((Date.now()-started)/1000),mode:'cooperative intent broker',osHooks:false,labPort:actualLabPort,fixtureAdapter:fixtureAdapter()});
       if(!url.pathname.startsWith('/api/')){
         if(req.method!=='GET'&&req.method!=='HEAD')return respond(res,405,{error:'Method not allowed'});
@@ -105,9 +116,12 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
         const event={...declared,id,journeyId,actor:role==='agent'?'research-agent':'local-operator',evidence:'declared'};
         const allowed=fixtureKind(event)==='auto'||(event.action==='navigate'&&Core.origin(event.destination)==='https://reference.test');
         if(!allowed&&!event.signals.includes('agent_outside_scope'))event.signals.push('agent_outside_scope');
-        // There is deliberately no shell executor. Missing taint metadata never authorizes one.
-        if(event.action==='shell-paste')return respond(res,422,{error:'Shell execution is not a supported capability',decision:'block'});
         const canonical=Core.normalizeEvent(event),result=Core.evaluate(canonical,{mode:'smart'});
+        // There is deliberately no shell executor. Missing taint metadata never authorizes one.
+        if(event.action==='shell-paste'){
+          addReceipt(canonical,{...result,decision:'block',wouldDecide:'block'},'decision',id);
+          return respond(res,422,{error:'Shell execution is not a supported capability',decision:'block'});
+        }
         const record={id,event:canonical,result,caller:role,expiresAt:now+60000,approved:false};
         const receipt=addReceipt(canonical,result,'decision',id);
         let capability=null;
@@ -155,7 +169,8 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
     if(req.headers.host!==`127.0.0.1:${actualLabPort}`)return respond(res,403,{error:'Unexpected Host'});
     if(req.headers.origin&&req.headers.origin!==expectedOrigin)return respond(res,403,{error:'Cross-origin requests are not accepted'});
     if(req.headers['sec-fetch-site']==='cross-site')return respond(res,403,{error:'Cross-site request rejected'});
-    const url=new URL(req.url,expectedOrigin);
+    const url=localRequestUrl(req.url,expectedOrigin);
+    if(!url)return respond(res,400,{error:'Invalid local request target'});
     if(url.pathname==='/broker-effects'&&req.method==='GET')return respond(res,200,{fixtureOnly:true,...brokerEffects});
     if(url.pathname==='/broker-effect'){
       if(req.method!=='POST')return respond(res,405,{error:'Method not allowed'});
@@ -171,7 +186,23 @@ async function createService({port=4318,labPort=4319,dataDir=path.join(ROOT,'.lo
       const kind=url.searchParams.get('kind');if(!Object.hasOwn(sinkCounts,kind))return respond(res,400,{error:'Invalid sink'});
       if(!['GET','POST'].includes(req.method))return respond(res,405,{error:'Method not allowed'});
       // Drain and discard. No field, password, command, body or query is logged.
-      req.resume();sinkCounts[kind]++;return respond(res,200,{fixtureOnly:true,kind,count:sinkCounts[kind],message:'Inert loopback sink reached'});
+      if(req.method==='GET'){req.resume();sinkCounts[kind]++;return respond(res,200,{fixtureOnly:true,kind,count:sinkCounts[kind],message:'Inert loopback sink reached'});}
+      const SINK_BODY_CAP=16384;
+      let sinkSize=0,sinkOversize=false,sinkTimedOut=false;
+      await new Promise(resolve=>{
+        // An absolute body deadline, not an inactivity timeout: trickled bytes
+        // cannot keep a handler alive. Preserve the response before disposal.
+        const finish=()=>{clearTimeout(timer);resolve();};
+        const timer=setTimeout(()=>{sinkTimedOut=true;req.pause();finish();},5000);
+        req.on('data',chunk=>{sinkSize+=chunk.length;if(sinkSize>SINK_BODY_CAP&&!sinkOversize){sinkOversize=true;req.pause();finish();}});
+        req.on('end',finish);
+        req.on('error',finish);
+        req.on('close',finish);
+      });
+      if(sinkOversize||sinkSize>SINK_BODY_CAP){res.once('finish',()=>req.destroy());return respond(res,413,{error:'Request exceeds 16 KiB'},{Connection:'close'});}
+      if(sinkTimedOut){res.once('finish',()=>req.destroy());return respond(res,408,{error:'Sink request body timed out'},{Connection:'close'});}
+      if(!req.complete)return respond(res,400,{error:'Incomplete sink request'});
+      sinkCounts[kind]++;return respond(res,200,{fixtureOnly:true,kind,count:sinkCounts[kind],message:'Inert loopback sink reached'});
     }
     if(url.pathname==='/lab-state'&&req.method==='GET')return respond(res,200,{fixtureOnly:true,counts:sinkCounts});
     if(req.method!=='GET')return respond(res,405,{error:'Method not allowed'});

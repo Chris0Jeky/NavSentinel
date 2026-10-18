@@ -28,6 +28,10 @@ const TOKENS_CSS = readFileSync(
   path.resolve(__dirname, "..", "extension", "src", "shared", "design_tokens.css"),
   "utf8",
 );
+const OPTIONS_CSS = readFileSync(
+  path.resolve(__dirname, "..", "extension", "src", "options", "options.css"),
+  "utf8",
+);
 
 const AA_NORMAL_TEXT = 4.5;
 const TRUST_PILL_TARGET = 5;
@@ -158,13 +162,22 @@ function parseRules(css: string): Rule[] {
 }
 
 const POPUP_RULES = parseRules(POPUP_CSS);
+const OPTIONS_RULES = parseRules(OPTIONS_CSS);
 
-function ruleBody(selector: string): string {
-  const rule = POPUP_RULES.find((r) =>
+function ruleBodyIn(rules: Rule[], sheet: string, selector: string): string {
+  const rule = rules.find((r) =>
     r.selector.split(",").some((s) => s.trim() === selector),
   );
-  if (!rule) throw new Error(`popup.css has no rule for "${selector}"`);
+  if (!rule) throw new Error(`${sheet} has no rule for "${selector}"`);
   return rule.body;
+}
+
+function ruleBody(selector: string): string {
+  return ruleBodyIn(POPUP_RULES, "popup.css", selector);
+}
+
+function optionsRuleBody(selector: string): string {
+  return ruleBodyIn(OPTIONS_RULES, "options.css", selector);
 }
 
 function declaration(body: string, property: string): string {
@@ -180,14 +193,13 @@ function declaration(body: string, property: string): string {
  * chip tint composites onto is parsed from popup.css so a backdrop change
  * re-proves contrast rather than silently invalidating these numbers.
  */
-function popupBackdrops(): Array<{ name: string; color: Rgba }> {
+/** Body gradient stops + hero glow shared by the card and hero surfaces. */
+function popupPaintBase(): { bodyStops: Rgba[]; glow: Rgba } {
   // body: linear-gradient(180deg, #08070a 0%, #030206 100%)
   const bodyStops = [...declaration(ruleBody("body"), "background").matchAll(/#[0-9a-f]{6}/gi)].map(
     (m) => parseColor(m[0]),
   );
   expect(bodyStops.length, "body gradient should declare hex stops").toBeGreaterThanOrEqual(2);
-
-  const card = parseColor(declaration(ruleBody(".site-card"), "background"));
 
   // .hero::before paints two radial glows at element opacity. Their peak alpha is
   // an upper bound on how much the glow lightens the backdrop under the chips
@@ -201,7 +213,12 @@ function popupBackdrops(): Array<{ name: string; color: Rgba }> {
 
   // Multiple CSS backgrounds composite first-listed on top.
   const merged = compositeCssBackgrounds(glowLayers);
-  const glow = withAlpha(merged, merged[3] * heroOpacity);
+  return { bodyStops, glow: withAlpha(merged, merged[3] * heroOpacity) };
+}
+
+function popupBackdrops(): Array<{ name: string; color: Rgba }> {
+  const { bodyStops, glow } = popupPaintBase();
+  const card = parseColor(declaration(ruleBody(".site-card"), "background"));
 
   const backdrops: Array<{ name: string; color: Rgba }> = [];
   for (const stop of bodyStops) {
@@ -213,6 +230,32 @@ function popupBackdrops(): Array<{ name: string; color: Rgba }> {
     });
   }
   return backdrops;
+}
+
+/**
+ * The hero-meta line sits in `.hero`, directly on the body gradient + hero
+ * glow — outside `.site-card`, so no card tint is composited here. The glow
+ * peak is the conservative (lightest) case, as for the chips.
+ */
+function popupHeroBackdrops(): Array<{ name: string; color: Rgba }> {
+  const { bodyStops, glow } = popupPaintBase();
+  const backdrops: Array<{ name: string; color: Rgba }> = [];
+  for (const stop of bodyStops) {
+    const label = `rgb(${stop.slice(0, 3).join(",")})`;
+    backdrops.push({ name: label, color: stop });
+    backdrops.push({ name: `${label} + hero-glow(peak)`, color: over(glow, stop) });
+  }
+  return backdrops;
+}
+
+/**
+ * Options surfaces (#979): `.pane-sub` paints on the opaque body background,
+ * while `.toggle-sub` sits inside `.card` (opaque `var(--ns-surface)`).
+ */
+function optionsBackdrop(selector: "body" | ".card"): { name: string; color: Rgba } {
+  const color = parseColor(declaration(optionsRuleBody(selector), "background"));
+  expect(color[3], `${selector} background should be opaque`).toBe(1);
+  return { name: `options ${selector}`, color };
 }
 
 function signalChipVariants(): Array<{ selector: string; text: Rgba; tint: Rgba }> {
@@ -384,5 +427,105 @@ describe("popup unscored-threat gauge (#219) meets WCAG AA 1.4.3", () => {
       const scored = parseColor(`var(${token})`);
       expect(unscored.slice(0, 3), `must differ from ${token}`).not.toEqual(scored.slice(0, 3));
     }
+  });
+});
+
+/**
+ * Muted copy contrast (#979). #274/#525 covered the signal chips; the options
+ * pane subtitles / toggle descriptions and the popup hero meta used the dimmer
+ * --ns-text-3 (~3.79:1) and now use --ns-text-2. All are normal-size text, so
+ * the 4.5:1 threshold applies.
+ */
+describe("muted copy meets WCAG AA 1.4.3 (#979)", () => {
+  it(".hero-meta clears 4.5:1 on every popup hero backdrop", () => {
+    const text = parseColor(declaration(ruleBody(".hero-meta"), "color"));
+    for (const backdrop of popupHeroBackdrops()) {
+      const ratio = contrastRatio(text, backdrop.color);
+      expect(
+        ratio,
+        `.hero-meta on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it(".pane-sub clears 4.5:1 on the options body", () => {
+    const text = parseColor(declaration(optionsRuleBody(".pane-sub"), "color"));
+    const backdrop = optionsBackdrop("body");
+    const ratio = contrastRatio(text, backdrop.color);
+    expect(
+      ratio,
+      `.pane-sub on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it(".toggle-sub clears 4.5:1 on the options card surface", () => {
+    const text = parseColor(declaration(optionsRuleBody(".toggle-sub"), "color"));
+    const backdrop = optionsBackdrop(".card");
+    const ratio = contrastRatio(text, backdrop.color);
+    expect(
+      ratio,
+      `.toggle-sub on ${backdrop.name} => ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});
+
+// ------------------------------------------------------- target size (#978)
+
+/** Parse a `<number>px` CSS length (bare `0` allowed). */
+function parsePx(raw: string): number {
+  const m = raw.trim().match(/^(-?[\d.]+)(px)?$/);
+  if (!m) throw new Error(`not a px length: ${raw}`);
+  if (m[2] === undefined && group(m, 1) !== "0") throw new Error(`missing px unit: ${raw}`);
+  return Number(group(m, 1));
+}
+
+/** Expand CSS `inset` 1-4 value shorthand to [top, right, bottom, left] px. */
+function parseInset(raw: string): [number, number, number, number] {
+  const parts = raw.trim().split(/\s+/).map(parsePx);
+  const top = parts[0];
+  if (top === undefined || parts.length > 4) throw new Error(`unsupported inset: ${raw}`);
+  const right = parts[1] ?? top;
+  const bottom = parts[2] ?? top;
+  const left = parts[3] ?? right;
+  return [top, right, bottom, left];
+}
+
+/**
+ * Pointer target size (WCAG 2.2 AA 2.5.8 Target Size Minimum): every target is
+ * at least 24x24 CSS px. The seg buttons and footer links declare min-height;
+ * the toggle keeps its 32x18 painted switch and reaches 24px tall via an
+ * invisible ::before hit expansion, and the footer link offsets its min-height
+ * with negative block margin so the footer row keeps its painted height.
+ * Radiogroup/switch semantics live in the markup and are untouched.
+ */
+const TARGET_MIN = 24;
+
+describe("pointer targets meet the 24px minimum (#978)", () => {
+  it("popup .seg-btn declares min-height >= 24px", () => {
+    expect(parsePx(declaration(ruleBody(".seg-btn"), "min-height"))).toBeGreaterThanOrEqual(
+      TARGET_MIN,
+    );
+  });
+
+  it("options .seg-btn declares min-height >= 24px", () => {
+    expect(
+      parsePx(declaration(optionsRuleBody(".seg-btn"), "min-height")),
+    ).toBeGreaterThanOrEqual(TARGET_MIN);
+  });
+
+  it(".footer-link declares a 24px hit box without growing the footer row", () => {
+    const body = ruleBody(".footer-link");
+    expect(parsePx(declaration(body, "min-height"))).toBeGreaterThanOrEqual(TARGET_MIN);
+    // Negative block margin compensates the min-height so the painted footer
+    // keeps its height.
+    expect(parsePx(declaration(body, "margin-block"))).toBeLessThan(0);
+  });
+
+  it(".toggle hit box is >= 24px in both axes", () => {
+    const body = optionsRuleBody(".toggle");
+    expect(parsePx(declaration(body, "width"))).toBeGreaterThanOrEqual(TARGET_MIN);
+    const height = parsePx(declaration(body, "height"));
+    const [top, , bottom] = parseInset(declaration(optionsRuleBody(".toggle::before"), "inset"));
+    expect(height - top - bottom).toBeGreaterThanOrEqual(TARGET_MIN);
   });
 });

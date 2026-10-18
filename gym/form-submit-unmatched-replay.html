@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Unmatched child replay allowance</title></head>
+<body>
+  <h1>Unmatched child replay allowance</h1>
+  <iframe id="source" title="source" style="width:800px;height:400px"></iframe>
+  <script>
+    (() => {
+      const query = new URLSearchParams(location.search);
+      if (!query.has("inner") && query.get("topdoc") !== "1") {
+        query.set("inner", "1");
+        document.getElementById("source").src = `${location.pathname}?${query}`;
+        return;
+      }
+      document.getElementById("source").remove();
+      const target = query.get("target") === "blank" ? "_blank" : "_top";
+      const control = query.get("control") === "1";
+      const later = query.get("later") === "1";
+      const early = query.get("early") === "1";
+      const atWindow = query.get("phase") === "window";
+      document.body.insertAdjacentHTML("beforeend", `
+        <iframe name="sink" title="replay sink"></iframe>
+        <form id="declared" action="form-submit-landing.html?authority=A" target="${target}">
+          <input name="receipt" value="escape" type="hidden">
+          <button id="activate" type="submit">Continue to declared destination</button>
+          <button id="recover" type="submit">Continue after replay</button>
+        </form>
+        <form id="replay" action="form-submit-landing.html?authority=B" target="sink">
+          <input name="receipt" value="child" type="hidden">
+        </form>`);
+      const declared = document.getElementById("declared");
+      const replay = document.getElementById("replay");
+      document.documentElement.dataset.formdataCount = "0";
+      replay.addEventListener("formdata", () => {
+        document.documentElement.dataset.formdataCount = String(
+          Number(document.documentElement.dataset.formdataCount) + 1,
+        );
+        const escape = () => {
+          declared.submit();
+          document.documentElement.dataset.nestedReturned = "1";
+        };
+        if (later) setTimeout(escape, early ? 100 : 0);
+        else escape();
+      });
+      const activate = document.getElementById("activate");
+      (atWindow ? window : activate).addEventListener("click", (event) => {
+        if (event.target !== activate) return;
+        event.preventDefault();
+        // Child frames deliberately wait for the isolated-world grant. The
+        // ordinary-submit control uses this identical timing, without a replay.
+        const start = () => {
+          if (control) declared.submit();
+          else replay.submit();
+          document.documentElement.dataset.outerReturned = "1";
+        };
+        // Replay before the isolated grant; its callback then runs after it.
+        // Window capture also runs before the MAIN document-capture arm.
+        if (early && !control) start();
+        else setTimeout(start, 100);
+      }, atWindow);
+      document.getElementById("recover").addEventListener("click", (event) => {
+        event.preventDefault();
+        setTimeout(() => declared.submit(), 100);
+      });
+    })();
+  </script>
+</body>
+</html>

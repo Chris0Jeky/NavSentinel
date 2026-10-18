@@ -914,3 +914,163 @@ describe("safeUrlParse", () => {
     expect(url!.hostname).toBe("example.com");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave-2 Slice 1 (detection-input correctness): A1-A4 regression tests
+// ---------------------------------------------------------------------------
+
+describe("isIPv6 strict validation (A1)", () => {
+  it.each([
+    "::",
+    "::1",
+    "2001:db8::1",
+    "fe80::1",
+    "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+    "2001:0DB8::1",
+    "::ffff:192.168.1.1",
+    "1:2:3:4:5:6:192.168.1.1",
+    "1::2:3:4:5:6:7",
+    "1:2:3:4:5:6:7::",
+  ])("accepts valid IPv6 %s", (ip) => {
+    expect(isIPAddress(ip)).toBe(true);
+  });
+
+  it.each([
+    ":::",
+    "...",
+    ":",
+    "abcd",
+    "hello:world",
+    "1:2:3:4:5:6:7",
+    "1:2:3:4:5:6:7:8:9",
+    ":1:2:3:4:5:6:7",
+    "1:2:3:4:5:6:7:",
+    "12345::",
+    "gggg::1",
+    "12:34:56:78:9a:bc:de:fg",
+    "1::2::3",
+    "2001:db8::1::",
+    "1::2:3:4:5:6:7:8",
+    "::ffff:999.1.1.1",
+    "fe80::1%eth0",
+  ])("rejects non-IPv6 %s", (ip) => {
+    expect(isIPAddress(ip)).toBe(false);
+  });
+
+  it("does not mis-bracket invalid literals in hostForUrl", () => {
+    // Before the strict validator these all bracketed (isIPv6 was charset-only).
+    expect(hostForUrl(":::")).toBe(":::");
+    expect(hostForUrl("1:2:3:4:5:6:7:8:9")).toBe("1:2:3:4:5:6:7:8:9");
+    expect(hostForUrl("hello:world")).toBe("hello:world");
+    // Valid literals still bracket.
+    expect(hostForUrl("2001:db8::1")).toBe("[2001:db8::1]");
+    expect(hostForUrl("::")).toBe("[::]");
+  });
+
+  it("keeps brackets around invalid literals in normalizeHost", () => {
+    // The old charset-only check unwrapped "[:::]" to ":::"; the strict
+    // validator leaves non-IPv6 bracketed strings untouched.
+    expect(normalizeHost("[:::]")).toBe("[:::]");
+    expect(normalizeHost("[2001:db8::1]")).toBe("2001:db8::1");
+  });
+});
+
+describe("normalizeHost NFKC folding (A2)", () => {
+  it("folds fullwidth Latin to ASCII", () => {
+    expect(normalizeHost("ｐａｙｐａｌ.com")).toBe("paypal.com");
+    expect(normalizeHost("ＰＡＹＰＡＬ．ＣＯＭ")).toBe("paypal.com");
+  });
+
+  it("folds a fullwidth trailing dot, then strips it", () => {
+    expect(normalizeHost("example.com．")).toBe("example.com");
+  });
+
+  it("folds Turkish dotted-I deterministically (precomposed = decomposed)", () => {
+    // U+0130 lowercases to ASCII i + U+0307 combining dot above.
+    expect(normalizeHost("\u0130")).toBe("i\u0307");
+    expect(normalizeHost("\u0130")).toBe(normalizeHost("i\u0307"));
+  });
+
+  it("matches a fullwidth lookalike to its trusted domain at distance 1", () => {
+    // Before NFKC the fullwidth code points survived and the distance was ~9,
+    // so the spoof sailed past maxDistance=2.
+    expect(findClosestLookalike("ＰＡＹＰＡ1.ＣＯＭ", ["paypal.com"])).toEqual({
+      target: "paypal.com",
+      distance: 1,
+    });
+  });
+
+  it("is idempotent on NFKC-folded input (fullwidth + Turkish İ pins)", () => {
+    for (const h of ["ｐａｙｐａｌ.ＣＯＭ．", "İxample.com", "ﬁle.com", "Ⅷbank.com"]) {
+      expect(normalizeHost(normalizeHost(h))).toBe(normalizeHost(h));
+    }
+  });
+});
+
+describe("isMixedScript CJK/Arabic/Hebrew buckets (A3)", () => {
+  it.each([
+    "payp中al.com",
+    "payp語al.com",
+    "payp한국al.com",
+    "payp\u{20000}al.com",
+    "paypاal.com",
+    "paypمثالx.com",
+    "paypאal.com",
+    "paypדוגמהx.com",
+    "αр.com",
+  ])("flags mixed-script host %s", (host) => {
+    expect(isMixedScript(host)).toBe(true);
+  });
+
+  it.each([
+    "paypal.com",
+    "中文测试",
+    "日本語のテスト",
+    "한국어테스트",
+    "مثال123",
+    "דוגמהמבחן",
+    "ไทย",
+  ])("does NOT flag single-script host %s", (host) => {
+    expect(isMixedScript(host)).toBe(false);
+  });
+
+  it("does NOT flag Latin + unclassified-script mixing (conservative Other bucket)", () => {
+    // Thai/Devanagari stay in "Other", which mixing detection ignores — an
+    // accepted gap, not an evasion of the CJK/Arabic/Hebrew buckets above.
+    expect(isMixedScript("paypไทยal.com")).toBe(false);
+  });
+
+  it("still flags a Latin+CJK spoof page end-to-end (via punycoding)", () => {
+    // WHATWG URL punycodes the host (payp中al.com -> xn--paypal-ew7i.com)
+    // before computeCredentialRisk ever sees it, so the credential path flags
+    // the spoof via PUNYCODE_HOST; isMixedScript covers raw-Unicode hosts
+    // passed directly (unit cases above).
+    const risk = computeCredentialRisk({
+      pageUrl: "https://payp中al.com/login",
+      actionUrl: "https://payp中al.com/post",
+      trustedDomains: ["paypal.com"],
+      config: baseConfig,
+    });
+    expect(risk.reasons.map((r) => r.code)).toContain("PUNYCODE_HOST");
+  });
+});
+
+describe("levenshtein code-point distances (A4)", () => {
+  const cases: Array<[string, string, number]> = [
+    ["😀", "a", 1],
+    ["😀", "😀😀", 1],
+    ["", "😀", 1],
+    ["😀", "😁", 1],
+    ["a😀b", "a😁b", 1],
+    ["\u{20000}", "a", 1],
+    ["\u{20000}x", "\u{20001}x", 1],
+  ];
+  it.each(cases)("levenshtein(%s, %s) === %i", (a, b, expected) => {
+    expect(levenshtein(a, b)).toBe(expected);
+  });
+
+  it("counts one astral substitution as a single edit inside lookalike matching", () => {
+    // The old charCodeAt walk counted the replacement emoji as 2 edits.
+    expect(levenshtein("payp😀al.com", "payp😁al.com")).toBe(1);
+  });
+});

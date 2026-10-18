@@ -167,7 +167,13 @@ function renderEvents(log: EventLogEntry[]): void {
     if (score > 0) {
       const scoreEl = document.createElement("div");
       scoreEl.className = `event-score event-score--${severityClass(score)}`;
-      scoreEl.innerHTML = `<div class="event-score-val">${score}</div><div class="event-score-label">${severityLabel(score)}</div>`;
+      const scoreVal = document.createElement("div");
+      scoreVal.className = "event-score-val";
+      scoreVal.textContent = String(score);
+      const scoreLabel = document.createElement("div");
+      scoreLabel.className = "event-score-label";
+      scoreLabel.textContent = severityLabel(score);
+      scoreEl.append(scoreVal, scoreLabel);
       row.appendChild(scoreEl);
     }
 
@@ -301,11 +307,16 @@ async function trustCurrentSite(): Promise<void> {
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
-  await addTrustedDomain(reg);
+  // Only log the event when the mutation persisted; refresh either way.
   try {
-    await appendEvent({ kind: "cred_trust_domain", site: reg });
+    await addTrustedDomain(reg);
+    try {
+      await appendEvent({ kind: "cred_trust_domain", site: reg });
+    } catch (e) {
+      console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e);
+    }
   } catch (e) {
-    console.warn("[NavSentinel] event log append failed (cred_trust_domain):", e);
+    console.warn("[NavSentinel] trust save failed:", e);
   }
   await refreshUi();
 }
@@ -315,11 +326,16 @@ async function untrustCurrentSite(): Promise<void> {
   const reg = derivePopupSiteState(url, []).registrableDomain;
   if (!reg) return;
 
-  await removeTrustedDomain(reg);
+  // Only log the event when the mutation persisted; refresh either way.
   try {
-    await appendEvent({ kind: "cred_untrust_domain", site: reg });
+    await removeTrustedDomain(reg);
+    try {
+      await appendEvent({ kind: "cred_untrust_domain", site: reg });
+    } catch (e) {
+      console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e);
+    }
   } catch (e) {
-    console.warn("[NavSentinel] event log append failed (cred_untrust_domain):", e);
+    console.warn("[NavSentinel] untrust save failed:", e);
   }
   await refreshUi();
 }

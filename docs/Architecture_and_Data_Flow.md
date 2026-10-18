@@ -106,12 +106,26 @@ It captures blocked or replayable navigation attempts, clipboard write metadata,
   `action` or `formaction`. A child frame's same-task submit therefore stays
   gated, as before #864, while the same submit one task later passes.
 
-A form posted into the page's own named iframe still needs an allowance (#865,
-open). An exemption that checks the target before the `submit` and `formdata`
-events is unsound. Handlers for those events run after the check and before the
-browser resolves the target. They can retarget the post to `_top`, or give the
-top window the child's name, and so navigate the tab without a prompt. The
-regression fixture `gym/form-submit-gesture-task.html` pins both variants.
+Legacy `form.submit()` has one additional child-only path (#865): a connected
+form in the current document may submit to its own named direct child without a
+redirect allowance. Before calling page-owned `formdata` handlers, the guard
+retires the current redirect budget even when its URL differs from the replay's.
+A captured native Event timestamp also records a monotonic retirement boundary:
+click arms and deferred bridge grants at or before it cannot renew the spent
+budget. This includes replay before a MAIN document listener or before a child
+frame's isolated grant arrives. Equal-time ambiguity fails closed; a newer click
+or an explicit independent grant can still start a fresh budget.
+It materializes the finalized payload without navigating, then requires the same
+direct-child WindowProxy, target name, action, method, encoding and character set.
+A form in an extension-owned closed shadow root replays those entries only after
+one final identity/state check. The page sees its original `formdata` event once;
+no top-level rollback allowance is granted for this child-only replay.
+
+Retargeting, name theft, replacement, re-entry, unsupported state, or failed
+revalidation remains blocked through the existing prompt path. `requestSubmit()`
+does not get this exemption: preserving its native trusted-submit cancellation
+semantics needs a separate design. The broader MAIN-world prototype/early-loader
+boundary remains tracked in #896; self-target callback escapes remain #898.
 
 #### `location.assign` / `location.replace` are deliberately NOT patched (#458)
 

@@ -71,20 +71,25 @@ export async function briefCardCount(scope: Scope): Promise<number> {
  * Main-viewport centre of an extension-owned toast button (works inside child
  * frames: Playwright reports frame content boxes in top-level coordinates).
  */
-export async function toastButtonCenter(scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<{ x: number; y: number }> {
+function toastButton(scope: Scope, label: string, kind: "full" | "brief" | "any") {
   const cardSelector = kind === "full"
     ? "#__navsentinel_toast_host .wrap:not([data-persistent='true'])"
     : kind === "brief" ? "#__navsentinel_toast_host .wrap.brief-recovery" : "#__navsentinel_toast_host .wrap";
-  const button = scope.locator(cardSelector).getByRole("button", { name: label, exact: true }).first();
+  return scope.locator(cardSelector).getByRole("button", { name: label, exact: true }).first();
+}
+
+export async function toastButtonCenter(scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<{ x: number; y: number }> {
+  const button = toastButton(scope, label, kind);
   const box = await button.boundingBox();
   if (!box) throw new Error(`toast button "${label}" (${kind}) is not rendered`);
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
 /** One trusted mouse click on an extension-owned toast button. */
-export async function clickToastButton(page: Page, scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<void> {
-  const point = await toastButtonCenter(scope, label, kind);
-  await page.mouse.click(point.x, point.y);
+export async function clickToastButton(_page: Page, scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<void> {
+  // Wait for stable geometry and receive native trusted input. A sampled point
+  // can move while the card's entrance animation is still running.
+  await toastButton(scope, label, kind).click();
 }
 
 /** Label of the toast button holding focus in this document, if focus is inside the real host. */

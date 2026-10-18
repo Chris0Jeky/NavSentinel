@@ -61,6 +61,59 @@ export default tseslint.config(
     },
   },
   {
+    // Dependency-free Node scripts, Gym fixture scripts, and this config are
+    // JavaScript outside tsconfig. Lint them without a TypeScript project.
+    // The browser globals cover page.evaluate callbacks in the Playwright
+    // scripts and the Gym fixture script, which runs in the page.
+    files: ["scripts/**/*.mjs", "gym/**/*.js", "eslint.config.js"],
+    languageOptions: {
+      globals: {
+        AbortController: "readonly",
+        AbortSignal: "readonly",
+        Buffer: "readonly",
+        __dirname: "readonly",
+        chrome: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        document: "readonly",
+        fetch: "readonly",
+        HTMLAnchorElement: "readonly",
+        innerWidth: "readonly",
+        localStorage: "readonly",
+        location: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        structuredClone: "readonly",
+        TextDecoder: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        window: "readonly",
+      },
+      parserOptions: {
+        project: false,
+        projectService: false,
+      },
+    },
+  },
+  {
+    // Playwright lanes the project service cannot resolve (they are not
+    // reachable from tsconfig). Lint them without a TypeScript project; the
+    // remaining configs keep type-aware parsing.
+    files: [
+      "playwright.acceptance.config.ts",
+      "playwright.branded.config.ts",
+      "playwright.corpus.config.ts",
+      "playwright.demo.config.ts",
+      "playwright.maintainer.config.ts",
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: false,
+        projectService: false,
+      },
+    },
+  },
+  {
     ignores: [
       "extension/dist/**",
       "dist/**",
@@ -68,12 +121,15 @@ export default tseslint.config(
       "test-results/**",
       "playwright-report/**",
       "artifacts/**",
-      "gym/**",
-      "scripts/**",
-      "eslint.config.js",
-      "vite.config.ts",
-      "playwright.*.config.ts",
-      "playwright.config.ts",
+      // Follow-up: these scripts need judgment-call fixes before they can
+      // join lint coverage. check-release-profile/measure-fp throw without
+      // `cause` (preserve-caught-error); deterministic-zip, measure-fp, and
+      // release-input-integrity intentionally match control characters
+      // (no-control-regex). Do not silence the rules to force green.
+      "scripts/check-release-profile.mjs",
+      "scripts/deterministic-zip.mjs",
+      "scripts/measure-fp.mjs",
+      "scripts/release-input-integrity.mjs",
     ],
   }
 );

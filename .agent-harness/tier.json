@@ -1,0 +1,13 @@
+{
+  "tier": 2,
+  "name": "daily-driver",
+  "authority": { "push": "free", "merge": "free" },
+  "flags": { "sensitive_data": false, "wave_mode": false, "dormant_production": false },
+  "human_todo": "ACTION_ITEMS.md",
+  "last_reviewed": "2026-09-27",
+  "notes": [
+    "Restored 2026-09-27 as a declaration only, by owner decision (agent-hq decisions/navsentinel-tier-after-499.json, q-4). The declaration matches the file #499 removed: tier 2, push and merge free.",
+    "Owner decision #499 still stands for everything else: no project hooks, command floor, lifecycle or validation scripts, and no Harness CI. This file adds no hook or check.",
+    "Repository-specific holds, such as the Browser-surface release check (Gate-3), remain in CLAUDE.md and ACTION_ITEMS.md."
+  ]
+}

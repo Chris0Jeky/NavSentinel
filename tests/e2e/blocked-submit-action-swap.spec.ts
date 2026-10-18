@@ -44,6 +44,10 @@ async function withAllowlistedPage(
     });
     let [serviceWorker] = context.serviceWorkers();
     if (!serviceWorker) serviceWorker = await context.waitForEvent("serviceworker");
+    // A just-started extension worker can be evaluated before Chrome binds its
+    // extension APIs (chrome.storage undefined); wait for the binding first.
+    const worker = serviceWorker;
+    await expect.poll(() => worker.evaluate(() => typeof chrome.storage?.local?.set === "function")).toBe(true);
 
     const site = new URL(baseUrl).hostname;
     await serviceWorker.evaluate(

@@ -132,7 +132,12 @@ export async function importThroughOptions(options: Page, file: string): Promise
       if (text) (window as unknown as { __nsAttrStatus: string[] }).__nsAttrStatus.push(text);
     }).observe(status, { childList: true, characterData: true, subtree: true });
   });
-  await options.locator("#importFile").setInputFiles(file);
+  // Chrome may expose a zero-byte, unreadable File for long fixture paths.
+  await options.locator("#importFile").setInputFiles({
+    name: path.basename(file),
+    mimeType: "application/json",
+    buffer: fs.readFileSync(file),
+  });
   await expect.poll(
     () => options.evaluate(() => ((window as unknown as { __nsAttrStatus?: string[] }).__nsAttrStatus ?? []).join(" | ")),
     { timeout: 10_000, message: "Options import must report a status" },
