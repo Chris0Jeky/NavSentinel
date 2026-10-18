@@ -2,6 +2,7 @@ import { test, expect, chromium, type BrowserContext } from "@playwright/test";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { selectBrandedChrome } from "../branded/branded-chrome-selector.cjs";
 import { getServiceWorker, updateNavigationSettings, waitForNavSentinelBridge } from "./extension_test_utils";
 import { startProvingGroundEgressFence, type ProvingGroundEgressAttempt } from "./proving_ground_fake_sink";
 
@@ -69,7 +70,7 @@ for (const crossOrigin of [false, true]) {
             info.annotations.push({ type: "setup", description: `launching protected=${protectedArm}, profile=${profile}` });
             context = await chromium.launchPersistentContext(profile, {
               headless: false,
-              ...(protectedArm ? {} : process.env.NAVSENTINEL_BRANDED_CHROME ? { channel: "chrome" as const } : {}),
+              ...selectBrandedChrome(process.env.NAVSENTINEL_BRANDED_CHROME),
               proxy: { server: fence.proxyServer },
               args: ["--disable-background-networking", "--disable-quic", "--no-first-run",
                 ...(protectedArm ? [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] : [])],
@@ -128,6 +129,9 @@ for (const crossOrigin of [false, true]) {
             if (fs.existsSync(profile)) fs.rmSync(profile, { recursive: true });
           }
         }
+        expect(arms).toHaveLength(2);
+        expect(arms[0]!.browser).toBeTruthy();
+        expect(arms[1]!.browser, "Both arms must use the same browser version").toBe(arms[0]!.browser);
       } finally {
         await info.attach("opener-location-native", { body: Buffer.from(JSON.stringify({ method, crossOrigin, arms, denied,
           scope: "Local trusted-input native method compatibility and observation; no document replacement or pre-harm prevention claim." }, null, 2)), contentType: "application/json" });
