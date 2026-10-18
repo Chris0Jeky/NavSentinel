@@ -83,12 +83,18 @@ const budgets = [
   {
     label: "main_guard (MAIN world)",
     glob: "assets/main_guard.ts-*.js",
-    maxKB: 20,
+    // Bumped 20 -> 20.5 (#1086): main sat at 20.0KB (100%) and the bounded popup-name text walk adds ~0.1KB.
+    maxKB: 20.5,
   },
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    maxKB: 30,
+    // Bumped 30 -> 31.5 (#1084, P1): main sat 49 bytes under 30KB and the re-entrant submit retarget fix (formdata
+    // destination check, window-capture listener, one re-check prompt) adds ~1.06KB after compaction (31.0KB).
+    // #1085 (bounded huge-DOM htmlSnippet copy) and #1105 (document.open() listener re-registration) each asked for
+    // 30.5 alone. Both fit under this ceiling together (31,901 B measured) after #1085 dropped the credential
+    // prompt stylesheet's base indent, so the cap was not raised for them.
+    maxKB: 31.5,
   },
   {
     label: "service worker",
@@ -249,10 +255,12 @@ for (const budget of budgets) {
     // the pre-package build output. package.mjs normalizes it to LF so the
     // measured artifact is identical on Windows and hosted Linux.
     const packagedLicensePath = path.join(distDir, "LICENSE");
-    if (!fs.existsSync(packagedLicensePath)) {
-      const license = fs.readFileSync(licensePath, "utf8").replace(/\r\n?/g, "\n");
-      sizeBytes += Buffer.byteLength(license);
-    }
+    // The packager replaces an existing build license too. Subtract those
+    // already-counted bytes and always project the normalized root GPL text.
+    const license = fs.readFileSync(licensePath, "utf8").replace(/\r\n?/g, "\n");
+    const existingLicenseBytes = fs.existsSync(packagedLicensePath)
+      ? fs.statSync(packagedLicensePath).size : 0;
+    sizeBytes += Buffer.byteLength(license) - existingLicenseBytes;
     matchInfo = `${target} (including packaged LICENSE)`;
   } else {
     const dir = path.dirname(path.join(distDir, budget.glob));

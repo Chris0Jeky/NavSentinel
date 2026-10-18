@@ -21,6 +21,7 @@ import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, 
 import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
 import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
+import { readToastState } from "./toast_state_reader";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const extensionPath = process.env.EXTENSION_PATH
@@ -697,16 +698,9 @@ export async function toastButtonPoint(page: Page, label: string): Promise<{ x: 
   }, label);
 }
 
+/** Full-card body text, otherwise a coalesced pill, from any toast shadow host. */
 export async function toastState(page: Page): Promise<{ text: string | null; buttons: string[] }> {
-  return page.evaluate(() => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    const root = host?.shadowRoot;
-    const text = root?.querySelector(".body")?.textContent?.trim() || null;
-    const buttons = Array.from(root?.querySelectorAll("button") ?? [])
-      .filter((button) => (button as HTMLElement).offsetParent !== null || getComputedStyle(button).display !== "none")
-      .map((button) => button.textContent?.trim() ?? "");
-    return { text, buttons };
-  });
+  return page.evaluate(readToastState);
 }
 
 /** Proves a real back/forward-cache restore rather than a reload. */

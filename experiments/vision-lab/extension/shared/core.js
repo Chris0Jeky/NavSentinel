@@ -84,7 +84,11 @@
     plainObject(context, 'context');
     if (Object.keys(context).some(k => !['tab','frame','document','navigation','actionId'].includes(k))) throw new TypeError('Unknown context field');
     const ctx = {};
-    for (const key of ['tab', 'frame', 'document', 'navigation', 'actionId']) ctx[key] = boundedString(String(context[key] ?? (key === 'frame' ? '0' : 'demo')), `context.${key}`, 96);
+    for (const key of ['tab', 'frame', 'document', 'navigation', 'actionId']) {
+      const raw = context[key] ?? (key === 'frame' ? '0' : 'demo');
+      if (typeof raw !== 'string' && (typeof raw !== 'number' || !Number.isFinite(raw))) throw new TypeError(`Invalid context.${key}`);
+      ctx[key] = boundedString(String(raw), `context.${key}`, 96);
+    }
     const evidence = input.evidence || 'fixture';
     if (!['fixture','sensor','declared'].includes(evidence)) throw new TypeError('Invalid evidence type');
     return {

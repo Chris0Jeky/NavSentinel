@@ -268,8 +268,21 @@ function setAllowOnce(url?: string): void {
 }
 
 function textLength(el: Element): number {
-  const text = (el.textContent ?? "").replace(/\s+/g, "");
-  return Math.min(text.length, 80);
+  // Include empty elements in the budget so text-free subtrees cannot hide unbounded work.
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL);
+  let length = 0;
+  let charsLeft = 65536;
+  for (let nodesLeft = 4096; nodesLeft > 0 && charsLeft > 0; nodesLeft--) {
+    const node = walker.nextNode();
+    if (!node) break;
+    if (node.nodeType !== Node.TEXT_NODE) continue;
+    const text = (node as Text).substringData(0, charsLeft); // never materialize an attacker-sized node
+    for (let i = 0; i < text.length && charsLeft > 0; i++, charsLeft--) {
+      if (!/\s/.test(text[i]!) && ++length === 80) return length;
+    }
+  }
+  // shortcut: names beyond the scan budgets may be missed; use explicit metadata for such controls.
+  return length;
 }
 
 function attrLength(el: Element, name: string): number {
@@ -321,12 +334,11 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
 
 function hasMeaningfulName(el: Element): boolean {
   return (
-    textLength(el) +
-      attrLength(el, "aria-label") +
+    attrLength(el, "aria-label") +
       attrLength(el, "title") +
       attrLength(el, "value") +
       attrLength(el, "alt") >
-    0
+    0 || textLength(el) > 0
   );
 }
 
@@ -1340,8 +1352,8 @@ function findSuspiciousShadowAnchor(e: MouseEvent): HTMLAnchorElement | null {
     if (!(node instanceof HTMLAnchorElement)) continue;
     if (node.target.toLowerCase() !== "_blank") continue;
     if (!(node.getRootNode() instanceof ShadowRoot)) continue;
-    const nameLen = textLength(node) + attrLength(node, "aria-label") + attrLength(node, "title");
-    if (nameLen > 0 && hasVisibleBox(node)) continue;
+    const named = attrLength(node, "aria-label") + attrLength(node, "title") > 0 || textLength(node) > 0;
+    if (named && hasVisibleBox(node)) continue;
     return node;
   }
   return null;
@@ -1472,7 +1484,7 @@ window.addEventListener(
     // Only a VERIFIED bridge pins its session — that prevents post-verification
     // hijack by a *different* session. An unverified session has not proven
     // legitimacy, so a fresh init (e.g. the real isolated world arriving after a
-    // hostile page raced an init first) is allowed to take over the handshake
+    // hostile page raced an init first) are allowed to take over the handshake
     // instead of being locked out.
     //
     // Residual init-auth limits (best-effort; the session travels in a
@@ -1537,29 +1549,35 @@ window.addEventListener(
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
 
+  // Share the unchanged successful-write receipt across text, item and
+  // non-text fallback paths without retaining the clipboard contents.
+  function recordClipboardWrite(contentLength: number, cmdLike: boolean): void {
+    postToIsolated("ns-clipboard-write", {
+      ts: nowMs(), contentLength, looksLikeCommand: cmdLike,
+    });
+  }
+
   if (nativeClipboardWriteText) {
     try {
-      navigator.clipboard.writeText = function (data: string): Promise<void> {
-        // Capture metadata before calling native (data may be GC'd), but
-        // only send the bridge message after the write succeeds so that
-        // failed writes (permission denied, no user gesture) do not cause
-        // false ClickFix detections.
-        const cmdLike = looksLikeCommand(data);
-        const len = data.length;
-        return nativeClipboardWriteText!(data).then((result) => {
-          postToIsolated("ns-clipboard-write", {
-            ts: nowMs(),
-            contentLength: len,
+      navigator.clipboard.writeText = async function (data: string): Promise<void> {
+        // WebIDL string conversion is observable and may throw. An async
+        // wrapper preserves native Promise rejection, including missing args.
+        const text = `${data}`;
+        const cmdLike = looksLikeCommand(text);
+        const len = text.length;
+        // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted data from explicit undefined.
+        if (arguments.length) arguments[0] = text;
+        // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
+        const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
+        // Failed native writes must not produce a successful-write receipt.
+        recordClipboardWrite(len, cmdLike);
+        if (debug) {
+          console.debug("[NavSentinel] clipboard.writeText intercepted", {
+            length: len,
             looksLikeCommand: cmdLike,
           });
-          if (debug) {
-            console.debug("[NavSentinel] clipboard.writeText intercepted", {
-              length: len,
-              looksLikeCommand: cmdLike,
-            });
-          }
-          return result;
-        });
+        }
+        return result;
       };
     } catch {
       // clipboard.writeText may not be configurable in all contexts
@@ -1579,11 +1597,7 @@ function patchClipboard(): void {
               if (item.types.includes("text/plain")) {
                 item.getType("text/plain").then((blob) => {
                   blob.text().then((text) => {
-                    postToIsolated("ns-clipboard-write", {
-                      ts: nowMs(),
-                      contentLength: text.length,
-                      looksLikeCommand: looksLikeCommand(text),
-                    });
+                    recordClipboardWrite(text.length, looksLikeCommand(text));
                   }).catch(() => {});
                 }).catch(() => {});
                 inspected = true;
@@ -1594,11 +1608,7 @@ function patchClipboard(): void {
             // ClipboardItem API may not be fully available
           }
           if (!inspected) {
-            postToIsolated("ns-clipboard-write", {
-              ts: nowMs(),
-              contentLength: -1,
-              looksLikeCommand: false,
-            });
+            recordClipboardWrite(-1, false);
           }
           if (debug) {
             console.debug("[NavSentinel] clipboard.write intercepted");
@@ -1746,13 +1756,14 @@ function patchOpenerLocation(): void {
   // Capture the real opener reference before anyone can tamper with it.
   const realOpener = window.opener;
 
-  function recordOpenerNav(url: string): void {
+  function recordOpenerNav(url: string): string {
     lastOpenerNavTs = nowMs();
     lastOpenerNavUrl = url;
     postToIsolated("ns-dblclick-opener-nav", { url, ts: lastOpenerNavTs });
     if (debug) {
       console.debug("[NavSentinel] opener.location write intercepted", { url });
     }
+    return url;
   }
 
   // Proxy the Location object to intercept .href setter, .assign(), and .replace().
@@ -1760,43 +1771,67 @@ function patchOpenerLocation(): void {
   // directly on the real Location object returned by the get trap.
   function createLocationProxy(): typeof realOpener.location {
     const realLocation = realOpener.location;
-    try {
-      return new Proxy(realLocation, {
-        set(_target, prop, value) {
-          if (prop === "href") {
-            const url = String(value);
-            recordOpenerNav(url);
-            try { realLocation.href = value; } catch { /* cross-origin */ }
-            return true;
-          }
-          try { Reflect.set(realLocation, prop, value); } catch { /* ignore */ }
-          return true;
-        },
-        get(_target, prop) {
-          if (prop === "assign") {
-            return function assign(url: string | URL): void {
-              recordOpenerNav(String(url));
-              try { realLocation.assign(url as string); } catch { /* cross-origin */ }
-            };
-          }
-          if (prop === "replace") {
-            return function replace(url: string | URL): void {
-              recordOpenerNav(String(url));
-              try { realLocation.replace(url as string); } catch { /* cross-origin */ }
-            };
-          }
-          try {
-            const val = Reflect.get(realLocation, prop);
-            if (typeof val === "function") return val.bind(realLocation);
-            return val;
-          } catch {
-            return undefined;
-          }
-        }
-      });
-    } catch {
-      return realLocation;
+    // Native Location methods are immutable own properties: replacing them
+    // on a Proxy(realLocation) violates get invariants (#1016). Reflect lazily
+    // onto an extensible facade, preserving the native receiver and href path.
+    const facade = Object.create(null);
+    const methodCache = new Map<
+      PropertyKey,
+      [native: (...args: unknown[]) => unknown, wrapper: (...args: unknown[]) => unknown]
+    >();
+
+    function readNative(_target: unknown, prop: PropertyKey): unknown {
+      const nativeMethod = Reflect.get(realLocation, prop) as unknown;
+      if (typeof nativeMethod !== "function") return nativeMethod;
+      const cached = methodCache.get(prop);
+      if (cached?.[0] === nativeMethod) return cached[1];
+      let wrapper: (...args: unknown[]) => unknown;
+      if (prop === "assign" || prop === "replace") {
+        wrapper = (...args: unknown[]): unknown => {
+          // Preserve missing arguments; convert URL objects once, like native.
+          if (args.length) args[0] = recordOpenerNav(`${args[0]}`);
+          return Reflect.apply(nativeMethod, realLocation, args);
+        };
+      } else {
+        wrapper = nativeMethod.bind(realLocation);
+      }
+      methodCache.set(prop, [nativeMethod as (...args: unknown[]) => unknown, wrapper]);
+      return wrapper;
     }
+
+    function writeNative(_target: unknown, prop: PropertyKey, value: unknown): boolean {
+      if (prop === "href") {
+        value = recordOpenerNav(`${value}`);
+      }
+      return Reflect.set(realLocation, prop, value);
+    }
+
+    return new Proxy(facade, {
+      get: readNative,
+      set: writeNative,
+      has: (_target, prop) => Reflect.has(realLocation, prop),
+      ownKeys: () => Reflect.ownKeys(realLocation),
+      getPrototypeOf: () => Reflect.getPrototypeOf(realLocation),
+      // Configurable descriptor copies satisfy facade invariants; this is not
+      // exact native branding or unforgeable descriptor equivalence.
+      getOwnPropertyDescriptor(_target, prop) {
+        const current = Reflect.getOwnPropertyDescriptor(realLocation, prop);
+        if (!current) return undefined;
+        current.configurable = true;
+        if ("value" in current) {
+          current.value = readNative(null, prop);
+        } else {
+          if (current.get) current.get = current.get.bind(realLocation);
+          if (current.set) current.set = (value: unknown): void => { writeNative(null, prop, value); };
+        }
+        return current;
+      },
+      // Never lock the empty facade and recreate native Proxy invariants.
+      defineProperty: (_target, prop, desc) => desc.configurable === true && Reflect.defineProperty(realLocation, prop, desc),
+      deleteProperty: (_target, prop) => Reflect.deleteProperty(realLocation, prop),
+      preventExtensions: () => false,
+      setPrototypeOf: () => false,
+    });
   }
 
   try {
@@ -1804,19 +1839,13 @@ function patchOpenerLocation(): void {
 
     // Watch for direct property assignment: window.opener.location = url
     // We proxy the opener object so we can intercept .location sets.
-    const openerProxy = new Proxy(realOpener, {
+    let openerProxy = new Proxy(realOpener, {
       set(_target, prop, value) {
         if (prop === "location") {
-          const url = String(value);
-          recordOpenerNav(url);
+          // Forward exactly the observed string; reject Symbol like native.
           // Allow the navigation to proceed so the attack surface
           // remains observable (the isolated-world will flag the click).
-          try {
-            realOpener.location = value;
-          } catch {
-            // cross-origin assignment -- browser will handle it
-          }
-          return true;
+          return Reflect.set(realOpener, prop, recordOpenerNav(`${value}`));
         }
         try {
           Reflect.set(realOpener, prop, value);
@@ -1844,14 +1873,13 @@ function patchOpenerLocation(): void {
     // window.opener after the proxy is installed.
     // Preserve setter so pages that intentionally do `window.opener = null`
     // (a common security hardening pattern) still work correctly.
-    let openerDisowned = false;
     Object.defineProperty(window, "opener", {
-      get() { return openerDisowned ? null : openerProxy; },
+      get() { return openerProxy; },
       set(value) {
         // Allow disowning the opener (security best practice) but do not
         // allow replacing it with an arbitrary object.
         if (value === null || value === undefined) {
-          openerDisowned = true;
+          openerProxy = null;
         }
         // Silently ignore other assignments; the proxy stays in place.
       },

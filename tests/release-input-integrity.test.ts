@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
+import { deflateSync } from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -379,6 +380,42 @@ describe("release input integrity", () => {
 });
 
 describe("release script integration", () => {
+  it("rejects substituted committed bytes before the release command can mutate metadata", () => {
+    const root = copyRepositoryForReleaseTest();
+    const runDryRelease = () => spawnSync(process.execPath, ["scripts/release.mjs", "patch", "--dry-run"], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 10_000,
+      env: { ...process.env, NAVSENTINEL_BUILD_PROFILE: "interaction-only" },
+    });
+    const clean = runDryRelease();
+    expect(clean.error).toBeUndefined();
+    expect(clean.status, `${clean.stdout}\n${clean.stderr}`).toBe(0);
+    expect(clean.stdout).toContain("[dry-run] No changes made.");
+
+    const head = runGit(root, ["rev-parse", "HEAD"]);
+    const blob = runGit(root, ["rev-parse", "HEAD:CHANGELOG.md"]);
+    const changed = Buffer.concat([
+      fs.readFileSync(path.join(root, "CHANGELOG.md")), Buffer.from("\nSubstituted release notes.\n"),
+    ]);
+    const objectPath = path.join(root, ".git", "objects", blob.slice(0, 2), blob.slice(2));
+    fs.rmSync(objectPath);
+    fs.writeFileSync(objectPath, deflateSync(Buffer.concat([Buffer.from(`blob ${changed.length}\0`), changed])));
+    fs.writeFileSync(path.join(root, "CHANGELOG.md"), changed);
+    // Git returns the forged object bytes and the worktree matches those bytes.
+    // Rejection must be for the OID mismatch, not a missing import or dirty file.
+    expect(execFileSync("git", ["cat-file", "blob", blob], { cwd: root })).toEqual(changed);
+    const metadata = RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)));
+    const result = runDryRelease();
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/object hash mismatch for blob/i);
+    expect(result.stdout).not.toContain("[dry-run] No changes made.");
+    expect(runGit(root, ["rev-parse", "HEAD"])).toBe(head);
+    expect(runGit(root, ["tag", "--list"])).toBe("");
+    expect(RELEASE_MUTABLE_PATHS.map((entry) => fs.readFileSync(path.join(root, entry)))).toEqual(metadata);
+  }, 30_000);
+
   it("fails closed when git status is clean but raw project bytes differ", () => {
     const root = copyRepositoryForReleaseTest();
     const runDryRelease = () => spawnSync(process.execPath, ["scripts/release.mjs", "patch", "--dry-run"], {
@@ -434,3 +471,52 @@ describe("release script integration", () => {
     ]);
   });
 });
+
+const pathIdentityEnvironment = createSanitizedGitEnvironment(process.env);
+function pathGit(root: string, ...args: string[]): Buffer {
+  return execFileSync("git", args, { cwd: root, env: pathIdentityEnvironment, stdio: ["ignore", "pipe", "pipe"] });
+}
+function pathFixture(format: "sha1" | "sha256", name: string): string {
+  const root = makeTempRoot("path-identity");
+  pathGit(root, "init", "-q", `--object-format=${format}`);
+  pathGit(root, "config", "core.autocrlf", "false");
+  pathGit(root, "config", "user.name", "Path Identity Fixture");
+  pathGit(root, "config", "user.email", "path-identity@example.invalid");
+  pathGit(root, "config", "commit.gpgsign", "false");
+  const target = path.join(root, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, "identical blob bytes\n");
+  pathGit(root, "add", ".");
+  pathGit(root, "commit", "-qm", "exact path fixture");
+  expect(pathGit(root, "ls-files", "-z")).toEqual(Buffer.from(`${name}\0`, "utf8"));
+  return root;
+}
+
+for (const format of ["sha1", "sha256"] as const) {
+  describe(`release path byte identity (${format})`, () => {
+    for (const name of ["\uFEFFproof.txt", "\uFEFFfolder/proof.txt"]) {
+      it(`preserves the leading U+FEFF in ${JSON.stringify(name)}`, () => {
+        const root = pathFixture(format, name);
+        expect(assertExactCommittedInputs(root).entries.map((entry) => entry.path)).toEqual([name]);
+      });
+
+      it(`rejects a same-content worktree alias for ${JSON.stringify(name)}`, () => {
+        const root = pathFixture(format, name);
+        const before = pathGit(root, "rev-parse", "HEAD");
+        const first = name.split("/")[0]!;
+        fs.renameSync(path.join(root, first), path.join(root, first.slice(1)));
+        // Neither the commit nor the index changed. Only the filesystem name
+        // differs; attesting the equal-content alias would attest the wrong path.
+        expect(pathGit(root, "rev-parse", "HEAD")).toEqual(before);
+        expect(pathGit(root, "ls-files", "-z")).toEqual(Buffer.from(`${name}\0`, "utf8"));
+        expect(() => assertExactCommittedInputs(root)).toThrow(/missing|untracked/i);
+      });
+    }
+
+    it("keeps a U+FEFF in a later path component without normalizing it", () => {
+      const name = "folder/\uFEFFproof.txt";
+      const root = pathFixture(format, name);
+      expect(assertExactCommittedInputs(root).entries.map((entry) => entry.path)).toEqual([name]);
+    });
+  });
+}

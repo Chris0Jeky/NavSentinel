@@ -108,8 +108,8 @@ export type EvidenceCategory = "all" | "navigation" | "credential" | "activity";
 export function evidenceCategory(kind: EventKind): Exclude<EvidenceCategory, "all"> {
   return kind.startsWith("cred_") ? "credential" : kind.startsWith("nav_") ? "navigation" : "activity";
 }
-export function filterEvidence(events: readonly EvidenceEvent[], query: string, category: EvidenceCategory, scoredOnly: boolean): EvidenceEvent[] {
-  const needle = query.trim().toLowerCase().slice(0, 253);
+export function filterEvidence(events: readonly EvidenceEvent[], query: string | null | undefined, category: EvidenceCategory, scoredOnly: boolean): EvidenceEvent[] {
+  const needle = String(query ?? "").trim().toLowerCase().slice(0, 253);
   return events.filter(event =>
     (category === "all" || evidenceCategory(event.kind) === category) &&
     (!scoredOnly || event.score !== undefined) &&
