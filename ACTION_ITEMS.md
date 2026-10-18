@@ -267,11 +267,15 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
   revert PR for `c47c5991`.
 - **AI-56 (#1060):** landed under the same retroactive rule (green CI, independent review, MAIN budget 21 KB).
-  In a cross-origin subframe: (1) a form with `target="_top"` (or `_parent`) is still treated as leaving the frame
-  even after the page sets `HTMLFormElement.prototype.target` to a getter returning `""` and sets an own `call` on
-  `globalThis.__navsentinelMainFormTarget`; (2) an ordinary self-targeted form posting to its own frame is still
-  neither blocked nor announced. The local fixtures are `tests/form-target-self-exemption.test.ts` and
-  `tests/main-base-uri-loader-contract.test.ts`. A failure gets a revert PR for `a0035874`.
+  A behaviour smoke check that ordinary forms still behave, not a hand-timed tamper test: the page-tamper
+  resistance (a getter replaced between the document-start loader and the async MAIN import, or an own `call` set
+  on the captured invoker) is covered by the vm-realm regressions in `tests/main-base-uri-loader-contract.test.ts`
+  and `tests/form-target-self-exemption.test.ts`. In branded Chrome on the unpacked build of `a0035874`, with the
+  Gym served (`npm run gym:serve`, port 5173): (1) `gym/fp-iframe-target-form.html` — a background form post into
+  the page's own named iframe is neither blocked nor announced (the same expectation as
+  `tests/acceptance/fp-iframe-target-form.spec.ts`); (2) `gym/base-uri-tamper.html` — the page's early baseURI tamper
+  does not change the base the guard resolves against (the outcome the page itself describes). Describe any
+  difference. A failure gets a revert PR for `a0035874`.
 
 ### Branch-held Gate-3 items
 
