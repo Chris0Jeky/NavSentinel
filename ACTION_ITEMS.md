@@ -211,7 +211,7 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
-### Retroactive Gate-3 checks (AI-48 to AI-54)
+### Retroactive Gate-3 checks (AI-48 to AI-55)
 
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
 Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
@@ -259,9 +259,10 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   `tests/e2e/credential-document-open.spec.ts`. Not part of this check: a submit dispatched in the same task
   as `document.close()`, the MAIN-world and disabled js-behaviour listeners, Firefox.
 - **AI-55 (#1017):** landed under the same retroactive rule (green CI, independent review, the unchanged 20,992-byte
-  MAIN cap) by the estate-hub overnight session. In a child tab opened by a page: (1) `window.opener.location.assign(url)`,
-  `.replace(url)`, `.href = url` and `window.opener.location = url` navigate the opener with no TypeError; (2) a
-  cross-origin opener still throws the native `SecurityError` on reads; (3) `window.opener = null` disowns it and a
+  MAIN cap) by the estate-hub overnight session. In a child tab opened by a page: (1) with a same-origin opener, `window.opener.location.assign(url)`,
+  `.replace(url)`, `.href = url` and `window.opener.location = url` navigate the opener with no TypeError; (2) with a
+  cross-origin opener, `assign()` and reads still throw the native `SecurityError` and the opener is unchanged (as
+  `tests/e2e/opener-location-native.spec.ts` expects), which is a pass, not a failure; (3) `window.opener = null` disowns it and a
   later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
   revert PR for `c47c5991`.
 
@@ -283,7 +284,7 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
-- **AI-48 to AI-54**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-54) above by
+- **AI-48 to AI-55**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-55) above by
   owner decision 2026-10-16 (#1072 / AI-52 excepted: its own Windows hold). The AI-48 (#1100) and AI-50 (#1103)
   branch entries were retired here; build their merge commits, not the pre-merge code heads. An AI-49/51/53/54
   entry that a PR branch brings into this list on merge is superseded the same way: run the check on that PR's
