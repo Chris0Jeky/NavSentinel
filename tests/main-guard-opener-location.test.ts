@@ -333,6 +333,9 @@ describe("same-origin opener.location writes (#1016)", () => {
     // Disowning to null (security hardening) keeps working.
     ev(ctx, `window.opener = null;`);
     expect(ev(ctx, "window.opener")).toBe(null);
+    // A later replacement after disowning stays ignored.
+    ev(ctx, `window.opener = { evil: 2 };`);
+    expect(ev(ctx, "window.opener")).toBe(null);
   });
 
   it("no opener is a benign no-op", () => {
