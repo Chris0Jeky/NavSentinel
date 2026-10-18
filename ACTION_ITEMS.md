@@ -271,10 +271,11 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   resistance (a getter replaced between the document-start loader and the async MAIN import, or an own `call` set
   on the captured invoker) is covered by the vm-realm regressions in `tests/main-base-uri-loader-contract.test.ts`
   and `tests/form-target-self-exemption.test.ts`. In branded Chrome on the unpacked build of `a0035874`, with the
-  Gym served (`npm run gym:serve`, port 5173): (1) `gym/fp-iframe-target-form.html` — a background form post into
-  the page's own named iframe is neither blocked nor announced (the same expectation as
-  `tests/acceptance/fp-iframe-target-form.spec.ts`); (2) `gym/base-uri-tamper.html` — the page's early baseURI tamper
-  does not change the base the guard resolves against (the outcome the page itself describes). Describe any
+  Gym served (`npm run gym:serve`, port 5173): (1) run the acceptance procedure for the subframe self-target form,
+  `NAVSENTINEL_BRANDED_CHROME=1 npm run test:acceptance -- tests/acceptance/fp-iframe-target-form.spec.ts` (fixture
+  `tests/acceptance/fixtures/fp-iframe-target-form.html`): a background form post into the page's own named iframe is
+  neither blocked nor announced, same-origin and cross-origin; (2) open `gym/base-uri-tamper.html`: the page's early
+  baseURI tamper does not change the base the guard resolves against (the outcome the page itself describes). Describe any
   difference. A failure gets a revert PR for `a0035874`.
 
 ### Branch-held Gate-3 items
