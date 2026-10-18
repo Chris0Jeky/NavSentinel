@@ -370,6 +370,21 @@ describe("#863 — attack shapes keep their leaf-based signals", () => {
     expect(computeCDS(ctx).reasonCodes).toContain("invisible_but_clickable");
   });
 
+  it("bounds the effective-opacity walk on an adversarially deep chain", () => {
+    const nest = (depth: number): Element => {
+      let parent: Element = document.body;
+      for (let i = 0; i < depth; i++) parent = el("div", {}, parent);
+      const link = el("a", { href: "https://evil.example/" }, parent);
+      const leaf = el("span", {}, link);
+      leaf.textContent = "Continue";
+      return leaf;
+    };
+    const shallow = nest(100);
+    expect(click([shallow, shallow.parentElement!, document.body]).top.opacity).toBe(1);
+    const deep = nest(600);
+    expect(click([deep, deep.parentElement!, document.body]).top.opacity).toBe(0);
+  });
+
   it("an unnamed control keeps the previous leaf-based score", () => {
     const link = el("a", { href: "https://other.example/" });
     const child = el("div", {}, link);

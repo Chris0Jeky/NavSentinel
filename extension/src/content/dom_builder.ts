@@ -129,6 +129,9 @@ function effectiveOpacity(el: Element): number {
     // assignedSlot, so fail closed (fully concealed) instead of hanging
     // the synchronous click path (review rv-924-geom H2).
     if (seen.has(current)) return 0;
+    // One getComputedStyle per ancestor on the synchronous click path: bound an
+    // adversarially deep acyclic chain and fail closed like opacityWithin.
+    if (seen.size >= 512) return 0;
     seen.add(current);
     product *= ownOpacity(current);
   }
