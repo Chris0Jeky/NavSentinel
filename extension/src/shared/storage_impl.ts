@@ -64,6 +64,9 @@ export type SuiteSettingsUpdateMessage = {
 /** A worker response that preserves the current settings for conflict recovery. */
 export type SuiteSettingsUpdateResponse = SuiteSettings & { conflict?: true };
 
+/** A rejected worker write, serialized across the runtime message boundary (#891). */
+export type SuiteSettingsUpdateErrorResponse = { ok: false; error: string };
+
 /** Raised in an extension page when the worker rejects a stale Options patch. */
 export class SuiteSettingsConflictError extends Error {
   constructor(readonly settings: SuiteSettings) {
@@ -228,7 +231,7 @@ function mergeNavSettings(cur: NavSettings, partial: Partial<NavSettings> | unde
       merged.defaultMode,
       normalizeProtectionMode(cur.defaultMode, DEFAULT_SUITE_SETTINGS.nav.defaultMode),
     ),
-    debug: merged.debug,
+    debug: merged.debug === true,
     autoDismissOverlays: merged.autoDismissOverlays === true,
   };
 }
@@ -251,6 +254,24 @@ function mergeSuiteSettings(cur: SuiteSettings, partial: SuiteSettingsPatch): Su
   );
   next.logLimit = clampInt(next.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
   next.autoSave = typeof next.autoSave === "boolean" ? next.autoSave : true;
+  next.credential.promptOnUntrustedDomain =
+    typeof next.credential.promptOnUntrustedDomain === "boolean"
+      ? next.credential.promptOnUntrustedDomain
+      : true;
+  next.credential.promptOnMediumRisk =
+    typeof next.credential.promptOnMediumRisk === "boolean"
+      ? next.credential.promptOnMediumRisk
+      : true;
+  next.credential.blockHttpPasswordSubmit =
+    typeof next.credential.blockHttpPasswordSubmit === "boolean"
+      ? next.credential.blockHttpPasswordSubmit
+      : true;
+  next.credential.warnOnPaste =
+    typeof next.credential.warnOnPaste === "boolean" ? next.credential.warnOnPaste : true;
+  next.credential.similarity.enabled =
+    typeof next.credential.similarity.enabled === "boolean"
+      ? next.credential.similarity.enabled
+      : true;
   next.credential.mediumRiskThreshold = clampInt(
     next.credential.mediumRiskThreshold,
     0,
@@ -282,7 +303,7 @@ function reconcileSettings(
   incoming?: SettingsRecord,
 ): SettingsRecord {
   const result: SettingsRecord = incoming ? { ...incoming } : {};
-  for (const key in draft) {
+  for (const key of Object.keys(draft)) {
     const value = draft[key];
     if (value && typeof value === "object") {
       const nested = reconcileSettings(
@@ -389,6 +410,7 @@ function patchMatchesExpectedSettings(
 function updateSuiteSettingsDirect(
   partial: SuiteSettingsPatch,
   expected?: SuiteSettings,
+  options?: { recomputeAdaptiveScoresOnModeChange?: boolean },
 ): Promise<SuiteSettingsUpdateResponse> {
   // Same-worker import/patch ordering (#891): hold the bulk lane BEFORE reading
   // settings so an import that enqueued first commits before this patch reads.
@@ -405,7 +427,26 @@ function updateSuiteSettingsDirect(
         partial as SettingsRecord,
       )) return { ...cur, conflict: true };
       const merged = mergeSuiteSettings(cur, partial);
-      await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+      if (
+        options?.recomputeAdaptiveScoresOnModeChange !== false &&
+        cur.nav.defaultMode !== merged.nav.defaultMode
+      ) {
+        // Mode is an input to the adaptive derivative (#891). Join the prompt
+        // lane before reading outcomes, and commit both keys together: an
+        // earlier append must finish first, and a later one must see this mode.
+        // Unrelated/same-mode patches preserve an explicitly cleared cache.
+        await queuePromptOutcomeWrite(async () => {
+          const res = await chrome.storage.local.get(PROMPT_OUTCOMES_KEY);
+          const outcomes = boundPromptOutcomeLog(res[PROMPT_OUTCOMES_KEY]);
+          const threshold = merged.nav.defaultMode === "strict" ? NRS_STRICT_BLOCK_THRESHOLD : NRS_BLOCK_THRESHOLD;
+          await chrome.storage.local.set({
+            [SUITE_SETTINGS_KEY]: merged,
+            [ADAPTIVE_SCORES_KEY]: computeAdaptiveScoreMap(outcomes, threshold),
+          });
+        });
+      } else {
+        await chrome.storage.local.set({ [SUITE_SETTINGS_KEY]: merged });
+      }
       return merged;
     }),
   );
@@ -427,7 +468,10 @@ export async function resetSuiteSettingsSection(
   const patch: SuiteSettingsPatch = section === "nav"
     ? { nav: structuredClone(DEFAULT_SUITE_SETTINGS.nav) }
     : { credential: structuredClone(DEFAULT_SUITE_SETTINGS.credential) };
-  return updateSuiteSettingsDirect(patch);
+  return updateSuiteSettingsDirect(patch, undefined, {
+    // A section reset changes settings only; every behavioural-data lane stays byte-identical (#563).
+    recomputeAdaptiveScoresOnModeChange: false,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -478,8 +522,21 @@ export async function handleSuiteSettingsUpdateMessage(
   return updateSuiteSettingsDirect(patch, expected);
 }
 
-function unwrapSuiteSettingsUpdate(response: SuiteSettingsUpdateResponse | undefined): SuiteSettings {
+function isSuiteSettingsUpdateError(
+  response: SuiteSettingsUpdateResponse | SuiteSettingsUpdateErrorResponse,
+): response is SuiteSettingsUpdateErrorResponse {
+  return "ok" in response && response.ok === false;
+}
+
+function unwrapSuiteSettingsUpdate(
+  response: SuiteSettingsUpdateResponse | SuiteSettingsUpdateErrorResponse | undefined,
+): SuiteSettings {
   if (!response) throw new Error("suite-settings update failed");
+  // The worker serializes an authorization/validation rejection so its reason
+  // survives the message boundary (#891).
+  if (isSuiteSettingsUpdateError(response)) {
+    throw new Error(response.error || "suite-settings update failed");
+  }
   if (response.conflict) {
     const { conflict: _conflict, ...settings } = response;
     throw new SuiteSettingsConflictError(settings);
@@ -492,7 +549,8 @@ export function updateSuiteSettings(partial: SuiteSettingsPatch, expected?: Suit
     // Do not fall back to a page-local write when delivery fails: it would revive
     // the lost-update race this worker boundary closes. (#558)
     return chrome.runtime.sendMessage({ type: "ns-suite-settings-update", patch: partial, ...(expected ? { expected } : {}) })
-      .then((response: SuiteSettingsUpdateResponse | undefined) => unwrapSuiteSettingsUpdate(response));
+      .then((response: SuiteSettingsUpdateResponse | SuiteSettingsUpdateErrorResponse | undefined) =>
+        unwrapSuiteSettingsUpdate(response));
   }
   // Non-extension test environments have no runtime messenger. Production page
   // contexts always do, and therefore always take the worker-owned path above.
@@ -884,8 +942,33 @@ function normalizeEventLog(value: unknown): EventLogEntry[] {
   return normalizeEventLogWithMetadata(value).entries;
 }
 
+let eventIdCounter = 0;
+
+/**
+ * Unique event ids: persistEventLogEntry dedups by id
+ * (`cur.filter((item) => item.id !== entry.id)`), so a collision silently
+ * drops the older event. The timestamp plus a per-context monotonic counter
+ * separates ids minted in the same millisecond; 96 bits of cryptographic
+ * randomness separate ids minted in different contexts.
+ *
+ * The isolated world keeps an identical copy (makeSilentNavEventId in
+ * content/capture_isolated.ts). Deliberately duplicated, not shared, following
+ * the nav_authority.ts precedent: a helper module imported across worlds makes
+ * the bundler split it into a chunk shared with the MAIN-world guard, which
+ * then loads one module later at document start.
+ */
 function makeId(): string {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  eventIdCounter = (eventIdCounter + 1) % 0xffffffff;
+  const unique = `${Date.now().toString(36)}_${eventIdCounter.toString(36)}`;
+  try {
+    const bytes = globalThis.crypto?.getRandomValues(new Uint8Array(12));
+    if (bytes) {
+      return `${unique}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+    }
+  } catch {
+    // Fall through to the Math.random fallback below.
+  }
+  return `${unique}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export async function getEventLog(): Promise<EventLogEntry[]> {
@@ -1209,19 +1292,32 @@ function sanitizeEventExtra(
   }
 }
 
+/**
+ * Normalize runtime string fields before write-path validation can silently
+ * evict them. Nullish fields stay absent; other values become bounded strings.
+ */
+function coerceEventLogString(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return typeof value === "string" ? value : String(value);
+}
+
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   const pageSite = normalizeEventPageSite(partial.pageSite);
   const extra = partial.extra === undefined ? undefined : sanitizeEventExtra(partial.extra, partial.kind, partial.reasons);
+  const coercedId = typeof partial.id === "string" ? partial.id : makeId();
+  const coercedSite = coerceEventLogString(partial.site);
+  const coercedUrl = coerceEventLogString(partial.url);
+  const coercedDestHost = coerceEventLogString(partial.destHost);
   return {
-    id: capEventString(partial.id ?? makeId()),
+    id: capEventString(coercedId),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     kind: partial.kind,
     ...(pageSite === undefined ? {} : { pageSite }),
-    ...(partial.site !== undefined ? { site: capEventString(partial.site) } : {}),
+    ...(coercedSite !== undefined ? { site: capEventString(coercedSite) } : {}),
     // RI-06: persist only origin+path for new entries (drop query+fragment tokens).
-    ...(partial.url !== undefined ? { url: capEventString(minimizeEventUrl(partial.url)) } : {}),
-    ...(partial.destHost !== undefined ? { destHost: capEventString(partial.destHost) } : {}),
-    ...(partial.score !== undefined ? { score: Number.isFinite(partial.score) ? partial.score : 0 } : {}),
+    ...(coercedUrl !== undefined ? { url: capEventString(minimizeEventUrl(coercedUrl)) } : {}),
+    ...(coercedDestHost !== undefined ? { destHost: capEventString(coercedDestHost) } : {}),
+    ...(partial.score !== undefined && Number.isFinite(partial.score) ? { score: partial.score } : {}),
     // Sanitize reasons to a bounded string[] (reuses the prompt-outcome helper). A
     // malformed runtime append message could carry non-string reasons; left raw, the
     // entry would fail isEventLogEntry and persistEventLogEntry's re-validation would
@@ -1577,8 +1673,12 @@ type PromptOutcomeStorageResponse =
   | { ok: true }
   | { ok: false; error: string; code?: "unauthorized" };
 
-function isOptionalFiniteNumber(value: unknown): boolean {
-  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+function isBoundedNumber(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function isOptionalBoundedNumber(value: unknown, min: number, max: number): boolean {
+  return value === undefined || isBoundedNumber(value, min, max);
 }
 
 function isOptionalStringArray(value: unknown): boolean {
@@ -1615,7 +1715,7 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   if (e.site !== undefined) out.site = capEventString(e.site);
   if (e.url !== undefined) out.url = capEventString(minimizeEventUrl(e.url));
   if (e.destHost !== undefined) out.destHost = capEventString(e.destHost);
-  if (e.score !== undefined) out.score = e.score;
+  if (typeof e.score === "number" && Number.isFinite(e.score) && e.score >= 0 && e.score <= 1000) out.score = e.score;
   // reasons elements are already strings here (isEventLogEntry pre-filtered them in
   // normalizeEventLog); sanitizeCodeList only applies the count (32) + per-string-length (80) caps.
   const reasons = sanitizeCodeList(e.reasons);
@@ -1697,7 +1797,7 @@ function sanitizeClickContext(value: unknown): ClickContext | undefined {
   return out;
 }
 
-function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
+function isPromptOutcomeEntry(value: unknown, strictReplayFields = true): value is PromptOutcomeEntry {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
   const type = entry.type;
@@ -1708,8 +1808,7 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     typeof entry.domain === "string" &&
     (entry.destDomain === undefined || typeof entry.destDomain === "string") &&
     (type === "nav" || type === "cred") &&
-    typeof entry.score === "number" &&
-    Number.isFinite(entry.score) &&
+    isBoundedNumber(entry.score, 0, 1000) &&
     (
       outcome === "allow" ||
       outcome === "allow_once" ||
@@ -1722,10 +1821,10 @@ function isPromptOutcomeEntry(value: unknown): value is PromptOutcomeEntry {
     isOptionalStringArray(entry.reasons) &&
     // Enriched replay fields (P5-C1) — all optional; validate shape so the
     // verify-step never rejects a record the (sanitized) writer produced.
-    isOptionalFiniteNumber(entry.cds) &&
-    isOptionalFiniteNumber(entry.navAnomalyScore) &&
-    isOptionalFiniteNumber(entry.adaptiveAdj) &&
-    isOptionalFiniteNumber(entry.thresholdUsed) &&
+    (!strictReplayFields || (isOptionalBoundedNumber(entry.cds, 0, 1000) &&
+    isOptionalBoundedNumber(entry.navAnomalyScore, 0, 15) &&
+    isOptionalBoundedNumber(entry.adaptiveAdj, -15, 15) &&
+    isOptionalBoundedNumber(entry.thresholdUsed, 30, 100))) &&
     isOptionalStringArray(entry.nrsFactors) &&
     (entry.elementContext === undefined || (typeof entry.elementContext === "object" && entry.elementContext !== null));
 }
@@ -1734,7 +1833,8 @@ function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
   if (!Array.isArray(value)) return [];
   const normalized: PromptOutcomeEntry[] = [];
   for (const entry of value) {
-    if (!isPromptOutcomeEntry(entry)) continue;
+    // The writer omits corrupt optional scalars; required fields stay strict.
+    if (!isPromptOutcomeEntry(entry, false)) continue;
     const record = buildPromptOutcomeRecord(entry);
     if (record) normalized.push(record);
   }
@@ -2035,6 +2135,9 @@ function buildPromptOutcomeRecord(
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
+  // Reject corrupt scores; optional replay fields use their producer's bounds.
+  if (Number.isFinite(partial.score) &&
+    !isBoundedNumber(partial.score, 0, 1000)) return undefined;
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
@@ -2045,10 +2148,10 @@ function buildPromptOutcomeRecord(
     outcome: partial.outcome,
     ...(reasons !== undefined ? { reasons } : {}),
     ...(nrsFactors !== undefined && nrsFactors.length > 0 ? { nrsFactors } : {}),
-    ...(Number.isFinite(partial.cds) ? { cds: partial.cds } : {}),
-    ...(Number.isFinite(partial.navAnomalyScore) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
-    ...(Number.isFinite(partial.adaptiveAdj) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
-    ...(Number.isFinite(partial.thresholdUsed) ? { thresholdUsed: partial.thresholdUsed } : {}),
+    ...(isBoundedNumber(partial.cds, 0, 1000) ? { cds: partial.cds } : {}),
+    ...(isBoundedNumber(partial.navAnomalyScore, 0, 15) ? { navAnomalyScore: partial.navAnomalyScore } : {}),
+    ...(isBoundedNumber(partial.adaptiveAdj, -15, 15) ? { adaptiveAdj: partial.adaptiveAdj } : {}),
+    ...(isBoundedNumber(partial.thresholdUsed, 30, 100) ? { thresholdUsed: partial.thresholdUsed } : {}),
     ...(elementContext !== undefined ? { elementContext } : {})
   };
 }

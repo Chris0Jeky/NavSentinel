@@ -127,6 +127,56 @@ export function gestureBranchEmissionBound(
 }
 
 /**
+ * Upper bound on how many direct child navigables {@link resolveChildNavigable}
+ * compares by identity. Callers read `window.length` through its native getter,
+ * but the cap keeps a malformed or hostile value from producing an unbounded
+ * scan in the MAIN world.
+ */
+export const MAX_CHILD_NAVIGABLE_SCAN = 256;
+
+/** What {@link resolveChildNavigable} reads from the current window. */
+export interface ChildNavigableView {
+  /** This browsing context's own current name. */
+  selfName: string;
+  /** Lowercase only the reserved-keyword comparison through a captured native. */
+  lowercaseTarget(target: string): string;
+  /** Browser-owned named-property lookup for `name` on this window. */
+  namedObject(name: string): unknown;
+  /** Number of direct child navigables. */
+  childCount: number;
+  /** The WindowProxy of direct child navigable `index`. */
+  child(index: number): unknown;
+}
+
+/**
+ * Return the direct child WindowProxy a target name resolves to, or `null` when
+ * that name can navigate this context, a new context, or something other than a
+ * direct child. Identity is load-bearing for #865: after the original form's
+ * `formdata` handlers run, the runtime re-resolves the target and requires the
+ * SAME child before replaying the captured payload.
+ */
+export function resolveChildNavigable(target: string, view: ChildNavigableView): unknown | null {
+  if (!target) return null;
+  const keyword = view.lowercaseTarget(target);
+  if (keyword === "_self" || keyword === "_top" || keyword === "_parent" || keyword === "_blank") {
+    return null;
+  }
+  if (target === view.selfName) return null;
+
+  const candidate = view.namedObject(target);
+  if (candidate === null || candidate === undefined) return null;
+
+  let count = view.childCount;
+  if (typeof count !== "number" || count !== count || count <= 0) return null;
+  if (count > MAX_CHILD_NAVIGABLE_SCAN) count = MAX_CHILD_NAVIGABLE_SCAN;
+  count |= 0;
+  for (let index = 0; index < count; index += 1) {
+    if (view.child(index) === candidate) return candidate;
+  }
+  return null;
+}
+
+/**
  * Redirect (form-submit) allowance for the MAIN-world guard (#864).
  *
  * The isolated world decides every trusted click and, when it allows one,
@@ -166,6 +216,8 @@ export interface RedirectAllowanceState {
   count: number;
   /** `event.timeStamp` of armed clicks whose isolated grant has not arrived. */
   pendingFollowUps: number[];
+  /** Event-clock boundary consumed by child replay, including undelivered grants. */
+  retiredThrough: number;
 }
 
 export interface RedirectAllowanceLimits {
@@ -195,6 +247,7 @@ export function createRedirectAllowance(): RedirectAllowanceState {
     sameTaskTarget: "",
     count: 0,
     pendingFollowUps: [],
+    retiredThrough: -1,
   };
 }
 
@@ -210,6 +263,7 @@ export function armSameTaskRedirect(
   scope: RedirectAllowanceScope,
   limits: RedirectAllowanceLimits,
 ): void {
+  if (gestureTs <= state.retiredThrough) return;
   state.count = 0;
   state.sameTaskArmed = true;
   state.sameTaskArmedAt = now;
@@ -238,6 +292,9 @@ export function applyIsolatedRedirectAllowance(
   grant: RedirectAllowanceScope & { allowRedirect: boolean; gestureTs?: number },
   limits: RedirectAllowanceLimits,
 ): void {
+  // A replay may precede both this bridge delivery and the document listener.
+  // Ignore its old grant completely: it must not renew or widen newer authority.
+  if (grant.gestureTs !== undefined && grant.gestureTs <= state.retiredThrough) return;
   const pending = state.pendingFollowUps;
   const match = grant.gestureTs === undefined ? -1 : pending.indexOf(grant.gestureTs);
   if (match >= 0) {
@@ -248,6 +305,25 @@ export function applyIsolatedRedirectAllowance(
   state.until = grant.allowRedirect ? now + limits.ttlMs : 0;
   state.restrict = grant.restrict;
   state.target = grant.target;
+}
+
+/**
+ * Retire the current gesture before child-only replay invokes page callbacks.
+ * This is deliberately independent of the replay's URL: an unrelated scoped
+ * grant must not survive just because consumeRedirect would reject that URL.
+ * Keep pendingFollowUps so a delayed follow-up to an in-task arm cannot reset
+ * the retired budget. The native Event-clock cutoff also retires clicks whose
+ * bridge grant or document-capture observer has not arrived yet. Only a newer
+ * gesture or an explicit independent grant can renew it; equal-time ties deny.
+ */
+export function exhaustRedirectAllowance(
+  state: RedirectAllowanceState,
+  limits: RedirectAllowanceLimits,
+  retiredThrough = state.retiredThrough,
+): void {
+  if (retiredThrough > state.retiredThrough) state.retiredThrough = retiredThrough;
+  state.count = limits.maxPerGesture;
+  state.sameTaskArmed = false;
 }
 
 /**

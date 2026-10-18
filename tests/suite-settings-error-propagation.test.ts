@@ -44,6 +44,17 @@ describe("suite-settings worker error propagation (#891)", () => {
     ).rejects.toThrow("suite-settings update failed");
   });
 
+  it("keeps the storage facade a pure re-export so no public name is declared twice", () => {
+    // A local export in storage.ts shadows storage_impl.ts's export of the same
+    // name, so a duplicated type or EventKind copy would silently drift.
+    const facade = fs.readFileSync(
+      path.resolve(process.cwd(), "extension/src/shared/storage.ts"),
+      "utf8",
+    );
+    const code = facade.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "").trim();
+    expect(code).toBe('export * from "./storage_impl";');
+  });
+
   it("keeps the rejection reason at the service-worker message boundary", () => {
     const source = fs.readFileSync(
       path.resolve(process.cwd(), "extension/src/sw/sw.ts"),

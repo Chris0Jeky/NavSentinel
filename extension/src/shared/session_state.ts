@@ -195,8 +195,13 @@ function objToMap<V>(obj: unknown): Map<number, V> {
   const map = new Map<number, V>();
   if (obj && typeof obj === "object" && !Array.isArray(obj)) {
     for (const [k, v] of Object.entries(obj as Record<string, V>)) {
+      // Tab-ID keys seat integers only: a fractional key ("1.5") would never match a
+      // real tabId lookup yet occupies a slot, and a negative key (e.g. "-1",
+      // chrome.tabs.TAB_ID_NONE) must not restore as live tab state. The empty-key
+      // guard matters because Number("") is 0, which would otherwise seat tab 0.
+      if (k.trim() === "") continue;
       const n = Number(k);
-      if (Number.isFinite(n)) {
+      if (Number.isInteger(n) && n >= 0) {
         map.set(n, v);
       }
     }
@@ -212,7 +217,9 @@ function arrayToSet(arr: unknown): Set<number> {
   const set = new Set<number>();
   if (Array.isArray(arr)) {
     for (const v of arr) {
-      if (typeof v === "number" && Number.isFinite(v)) {
+      // Same int-only gate as objToMap: fractional/negative tab IDs never match a
+      // real tab yet would persist as phantom readyTabs entries across restarts.
+      if (typeof v === "number" && Number.isInteger(v) && v >= 0) {
         set.add(v);
       }
     }

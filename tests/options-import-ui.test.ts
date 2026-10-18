@@ -50,7 +50,7 @@ describe("wired Options import / autosave boundary (#690)", () => {
 
   it("failed JSON import re-arms the dirty autosave and preserves its baseline", async () => {
     editLimit("400"); chooseFile(async () => "{"); await flush();
-    expect(el("status").textContent).toBe("Import failed.");
+    expect(el("status").textContent).toBe("Import failed: the file isn't valid JSON.");
     expect(el<HTMLInputElement>("logLimit").value).toBe("400");
     expect(state.update).not.toHaveBeenCalled(); expect(shell().inert).toBeFalsy();
     await vi.advanceTimersByTimeAsync(250);

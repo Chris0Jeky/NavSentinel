@@ -18,6 +18,9 @@ if (process.env.NAVSENTINEL_BRANDED_CHROME === "0") process.env.NAVSENTINEL_BRAN
 createRequire(import.meta.url)("./tests/branded/branded-chrome-preload.cjs");
 
 export default defineConfig({
+  // This independent config must also avoid Playwright's shallow PR diff fetch
+  // so the historical-merge checks keep their full checkout authority (#948).
+  captureGitInfo: { commit: true, diff: false },
   testDir: "./tests/acceptance",
   testMatch: "**/*.spec.ts",
   fullyParallel: false,

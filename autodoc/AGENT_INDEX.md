@@ -1,6 +1,6 @@
 # Agent Index - NavSentinel
 
-Last reviewed: 2026-08-30.
+Last reviewed: 2026-09-29.
 
 This is a fast orientation layer for coding agents. It should point to interfaces and seams, not duplicate implementation details.
 
@@ -65,7 +65,7 @@ All paths above are relative to repo root. Content scripts live under `extension
 
 ## Current Agent-Readiness Observations
 
-- NavSentinel v0.4.0 is pre-alpha with no established adoption: engineering
+- NavSentinel v0.5.0 is pre-alpha with no established adoption: engineering
   implementation is substantial, but release integrity, validation,
   distribution, and market evidence are open. Do not repeat the old "Phases
   0-3 complete" framing.

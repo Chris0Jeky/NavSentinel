@@ -110,14 +110,24 @@ export function analyzeOutcomesForPair(
   return null;
 }
 
-/**
- * Get the cooldown map from storage.
- * Prunes expired entries on read.
- */
-export async function getCooldowns(): Promise<CooldownMap> {
+// All document instances delegate mutations, including TTL pruning, to the
+// worker. Only that worker's queue may read-modify-write this shared key (#976).
+// A rejected write reaches its caller without poisoning subsequent operations.
+let cooldownWriteQueue: Promise<unknown> = Promise.resolve();
+
+function queueCooldownWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const next = cooldownWriteQueue.then(operation);
+  cooldownWriteQueue = next.catch((err) => {
+    console.warn("[NavSentinel] smart-default cooldown serialization error:", err);
+  });
+  return next;
+}
+
+/** Read the stored map and compute the TTL-pruned view, without writing. */
+async function readCooldowns(): Promise<{ pruned: CooldownMap; changed: boolean }> {
   const res = await chrome.storage.local.get(SMART_DEFAULT_COOLDOWNS_KEY);
   const raw = res[SMART_DEFAULT_COOLDOWNS_KEY];
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { pruned: {}, changed: false };
 
   const map = raw as CooldownMap;
   const now = Date.now();
@@ -125,19 +135,25 @@ export async function getCooldowns(): Promise<CooldownMap> {
   let changed = false;
 
   for (const [key, expiresAt] of Object.entries(map)) {
-    if (typeof expiresAt === "number" && expiresAt > now) {
+    if (typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > now) {
       pruned[key] = expiresAt;
     } else {
       changed = true;
     }
   }
 
-  // Persist pruned map if we removed stale entries
-  if (changed) {
-    await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: pruned });
-  }
+  return { pruned, changed };
+}
 
-  return pruned;
+/**
+ * Get the cooldown map from storage.
+ * Prunes expired entries on read.
+ */
+export async function getCooldowns(): Promise<CooldownMap> {
+  const { pruned, changed } = await readCooldowns();
+  if (!changed) return pruned;
+
+  return mutateCooldowns({ type: "ns-smart-default-cooldown", op: "prune" });
 }
 
 /**
@@ -183,11 +199,7 @@ export async function setCooldown(
   sourceDomain: string,
   destDomain: string
 ): Promise<void> {
-  const cooldowns = await getCooldowns();
-  cooldowns[pairKey(sourceDomain, destDomain)] = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
-  await chrome.storage.local.set({
-    [SMART_DEFAULT_COOLDOWNS_KEY]: capCooldowns(cooldowns)
-  });
+  await mutateCooldowns({ type: "ns-smart-default-cooldown", op: "set", sourceDomain, destDomain });
 }
 
 /**
@@ -197,9 +209,78 @@ export async function clearCooldown(
   sourceDomain: string,
   destDomain: string
 ): Promise<void> {
-  const cooldowns = await getCooldowns();
-  delete cooldowns[pairKey(sourceDomain, destDomain)];
-  await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: cooldowns });
+  await mutateCooldowns({ type: "ns-smart-default-cooldown", op: "clear", sourceDomain, destDomain });
+}
+
+type CooldownMutation =
+  | { type: "ns-smart-default-cooldown"; op: "prune" }
+  | { type: "ns-smart-default-cooldown"; op: "set" | "clear"; sourceDomain: string; destDomain: string };
+
+type CooldownMutationResponse =
+  | { ok: true; cooldowns: CooldownMap }
+  | { ok: false; error: string };
+
+async function mutateCooldowns(message: CooldownMutation): Promise<CooldownMap> {
+  if (typeof document === "undefined") return applyCooldownMutation(message);
+  const response = await chrome.runtime.sendMessage(message) as CooldownMutationResponse | undefined;
+  if (!response?.ok) throw new Error(response?.error ?? "Cooldown update was not confirmed");
+  if (!response.cooldowns || typeof response.cooldowns !== "object" || Array.isArray(response.cooldowns)) {
+    throw new Error("Cooldown update returned an invalid map");
+  }
+  return response.cooldowns;
+}
+
+// This entry point is private: document callers cannot opt out of delegation.
+function applyCooldownMutation(message: CooldownMutation): Promise<CooldownMap> {
+  return queueCooldownWrite(async () => {
+    const { pruned, changed } = await readCooldowns();
+    if (message.op === "set") {
+      pruned[pairKey(message.sourceDomain, message.destDomain)] = Date.now() + SMART_DEFAULT_COOLDOWN_MS;
+    } else if (message.op === "clear") {
+      delete pruned[pairKey(message.sourceDomain, message.destDomain)];
+    }
+    const bounded = capCooldowns(pruned);
+    if (message.op !== "prune" || changed || bounded !== pruned) {
+      await chrome.storage.local.set({ [SMART_DEFAULT_COOLDOWNS_KEY]: bounded });
+    }
+    return bounded;
+  });
+}
+
+/** Authenticated worker admission. Cooldowns never grant navigation authority. */
+export async function handleSmartDefaultCooldownMessage(
+  value: unknown,
+  sender?: chrome.runtime.MessageSender,
+): Promise<CooldownMutationResponse> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "Invalid cooldown update" };
+  }
+  const message = value as Record<string, unknown>;
+  if (message.type !== "ns-smart-default-cooldown" ||
+      (message.op !== "set" && message.op !== "clear" && message.op !== "prune")) {
+    return { ok: false, error: "Invalid cooldown operation" };
+  }
+  const runtime = chrome.runtime;
+  const base = runtime.getURL("");
+  const ownPage = !!base && !!sender?.url?.startsWith(base);
+  const ownContent = Number.isSafeInteger(sender?.tab?.id) && (sender?.tab?.id ?? -1) >= 0 &&
+    Number.isSafeInteger(sender?.frameId) && (sender?.frameId ?? -1) >= 0 &&
+    typeof sender?.documentId === "string" && sender.documentId.length > 0;
+  if (!runtime.id || sender?.id !== runtime.id || (!ownPage && !ownContent)) {
+    return { ok: false, error: "Unauthorized cooldown update" };
+  }
+  const validDomain = (domain: unknown): domain is string =>
+    typeof domain === "string" && domain.length > 0 && domain.length <= 253 &&
+    domain.trim() === domain && !/[|\s]/u.test(domain);
+  if (message.op !== "prune" && (!validDomain(message.sourceDomain) || !validDomain(message.destDomain))) {
+    return { ok: false, error: "Invalid cooldown pair" };
+  }
+  try {
+    const cooldowns = await applyCooldownMutation(message as CooldownMutation);
+    return { ok: true, cooldowns };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /**

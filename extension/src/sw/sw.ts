@@ -30,6 +30,7 @@ import {
   isBehaviouralResetMessage,
   resumeInterruptedBehaviouralReset,
 } from "../shared/behavioural_reset";
+import { handleSmartDefaultCooldownMessage } from "../shared/smart_defaults";
 import { CHAIN_STALE_MS, RedirectChainTracker } from "../shared/redirect_chain";
 import type { PendingDecisionRuntimeMessage } from "../shared/pending_decision";
 import {
@@ -667,6 +668,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => {
         sendResponse?.({ ok: false, error: err instanceof Error ? err.message : String(err) });
       });
+    return true;
+  }
+
+  if ((message as { type?: unknown }).type === "ns-smart-default-cooldown") {
+    void handleSmartDefaultCooldownMessage(message, sender)
+      .then((response) => sendResponse?.(response))
+      .catch((error) => sendResponse?.({ ok: false, error: error instanceof Error ? error.message : String(error) }));
     return true;
   }
 
@@ -1345,7 +1353,33 @@ chrome.tabs.onCreated.addListener((tab) => {
   }
   onCreatedHandler(tabId, openerTabId);
 });
+// #496: sized HTTP popups can omit tabs.openerTabId. This browser event
+// supplies creation provenance; the existing opener-write handler still
+// requires a report from the registered child before forwarding a signal.
+// Creation grants no navigation authority. Never infer a relationship from URL.
+chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
+  const tabId = details.tabId;
+  const openerTabId = details.sourceTabId;
+  const sourceFrameId = details.sourceFrameId;
+  if (typeof tabId !== "number" || !Number.isInteger(tabId) || tabId <= 0) return;
+  if (typeof openerTabId !== "number" || !Number.isInteger(openerTabId) || openerTabId <= 0) return;
+  if (tabId === openerTabId) return;
+  if (typeof sourceFrameId !== "number" || !Number.isInteger(sourceFrameId) || sourceFrameId < 0) return;
+  // Subscribe at arrival, before a later opener-write queues its continuation.
+  // Registration must follow restoration so hydration cannot overwrite it.
+  if (!swState.hydrated) {
+    void hydrateReady.then(() => onCreatedHandler(tabId, openerTabId));
+    return;
+  }
+  onCreatedHandler(tabId, openerTabId);
+});
 function onCreatedHandler(tabId: number, openerTabId: number): void {
+  if (!Number.isInteger(tabId) || tabId <= 0) return;
+  if (!Number.isInteger(openerTabId) || openerTabId <= 0) return;
+  if (tabId === openerTabId) return;
+  // Both event sources can report one child. Preserve its first relationship,
+  // original age and observed-write flag, including on conflicting duplicates.
+  if (childWindowByTab.has(tabId)) return;
   pruneStaleChildWindows();
   childWindowByTab.set(tabId, {
     openerTabId,

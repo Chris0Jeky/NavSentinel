@@ -51,6 +51,7 @@ body {
 }
 
 .hero-title {
+  margin: 0;
   font-size: 19px;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -61,7 +62,7 @@ body {
   align-items: center;
   gap: 5px;
   font-size: 10px;
-  color: var(--ns-text-3);
+  color: var(--ns-text-2);
 }
 
 .icon-btn {
@@ -339,6 +340,7 @@ body {
 
 .seg-btn {
   padding: 5px 4px;
+  min-height: 24px;
   border: none;
   cursor: pointer;
   background: transparent;
@@ -609,6 +611,8 @@ body {
   gap: 3px;
   font-weight: 500;
   cursor: pointer;
+  min-height: 24px;
+  margin-block: -5px;
 }
 
 .footer-link:hover {

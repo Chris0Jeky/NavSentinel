@@ -9,6 +9,7 @@ import {
   computeOverlayAutoDismissStats,
   withReentrancyGuard,
   classifyImportError,
+  ImportSizeLimitError,
   describeBehaviouralReset,
   runClearBehaviouralData,
   runClearStats,
@@ -335,6 +336,26 @@ describe("classifyImportError (#188)", () => {
     const outcome = classifyImportError(false);
     expect(outcome.tone).toBe("error");
     expect(outcome.message).toBe("Import failed.");
+  });
+
+  it("names malformed JSON distinctly from a flat failure", () => {
+    const outcome = classifyImportError(false, new SyntaxError("Unexpected token"));
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toMatch(/isn't valid JSON/);
+    expect(outcome.message).not.toBe("Import failed.");
+  });
+
+  it("names an oversized file distinctly from malformed JSON and flat failures", () => {
+    const outcome = classifyImportError(false, new ImportSizeLimitError());
+    expect(outcome.tone).toBe("error");
+    expect(outcome.message).toMatch(/exceeds the size limit/);
+    expect(outcome.message).not.toBe("Import failed.");
+    expect(outcome.message).not.toBe(classifyImportError(false, new SyntaxError("x")).message);
+  });
+
+  it("keeps a delivery failure partial even when the error is typed", () => {
+    const outcome = classifyImportError(true, new ImportSizeLimitError());
+    expect(outcome.message).toMatch(/prompt-related/i);
   });
 });
 

@@ -148,6 +148,15 @@ describe("isDocumentNavigationHref (#236)", () => {
     expect(isDocumentNavigationHref("https://x.com/", null, here)).toBe(false);
     expect(isDocumentNavigationHref(undefined, undefined, here)).toBe(false);
   });
+
+  it("rejects falsy destHost with a valid href, so appendImmediateSilentNav never sees a hostless event (#975)", () => {
+    // buildSilentNavEvent returns null unless this gate passes, and every
+    // appendImmediateSilentNav caller passes its output — the throttle key
+    // therefore always has a destHost and needs no site: fallback.
+    expect(isDocumentNavigationHref("https://x.com/", "", here)).toBe(false);
+    expect(isDocumentNavigationHref("https://x.com/", null, here)).toBe(false);
+    expect(isDocumentNavigationHref("https://x.com/", undefined, here)).toBe(false);
+  });
 });
 
 describe("silentNavThrottleAllows (#236)", () => {

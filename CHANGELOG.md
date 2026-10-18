@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tests and evidence
 
-- An acceptance spec now automates the AI-47 row 8 owner procedure, and the v0.5.0 agent pass is recorded (#944). That procedure cannot detect a #599 regression, because the benign prewrite alone warns (#947).
+- An acceptance spec now automates the AI-47 row 8 owner procedure, and the v0.5.0 agent pass is recorded (#944). That first procedure could not detect a #599 regression, because the benign prewrite alone warned (#947); #952 replaced it with a clipboard-pressure procedure whose spec fails against a #599-regressed build.
 - The popup acceptance helper waits for the pending-decision controller's first render (#884, #899).
 
 ## [0.5.0] - 2026-09-26

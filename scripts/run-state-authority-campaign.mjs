@@ -1050,7 +1050,7 @@ async function main() {
     "--verify",
     "HEAD^{commit}",
   ]);
-  const repositoryTree = gitText(repositoryRoot, [
+  const _repositoryTree = gitText(repositoryRoot, [
     "rev-parse",
     "--verify",
     `${repositoryCommit}^{tree}`,

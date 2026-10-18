@@ -47,6 +47,9 @@ function createChromeMock(options: { deferSends?: boolean } = {}) {
     }) => void
   >();
   const tabCreated = createEvent<(tab: { id?: number; openerTabId?: number }) => void>();
+  const createdNavigationTarget = createEvent<
+    (details: { tabId: unknown; sourceTabId: unknown; sourceFrameId: unknown; url?: string }) => void
+  >();
   const tabRemoved = createEvent<(tabId: number) => void>();
   const tabUpdated = createEvent<
     (tabId: number, changeInfo: { status?: string; url?: string }, tab: { url?: string }) => void
@@ -119,7 +122,8 @@ function createChromeMock(options: { deferSends?: boolean } = {}) {
       webNavigation: {
         onBeforeNavigate: beforeNavigate,
         onCommitted: committed,
-        onErrorOccurred: errorOccurred
+        onErrorOccurred: errorOccurred,
+        onCreatedNavigationTarget: createdNavigationTarget
       },
       tabs: {
         onCreated: tabCreated,

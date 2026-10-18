@@ -44,11 +44,16 @@ async function assertLevel1Blocked(session: AcceptanceSession, page: Page, label
   await session.gotoReady(page, session.url("/level1-basic-opacity.html"));
   const before = session.context.pages().length;
   await trustedClick(page, "#play");
-  await expect.poll(async () => (await toastState(page)).text, { timeout: 6000, message: `${label}: block notice` }).not.toBeNull();
-  await page.waitForTimeout(1200);
-  const toast = await toastState(page);
+  let snapshot: { text: string | null; buttons: string[] } | null = null;
+  await expect.poll(async () => {
+    const state = await toastState(page);
+    if (state.text !== null && /block/i.test(state.text)) snapshot = state;
+    return state.text;
+  }, { timeout: 6000, message: `${label}: block notice` }).toMatch(/block/i);
+  const toast = snapshot ?? { text: null, buttons: [] as string[] };
   session.note(`${label}: toast "${toast.text}" buttons [${toast.buttons.join(", ")}]`);
   expect(toast.text ?? "").toMatch(/block/i);
+  await page.waitForTimeout(1200);
   expect(session.context.pages().length, `${label}: no destination tab opened`).toBe(before);
 }
 

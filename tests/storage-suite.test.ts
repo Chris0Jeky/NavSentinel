@@ -991,6 +991,41 @@ describe("suite storage and allowlist migration", () => {
     expect(JSON.stringify(stored).length).toBeLessThan(4 * 2048 + 32 * 80 + 1000);
   });
 
+  it("omits an out-of-range imported-event-score-range instead of storing it", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+
+    const { importAll } = await import("../extension/src/shared/storage");
+    await importAll({
+      eventLog: [
+        { id: "over", ts: 1, kind: "nav_click_block", site: "evil.example", score: 999999 },
+        { id: "neg", ts: 2, kind: "nav_click_block", site: "evil.example", score: -1 },
+        { id: "over1001", ts: 3, kind: "nav_click_block", site: "evil.example", score: 1001 },
+        { id: "zero", ts: 4, kind: "nav_click_block", site: "evil.example", score: 0 },
+        { id: "hundred", ts: 5, kind: "nav_click_block", site: "evil.example", score: 100 },
+        { id: "mid", ts: 6, kind: "nav_click_block", site: "evil.example", score: 40.5 },
+        { id: "none", ts: 7, kind: "nav_click_block", site: "evil.example" },
+        { id: "nrs104", ts: 8, kind: "nav_click_block", site: "evil.example", score: 104 },
+        { id: "nrs150", ts: 9, kind: "nav_click_block", site: "evil.example", score: 150 },
+        { id: "ceiling", ts: 10, kind: "nav_click_block", site: "evil.example", score: 1000 },
+      ],
+    });
+
+    const stored = store["sentinelsuite:event_log_v1"] as Array<Record<string, unknown>>;
+    const byId = Object.fromEntries(stored.map((e) => [e.id, e]));
+    expect(stored).toHaveLength(10);
+    expect("score" in byId["over"]!).toBe(false);
+    expect("score" in byId["neg"]!).toBe(false);
+    expect("score" in byId["over1001"]!).toBe(false);
+    expect(byId["zero"]!.score).toBe(0);
+    expect(byId["hundred"]!.score).toBe(100);
+    expect(byId["mid"]!.score).toBe(40.5);
+    expect("score" in byId["none"]!).toBe(false);
+    expect(byId["nrs104"]!.score).toBe(104);
+    expect(byId["nrs150"]!.score).toBe(150);
+    expect(byId["ceiling"]!.score).toBe(1000);
+  });
+
   it("preserves a small serializable extra and short fields on import (#299)", async () => {
     // Inverted-condition guard: the oversized-extra DROP must be selective — a small, valid extra
     // (like the structural objects the live path emits) and short fields must survive verbatim.

@@ -43,6 +43,7 @@ function createChromeMock() {
     },
     webNavigation: {
       onBeforeNavigate: createEvent(), onCommitted: createEvent(), onErrorOccurred: createEvent(),
+      onCreatedNavigationTarget: createEvent(),
       getAllFrames: vi.fn().mockResolvedValue([]),
     },
     tabs: {

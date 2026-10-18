@@ -8,7 +8,12 @@ export function normalizeHost(host: string): string {
   if (!host) return "";
   // Strip all trailing dots (not just one) so the function is idempotent:
   // normalizeHost("a..") must equal normalizeHost(normalizeHost("a..")).
-  let h = host.toLowerCase().replace(/\.+$/, "");
+  // NFKC BEFORE lowercase: compatibility characters (fullwidth "ｐａｙｐａｌ",
+  // "．" full stop, Roman numerals, Kelvin sign) fold to their canonical forms
+  // first, so lookalike matching compares what the user actually sees instead
+  // of the raw confusable code points. Idempotent: NFKC output re-normalizes
+  // to itself and lowercasing is already stable (incl. Turkish İ -> i̇).
+  let h = host.normalize("NFKC").toLowerCase().replace(/\.+$/, "");
   // Unwrap a bracketed IPv6 literal ("[2001:db8::1]" -> "2001:db8::1"). URL
   // hostnames bracket IPv6 literals, but the brackets are not part of the
   // canonical host: leaving them would defeat isIPv6 (so the +35 IP_HOST
@@ -34,7 +39,43 @@ function isIPv4(host: string): boolean {
 
 function isIPv6(host: string): boolean {
   if (!host.includes(":")) return false;
-  return /^[0-9a-fA-F:.]+$/.test(host);
+  if (!/^[0-9a-fA-F:.]+$/.test(host)) return false;
+  // ":::" is never valid, and "::" elision may appear at most once.
+  if (host.includes(":::")) return false;
+  const firstElision = host.indexOf("::");
+  if (firstElision !== -1 && host.indexOf("::", firstElision + 2) !== -1) return false;
+
+  const isGroup = (g: string): boolean => /^[0-9a-fA-F]{1,4}$/.test(g);
+
+  // Validate one side of an optional "::" elision. Returns the number of
+  // 16-bit groups, or -1 when invalid. An IPv4 dotted-quad tail (only legal
+  // as the final piece of the whole address) counts as two groups.
+  const checkSide = (side: string, allowV4Tail: boolean): number => {
+    if (side === "") return 0;
+    const pieces = side.split(":");
+    let count = 0;
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i] as string;
+      if (p.includes(".")) {
+        if (!allowV4Tail || i !== pieces.length - 1 || !isIPv4(p)) return -1;
+        count += 2;
+      } else {
+        if (!isGroup(p)) return -1;
+        count += 1;
+      }
+    }
+    return count;
+  };
+
+  if (firstElision === -1) {
+    // No elision: exactly 8 groups (an embedded dotted quad counts as 2).
+    return checkSide(host, true) === 8;
+  }
+  const left = checkSide(host.slice(0, firstElision), false);
+  const right = checkSide(host.slice(firstElision + 2), true);
+  if (left < 0 || right < 0) return false;
+  // The elision must compress at least one group.
+  return left + right <= 7;
 }
 
 export function isIPAddress(host: string): boolean {
@@ -170,7 +211,16 @@ function containsPunycode(host: string): boolean {
     .some((label) => label.startsWith("xn--"));
 }
 
-type ScriptClass = "Latin" | "Greek" | "Cyrillic" | "Digit" | "Common" | "Other";
+type ScriptClass =
+  | "Latin"
+  | "Greek"
+  | "Cyrillic"
+  | "CJK"
+  | "Arabic"
+  | "Hebrew"
+  | "Digit"
+  | "Common"
+  | "Other";
 
 function charScript(cp: number): ScriptClass {
   if ((cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)) return "Latin";
@@ -183,6 +233,35 @@ function charScript(cp: number): ScriptClass {
     (cp >= 0xa640 && cp <= 0xa69f)
   ) {
     return "Cyrillic";
+  }
+  // Han, Hiragana, Katakana, Hangul, and Bopomofo share ONE bucket: a
+  // Japanese host legitimately mixes Kanji + Kana, so splitting them would
+  // false-positive on ordinary IDNs. Latin+CJK still flags via the bucket pair.
+  if (
+    (cp >= 0x1100 && cp <= 0x11ff) || // Hangul Jamo
+    (cp >= 0x3040 && cp <= 0x30ff) || // Hiragana + Katakana
+    (cp >= 0x3100 && cp <= 0x312f) || // Bopomofo
+    (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Extension A
+    (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified Ideographs
+    (cp >= 0xac00 && cp <= 0xd7af) || // Hangul Syllables
+    (cp >= 0x20000 && cp <= 0x2b739)  // CJK Extensions B-F (astral)
+  ) {
+    return "CJK";
+  }
+  if (
+    (cp >= 0x0590 && cp <= 0x05ff) || // Hebrew
+    (cp >= 0xfb1d && cp <= 0xfb4f)    // Hebrew presentation forms
+  ) {
+    return "Hebrew";
+  }
+  if (
+    (cp >= 0x0600 && cp <= 0x06ff) || // Arabic
+    (cp >= 0x0750 && cp <= 0x077f) || // Arabic Supplement
+    (cp >= 0x08a0 && cp <= 0x08ff) || // Arabic Extended-A
+    (cp >= 0xfb50 && cp <= 0xfdff) || // Arabic presentation forms-A
+    (cp >= 0xfe70 && cp <= 0xfeff)    // Arabic presentation forms-B
+  ) {
+    return "Arabic";
   }
   if (cp === 0x2d || cp === 0x2e) return "Common";
   return "Other";
@@ -201,15 +280,15 @@ export function isMixedScript(host: string): boolean {
     if (scripts.size >= 2) break;
   }
 
-  const hasLatin = scripts.has("Latin");
-  const hasGreek = scripts.has("Greek");
-  const hasCyrillic = scripts.has("Cyrillic");
-
-  return (
-    (hasLatin && hasGreek) ||
-    (hasLatin && hasCyrillic) ||
-    (hasGreek && hasCyrillic)
-  );
+  // Flag any TWO distinct letter scripts (Latin/Cyrillic/Greek/CJK/Arabic/
+  // Hebrew). Single-script hosts — including legitimate pure-CJK, pure-Arabic,
+  // or pure-Hebrew IDNs — stay unflagged; "Other" (unclassified scripts like
+  // Thai or Devanagari) is ignored as before, conservatively.
+  let letterScripts = 0;
+  for (const s of scripts) {
+    if (s !== "Other") letterScripts++;
+  }
+  return letterScripts >= 2;
 }
 
 /**
@@ -222,8 +301,12 @@ const LEVENSHTEIN_MAX_LEN = 253;
 
 export function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
-  const n = a.length;
-  const m = b.length;
+  // Iterate code points, not UTF-16 units: charCodeAt splits surrogate pairs,
+  // so one astral character (emoji, CJK Ext B) counted as two edits.
+  const aChars = Array.from(a);
+  const bChars = Array.from(b);
+  const n = aChars.length;
+  const m = bChars.length;
   if (n === 0) return m;
   if (m === 0) return n;
   // Guard against pathologically long inputs
@@ -237,9 +320,9 @@ export function levenshtein(a: string, b: string): number {
 
   for (let i = 1; i <= n; i++) {
     cur[0] = i;
-    const ai = a.charCodeAt(i - 1);
+    const ai = aChars[i - 1];
     for (let j = 1; j <= m; j++) {
-      const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
+      const cost = ai === bChars[j - 1] ? 0 : 1;
       cur[j] = Math.min((prev[j] ?? 0) + 1, (cur[j - 1] ?? 0) + 1, (prev[j - 1] ?? 0) + cost);
     }
     for (let j = 0; j <= m; j++) prev[j] = cur[j] ?? 0;
@@ -377,7 +460,7 @@ export function computeCredentialRisk(params: {
     score += 25;
     reasons.push({
       code: "MIXED_SCRIPT_HOST",
-      label: "Hostname mixes scripts (Latin/Cyrillic/Greek). Potential homograph."
+      label: "Hostname mixes scripts (different alphabets). Potential homograph."
     });
   }
 
