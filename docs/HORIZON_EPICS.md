@@ -571,8 +571,9 @@ v1.0.41), UW's result that same-origin policy collapses to "the strength of the 
 defenses." OpenAI's CISO calls prompt injection "a frontier, unsolved problem." Vendor confirmations
 are **self-graded** (fox guarding henhouse) and **no one ships an independent audit trail** — the
 research brief ranks an extension-resident agent-action journal as the strongest-fit, near-zero-
-competition opening. NavSentinel's gesture-token state machine already distinguishes human gestures
-from synthetic events: the primitive is ~80% built but never reified.
+competition opening. NavSentinel's gesture-token state machine does not yet distinguish human gestures
+from synthetic events: tokens are minted, but `getActiveToken` has no production reader pending the
+roadmap gesture-correlation task (P2-08). The primitive is scaffolding and is not reified.
 
 **Mechanism.** Four mechanics. (1) **Actor attribution** — extend the gesture state machine +
 `main_guard` interposition to label every consequential event `{human-gesture | page-synthetic

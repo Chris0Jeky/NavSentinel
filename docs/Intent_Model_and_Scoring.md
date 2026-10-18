@@ -116,7 +116,7 @@ Both navigation and credential decisions are designed to be inspectable:
 That is deliberate. The project is easier to tune and safer to review when decisions are explainable instead of purely implicit.
 
 ## Terminology
-- GestureToken: short-lived token representing user intent (trusted, suspicious, unknown).
+- GestureToken: short-lived token minted for a gesture. Production stores it with `setActiveToken` and does not read `getActiveToken`. It does not classify intent as trusted, suspicious, or unknown.
 - CDS: Click Deception Score computed from click context.
 - NRS: Navigation Risk Score computed at navigation time.
 - Reason codes: labels that explain why a score changed.
@@ -130,8 +130,8 @@ That is deliberate. The project is easier to tune and safer to review when decis
 - Each real user gesture creates a token with TTL around 800ms (tunable).
 - Tokens should carry context (coords and element signature) to verify intent.
 - Cache CDS in the token to avoid recomputation.
-- Patched navigation primitives require an active trusted token.
-- Invalidate the token after a successful open or when multiple attempts occur.
+- Patched navigation primitives do not require an active trusted token. `getActiveToken` has no production reader; correlation is pending roadmap task P2-08.
+- The token is not invalidated after a successful open or when multiple attempts occur. Expiry is checked only inside the unconsumed accessor.
 
 ## CDS (Click Deception Score) features
 
