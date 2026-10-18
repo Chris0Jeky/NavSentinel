@@ -1719,6 +1719,8 @@ function patchHistory(): void {
       const args = arguments; // eslint-disable-line prefer-rest-params -- Preserve supplied arity and native function.length.
       // Forward actual arity so the native still rejects missing required arguments.
       if (args.length < 2) return Reflect.apply(native, this, args);
+      // WebIDL converts the required DOMString `unused` before the optional URL.
+      args[1] = `${args[1]}`;
       const rawUrl = args[2] as string | URL | null | undefined;
       // Native and observer share one ToString; Symbol still throws (#891).
       const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;

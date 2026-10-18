@@ -119,6 +119,23 @@ describe.each<Method>(["pushState", "replaceState"])("actual MAIN History %s (#1
     expect(h.posts[0]?.payload.url).toBe("");
   });
 
+  it("converts the required unused argument before the URL, like WebIDL", () => {
+    const h = install({ reason: "suspicious" });
+    const calls: string[] = [];
+    const unused = { toString() { calls.push("unused"); throw new Error("bad unused"); } };
+    const url = { toString() { calls.push("url"); return "/x"; } };
+    expect(() => Reflect.apply(h.methods[method], h.history, [{}, unused, url])).toThrow("bad unused");
+    expect(calls).toEqual(["unused"]);
+    expect(h.calls).toEqual([]);
+    expect(h.observations).toEqual([]);
+  });
+
+  it("forwards the converted unused string to the native", () => {
+    const h = install({});
+    Reflect.apply(h.methods[method], h.history, [null, { toString: () => "title" }, "/y"]);
+    expect(h.calls[0]?.args).toEqual([null, "title", "/y"]);
+  });
+
   it("rejects a Symbol URL without native calls or observations", () => {
     const h = install({ reason: "suspicious" });
     expect(() => Reflect.apply(h.methods[method], h.history, [null, "", Symbol("url")])).toThrow(/Symbol/);
