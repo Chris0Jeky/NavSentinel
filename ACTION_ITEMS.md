@@ -229,6 +229,7 @@ Gate-3.
 | AI-51 | #1104 credential snapshot bound | merge commit `fbe7648a` (merged 2026-10-17) | OPEN — not run |
 | AI-53 | #1077 popup trust after failed writes | merge commit `aa39a7b2` (merged 2026-10-16) | OPEN — not run |
 | AI-54 | #1106 guards through `document.open()` | merge commit `d2cbf115` (merged 2026-10-16) | OPEN — not run |
+| AI-55 | #1017 opener `location` facade (MAIN world) | merge commit `c47c5991` (merged 2026-10-18) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -257,6 +258,12 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   (2) a normal login still prompts (when risky) or goes through after "Proceed once". The local fixture is
   `tests/e2e/credential-document-open.spec.ts`. Not part of this check: a submit dispatched in the same task
   as `document.close()`, the MAIN-world and disabled js-behaviour listeners, Firefox.
+- **AI-55 (#1017):** landed under the same retroactive rule (green CI, independent review, the unchanged 20,992-byte
+  MAIN cap) by the estate-hub overnight session. In a child tab opened by a page: (1) `window.opener.location.assign(url)`,
+  `.replace(url)`, `.href = url` and `window.opener.location = url` navigate the opener with no TypeError; (2) a
+  cross-origin opener still throws the native `SecurityError` on reads; (3) `window.opener = null` disowns it and a
+  later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
+  revert PR for `c47c5991`.
 
 ### Branch-held Gate-3 items
 
