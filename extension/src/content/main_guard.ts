@@ -620,12 +620,15 @@ const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
 // import. This module can run after an early page script, so the self-exemption
 // prefers that capture and uses the module-level descriptor only when it is absent.
 const earlyFormTarget = (globalThis as typeof globalThis & {
-  __navsentinelMainFormTarget?: (this: HTMLFormElement) => string;
+  __navsentinelMainFormTarget?: (form: HTMLFormElement) => string;
 }).__navsentinelMainFormTarget;
 const nativeFormTargetGetter =
   typeof earlyFormTarget === "function"
     ? earlyFormTarget
-    : nativeGetOwnPropertyDescriptor(formPrototype, "target")?.get as NativeStringGetter<HTMLFormElement> | undefined;
+    : (() => {
+      const getter = nativeGetOwnPropertyDescriptor(formPrototype, "target")?.get;
+      return getter ? (form: HTMLFormElement) => nativeApply(getter, form, []) as string : undefined;
+    })();
 const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
   nodePrototype,
   "isConnected",
@@ -652,13 +655,13 @@ const windowNamedProperties: object | null = (() => {
 // Without that capture, relative URLs get no base at all: they lose authority
 // rather than trust a getter the page may control.
 const earlyBaseURI = (globalThis as typeof globalThis & {
-  __navsentinelMainBaseURI?: (this: Node) => string;
+  __navsentinelMainBaseURI?: (node: Node) => string;
 }).__navsentinelMainBaseURI;
 
 function documentBaseUrl(): string | null {
   if (typeof earlyBaseURI !== "function") return null;
   try {
-    const base = earlyBaseURI.call(document);
+    const base = earlyBaseURI(document);
     return typeof base === "string" && base !== "" ? base : null;
   } catch {
     return null;
