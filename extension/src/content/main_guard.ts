@@ -270,8 +270,21 @@ function setAllowOnce(url?: string): void {
 }
 
 function textLength(el: Element): number {
-  const text = (el.textContent ?? "").replace(/\s+/g, "");
-  return Math.min(text.length, 80);
+  // Include empty elements in the budget so text-free subtrees cannot hide unbounded work.
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_ALL);
+  let length = 0;
+  let charsLeft = 65536;
+  for (let nodesLeft = 4096; nodesLeft > 0 && charsLeft > 0; nodesLeft--) {
+    const node = walker.nextNode();
+    if (!node) break;
+    if (node.nodeType !== Node.TEXT_NODE) continue;
+    const text = (node as Text).substringData(0, charsLeft); // never materialize an attacker-sized node
+    for (let i = 0; i < text.length && charsLeft > 0; i++, charsLeft--) {
+      if (!/\s/.test(text[i]!) && ++length === 80) return length;
+    }
+  }
+  // shortcut: names beyond the scan budgets may be missed; use explicit metadata for such controls.
+  return length;
 }
 
 function attrLength(el: Element, name: string): number {
@@ -323,12 +336,11 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
 
 function hasMeaningfulName(el: Element): boolean {
   return (
-    textLength(el) +
-      attrLength(el, "aria-label") +
+    attrLength(el, "aria-label") +
       attrLength(el, "title") +
       attrLength(el, "value") +
       attrLength(el, "alt") >
-    0
+    0 || textLength(el) > 0
   );
 }
 
@@ -630,12 +642,11 @@ const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
 // import. This module can run after an early page script, so the self-exemption
 // prefers that capture and uses the module-level descriptor only when it is absent.
 const earlyFormTarget = (globalThis as typeof globalThis & {
-  __navsentinelMainFormTarget?: (this: HTMLFormElement) => string;
+  __navsentinelMainFormTarget?: (form: HTMLFormElement) => string;
 }).__navsentinelMainFormTarget;
-const nativeFormTargetGetter =
-  typeof earlyFormTarget === "function"
-    ? earlyFormTarget
-    : nativeGetOwnPropertyDescriptor(formPrototype, "target")?.get as NativeStringGetter<HTMLFormElement> | undefined;
+// Without the document-start capture there is no trustworthy getter: fail closed
+// (no self-exemption) like documentBaseUrl, rather than trust a module-load read.
+const nativeFormTargetGetter = typeof earlyFormTarget === "function" ? earlyFormTarget : undefined;
 const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
   nodePrototype,
   "isConnected",
@@ -662,13 +673,13 @@ const windowNamedProperties: object | null = (() => {
 // Without that capture, relative URLs get no base at all: they lose authority
 // rather than trust a getter the page may control.
 const earlyBaseURI = (globalThis as typeof globalThis & {
-  __navsentinelMainBaseURI?: (this: Node) => string;
+  __navsentinelMainBaseURI?: (node: Node) => string;
 }).__navsentinelMainBaseURI;
 
 function documentBaseUrl(): string | null {
   if (typeof earlyBaseURI !== "function") return null;
   try {
-    const base = earlyBaseURI.call(document);
+    const base = earlyBaseURI(document);
     return typeof base === "string" && base !== "" ? base : null;
   } catch {
     return null;
@@ -1382,8 +1393,8 @@ function findSuspiciousShadowAnchor(e: MouseEvent): HTMLAnchorElement | null {
     if (!(node instanceof HTMLAnchorElement)) continue;
     if (node.target.toLowerCase() !== "_blank") continue;
     if (!(node.getRootNode() instanceof ShadowRoot)) continue;
-    const nameLen = textLength(node) + attrLength(node, "aria-label") + attrLength(node, "title");
-    if (nameLen > 0 && hasVisibleBox(node)) continue;
+    const named = attrLength(node, "aria-label") + attrLength(node, "title") > 0 || textLength(node) > 0;
+    if (named && hasVisibleBox(node)) continue;
     return node;
   }
   return null;
@@ -1744,63 +1755,28 @@ const nativePushState = History.prototype.pushState;
 const nativeReplaceState = History.prototype.replaceState;
 
 function patchHistory(): void {
-  const patchedPushState = function (
-    this: History,
-    data: unknown,
-    unused: string,
-    rawUrl?: string | URL | null,
-  ): void {
-    // Coerce the URL exactly once, as patchedOpen does. A page-supplied object
-    // could otherwise stringify to one path for the native call and another
-    // for the detector or the telemetry below (#891). A template literal
-    // performs the same ToString as the native binding, including throwing on
-    // a Symbol; null/undefined keep their native semantics.
-    const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
-    const result = nativePushState.call(this, data, unused, url);
-    const reason = checkPushStateSuspicious(url, "pushState");
-    if (reason) {
-      postToIsolated("ns-pushstate-suspicious", {
-        ts: nowMs(),
-        url: url ?? "",
-        method: "pushState",
-        reason,
-      });
-      if (debug) {
-        console.debug("[NavSentinel] suspicious pushState", { url, reason });
+  for (const [method, native] of [["pushState", nativePushState], ["replaceState", nativeReplaceState]] as const) {
+    const patchedHistory = function (this: History, _data: unknown, _unused: string): void {
+      const args = arguments; // eslint-disable-line prefer-rest-params -- Preserve supplied arity and native function.length.
+      // Forward actual arity so the native still rejects missing required arguments.
+      if (args.length < 2) return Reflect.apply(native, this, args);
+      // WebIDL converts the required DOMString `unused` before the optional URL.
+      args[1] = `${args[1]}`;
+      const rawUrl = args[2] as string | URL | null | undefined;
+      // Native and observer share one ToString; Symbol still throws (#891).
+      const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
+      if (args.length > 2) args[2] = url;
+      const result = Reflect.apply(native, this, args);
+      const reason = checkPushStateSuspicious(url, method);
+      if (reason) {
+        postToIsolated("ns-pushstate-suspicious", { ts: nowMs(), url: url ?? "", method, reason });
+        if (debug) console.debug(`[NavSentinel] suspicious ${method}`, { url, reason });
       }
-    }
-    return result;
-  };
-
-  const patchedReplaceState = function (
-    this: History,
-    data: unknown,
-    unused: string,
-    rawUrl?: string | URL | null,
-  ): void {
-    // Same single-coercion contract as patchedPushState (#891).
-    const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
-    const result = nativeReplaceState.call(this, data, unused, url);
-    const reason = checkPushStateSuspicious(url, "replaceState");
-    if (reason) {
-      postToIsolated("ns-pushstate-suspicious", {
-        ts: nowMs(),
-        url: url ?? "",
-        method: "replaceState",
-        reason,
-      });
-      if (debug) {
-        console.debug("[NavSentinel] suspicious replaceState", { url, reason });
-      }
-    }
-    return result;
-  };
-  // Observational hooks only (they call the native and report; never block), so
-  // install them WRITABLE + CONFIGURABLE — hardening these to non-writable broke
-  // strict-mode SPA routers that reassign history.pushState (grey screen on
-  // claude.ai and other TanStack/React-Router apps). See softPatchProto.
-  softPatchProto(History.prototype, "pushState", patchedPushState, "History.prototype.pushState");
-  softPatchProto(History.prototype, "replaceState", patchedReplaceState, "History.prototype.replaceState");
+      return result;
+    };
+    // Observational hooks stay wrappable by strict-mode SPA routers.
+    softPatchProto(History.prototype, method, patchedHistory, `History.prototype.${method}`);
+  }
 }
 
 /**
@@ -1823,13 +1799,14 @@ function patchOpenerLocation(): void {
   // Capture the real opener reference before anyone can tamper with it.
   const realOpener = window.opener;
 
-  function recordOpenerNav(url: string): void {
+  function recordOpenerNav(url: string): string {
     lastOpenerNavTs = nowMs();
     lastOpenerNavUrl = url;
     postToIsolated("ns-dblclick-opener-nav", { url, ts: lastOpenerNavTs });
     if (debug) {
       console.debug("[NavSentinel] opener.location write intercepted", { url });
     }
+    return url;
   }
 
   // Proxy the Location object to intercept .href setter, .assign(), and .replace().
@@ -1837,43 +1814,67 @@ function patchOpenerLocation(): void {
   // directly on the real Location object returned by the get trap.
   function createLocationProxy(): typeof realOpener.location {
     const realLocation = realOpener.location;
-    try {
-      return new Proxy(realLocation, {
-        set(_target, prop, value) {
-          if (prop === "href") {
-            const url = String(value);
-            recordOpenerNav(url);
-            try { realLocation.href = value; } catch { /* cross-origin */ }
-            return true;
-          }
-          try { Reflect.set(realLocation, prop, value); } catch { /* ignore */ }
-          return true;
-        },
-        get(_target, prop) {
-          if (prop === "assign") {
-            return function assign(url: string | URL): void {
-              recordOpenerNav(String(url));
-              try { realLocation.assign(url as string); } catch { /* cross-origin */ }
-            };
-          }
-          if (prop === "replace") {
-            return function replace(url: string | URL): void {
-              recordOpenerNav(String(url));
-              try { realLocation.replace(url as string); } catch { /* cross-origin */ }
-            };
-          }
-          try {
-            const val = Reflect.get(realLocation, prop);
-            if (typeof val === "function") return val.bind(realLocation);
-            return val;
-          } catch {
-            return undefined;
-          }
-        }
-      });
-    } catch {
-      return realLocation;
+    // Native Location methods are immutable own properties: replacing them
+    // on a Proxy(realLocation) violates get invariants (#1016). Reflect lazily
+    // onto an extensible facade, preserving the native receiver and href path.
+    const facade = Object.create(null);
+    const methodCache = new Map<
+      PropertyKey,
+      [native: (...args: unknown[]) => unknown, wrapper: (...args: unknown[]) => unknown]
+    >();
+
+    function readNative(_target: unknown, prop: PropertyKey): unknown {
+      const nativeMethod = Reflect.get(realLocation, prop) as unknown;
+      if (typeof nativeMethod !== "function") return nativeMethod;
+      const cached = methodCache.get(prop);
+      if (cached?.[0] === nativeMethod) return cached[1];
+      let wrapper: (...args: unknown[]) => unknown;
+      if (prop === "assign" || prop === "replace") {
+        wrapper = (...args: unknown[]): unknown => {
+          // Preserve missing arguments; convert URL objects once, like native.
+          if (args.length) args[0] = recordOpenerNav(`${args[0]}`);
+          return Reflect.apply(nativeMethod, realLocation, args);
+        };
+      } else {
+        wrapper = nativeMethod.bind(realLocation);
+      }
+      methodCache.set(prop, [nativeMethod as (...args: unknown[]) => unknown, wrapper]);
+      return wrapper;
     }
+
+    function writeNative(_target: unknown, prop: PropertyKey, value: unknown): boolean {
+      if (prop === "href") {
+        value = recordOpenerNav(`${value}`);
+      }
+      return Reflect.set(realLocation, prop, value);
+    }
+
+    return new Proxy(facade, {
+      get: readNative,
+      set: writeNative,
+      has: (_target, prop) => Reflect.has(realLocation, prop),
+      ownKeys: () => Reflect.ownKeys(realLocation),
+      getPrototypeOf: () => Reflect.getPrototypeOf(realLocation),
+      // Configurable descriptor copies satisfy facade invariants; this is not
+      // exact native branding or unforgeable descriptor equivalence.
+      getOwnPropertyDescriptor(_target, prop) {
+        const current = Reflect.getOwnPropertyDescriptor(realLocation, prop);
+        if (!current) return undefined;
+        current.configurable = true;
+        if ("value" in current) {
+          current.value = readNative(null, prop);
+        } else {
+          if (current.get) current.get = current.get.bind(realLocation);
+          if (current.set) current.set = (value: unknown): void => { writeNative(null, prop, value); };
+        }
+        return current;
+      },
+      // Never lock the empty facade and recreate native Proxy invariants.
+      defineProperty: (_target, prop, desc) => desc.configurable === true && Reflect.defineProperty(realLocation, prop, desc),
+      deleteProperty: (_target, prop) => Reflect.deleteProperty(realLocation, prop),
+      preventExtensions: () => false,
+      setPrototypeOf: () => false,
+    });
   }
 
   try {
@@ -1881,19 +1882,13 @@ function patchOpenerLocation(): void {
 
     // Watch for direct property assignment: window.opener.location = url
     // We proxy the opener object so we can intercept .location sets.
-    const openerProxy = new Proxy(realOpener, {
+    let openerProxy = new Proxy(realOpener, {
       set(_target, prop, value) {
         if (prop === "location") {
-          const url = String(value);
-          recordOpenerNav(url);
+          // Forward exactly the observed string; reject Symbol like native.
           // Allow the navigation to proceed so the attack surface
           // remains observable (the isolated-world will flag the click).
-          try {
-            realOpener.location = value;
-          } catch {
-            // cross-origin assignment -- browser will handle it
-          }
-          return true;
+          return Reflect.set(realOpener, prop, recordOpenerNav(`${value}`));
         }
         try {
           Reflect.set(realOpener, prop, value);
@@ -1921,14 +1916,13 @@ function patchOpenerLocation(): void {
     // window.opener after the proxy is installed.
     // Preserve setter so pages that intentionally do `window.opener = null`
     // (a common security hardening pattern) still work correctly.
-    let openerDisowned = false;
     Object.defineProperty(window, "opener", {
-      get() { return openerDisowned ? null : openerProxy; },
+      get() { return openerProxy; },
       set(value) {
         // Allow disowning the opener (security best practice) but do not
         // allow replacing it with an arbitrary object.
         if (value === null || value === undefined) {
-          openerDisowned = true;
+          openerProxy = null;
         }
         // Silently ignore other assignments; the proxy stays in place.
       },

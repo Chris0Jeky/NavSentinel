@@ -36,7 +36,8 @@ describe("readCapturedFormTarget (#1055)", () => {
     });
 
     expect(form.target).toBe("");
-    expect(readCapturedFormTarget(form, captured)).toBe("_top");
+    const read = Function.prototype.call.bind(captured);
+    expect(readCapturedFormTarget(form, read)).toBe("_top");
   });
 
   it("returns an empty string only when the captured getter reports no target", () => {
@@ -44,7 +45,8 @@ describe("readCapturedFormTarget (#1055)", () => {
     function captured(this: HTMLFormElement): string {
       return this.getAttribute("target") ?? "";
     }
-    expect(readCapturedFormTarget(form, captured)).toBe("");
+    const read = Function.prototype.call.bind(captured);
+    expect(readCapturedFormTarget(form, read)).toBe("");
   });
 
   it("returns null when the captured getter is missing, throws, or returns a non-string", () => {

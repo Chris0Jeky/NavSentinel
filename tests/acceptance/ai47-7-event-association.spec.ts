@@ -23,8 +23,17 @@ import {
   type PopupGauge,
 } from "./attribution_helpers";
 
-const PR_644_MERGE_SUBJECT = /Merge pull request #644\b/;
-const PR_657_MERGE_SUBJECT = /Merge pull request #657\b/;
+// Merge commits of PR #644 and PR #657: ancestry, not a window of recent merges, so the precheck never expires (#1080).
+const PR_644_MERGE = "7184e9d0a3bca699cae5e05426137258c836850e";
+const PR_657_MERGE = "c760bb086023c4b83c8ef65693b5adf475414fda";
+const isAncestor = (sha: string): boolean => {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd: repoRoot, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
 const URL_RESIDUE = ["https://other.test", "other.test/account", "/account", "token=", "secret", "#fragment", "fragment"];
 
 // Keep the guide's ordering while rebasing its example timestamps into the
@@ -80,9 +89,8 @@ test("AI-47.7 / former AI-44: imported rows never keep a URL pageSite, IP litera
     session.note(`IPv6 loopback fixture: ${ipv6 ? ipv6.baseUrl : "unavailable (::1 bind failed)"}`);
 
     await soft("1. tested head contains the #644 and #657 merges; product source clean", async () => {
-      const merges = execFileSync("git", ["log", "--merges", "--format=%H %s", "-n", "400", "HEAD"], { cwd: repoRoot, encoding: "utf8" });
-      expect(merges, "PR #644 merged into the tested head").toMatch(PR_644_MERGE_SUBJECT);
-      expect(merges, "PR #657 merged into the tested head").toMatch(PR_657_MERGE_SUBJECT);
+      expect(isAncestor(PR_644_MERGE), "PR #644 merged into the tested head").toBe(true);
+      expect(isAncestor(PR_657_MERGE), "PR #657 merged into the tested head").toBe(true);
       expect(session.receipt.git.productSourceClean).toBe(true);
     });
 

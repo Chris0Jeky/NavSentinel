@@ -82,15 +82,15 @@ export const EARLY_MAIN_CLOCK =
 // #900: the platform `Node.prototype.baseURI` getter, captured the same way.
 // The guard resolves relative form actions and window.open URLs against the
 // base URL; a getter an early page script replaced could report one base while
-// the browser submits against another. Only a real getter is stored.
+// the browser submits against another. Bind the invoker before page tampering.
 export const EARLY_MAIN_BASE_URI =
-  "try{const baseGetter=Object.getOwnPropertyDescriptor(Node.prototype,'baseURI').get;if(typeof baseGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainBaseURI',{value:baseGetter,writable:false,configurable:false})}catch(_){}";
+  "try{const baseGetter=Object.getOwnPropertyDescriptor(Node.prototype,'baseURI').get;if(typeof baseGetter==='function'){const read=Function.prototype.call.bind(baseGetter);Object.defineProperty(globalThis,'__navsentinelMainBaseURI',{value:read,writable:false,configurable:false})}}catch(_){}";
 
 // #1055: the platform HTMLFormElement target getter, captured before the async
 // guard import. The subframe self-exemption must not trust a getter an early
-// page script replaced. Only a real getter is stored.
+// page script replaced. Bind the invoker before page tampering.
 export const EARLY_MAIN_FORM_TARGET =
-  "try{const targetGetter=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,'target').get;if(typeof targetGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainFormTarget',{value:targetGetter,writable:false,configurable:false})}catch(_){}";
+  "try{const targetGetter=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,'target').get;if(typeof targetGetter==='function'){const read=Function.prototype.call.bind(targetGetter);Object.defineProperty(globalThis,'__navsentinelMainFormTarget',{value:read,writable:false,configurable:false})}}catch(_){}";
 
 // #1061: Element.prototype.getAttribute, captured before the async guard import.
 // Action and method decisions must not trust a method an early page script replaced.
