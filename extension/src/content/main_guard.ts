@@ -27,6 +27,7 @@ import {
   pruneTimestampWindow,
   resolveChildNavigable,
   resolveFormActionUrl,
+  readCapturedAttribute,
   readCapturedFormTarget,
   shouldEmitRapidPushState,
   type ChildNavigableView,
@@ -526,8 +527,21 @@ function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQue
 }
 
 function isGetForm(form: HTMLFormElement, submitter?: HTMLElement | null): boolean {
-  const raw = submitter?.getAttribute("formmethod") || form.getAttribute("method") || form.method || "get";
-  return raw.toLowerCase() === "get";
+  const submitterMethod = submitter
+    ? readCapturedAttribute(submitter, "formmethod", nativeGetAttribute)
+    : null;
+  if (submitterMethod === undefined) return false;
+  if (submitterMethod) return submitterMethod.toLowerCase() === "get";
+  const formMethod = readCapturedAttribute(form, "method", nativeGetAttribute);
+  if (formMethod === undefined) return false;
+  if (formMethod) return formMethod.toLowerCase() === "get";
+  if (!nativeFormMethodGetter) return false;
+  try {
+    const idl = nativeFormMethodGetter.call(form);
+    return typeof idl === "string" && idl.toLowerCase() === "get";
+  } catch {
+    return false;
+  }
 }
 
 function registerBlockedAction(params: {
@@ -585,6 +599,13 @@ const nativeApply = Reflect.apply;
 const nativeArrayPush = Array.prototype.push;
 const nativeStringToLowerCase = String.prototype.toLowerCase;
 const nativeElementGetAttribute = Element.prototype.getAttribute;
+// #1061: the loader captures a tamper-safe getAttribute invoker before the async
+// import. Without it, action and method reads fail closed as unknown attributes.
+const earlyGetAttribute = (globalThis as typeof globalThis & {
+  __navsentinelMainGetAttribute?: (element: Element, qualifiedName: string) => string | null;
+}).__navsentinelMainGetAttribute;
+const nativeGetAttribute =
+  typeof earlyGetAttribute === "function" ? earlyGetAttribute : undefined;
 const nativeDocumentQuerySelector = Document.prototype.querySelector;
 const nativeCreateElement = Document.prototype.createElement;
 const nativeAttachShadow = Element.prototype.attachShadow;
@@ -1131,7 +1152,14 @@ function patchedOpen(
 }
 
 function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null): string | undefined {
-  const raw = submitter?.getAttribute("formaction") ?? form.getAttribute("action");
+  const submitterAction = submitter
+    ? readCapturedAttribute(submitter, "formaction", nativeGetAttribute)
+    : null;
+  if (submitterAction === undefined) return undefined;
+  const raw = submitterAction !== null
+    ? submitterAction
+    : readCapturedAttribute(form, "action", nativeGetAttribute);
+  if (raw === undefined) return undefined;
   return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
 }
 
