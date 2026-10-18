@@ -27,6 +27,7 @@ import {
   pruneTimestampWindow,
   resolveChildNavigable,
   resolveFormActionUrl,
+  readCapturedFormTarget,
   shouldEmitRapidPushState,
   type ChildNavigableView,
   type AnchorOpenIntent,
@@ -615,6 +616,15 @@ const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
   formPrototype,
   "acceptCharset",
 )?.get as NativeStringGetter<HTMLFormElement> | undefined;
+// #1055: the loader captures HTMLFormElement.prototype.target before the async
+// import. This module can run after an early page script, so the self-exemption
+// prefers that capture and uses the module-level descriptor only when it is absent.
+const earlyFormTarget = (globalThis as typeof globalThis & {
+  __navsentinelMainFormTarget?: (form: HTMLFormElement) => string;
+}).__navsentinelMainFormTarget;
+// Without the document-start capture there is no trustworthy getter: fail closed
+// (no self-exemption) like documentBaseUrl, rather than trust a module-load read.
+const nativeFormTargetGetter = typeof earlyFormTarget === "function" ? earlyFormTarget : undefined;
 const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
   nodePrototype,
   "isConnected",
@@ -641,13 +651,13 @@ const windowNamedProperties: object | null = (() => {
 // Without that capture, relative URLs get no base at all: they lose authority
 // rather than trust a getter the page may control.
 const earlyBaseURI = (globalThis as typeof globalThis & {
-  __navsentinelMainBaseURI?: (this: Node) => string;
+  __navsentinelMainBaseURI?: (node: Node) => string;
 }).__navsentinelMainBaseURI;
 
 function documentBaseUrl(): string | null {
   if (typeof earlyBaseURI !== "function") return null;
   try {
-    const base = earlyBaseURI.call(document);
+    const base = earlyBaseURI(document);
     return typeof base === "string" && base !== "" ? base : null;
   } catch {
     return null;
@@ -1208,8 +1218,10 @@ function dispatchFormSubmit(
     postAllowed(kind, childReplay.actionUrl);
     return;
   }
+  const capturedFormTarget = readCapturedFormTarget(form, nativeFormTargetGetter);
   if (childReplay.status === "not-child" &&
-      ((isSubframe() && isFormSelfTarget(form.target)) || consumeRedirectAllowance(actionUrl) !== "none")) {
+      ((isSubframe() && capturedFormTarget !== null && isFormSelfTarget(capturedFormTarget)) ||
+        consumeRedirectAllowance(actionUrl) !== "none")) {
     allow();
     return;
   }
