@@ -622,13 +622,9 @@ const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
 const earlyFormTarget = (globalThis as typeof globalThis & {
   __navsentinelMainFormTarget?: (form: HTMLFormElement) => string;
 }).__navsentinelMainFormTarget;
-const nativeFormTargetGetter =
-  typeof earlyFormTarget === "function"
-    ? earlyFormTarget
-    : (() => {
-      const getter = nativeGetOwnPropertyDescriptor(formPrototype, "target")?.get;
-      return getter ? (form: HTMLFormElement) => nativeApply(getter, form, []) as string : undefined;
-    })();
+// Without the document-start capture there is no trustworthy getter: fail closed
+// (no self-exemption) like documentBaseUrl, rather than trust a module-load read.
+const nativeFormTargetGetter = typeof earlyFormTarget === "function" ? earlyFormTarget : undefined;
 const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
   nodePrototype,
   "isConnected",
