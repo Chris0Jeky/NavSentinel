@@ -19,5 +19,6 @@ export function installEarlyMainClockText(generated: string): string;
 export function assertEarlyMainClock(loader: string): void;
 export const EARLY_MAIN_BASE_URI: string;
 export const EARLY_MAIN_FORM_TARGET: string;
+export const EARLY_MAIN_GET_ATTRIBUTE: string;
 export const EARLY_MAIN_PRELUDE: string;
 export function assertEarlyMainPrelude(loader: string): void;

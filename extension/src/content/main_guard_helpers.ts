@@ -413,11 +413,11 @@ export function matchesAnchorOpenIntent(
 export function readCapturedAttribute(
   element: Element,
   name: string,
-  nativeGetAttribute: ((this: Element, qualifiedName: string) => string | null) | undefined,
+  nativeGetAttribute: ((element: Element, qualifiedName: string) => string | null) | undefined,
 ): string | null | undefined {
   if (!nativeGetAttribute) return undefined;
   try {
-    const value = nativeGetAttribute.call(element, name);
+    const value = nativeGetAttribute(element, name);
     if (value === null) return null;
     return typeof value === "string" ? value : undefined;
   } catch {

@@ -95,7 +95,7 @@ export const EARLY_MAIN_FORM_TARGET =
 // #1061: Element.prototype.getAttribute, captured before the async guard import.
 // Action and method decisions must not trust a method an early page script replaced.
 export const EARLY_MAIN_GET_ATTRIBUTE =
-  "try{const getAttribute=Element.prototype.getAttribute;if(typeof getAttribute==='function')Object.defineProperty(globalThis,'__navsentinelMainGetAttribute',{value:getAttribute,writable:false,configurable:false})}catch(_){}";
+  "try{const getAttribute=Element.prototype.getAttribute;if(typeof getAttribute==='function')Object.defineProperty(globalThis,'__navsentinelMainGetAttribute',{value:Function.prototype.call.bind(getAttribute),writable:false,configurable:false})}catch(_){}";
 
 /** Every early native capture, in order: installed and asserted as one block. */
 export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}`;

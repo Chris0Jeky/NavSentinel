@@ -599,14 +599,13 @@ const nativeApply = Reflect.apply;
 const nativeArrayPush = Array.prototype.push;
 const nativeStringToLowerCase = String.prototype.toLowerCase;
 const nativeElementGetAttribute = Element.prototype.getAttribute;
-// #1061: the loader captures getAttribute before the async import. This module
-// can run after an early page script, so action and method reads prefer that
-// capture and use the module-level function only when it is absent.
+// #1061: the loader captures a tamper-safe getAttribute invoker before the async
+// import. Without it, action and method reads fail closed as unknown attributes.
 const earlyGetAttribute = (globalThis as typeof globalThis & {
-  __navsentinelMainGetAttribute?: (this: Element, qualifiedName: string) => string | null;
+  __navsentinelMainGetAttribute?: (element: Element, qualifiedName: string) => string | null;
 }).__navsentinelMainGetAttribute;
 const nativeGetAttribute =
-  typeof earlyGetAttribute === "function" ? earlyGetAttribute : nativeElementGetAttribute;
+  typeof earlyGetAttribute === "function" ? earlyGetAttribute : undefined;
 const nativeDocumentQuerySelector = Document.prototype.querySelector;
 const nativeCreateElement = Document.prototype.createElement;
 const nativeAttachShadow = Element.prototype.attachShadow;
