@@ -211,7 +211,7 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
-### Retroactive Gate-3 checks (AI-48 to AI-55)
+### Retroactive Gate-3 checks (AI-48 to AI-56)
 
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
 Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
@@ -230,6 +230,7 @@ Gate-3.
 | AI-53 | #1077 popup trust after failed writes | merge commit `aa39a7b2` (merged 2026-10-16) | OPEN — not run |
 | AI-54 | #1106 guards through `document.open()` | merge commit `d2cbf115` (merged 2026-10-16) | OPEN — not run |
 | AI-55 | #1017 opener `location` facade (MAIN world) | merge commit `c47c5991` (merged 2026-10-18) | OPEN — not run |
+| AI-56 | #1060 subframe form-target capture (MAIN world) | merge commit `a0035874` (merged 2026-10-18) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -265,6 +266,17 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   `tests/e2e/opener-location-native.spec.ts` expects), which is a pass, not a failure; (3) `window.opener = null` disowns it and a
   later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
   revert PR for `c47c5991`.
+- **AI-56 (#1060):** landed under the same retroactive rule (green CI, independent review, MAIN budget 21 KB).
+  A behaviour smoke check that ordinary forms still behave, not a hand-timed tamper test: the page-tamper
+  resistance (a getter replaced between the document-start loader and the async MAIN import, or an own `call` set
+  on the captured invoker) is covered by the vm-realm regressions in `tests/main-base-uri-loader-contract.test.ts`
+  and `tests/form-target-self-exemption.test.ts`. In branded Chrome on the unpacked build of `a0035874`, with the
+  Gym served (`npm run gym:serve`, port 5173): (1) run the acceptance procedure for the subframe self-target form,
+  `NAVSENTINEL_BRANDED_CHROME=1 npm run test:acceptance -- tests/acceptance/fp-iframe-target-form.spec.ts` (fixture
+  `tests/acceptance/fixtures/fp-iframe-target-form.html`): a background form post into the page's own named iframe is
+  neither blocked nor announced, same-origin and cross-origin; (2) open `gym/base-uri-tamper.html`: the page's early
+  baseURI tamper does not change the base the guard resolves against (the outcome the page itself describes). Describe any
+  difference. A failure gets a revert PR for `a0035874`.
 
 ### Branch-held Gate-3 items
 
@@ -284,7 +296,7 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
-- **AI-48 to AI-55**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-55) above by
+- **AI-48 to AI-56**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-56) above by
   owner decision 2026-10-16 (#1072 / AI-52 excepted: its own Windows hold). The AI-48 (#1100) and AI-50 (#1103)
   branch entries were retired here; build their merge commits, not the pre-merge code heads. An AI-49/51/53/54
   entry that a PR branch brings into this list on merge is superseded the same way: run the check on that PR's
