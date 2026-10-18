@@ -11,6 +11,8 @@ import {
 } from "./extension_test_utils";
 import { startProvingGroundEgressFence, type ProvingGroundEgressAttempt } from "./proving_ground_fake_sink";
 
+import { FIXTURE_CLOSE_SCRIPT, prepareFixtureClose } from "./fixture_close_handshake";
+
 type ChildEntry = { openerTabId: number; createdAt: number; openerNavObserved: boolean };
 type LoggedEvent = { kind?: string; reasons?: string[] };
 
@@ -50,7 +52,7 @@ for (const arm of ["opener-write", "benign-close", "noopener"] as const) {
               window.opener.location.href = new URL('/parent?arm=${arm}#stage2', location.href).href;
               document.body.dataset.writeResult = 'attempted';
             });
-            document.querySelector('#close').addEventListener('click', () => window.close());
+            ${FIXTURE_CLOSE_SCRIPT}
           </script></body></html>`);
         return;
       }
@@ -129,8 +131,12 @@ for (const arm of ["opener-write", "benign-close", "noopener"] as const) {
         await expect(page).toHaveURL(`${origin}/parent?arm=${arm}`);
       }
       receipt.beforeClose = await snapshot(context);
+      const closeControl = await prepareFixtureClose(child);
       const closed = child.waitForEvent("close");
       await child.locator("#close").click();
+      await expect.poll(() => closeControl.requests).toBe(1);
+      receipt.closeActivation = { requests: closeControl.requests, acknowledged: true };
+      closeControl.release();
       await closed;
       await expect.poll(async () => (await snapshot(context!)).children[childId]).toBeUndefined();
       expect(hasDoubleClickSignal((await snapshot(context)).events), "creation, write and close have not yet attributed a click").toBe(false);

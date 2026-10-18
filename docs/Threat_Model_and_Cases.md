@@ -106,6 +106,48 @@ NavSentinel applies local heuristics before or around the browser primitives tha
 
 ## Residual Risks
 
+### Password presence and shadow-DOM coverage (#200)
+
+The shared credential-page gate is `hasVisiblePasswordField` in
+`content/password_field.ts`: a light-DOM password input whose own `disabled`
+property is false and whose inline style is neither `display:none` nor `visibility:hidden`. Content fingerprinting,
+the SRI gate, and the JS monitor's page-level `credentialFieldsPresent` flag use
+this definition. It does not claim full computed-style or ancestor visibility.
+`capture_isolated.ts` no longer carries its own password-presence query.
+
+Other predicates retain different boundaries because they answer different
+questions; they must not be substituted for that page-level gate:
+
+| Consumer | Current boundary and purpose |
+| --- | --- |
+| Content analyzer's form-action snapshot | Records structural password descendants, including disabled or inline-hidden inputs, for form-action analysis. It does not assert that those fields are visible or successful submit controls. |
+| JS monitor's form-submit signal | Counts password inputs whose own `disabled` property is false: those passing the shared inline-visibility check (including unnamed inputs), or named inline-hidden inputs. This is an exposure heuristic, not a complete successful-form-control check. |
+| Credential submit guard | Counts password controls whose own `disabled` property is false, including inline-hidden or unnamed controls, from descendants and `form.elements` (including `form=` associations). This submit boundary intentionally does not apply the passive page-visibility filter. |
+| JS monitor's credential-read count | Reports a raw count of light-DOM password inputs after a password-value read, including hidden or disabled fields; it is a count, not the page-presence gate. |
+| Mutation monitor | Reports an added or retyped password node without the page-visibility filter. `password_injected` describes a DOM mutation, not a declaration that the whole page passes the credential-page gate. |
+
+The own-property checks do not account for disabled ancestor fieldsets. A
+password input inside a disabled `<fieldset>` can still have `input.disabled`
+equal to false, so these predicates can count it even when the browser excludes
+it from native form data. This documented limitation does not change the
+platform's disabled-fieldset or first-legend rules and is not a claim that every
+counted field will be submitted.
+
+Document-level password queries do not traverse shadow roots. A password only
+inside a shadow tree therefore does not satisfy the shared credential-page gate.
+Mutation monitoring separately observes open shadow roots and has tests for
+password injection there; this does not establish shadow-form submit protection.
+The credential guard and JS monitor listen for submits on `document`, check the
+event target, and do not install shadow-root submit listeners. Shadow-form submit
+coverage remains unverified. The optional `chrome.dom.openOrClosedShadowRoot`
+lookup in mutation monitoring is not proof of closed-shadow credential coverage.
+Open/closed shadow credential-page and submit coverage remain known gaps; no
+traversal expansion, measured performance result, or owner risk acceptance is
+claimed here. JS behavior instrumentation remains disabled in every committed
+release profile.
+
+### Other residual risks
+
 - `chrome.storage.local` writes are not transactional, so event logging is best-effort
 - registrable-domain logic uses a build-time PSL snapshot; new TLDs require a PSL data rebuild
 - the research Bloom filter is a build-time fixture, not live threat coverage;
