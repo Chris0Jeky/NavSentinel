@@ -211,7 +211,7 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
-### Retroactive Gate-3 checks (AI-48 to AI-55)
+### Retroactive Gate-3 checks (AI-48 to AI-56)
 
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
 Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
@@ -230,6 +230,7 @@ Gate-3.
 | AI-53 | #1077 popup trust after failed writes | merge commit `aa39a7b2` (merged 2026-10-16) | OPEN — not run |
 | AI-54 | #1106 guards through `document.open()` | merge commit `d2cbf115` (merged 2026-10-16) | OPEN — not run |
 | AI-55 | #1017 opener `location` facade (MAIN world) | merge commit `c47c5991` (merged 2026-10-18) | OPEN — not run |
+| AI-56 | #1060 subframe form-target capture (MAIN world) | merge commit `a0035874` (merged 2026-10-18) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -265,6 +266,12 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   `tests/e2e/opener-location-native.spec.ts` expects), which is a pass, not a failure; (3) `window.opener = null` disowns it and a
   later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
   revert PR for `c47c5991`.
+- **AI-56 (#1060):** landed under the same retroactive rule (green CI, independent review, MAIN budget 21 KB).
+  In a cross-origin subframe: (1) a form with `target="_top"` (or `_parent`) is still treated as leaving the frame
+  even after the page sets `HTMLFormElement.prototype.target` to a getter returning `""` and sets an own `call` on
+  `globalThis.__navsentinelMainFormTarget`; (2) an ordinary self-targeted form posting to its own frame is still
+  neither blocked nor announced. The local fixtures are `tests/form-target-self-exemption.test.ts` and
+  `tests/main-base-uri-loader-contract.test.ts`. A failure gets a revert PR for `a0035874`.
 
 ### Branch-held Gate-3 items
 
@@ -284,7 +291,7 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
-- **AI-48 to AI-55**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-55) above by
+- **AI-48 to AI-56**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-56) above by
   owner decision 2026-10-16 (#1072 / AI-52 excepted: its own Windows hold). The AI-48 (#1100) and AI-50 (#1103)
   branch entries were retired here; build their merge commits, not the pre-merge code heads. An AI-49/51/53/54
   entry that a PR branch brings into this list on merge is superseded the same way: run the check on that PR's
