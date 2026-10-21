@@ -61,6 +61,7 @@ for (const crossOrigin of [false, true]) {
       const arms: Record<string, unknown>[] = [];
       try {
         for (const protectedArm of [false, true]) {
+          const armStarted = performance.now();
           // Keep disposable Chrome profile paths short on Windows; trace output
           // paths include the full test title and can exceed native path limits.
           const profile = fs.mkdtempSync(path.join(profileRoot, "case-"));
@@ -84,8 +85,11 @@ for (const crossOrigin of [false, true]) {
             if (protectedArm) await updateNavigationSettings(context, { defaultMode: "smart" });
             const parent = await context.newPage();
             await parent.goto(`${parentOrigin}/parent`);
+            // goto waits for the fixture's inline click listener; protected arms
+            // additionally wait for capture, the bridge, and the exact built guard.
+            // No elapsed-time window is required before this trusted popup click.
             if (protectedArm) await waitForNavSentinelBridge(parent);
-            await parent.waitForTimeout(6_000);
+            const parentReadyMs = performance.now() - armStarted;
             const popupPromise = context.waitForEvent("page", { timeout: 5_000 });
             await parent.locator("#open-child").click();
             const child = await popupPromise;
@@ -123,6 +127,7 @@ for (const crossOrigin of [false, true]) {
               await expect.poll(async () => (await childState(context!)).children[childId!]?.openerNavObserved).toBe(!nativeRejected);
             }
             arms.push({ protectedArm, browser: context.browser()?.version(), stringify, attempt, parentUrl: parent.url(),
+              parentReadyMs, assertionsCompleteMs: performance.now() - armStarted,
               session: protectedArm ? await childState(context) : undefined });
           } finally {
             await context?.close();
