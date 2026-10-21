@@ -2,6 +2,10 @@ name: Observatory form evidence
 on:
   pull_request:
     paths:
+      - 'extension/src/content/form_intent.ts'
+      - 'extension/src/content/child_form_authority.ts'
+      - 'extension/src/content/main_guard.ts'
+      - 'extension/src/content/capture_isolated.ts'
       - 'extension/src/shared/form_intent.ts'
       - 'extension/src/shared/session_state.ts'
       - 'extension/src/sw/sw.ts'
