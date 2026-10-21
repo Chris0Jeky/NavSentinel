@@ -56,6 +56,8 @@ export interface FormNavigationEntry {
   issuedAt: number;
   expiresAt: number;
   phase: "a" | "s" | "p";
+  /** Matching source confirmation after submit dispatch, independent of start order. */
+  submitted?: true;
   /** First onBeforeNavigate consumes the armed state, including on mismatch. */
   startedUrl?: string | undefined;
   startedAt?: number | undefined;
