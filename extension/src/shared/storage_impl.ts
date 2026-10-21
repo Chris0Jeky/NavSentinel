@@ -2428,10 +2428,12 @@ export async function exportAll(): Promise<{
  * operations, not a new per-write concurrency scheme: the existing per-lane
  * chains (and the #180/#182 fixes in them) are untouched.
  *
- * Scope: per JS context. Both controls live on the options page, so its module
- * instance serializes them end to end, including across the worker delegation
- * each awaits inside the queue. Two extension pages driving one bulk operation
- * each are still not ordered against one another — documented residual.
+ * Each JS context has its own queue instance. Supported extension-page imports
+ * and resets delegate the whole operation to the worker, whose queue serializes
+ * imports, resets, and startup resume across callers. The page-side queue keeps
+ * local bulk operations ordered while awaiting the worker response. This does
+ * not provide a cross-context lock for arbitrary direct storage writes, such as
+ * content-script domain-profile updates.
  */
 export const queueBulkDataOperation = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] bulk data serialization error:", err);
