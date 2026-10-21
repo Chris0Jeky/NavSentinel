@@ -3,6 +3,13 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { expect, test } from "@playwright/test";
 import { EARLY_MAIN_PRELUDE } from "../../scripts/content-loader-contract.mjs";
+import { selectBrandedChrome } from "../branded/branded-chrome-selector.cjs";
+
+// The extension-launch preload does not select the built-in browser fixtures.
+const browserSelection = selectBrandedChrome(process.env.NAVSENTINEL_BRANDED_CHROME);
+if (browserSelection.channel || browserSelection.executablePath) {
+  test.use({ launchOptions: browserSelection });
+}
 
 type Mutation = "none" | "own call" | "prototype call" | "Reflect.apply" | "all dispatch methods";
 type Phase = "before module" | "after module";
@@ -114,7 +121,8 @@ const expected = {
 
 for (const phase of ["before module", "after module"] as const) {
   for (const mutation of ["none", "own call", "prototype call", "Reflect.apply", "all dispatch methods"] as const) {
-    test(`captured native readers survive ${mutation} ${phase} @regression`, async ({ page, context, browser }, testInfo) => {
+    test(`captured native readers survive ${mutation} ${phase} @regression`, async ({ page, context, browser, channel, launchOptions }, testInfo) => {
+      const fixtureSelection = { channel: channel ?? null, executablePath: launchOptions.executablePath ?? null };
       const attempts: string[] = [];
       await context.route("**/*", async route => {
         attempts.push(route.request().url());
@@ -124,9 +132,11 @@ for (const phase of ["before module", "after module"] as const) {
       await testInfo.attach("native-reader-invocation.json", {
         contentType: "application/json",
         body: Buffer.from(JSON.stringify({ schema: "navsentinel.native-reader-invocation.v1", phase, mutation,
-          browserVersion: browser.version(), helperSha256: createHash("sha256").update(helperSource).digest("hex"),
+          browserVersion: browser.version(), browserType: browser.browserType().name(), browserSelection, fixtureSelection,
+          helperSha256: createHash("sha256").update(helperSource).digest("hex"),
           preludeSha256: createHash("sha256").update(EARLY_MAIN_PRELUDE).digest("hex"), result, attempts })),
       });
+      expect(fixtureSelection).toMatchObject(browserSelection);
       expect(result).toEqual(expected);
       expect(attempts).toEqual([]);
       expect(page.url()).toBe("about:blank");
