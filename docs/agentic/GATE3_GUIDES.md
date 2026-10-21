@@ -819,6 +819,17 @@ merged as `d4b1acf5843605f519ffe1732050a2c1bb501ee1`. This is the owner
 Chrome check retained under AI-47; the branch-head and policy-decision steps
 in the historical AI-37 guide below no longer apply.
 
+**Validity procedure under repair (#954/#963).** The public bridge-ready
+marker is delayed after actual verification; neither a marker gap nor a minimum
+gap can prove that clipboard receipts entered the pre-verification queue.
+The current fixture therefore requires direct evidence from a separately
+instrumented diagnostic copy. Ordinary release `extension/dist` has no such
+observer and cannot produce a valid direct queue witness. The numbered human
+procedure below is retained for provenance and needs repair before another
+owner result can be recorded from it. An observed diagnostic copy does not
+complete that human procedure. The AI-47 waiver and existing owner records are
+unchanged.
+
 **Procedure replaced 2026-09-27 (#947).** The earlier mixed trial on
 `clickfix-01` (historical steps 5–6) could not fail: that page shows its overlay
 and instruction text from load, so the benign prewrite alone raised the warning,
@@ -826,9 +837,9 @@ and the 10-second alert limit then absorbed the attack write. It also ran after
 the bridge was verified, so #599's queue was never used. The steps below use
 `gym/clickfix-06-clipboard-pressure.html` instead:
 
-- The page writes the clipboard in the short window after NavSentinel's
-  MAIN-world clipboard hook is installed and before the bridge verifies its
-  isolated peer. During that window, receipts wait in the queue that #599
+- The page attempts its burst after NavSentinel's MAIN-world clipboard hook is
+  installed. Only the direct diagnostic observer can establish that the
+  receipts reached the queue before its first accepted handshake. That queue
   coalesces to the latest command-like receipt and the latest other receipt.
 - Its overlay has no verification or paste wording, so a benign write alone
   scores nothing. Only the command-like receipt can raise the warning, and the
@@ -841,14 +852,29 @@ the bridge was verified, so #599's queue was never used. The steps below use
 
 Chrome lets a page write the clipboard without a click only when the site's
 Clipboard permission is **Allow**, so step 4 sets it. The agent's acceptance
-spec `tests/acceptance/ai47-8-clipboard-pressure.spec.ts` follows these steps.
-Run on a copy of the build with #599's coalescing removed
-(`node tests/acceptance/pr599-regressed-bundle.ts` on Node 22.18+ or 24, which
-run TypeScript files directly; on older Node use `npx tsx`. Then set
-`EXTENSION_PATH=<printed path>`), it fails the checks in steps 5–7 below: the
-benign arm logs an overflow row, and the attack arm shows no warning and logs no
-`clickfix_detected` row. Run on the real build, it passes. That is automated
-evidence only.
+spec `tests/acceptance/ai47-8-clipboard-pressure.spec.ts` now creates its own
+temporary observed copy of the source `EXTENSION_PATH` (default
+`extension/dist`). Only this row's session uses that copy; its receipt records
+the source and observed bundle hashes and an explicit diagnostic classification.
+The copy is removed after the session closes, including failed opens. Other
+acceptance rows keep their original source build.
+
+For the paired diagnostic run, build first and run
+`npm run test:acceptance -- tests/acceptance/ai47-8-clipboard-pressure.spec.ts`.
+Create the regressed source with `node tests/acceptance/pr599-regressed-bundle.ts`
+(Node 22.18+ or 24, or `npx tsx` on older Node), then repeat with
+`EXTENSION_PATH=<printed regressed source path>`. Do not pass an already observed
+copy: row 8 applies the observer itself. The standalone
+`clipboard-pressure-observed-bundle.ts` CLI is for inspecting that transformation.
+With valid direct queue evidence, the fixed-policy diagnostic copy must retain
+the command receipt without overflow, and the regressed diagnostic copy must
+fail those same behavior checks. A missed natural startup window remains
+`TEST_INVALID`; timings, extra sleeps or a delayed public marker cannot authorize
+`VALID`. These runs establish only instrumented diagnostic behavior. The
+discarded-page event-attribution issue in #963 remains open: three stable log
+snapshots do not prove that an old producer has finished.
+
+**Retained human procedure — pending the validity repair above.**
 
 1. An agent records the exact current `main` SHA, runs `npm ci`,
    `npx vitest run tests/bridge-outbound.test.ts`, `npm run typecheck`,
@@ -875,8 +901,10 @@ evidence only.
    `http://localhost:5173/clickfix-06-clipboard-pressure.html?mode=benign` and
    press Enter. Do not click anything on the page yet. Read the **Fixture
    self-check** box on the page:
-   - **VALID** with `40/40` writes finished before the bridge-ready marker: the
-     load counts.
+   - **VALID** now requires direct evidence that all `40/40` successful receipts
+     reached the unverified queue. A marker-only or ordinary-release load
+     cannot satisfy that requirement; a diagnostic-copy result does not count
+     as an owner pass of this retained procedure.
    - **RETRY**: click once inside the page and press F5. The box explains why.
      "Refused" or "never finished" means that step 4 did not take effect or that
      the page did not have focus.
@@ -919,10 +947,13 @@ evidence only.
   (`tests/e2e/bridge-clipboard-pressure.spec.ts`, #186). So does the proof that
   this procedure fails on a regressed build, which uses a patched copy that is
   never loaded in the owner's profile.
-- The self-check is a page-side proxy. The page can see only NavSentinel's
-  public bridge-ready marker, which appears one message hop after the bridge
-  verifies. A write that finished inside that last hop would skip the queue. The
-  paired regressed-copy runs are the evidence that the proxy holds in practice.
+- The diagnostic builder observes the actual queue call synchronously and
+  freezes its counts at the first accepted verification, before bridge-ready
+  and the queue drain. Acceptance reads that builder-controlled getter directly;
+  the DOM display and marker timing are not authoritative. This is a controlled
+  fixture diagnostic, not a new trusted page-to-extension channel. Instrumentation
+  can affect natural scheduling, so its result cannot be described as an
+  unchanged release-bundle observation or an owner Gate-3 result.
 - The agent loads the page with the tab already focused. Whether typing the
   address and pressing Enter gives the new page focus in time was not tested by
   automation; the self-check reports it if not.
