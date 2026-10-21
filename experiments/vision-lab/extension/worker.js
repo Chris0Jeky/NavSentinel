@@ -33,6 +33,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
    if(typeof message.localId!=='string'||!/^ns-[a-f0-9-]{36}$/.test(message.localId))throw Error('Invalid local consequence ID');
    const input=C.normalizeEvent({...message.event,source:sender.url,actor:'browser-content',evidence:'sensor',context:{tab:String(sender.tab.id),frame:String(sender.frameId),document:sender.documentId,navigation:sender.documentId,actionId:message.localId}});
    const result=C.evaluate(input,{mode:'smart'}),receipt=C.publicReceipt(input,result,{sourceKind:'live-extension'});
+   if(message.effect!==undefined&&message.effect!=='suppressed'&&message.effect!=='held')throw Error('Invalid effect');
    receipt.id=message.localId;receipt.tabId=sender.tab.id;receipt.frameId=sender.frameId;receipt.effect=message.effect==='suppressed'?'overlay-suppressed':message.effect==='held'?'captured-action-held':'observed';
    // Logs are not the enforcement oracle. Keep only purpose-limited, normalized metadata.
    s.records.push(receipt);s.records=s.records.slice(-MAX_ROWS);await chrome.storage.local.set({records:s.records});
@@ -50,7 +51,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   }
   if(message.type==='disable'){
    const origin=matchOrigin(message.origin);s.enabledOrigins=s.enabledOrigins.filter(x=>x!==origin);await chrome.storage.local.set({enabledOrigins:s.enabledOrigins});await syncRegistration(s.enabledOrigins);
-   const tabs=await chrome.tabs.query({});await Promise.all(tabs.filter(t=>Number.isInteger(t.id)).map(t=>chrome.tabs.sendMessage(t.id,{type:'ns-disable',origin}).catch(()=>{})));const live=await contexts();for(const [key,value]of Object.entries(live))if(value.origin===origin)delete live[key];await saveContexts(live);return {enabled:false,reloadRecommended:true};
+   const tabs=await chrome.tabs.query({});const targets=tabs.filter(t=>Number.isInteger(t.id));const outcomes=await Promise.allSettled(targets.map(t=>chrome.tabs.sendMessage(t.id,{type:'ns-disable',origin})));const failedTabIds=outcomes.map((outcome,index)=>outcome.status==='rejected'?targets[index].id:null).filter(id=>Number.isInteger(id));const live=await contexts();for(const [key,value]of Object.entries(live))if(value.origin===origin)delete live[key];await saveContexts(live);return {enabled:false,reloadRecommended:true,failedCount:failedTabIds.length,failedTabIds};
   }
   if(message.type==='clear'){
    const tabs=await chrome.tabs.query({});

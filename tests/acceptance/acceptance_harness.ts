@@ -21,6 +21,8 @@ import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, 
 import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
 import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
+import { readToastState } from "./toast_state_reader";
+import { selectBrandedChrome } from "../branded/branded-chrome-selector.cjs";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const extensionPath = process.env.EXTENSION_PATH
@@ -186,7 +188,9 @@ export class AcceptanceSession {
     try {
       launched = await launchProfile(userDataDir);
       const extensionId = new URL(launched.worker.url()).host;
-      const branded = Boolean(process.env.NAVSENTINEL_BRANDED_CHROME && process.env.NAVSENTINEL_BRANDED_CHROME !== "0");
+      // Same normalized selection the preload launched with (#1018): false/whitespace mean bundled Chromium.
+      const selection = selectBrandedChrome(process.env.NAVSENTINEL_BRANDED_CHROME);
+      const branded = Boolean(selection.channel || selection.executablePath);
       // Derive the product from the running browser (#873): the env flag only
       // says what was requested. Branded Chrome reports a "Google Chrome" brand.
       const brands = await launched.worker.evaluate(() =>
@@ -215,7 +219,7 @@ export class AcceptanceSession {
           brands,
           version: launched.context.browser()?.version() ?? "unknown",
           realistic: process.env.NAVSENTINEL_REALISTIC_CHROME === "1",
-          executable: branded ? (process.env.NAVSENTINEL_BRANDED_CHROME === "1" ? "default-install" : process.env.NAVSENTINEL_BRANDED_CHROME ?? null) : null,
+          executable: selection.executablePath ?? (selection.channel ? "default-install" : null),
         },
         extensionId,
         gymBaseUrl: gymServer.baseUrl,
@@ -697,16 +701,9 @@ export async function toastButtonPoint(page: Page, label: string): Promise<{ x: 
   }, label);
 }
 
+/** Full-card body text, otherwise a coalesced pill, from any toast shadow host. */
 export async function toastState(page: Page): Promise<{ text: string | null; buttons: string[] }> {
-  return page.evaluate(() => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    const root = host?.shadowRoot;
-    const text = root?.querySelector(".body")?.textContent?.trim() || null;
-    const buttons = Array.from(root?.querySelectorAll("button") ?? [])
-      .filter((button) => (button as HTMLElement).offsetParent !== null || getComputedStyle(button).display !== "none")
-      .map((button) => button.textContent?.trim() ?? "");
-    return { text, buttons };
-  });
+  return page.evaluate(readToastState);
 }
 
 /** Proves a real back/forward-cache restore rather than a reload. */

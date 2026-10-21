@@ -33,9 +33,9 @@ export function probeNativeReaders({ prelude, helperModule, mutation, phase }: P
   ];
   const saved = properties.map(([object, key]) => ({ object, key, descriptor: Object.getOwnPropertyDescriptor(object, key) }));
   const readers = {} as {
-    readCapturedFormTarget(form: HTMLFormElement, getter: typeof targetGetter): string | null;
-    readCapturedAttribute(element: Element, name: string, reader: typeof getAttribute): string | null | undefined;
-    readCapturedClosest(element: Element, selector: string, reader: typeof closest): Element | null | undefined;
+    readCapturedFormTarget(form: HTMLFormElement, getter: (form: HTMLFormElement) => string): string | null;
+    readCapturedAttribute(element: Element, name: string, reader: (element: Element, name: string) => string | null): string | null | undefined;
+    readCapturedClosest(element: Element, selector: string, reader: (element: Element, selector: string) => Element | null): Element | null | undefined;
   };
   // Compile both before poisoning dispatch methods; execute the helper module
   // on the selected side of the import gap. Its reads use the page realm.
@@ -44,6 +44,11 @@ export function probeNativeReaders({ prelude, helperModule, mutation, phase }: P
   function replace(object: object, key: string, value: unknown): void {
     Object.defineProperty(object, key, { value, configurable: true, writable: true });
   }
+  const captures = globalThis as typeof globalThis & {
+    __navsentinelMainFormTarget: (form: HTMLFormElement) => string;
+    __navsentinelMainGetAttribute: (element: Element, name: string) => string | null;
+    __navsentinelMainClosest: (element: Element, selector: string) => Element | null;
+  };
   function tamper(): void {
     if (mutation === "none") return;
     Object.defineProperty(HTMLFormElement.prototype, "target", { configurable: true, get: () => "" });
@@ -53,6 +58,9 @@ export function probeNativeReaders({ prelude, helperModule, mutation, phase }: P
       replace(targetGetter, "call", () => "");
       replace(getAttribute, "call", () => null);
       replace(closest, "call", () => null);
+      replace(captures.__navsentinelMainFormTarget, "call", () => "");
+      replace(captures.__navsentinelMainGetAttribute, "call", () => null);
+      replace(captures.__navsentinelMainClosest, "call", () => null);
     }
     if (mutation === "prototype call" || mutation === "all dispatch methods") {
       replace(Function.prototype, "call", () => null);
@@ -72,16 +80,16 @@ export function probeNativeReaders({ prelude, helperModule, mutation, phase }: P
     loadHelpers(readers);
     if (phase === "after module") tamper();
     const result = {
-      target: readers.readCapturedFormTarget(form, targetGetter),
-      action: readers.readCapturedAttribute(form, "action", getAttribute),
-      method: readers.readCapturedAttribute(form, "method", getAttribute),
-      ancestorMatches: readers.readCapturedClosest(button, "a", closest) === anchor,
-      absentAttribute: readers.readCapturedAttribute(form, "missing", getAttribute),
-      unmatchedAncestor: readers.readCapturedClosest(button, "form", closest),
+      target: readers.readCapturedFormTarget(form, captures.__navsentinelMainFormTarget),
+      action: readers.readCapturedAttribute(form, "action", captures.__navsentinelMainGetAttribute),
+      method: readers.readCapturedAttribute(form, "method", captures.__navsentinelMainGetAttribute),
+      ancestorMatches: readers.readCapturedClosest(button, "a", captures.__navsentinelMainClosest) === anchor,
+      absentAttribute: readers.readCapturedAttribute(form, "missing", captures.__navsentinelMainGetAttribute),
+      unmatchedAncestor: readers.readCapturedClosest(button, "form", captures.__navsentinelMainClosest),
       emptyTarget: "pending" as string | null,
     };
     form.setAttribute("target", "");
-    result.emptyTarget = readers.readCapturedFormTarget(form, targetGetter);
+    result.emptyTarget = readers.readCapturedFormTarget(form, captures.__navsentinelMainFormTarget);
     return result;
   } finally {
     // Never leave a poisoned Playwright page or host runtime behind. The early

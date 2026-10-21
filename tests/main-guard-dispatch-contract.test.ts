@@ -37,6 +37,8 @@ function form(): HTMLFormElement {
 }
 
 beforeAll(async () => {
+  // The real loader installs this invoker before importing the guard.
+  vi.stubGlobal("__navsentinelMainGetAttribute", Function.prototype.call.bind(Element.prototype.getAttribute));
   Object.defineProperty(MessagePort, Symbol.hasInstance, {
     configurable: true,
     value: (value: unknown) => nativeHasInstance.call(MessagePort, value) ||
@@ -75,6 +77,7 @@ beforeEach(async () => {
 });
 
 afterAll(() => {
+  vi.unstubAllGlobals();
   peer.port1.close();
   peer.port2.close();
   delete (MessagePort as unknown as Record<symbol, unknown>)[Symbol.hasInstance];

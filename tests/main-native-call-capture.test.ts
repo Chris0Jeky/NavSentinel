@@ -91,43 +91,58 @@ for (const [name, expression, expected] of [
   });
 }
 
-it("pins the first apply primitive without freezing or replacing page intrinsics", () => {
+it("pins the first closest invoker without freezing or replacing page intrinsics", () => {
   const context = realm();
-  assert.equal(vm.runInContext("typeof __navsentinelMainApply", context), "function");
-  assert.equal(vm.runInContext("__navsentinelMainApply === Reflect.apply", context), true);
-  assert.equal(vm.runInContext("Object.isFrozen(Reflect.apply)", context), false);
-  assert.equal(vm.runInContext("Object.getOwnPropertyDescriptor(globalThis, '__navsentinelMainApply').writable", context), false);
-  assert.equal(vm.runInContext("Object.getOwnPropertyDescriptor(globalThis, '__navsentinelMainApply').configurable", context), false);
-  vm.runInContext("globalThis.firstApply = __navsentinelMainApply; Reflect.apply = () => null; firstApply.call = () => null;", context);
+  assert.equal(vm.runInContext("typeof __navsentinelMainClosest", context), "function");
+  assert.equal(vm.runInContext("Object.isFrozen(Element.prototype.closest)", context), false);
+  assert.equal(vm.runInContext("Object.getOwnPropertyDescriptor(globalThis, '__navsentinelMainClosest').writable", context), false);
+  assert.equal(vm.runInContext("Object.getOwnPropertyDescriptor(globalThis, '__navsentinelMainClosest').configurable", context), false);
+  vm.runInContext("globalThis.firstClosest = __navsentinelMainClosest; Element.prototype.closest = () => null; firstClosest.call = () => null;", context);
   vm.runInContext(loader.EARLY_MAIN_PRELUDE, context);
   vm.runInContext(helperModule, context);
-  assert.equal(vm.runInContext("__navsentinelMainApply === firstApply", context), true);
-  assert.equal(vm.runInContext(readers[0].expression, context), "_top");
+  assert.equal(vm.runInContext("__navsentinelMainClosest === firstClosest", context), true);
+  assert.equal(vm.runInContext(readers[3].expression, context), true);
 });
 
-it("captures invocation even in a realm without DOM constructors", () => {
-  const context = vm.createContext({});
-  vm.runInContext(loader.EARLY_MAIN_PRELUDE, context);
-  assert.equal(vm.runInContext("typeof __navsentinelMainApply", context), "function");
+it("leaves closest unavailable without a native method", () => {
+  for (const setup of ["", "globalThis.Element = function Element() {}; Element.prototype.closest = null;"]) {
+    const context = vm.createContext({});
+    vm.runInContext(setup, context);
+    vm.runInContext(loader.EARLY_MAIN_PRELUDE, context);
+    assert.equal(vm.runInContext("typeof globalThis.__navsentinelMainClosest", context), "undefined");
+  }
 });
 
-it("uses a module-time fallback only when the early invoker is absent", () => {
+it("fails closed without the early closest invoker instead of trusting the module-time method", () => {
   const context = vm.createContext({});
   vm.runInContext(setup, context);
-  vm.runInContext("globalThis.targetGetter = Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, 'target').get;", context);
+  const guardSource = readFileSync("extension/src/content/main_guard.ts", "utf8");
+  const init = guardSource.indexOf("const earlyClosest = ");
+  const source = ts.createSourceFile("main_guard.ts", guardSource, ts.ScriptTarget.Latest, true);
+  const bindingStatements = source.statements.filter((node) => ts.isVariableStatement(node)
+    && node.declarationList.declarations.some((declaration) => ts.isIdentifier(declaration.name)
+      && ["earlyClosest", "nativeClosest"].includes(declaration.name.text)));
+  assert.equal(bindingStatements.length, 2);
+  const binding = bindingStatements.map((node) => node.getText(source)).join("\n");
+  assert.ok(init > 0);
+  vm.runInContext(ts.transpile(binding), context);
+  assert.equal(vm.runInContext("nativeClosest", context), undefined);
   vm.runInContext(helperModule, context);
-  vm.runInContext("targetGetter.call = () => ''; Reflect.apply = () => null;", context);
-  assert.equal(vm.runInContext("exports.readCapturedFormTarget(form, targetGetter)", context), "_top");
+  assert.equal(vm.runInContext("exports.readCapturedClosest(button, 'a', nativeClosest)", context), undefined);
 });
 
-it("checks that invocation capture is present, unique and inside the pre-import block", () => {
-  const apply = loader.EARLY_MAIN_APPLY;
-  assert.equal(typeof apply, "string");
+it("checks that closest capture follows attributes exactly once before the import", () => {
+  const closest = loader.EARLY_MAIN_CLOSEST;
+  assert.equal(typeof closest, "string");
   const generated = "(function(){'use strict';(async()=>{await import('guard.js')})()})();";
   const installed = loader.installEarlyMainClockText(generated);
   loader.assertEarlyMainPrelude(installed);
-  assert.ok(installed.indexOf(apply) < installed.indexOf("await import("));
-  assert.throws(() => loader.assertEarlyMainPrelude(installed.replace(apply, "")));
-  assert.throws(() => loader.assertEarlyMainPrelude(installed + apply));
-  assert.throws(() => loader.assertEarlyMainPrelude(installed.replace(apply, "") + apply));
+  assert.ok(installed.indexOf(loader.EARLY_MAIN_GET_ATTRIBUTE) < installed.indexOf(closest));
+  assert.ok(installed.indexOf(closest) < installed.indexOf("await import("));
+  assert.throws(() => loader.assertEarlyMainPrelude(installed.replace(closest, "")), /missing early closest/);
+  assert.throws(() => loader.assertEarlyMainPrelude(installed + closest), /more than one early closest/);
+  assert.throws(() => loader.assertEarlyMainPrelude(installed.replace(
+    loader.EARLY_MAIN_GET_ATTRIBUTE + closest, closest + loader.EARLY_MAIN_GET_ATTRIBUTE,
+  )), /must follow the getAttribute/);
+  assert.throws(() => loader.assertEarlyMainPrelude(installed.replace(closest, "") + closest));
 });

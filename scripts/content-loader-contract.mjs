@@ -82,34 +82,28 @@ export const EARLY_MAIN_CLOCK =
 // #900: the platform `Node.prototype.baseURI` getter, captured the same way.
 // The guard resolves relative form actions and window.open URLs against the
 // base URL; a getter an early page script replaced could report one base while
-// the browser submits against another. Only a real getter is stored.
+// the browser submits against another. Bind the invoker before page tampering.
 export const EARLY_MAIN_BASE_URI =
-  "try{const baseGetter=Object.getOwnPropertyDescriptor(Node.prototype,'baseURI').get;if(typeof baseGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainBaseURI',{value:baseGetter,writable:false,configurable:false})}catch(_){}";
+  "try{const baseGetter=Object.getOwnPropertyDescriptor(Node.prototype,'baseURI').get;if(typeof baseGetter==='function'){const read=Function.prototype.call.bind(baseGetter);Object.defineProperty(globalThis,'__navsentinelMainBaseURI',{value:read,writable:false,configurable:false})}}catch(_){}";
 
 // #1055: the platform HTMLFormElement target getter, captured before the async
 // guard import. The subframe self-exemption must not trust a getter an early
-// page script replaced. Only a real getter is stored.
+// page script replaced. Bind the invoker before page tampering.
 export const EARLY_MAIN_FORM_TARGET =
-  "try{const targetGetter=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,'target').get;if(typeof targetGetter==='function')Object.defineProperty(globalThis,'__navsentinelMainFormTarget',{value:targetGetter,writable:false,configurable:false})}catch(_){}";
+  "try{const targetGetter=Object.getOwnPropertyDescriptor(HTMLFormElement.prototype,'target').get;if(typeof targetGetter==='function'){const read=Function.prototype.call.bind(targetGetter);Object.defineProperty(globalThis,'__navsentinelMainFormTarget',{value:read,writable:false,configurable:false})}}catch(_){}";
 
 // #1061: Element.prototype.getAttribute, captured before the async guard import.
 // Action and method decisions must not trust a method an early page script replaced.
 export const EARLY_MAIN_GET_ATTRIBUTE =
-  "try{const getAttribute=Element.prototype.getAttribute;if(typeof getAttribute==='function')Object.defineProperty(globalThis,'__navsentinelMainGetAttribute',{value:getAttribute,writable:false,configurable:false})}catch(_){}";
+  "try{const getAttribute=Element.prototype.getAttribute;if(typeof getAttribute==='function')Object.defineProperty(globalThis,'__navsentinelMainGetAttribute',{value:Function.prototype.call.bind(getAttribute),writable:false,configurable:false})}catch(_){}";
 
-// #1063: Element.prototype.closest, captured before the async guard import.
-// Popup-intent ancestor checks must not trust a method an early page script replaced.
+// #1063: popup-intent ancestry must use the document-start method and invoker,
+// including when the page replaces Function.prototype.call during the import.
 export const EARLY_MAIN_CLOSEST =
-  "try{const closest=Element.prototype.closest;if(typeof closest==='function')Object.defineProperty(globalThis,'__navsentinelMainClosest',{value:closest,writable:false,configurable:false})}catch(_){}";
-
-// #1060/#1062/#1065: captured DOM functions remain page-visible objects.
-// Capture the invocation primitive too; callers use its [[Call]] directly,
-// never a mutable .call/.apply property on a captured function or Reflect.
-export const EARLY_MAIN_APPLY =
-  "try{const apply=Reflect.apply;if(typeof apply==='function')Object.defineProperty(globalThis,'__navsentinelMainApply',{value:apply,writable:false,configurable:false})}catch(_){}";
+  "try{const closest=Element.prototype.closest;if(typeof closest==='function')Object.defineProperty(globalThis,'__navsentinelMainClosest',{value:Function.prototype.call.bind(closest),writable:false,configurable:false})}catch(_){}";
 
 /** Every early native capture, in order: installed and asserted as one block. */
-export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}${EARLY_MAIN_APPLY}`;
+export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}`;
 
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";
@@ -159,14 +153,6 @@ export function assertEarlyMainPrelude(loader) {
   }
   if (closestFirst < attrFirst) {
     throw new Error("MAIN-world early closest capture must follow the getAttribute capture");
-  }
-  const applyFirst = loader.indexOf(EARLY_MAIN_APPLY);
-  if (applyFirst < 0) throw new Error("MAIN-world guard loader is missing early apply capture");
-  if (loader.indexOf(EARLY_MAIN_APPLY, applyFirst + EARLY_MAIN_APPLY.length) >= 0) {
-    throw new Error("MAIN-world guard loader has more than one early apply capture");
-  }
-  if (applyFirst < closestFirst) {
-    throw new Error("MAIN-world early apply capture must follow the closest capture");
   }
   const strict = loader.indexOf(STRICT_MARKER);
   const prelude = loader.indexOf(EARLY_MAIN_PRELUDE);

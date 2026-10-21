@@ -211,6 +211,73 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
+### Retroactive Gate-3 checks (AI-48 to AI-56)
+
+Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
+Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
+(`scripts/check-perf-budget.mjs`), and Chris runs its branded-Chrome check afterwards on the merged build. A
+failure gets a revert PR for that merge commit. Build the merge commit (`npm ci`, `npm run build`), load
+`extension/dist` unpacked, and reply `AI-xx done; Gate-3 passed at <merge commit>` or describe what differed.
+PR #1072 (AI-52, CRXJS 3) is not on this list: it stays open on its recorded Windows hold, which is separate from
+Gate-3.
+
+| AI | PR | Merged head | Human result |
+| --- | --- | --- | --- |
+| AI-48 | #1100 credential resubmit retarget | `598b94c8` (merged 2026-10-16) | OPEN — not run |
+| AI-50 | #1103 retarget into other windows | `2c7a232c` (merged 2026-10-16) | OPEN — not run |
+| AI-49 | #1098 popup-name text bound | merge commit `dce69fe3` (merged 2026-10-16) | OPEN — not run |
+| AI-51 | #1104 credential snapshot bound | merge commit `fbe7648a` (merged 2026-10-17) | OPEN — not run |
+| AI-53 | #1077 popup trust after failed writes | merge commit `aa39a7b2` (merged 2026-10-16) | OPEN — not run |
+| AI-54 | #1106 guards through `document.open()` | merge commit `d2cbf115` (merged 2026-10-16) | OPEN — not run |
+| AI-55 | #1017 opener `location` facade (MAIN world) | merge commit `c47c5991` (merged 2026-10-18) | OPEN — not run |
+| AI-56 | #1060 subframe form-target capture (MAIN world) | merge commit `a0035874` (merged 2026-10-18) | OPEN — not run |
+
+Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-48 (#1100):** (1) a normal login on a real site still goes through after "Proceed once"; (2) on the
+  fixture in `tests/e2e/credential-resubmit-retarget.spec.ts` (or any page whose submit handler swaps
+  `formaction` to another site), the second prompt names the new host and Cancel sends nothing. Not part of
+  this check: Firefox (#1101).
+- **AI-50 (#1103):** with the popup blocker on, (1) a normal login still goes through after "Proceed once";
+  (2) on the same fixture with a `_blank` retarget, any new tab receives no password and the original tab
+  re-prompts for the new host.
+- **AI-49 (#1098):** (1) an ordinary named popup trigger (visible text under 80 characters) opens its popup
+  exactly as before; (2) a page whose popup anchor holds thousands of nodes neither stalls on click nor
+  changes verdict for a short visible name.
+- **AI-51 (#1104):** (1) a normal login still goes through as before; (2) on a local page with a password form
+  and about 200,000 extra elements (`"<i>x</i>".repeat(200000)` appended to the body), submitting does not
+  stall visibly before Heedline responds. The prompt's stylesheet lost only indentation in this PR; it should
+  look unchanged.
+- **AI-53 (#1077):** (1) on a normal site press **Trust** in the popup: status turns trusted, **Untrust**
+  appears, Options > event log gains exactly one trust event; (2) press **Untrust**: status returns to
+  observing, one untrust event; (3) optional: in the popup's DevTools run
+  `chrome.storage.local.set = () => Promise.reject(new Error("x"))`, press **Trust**: the popup stays
+  observing, the console shows "trust save failed", and no trust event is logged.
+- **AI-54 (#1106):** (1) on a page whose script runs
+  `document.open(); document.write('<form method=post action="https://other.example/x"><input type=password name=p value=x><button id=go>Go</button></form>'); document.close()`,
+  clicking Go still shows the "Credential submit blocked" prompt and Cancel sends nothing to the other host;
+  (2) a normal login still prompts (when risky) or goes through after "Proceed once". The local fixture is
+  `tests/e2e/credential-document-open.spec.ts`. Not part of this check: a submit dispatched in the same task
+  as `document.close()`, the MAIN-world and disabled js-behaviour listeners, Firefox.
+- **AI-55 (#1017):** landed under the same retroactive rule (green CI, independent review, the unchanged 20,992-byte
+  MAIN cap) by the estate-hub overnight session. In a child tab opened by a page: (1) with a same-origin opener, `window.opener.location.assign(url)`,
+  `.replace(url)`, `.href = url` and `window.opener.location = url` navigate the opener with no TypeError; (2) with a
+  cross-origin opener, `assign()` and reads still throw the native `SecurityError` and the opener is unchanged (as
+  `tests/e2e/opener-location-native.spec.ts` expects), which is a pass, not a failure; (3) `window.opener = null` disowns it and a
+  later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
+  revert PR for `c47c5991`.
+- **AI-56 (#1060):** landed under the same retroactive rule (green CI, independent review, MAIN budget 21 KB).
+  A behaviour smoke check that ordinary forms still behave, not a hand-timed tamper test: the page-tamper
+  resistance (a getter replaced between the document-start loader and the async MAIN import, or an own `call` set
+  on the captured invoker) is covered by the vm-realm regressions in `tests/main-base-uri-loader-contract.test.ts`
+  and `tests/form-target-self-exemption.test.ts`. In branded Chrome on the unpacked build of `a0035874`, with the
+  Gym served (`npm run gym:serve`, port 5173): (1) run the acceptance procedure for the subframe self-target form,
+  `NAVSENTINEL_BRANDED_CHROME=1 npm run test:acceptance -- tests/acceptance/fp-iframe-target-form.spec.ts` (fixture
+  `tests/acceptance/fixtures/fp-iframe-target-form.html`): a background form post into the page's own named iframe is
+  neither blocked nor announced, same-origin and cross-origin; (2) open `gym/base-uri-tamper.html`: the page's early
+  baseURI tamper does not change the base the guard resolves against (the outcome the page itself describes). Describe any
+  difference. A failure gets a revert PR for `a0035874`.
+
 ### Branch-held Gate-3 items
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
@@ -229,6 +296,12 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
+- **AI-48 to AI-56**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-56) above by
+  owner decision 2026-10-16 (#1072 / AI-52 excepted: its own Windows hold). The AI-48 (#1100) and AI-50 (#1103)
+  branch entries were retired here; build their merge commits, not the pre-merge code heads. An AI-49/51/53/54
+  entry that a PR branch brings into this list on merge is superseded the same way: run the check on that PR's
+  merge commit and record the result in the retroactive table.
+
 ### Integration closeout receipt
 
 This row records integration state, not a human-test result:

@@ -397,16 +397,9 @@ export function matchesAnchorOpenIntent(
   return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
 }
 
-// A non-writable binding does not freeze a captured function's `.call`.
-// Pin invocation before the loader's async gap and call that primitive directly.
-// The module-time fallback preserves older loaders, but is not an early capture.
-const applyCapturedMain = (globalThis as typeof globalThis & {
-  __navsentinelMainApply?: typeof Reflect.apply;
-}).__navsentinelMainApply ?? Reflect.apply;
-
 /**
  * Form target for the subframe self-exemption (#1055).
- * The caller supplies the getter captured at MAIN-world startup. Null means
+ * The caller supplies the invoker captured at MAIN-world startup. Null means
  * the getter is missing, threw, or returned a non-string, so the exemption
  * must not be granted. An empty string is a real self target and is distinct.
  */
@@ -420,34 +413,31 @@ const applyCapturedMain = (globalThis as typeof globalThis & {
 export function readCapturedAttribute(
   element: Element,
   name: string,
-  nativeGetAttribute: ((this: Element, qualifiedName: string) => string | null) | undefined,
+  nativeGetAttribute: ((element: Element, qualifiedName: string) => string | null) | undefined,
 ): string | null | undefined {
   if (!nativeGetAttribute) return undefined;
   try {
-    const value = applyCapturedMain(nativeGetAttribute, element, [name]);
-    if (value === null) return null;
-    return typeof value === "string" ? value : undefined;
+    const value = nativeGetAttribute(element, name);
+    return value === null || typeof value === "string" ? value : undefined;
   } catch {
     return undefined;
   }
 }
 
 /**
- * Ancestor match for a MAIN-world popup-intent decision (#1063).
- * Undefined means the captured reader is missing, threw, or returned a
- * non-element. Null means nothing matched. A failed read must not be
- * treated as "no ancestor".
+ * Popup-intent ancestry through a document-start bound invoker (#1063).
+ * Null is a confirmed miss; undefined means unreadable and cannot arm intent.
+ * Calling the invoker directly avoids its page-mutable .call/.apply properties.
  */
 export function readCapturedClosest(
   element: Element,
   selector: string,
-  nativeClosest: ((this: Element, selector: string) => Element | null) | undefined,
+  nativeClosest: ((element: Element, selector: string) => Element | null) | undefined,
 ): Element | null | undefined {
   if (!nativeClosest) return undefined;
   try {
-    const value = applyCapturedMain(nativeClosest, element, [selector]);
-    if (value === null) return null;
-    return value instanceof Element ? value : undefined;
+    const value = nativeClosest(element, selector);
+    return value === null || value instanceof Element ? value : undefined;
   } catch {
     return undefined;
   }
@@ -455,11 +445,11 @@ export function readCapturedClosest(
 
 export function readCapturedFormTarget(
   form: HTMLFormElement,
-  nativeTargetGetter: ((this: HTMLFormElement) => string) | undefined,
+  nativeTargetGetter: ((form: HTMLFormElement) => string) | undefined,
 ): string | null {
   if (!nativeTargetGetter) return null;
   try {
-    const value = applyCapturedMain(nativeTargetGetter, form, []);
+    const value = nativeTargetGetter(form);
     return typeof value === "string" ? value : null;
   } catch {
     return null;

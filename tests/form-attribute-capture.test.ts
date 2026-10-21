@@ -8,6 +8,7 @@ import { readCapturedAttribute } from "../extension/src/content/main_guard_helpe
 import {
   assertEarlyMainPrelude,
   EARLY_MAIN_FORM_TARGET,
+  EARLY_MAIN_CLOSEST,
   EARLY_MAIN_GET_ATTRIBUTE,
   EARLY_MAIN_PRELUDE,
   installEarlyMainClockText,
@@ -25,7 +26,7 @@ describe("readCapturedAttribute (#1061)", () => {
     };
     try {
       expect(form.getAttribute("action")).toBeNull();
-      expect(readCapturedAttribute(form, "action", captured)).toBe("https://collector.example/take");
+      expect(readCapturedAttribute(form, "action", Function.prototype.call.bind(captured))).toBe("https://collector.example/take");
     } finally {
       Object.defineProperty(Element.prototype, "getAttribute", { configurable: true, writable: true, value: captured });
     }
@@ -33,7 +34,7 @@ describe("readCapturedAttribute (#1061)", () => {
 
   it("returns null for a missing attribute and undefined when the reader is missing or throws", () => {
     const form = document.createElement("form");
-    const captured = Element.prototype.getAttribute;
+    const captured = Function.prototype.call.bind(Element.prototype.getAttribute);
     expect(readCapturedAttribute(form, "action", captured)).toBeNull();
     expect(readCapturedAttribute(form, "action", undefined)).toBeUndefined();
     expect(readCapturedAttribute(form, "action", () => {
@@ -78,25 +79,53 @@ describe("form action and method use the captured reader (#1061)", () => {
     }
   });
 
-  it("prefers the loader capture over the module-level descriptor", () => {
+  it("fails closed without a loader capture, including for action resolution and the GET exemption", () => {
     const init = guard.indexOf("const earlyGetAttribute = ");
     const resolveAt = guard.indexOf("function resolveFormAction(");
     expect(init).toBeGreaterThanOrEqual(0);
     expect(init).toBeLessThan(resolveAt);
-    const binding = guard.slice(init, init + 420);
+    const bindingStatements = source.statements.filter((node) => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some((declaration) => ts.isIdentifier(declaration.name)
+        && ["earlyGetAttribute", "nativeGetAttribute"].includes(declaration.name.text)));
+    expect(bindingStatements).toHaveLength(2);
+    const binding = bindingStatements.map((node) => node.getText(source)).join("\n");
     expect(binding).toContain("__navsentinelMainGetAttribute");
-    expect(binding.indexOf("__navsentinelMainGetAttribute")).toBeLessThan(binding.indexOf("nativeElementGetAttribute"));
+    const functions = ["resolveFormAction", "isGetForm"].map((name) => source.statements.find(
+      (node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name,
+    )!.getText(source)).join("\n");
+    const context = vm.createContext({ readCapturedAttribute });
+    vm.runInContext(ts.transpile(binding + "\n" + functions), context);
+    expect(vm.runInContext("nativeGetAttribute", context)).toBeUndefined();
+    expect(vm.runInContext("resolveFormAction({})", context)).toBeUndefined();
+    expect(vm.runInContext("isGetForm({})", context)).toBe(false);
   });
 });
 
 describe("document-start getAttribute capture (#1061)", () => {
+  it.each(["own", "prototype"])("reads action and method after %s call tampering", (tamper) => {
+    const context = vm.createContext({});
+    vm.runInContext(
+      "globalThis.Element = function Element() {};" +
+        "Element.prototype.getAttribute = function (name) { return this.attrs[name] ?? null; };" +
+        "globalThis.el = Object.assign(Object.create(Element.prototype), { attrs: { action: 'https://collector.example/take', method: 'post' } });",
+      context,
+    );
+    vm.runInContext(`(function(){'use strict';${EARLY_MAIN_PRELUDE}})();`, context);
+    vm.runInContext(tamper === "own"
+      ? "globalThis.__navsentinelMainGetAttribute.call = () => 'get';"
+      : "Function.prototype.call = () => 'get';", context);
+    const element = vm.runInContext("el", context) as Element;
+    const invoker = vm.runInContext("globalThis.__navsentinelMainGetAttribute", context);
+    expect(readCapturedAttribute(element, "action", invoker)).toBe("https://collector.example/take");
+    expect(readCapturedAttribute(element, "method", invoker)).toBe("post");
+  });
+
   it("installs the capture after the form-target capture and before the async import", () => {
     const loader = installEarlyMainClockText(GENERATED);
     expect(loader.indexOf(EARLY_MAIN_FORM_TARGET)).toBeLessThan(loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE));
     expect(loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE)).toBeLessThan(loader.indexOf("await import("));
-    expect(EARLY_MAIN_PRELUDE.indexOf(EARLY_MAIN_FORM_TARGET)).toBeLessThan(
-      EARLY_MAIN_PRELUDE.indexOf(EARLY_MAIN_GET_ATTRIBUTE),
-    );
+    expect(EARLY_MAIN_PRELUDE.endsWith(`${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}`)).toBe(true);
+    expect(EARLY_MAIN_GET_ATTRIBUTE).toContain("value:Function.prototype.call.bind(getAttribute),writable:false,configurable:false");
     expect(() => assertEarlyMainPrelude(loader)).not.toThrow();
   });
 
@@ -111,7 +140,7 @@ describe("document-start getAttribute capture (#1061)", () => {
     vm.runInContext(`(function(){'use strict';${EARLY_MAIN_PRELUDE}})();`, context);
     vm.runInContext("Element.prototype.getAttribute = function () { return null; };", context);
     expect(vm.runInContext("el.getAttribute('action')", context)).toBeNull();
-    expect(vm.runInContext("globalThis.__navsentinelMainGetAttribute.call(el, 'action')", context)).toBe(
+    expect(vm.runInContext("globalThis.__navsentinelMainGetAttribute(el, 'action')", context)).toBe(
       "https://collector.example/take",
     );
   });
