@@ -31,9 +31,9 @@ const compiled = ts.transpileModule(declarations.map((node) => node.getText(file
 
 type BridgeRow = { type: string; looksLikeCommand?: boolean; dropped?: number };
 /** Execute the actual production declarations with a modeled native clipboard and MessagePort. */
-function boot(regressed = false, observed = true, nativeWrite = () => Promise.resolve()) {
+function boot(regressed = false, observed = true, nativeWrite: (value: string) => Promise<void> = () => Promise.resolve()) {
   let init: (event: unknown) => void = () => { throw new Error("No actual bridge init listener"); };
-  const clipboard = { writeText: (_value: string) => nativeWrite() };
+  const clipboard = { writeText: (value: string) => nativeWrite(value) };
   const rows: BridgeRow[] = [];
   const readySnapshots: ClipboardQueueEvidence[] = [];
   const evidence = () => context[PRESSURE_OBSERVER_PROPERTY] as ClipboardQueueEvidence;
@@ -89,7 +89,9 @@ describe("synchronous diagnostic observation of the actual MAIN queue", () => {
     h.verify(port);
     expect(h.evidence()).toMatchObject({ verificationCount: 1, queuedAfterVerification: 0,
       firstVerification: { clipboardEnqueueCalls: 41, other: 40, commandLike: 1, queueSize: 3, coalesced: 39, dropped: 0 } });
-    expect(h.readySnapshots).toEqual([h.evidence()]);
+    expect(h.evidence()).toMatchObject({ drainCount: 1, drainsBeforeVerification: 0,
+      firstDrain: { verificationCount: 1, total: 3, commandLike: 1, other: 1, dropped: 0, coalesced: 39 } });
+    expect(h.readySnapshots).toEqual([{ ...h.evidence(), drainCount: 0, firstDrain: null }]);
     expect(h.rows.filter((row) => row.type === "ns-clipboard-write")).toHaveLength(2);
     expect(h.rows.some((row) => row.type === "ns-clipboard-write" && row.looksLikeCommand)).toBe(true);
     expect(h.rows.some((row) => row.type === "ns-bridge-overflow")).toBe(false);
@@ -135,6 +137,30 @@ describe("synchronous diagnostic observation of the actual MAIN queue", () => {
       queueSize: 32, coalesced: 0, dropped: 10 });
     expect(h.rows.some((row) => row.type === "ns-clipboard-write" && row.looksLikeCommand)).toBe(false);
     expect(h.rows.find((row) => row.type === "ns-bridge-overflow")?.dropped).toBe(10);
+    expect(h.evidence()).toMatchObject({ drainCount: 1, drainsBeforeVerification: 0,
+      firstDrain: { verificationCount: 1, total: 32, commandLike: 0, other: 32, dropped: 10, coalesced: 0 } });
+  });
+
+  it("distinguishes command retention when identical admission counts hide different native completion orders", async () => {
+    async function run(commandFirst: boolean) {
+      const pending: Array<{ value: string; resolve: () => void }> = [];
+      const h = boot(true, true, (value) => new Promise<void>((resolve) => { pending.push({ value, resolve }); }));
+      const port = h.begin();
+      const burst = h.burst();
+      // Let the VM's async wrappers attach to the modeled native promises.
+      await Promise.resolve();
+      const ordered = commandFirst ? [pending[40]!, ...pending.slice(0, 40)] : pending;
+      for (const write of ordered) write.resolve();
+      await burst;
+      h.verify(port);
+      return h;
+    }
+    const commandLast = await run(false);
+    const commandFirst = await run(true);
+    expect(commandLast.evidence().firstVerification).toEqual(commandFirst.evidence().firstVerification);
+    expect(commandLast.evidence().firstDrain).toMatchObject({ commandLike: 0, other: 32 });
+    expect(commandFirst.evidence().firstDrain).toMatchObject({ commandLike: 1, other: 31 });
+    expect(commandFirst.rows.filter((row) => row.type === "ns-clipboard-write" && row.looksLikeCommand)).toHaveLength(1);
   });
 
   it.each([false, true])("preserves uninstrumented queue outputs with regression=%s", async (regressed) => {
@@ -154,6 +180,9 @@ describe("synchronous diagnostic observation of the actual MAIN queue", () => {
     expect(() => instrumentClipboardQueue(`${compiled}\nbridgeVerified = true;`, "x")).toThrow("TEST_INVALID");
     expect(() => instrumentClipboardQueue(compiled.replace("bridgeVerified = true;", "bridgeVerified = false;"), "x")).toThrow("TEST_INVALID");
     expect(() => instrumentClipboardQueue(instrumentClipboardQueue(compiled, "x"), "y")).toThrow("already has a queue observer");
+    expect(() => instrumentClipboardQueue(`${compiled}\npendingOutbound.drain();`, "x")).toThrow("TEST_INVALID");
+    expect(() => instrumentClipboardQueue(compiled.replace("pendingOutbound.drain()", "otherQueue.drain()"), "x")).toThrow("TEST_INVALID");
+    expect(() => instrumentClipboardQueue(compiled.replace("flushPendingOutbound();", "otherFlush();"), "x")).toThrow("TEST_INVALID");
   });
 
   it("hash-binds a separate copy and cleans it on success or browser-open failure", async () => {

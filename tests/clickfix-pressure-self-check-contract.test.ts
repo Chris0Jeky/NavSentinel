@@ -66,7 +66,7 @@ async function runFixture(evidence: unknown, writeAt = 105, markerAt = 125) {
 
 function witness(enqueued: number) {
   return {
-    schema: "navsentinel-clipboard-queue-test/v1",
+    schema: "navsentinel-clipboard-queue-test/v2",
     artifactId: "test-artifact",
     verificationCount: 1,
     queuedAfterVerification: 0,

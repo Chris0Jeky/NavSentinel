@@ -846,9 +846,11 @@ the bridge was verified, so #599's queue was never used. The steps below use
   page writes it after 40 benign ones.
 - With #599, the benign arm stays silent, the attack arm warns, and no
   `bridge_buffer_overflow` row appears.
-- Without #599, the 40 receipts fill the 32-slot queue and the command-like
-  receipt is dropped. The attack arm then stays silent, and both arms log an
-  overflow row.
+- Without #599, the benign receipts can fill the 32-slot queue before the
+  command-like receipt arrives, dropping that receipt. Native completion order
+  can differ from invocation order, so this must be observed in the first
+  actual drain. A retained command does not qualify the negative proof even if
+  some other behavior assertion fails.
 
 Chrome lets a page write the clipboard without a click only when the site's
 Clipboard permission is **Allow**, so step 4 sets it. The agent's acceptance
@@ -859,16 +861,33 @@ the source and observed bundle hashes and an explicit diagnostic classification.
 The copy is removed after the session closes, including failed opens. Other
 acceptance rows keep their original source build.
 
-For the paired diagnostic run, build first and run
-`npm run test:acceptance -- tests/acceptance/ai47-8-clipboard-pressure.spec.ts`.
-Create the regressed source with `node tests/acceptance/pr599-regressed-bundle.ts`
-(Node 22.18+ or 24, or `npx tsx` on older Node), then repeat with
-`EXTENSION_PATH=<printed regressed source path>`. Do not pass an already observed
-copy: row 8 applies the observer itself. The standalone
-`clipboard-pressure-observed-bundle.ts` CLI is for inspecting that transformation.
-With valid direct queue evidence, the fixed-policy diagnostic copy must retain
-the command receipt without overflow, and the regressed diagnostic copy must
-fail those same behavior checks. A missed natural startup window remains
+Use the **Clipboard Pressure Diagnostic Pair** workflow for qualified paired
+evidence. It checks out the exact branch head with full history, builds clean,
+and runs this row once on each source copy under the same installed Chrome,
+realism mode and worker configuration. The existing ten timing samples, three
+pressure attempts and timeouts remain unchanged. The workflow retains both
+native logs, JSON reports, receipts, successful-launch records and the
+`qualification.json` verdict. A normal fixed pass and a directly witnessed
+command-loss regression are both required. Setup/read errors, missing or
+malformed evidence, `TEST_INVALID`, timeout, unrelated failures or source/hash
+mismatches fail qualification. The regressed native test remains failed.
+
+The corresponding hosted command, after a clean build, is
+`xvfb-run -a node scripts/clipboard-pressure-pair.mjs run test-results/clipboard-pressure-pair <exact-head-sha>`.
+It requires Node 24, a clean full-history checkout and the installed
+`/opt/google/chrome/chrome`; the output directory must be new. Its strict
+validator independently reconstructs the observed bytes and the exact #599
+regression. It requires the admitted command to be absent from the first drain,
+zero coalesces and positive drops in the regressed copy, plus every expected
+behavioral mismatch and all remaining privacy/UI/console checks. A command that
+survives the drain cannot be classified as command loss from a missing warning.
+
+Individual row-8 invocations still accept a fixed or regressed source
+`EXTENSION_PATH`, and `pr599-regressed-bundle.ts` still creates the regressed
+source. They retain diagnostic receipts but do not by themselves qualify a
+pair. Do not pass an already observed copy: row 8 applies the observer itself.
+The standalone `clipboard-pressure-observed-bundle.ts` CLI is for inspecting
+that transformation. A missed natural startup window remains
 `TEST_INVALID`; timings, extra sleeps or a delayed public marker cannot authorize
 `VALID`. These runs establish only instrumented diagnostic behavior. The
 discarded-page event-attribution issue in #963 remains open: three stable log
@@ -949,7 +968,10 @@ snapshots do not prove that an old producer has finished.
   never loaded in the owner's profile.
 - The diagnostic builder observes the actual queue call synchronously and
   freezes its counts at the first accepted verification, before bridge-ready
-  and the queue drain. Acceptance reads that builder-controlled getter directly;
+  and the queue drain. Its v2 witness also records the retained clipboard
+  classes from the single actual first drain result, before the original send
+  loop, and returns that result unchanged. Acceptance reads that
+  builder-controlled getter directly;
   the DOM display and marker timing are not authoritative. This is a controlled
   fixture diagnostic, not a new trusted page-to-extension channel. Instrumentation
   can affect natural scheduling, so its result cannot be described as an
