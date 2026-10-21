@@ -1,4 +1,5 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ import {
 
 const entrypoint = path.resolve("scripts/clipboard-pressure-pair.mjs");
 const cli = await import(pathToFileURL(entrypoint).href) as {
-  verifyRegressedSource(fixed: string, regressed: string): { fixedSourceSha256: string; regressedSourceSha256: string };
+  verifyRegressedSource(fixed: string, regressed: string): { patchedAsset: string; fixedAssetSha256: string; regressedAssetSha256: string; fixedSourceSha256: string; regressedSourceSha256: string };
   reconstructObservedArtifact(source: string, sourceHash: string, marker: ObserverMarker): { marker: ObserverMarker; distSha256: string };
   attachedReceipt(report: unknown, original: string, root: string): string;
 };
@@ -21,7 +22,8 @@ const cli = await import(pathToFileURL(entrypoint).href) as {
 // coalescer below has the exact built shape accepted by the existing #599 helper.
 const compiled = ts.transpileModule(fs.readFileSync("extension/src/content/main_guard.ts", "utf8"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-}).outputText + '\nfunction pairedCoalescer(e){if(e.type===`ns-clipboard-write`)return e.payload?.looksLikeCommand===!0?`ns-clipboard-write:command-like`:`ns-clipboard-write:other`}\n';
+}).outputText;
+const coalescer = 'function pairedCoalescer(e){if(e.type===`ns-clipboard-write`)return e.payload?.looksLikeCommand===!0?`ns-clipboard-write:command-like`:`ns-clipboard-write:other`}\n';
 
 function fixture(body: (root: string, fixed: string) => void): void {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ns-pressure-pair-artifacts-"));
@@ -30,12 +32,26 @@ function fixture(body: (root: string, fixed: string) => void): void {
     fs.mkdirSync(path.join(fixed, "assets"), { recursive: true });
     fs.writeFileSync(path.join(fixed, "manifest.json"), '{"version":"0.5.0"}\n');
     fs.writeFileSync(path.join(fixed, "assets", "main_guard.ts-example.js"), compiled);
+    fs.writeFileSync(path.join(fixed, "assets", "bridge_outbound-example.js"), coalescer);
     fs.writeFileSync(path.join(fixed, "isolated-loader.js"), "// unchanged isolated loader\n");
     body(root, fixed);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 
 describe("independent diagnostic artifact reconstruction", () => {
+  it("binds the actual shared regression chunk while MAIN bytes stay identical", () => fixture((root, fixed) => {
+    const built = buildPr599RegressedBundle(fixed, path.join(root, "regressed"));
+    expect(built.patchedAsset).toBe("bridge_outbound-example.js");
+    const hash = (source: string, asset: string) => createHash("sha256").update(fs.readFileSync(path.join(source, "assets", asset))).digest("hex");
+    expect(hash(fixed, "main_guard.ts-example.js")).toBe(hash(built.extensionPath, "main_guard.ts-example.js"));
+    const identity = cli.verifyRegressedSource(fixed, built.extensionPath);
+    expect(identity.patchedAsset).toBe("assets/bridge_outbound-example.js");
+    expect(identity.fixedAssetSha256).toBe(hash(fixed, built.patchedAsset));
+    expect(identity.regressedAssetSha256).toBe(hash(built.extensionPath, built.patchedAsset));
+    expect(identity.fixedAssetSha256).not.toBe(identity.regressedAssetSha256);
+    expect(identity.fixedSourceSha256).not.toBe(identity.regressedSourceSha256);
+  }));
+
   it("reconstructs both fixed and regressed observed bytes, including the marker in the receipt hash", () => fixture((root, fixed) => {
     const regressed = buildPr599RegressedBundle(fixed, path.join(root, "regressed")).extensionPath;
     const identity = cli.verifyRegressedSource(fixed, regressed);
@@ -94,7 +110,23 @@ describe("receipt file/report binding", () => {
     expect(() => cli.attachedReceipt(report([stale]), original, fresh)).toThrow(/escaped/u);
   }));
 
-  it("loads the actual CLI and TypeScript helpers under Node without launching a browser", () => {
+  it("rejects unsupported native CLI runtimes before importing TypeScript helpers", () => {
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `Object.defineProperty(process.versions, "node", { value: "20.20.2" }); process.argv[1] = ${JSON.stringify(entrypoint)}; await import(${JSON.stringify(pathToFileURL(entrypoint).href)});`],
+    { encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("clipboard-pressure-pair.mjs requires Node.js 24 or newer; received 20.20.2");
+    expect(result.stderr).not.toContain("ERR_UNKNOWN_FILE_EXTENSION");
+  });
+
+  it("enforces the real native runtime contract without launching a browser", () => {
+    if (Number(process.versions.node.split(".")[0]) < 24) {
+      const result = spawnSync(process.execPath, [entrypoint], { encoding: "utf8" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`clipboard-pressure-pair.mjs requires Node.js 24 or newer; received ${process.versions.node}`);
+      expect(result.stderr).not.toContain("ERR_UNKNOWN_FILE_EXTENSION");
+      return;
+    }
     const output = execFileSync(process.execPath, ["--input-type=module", "-e",
       `const tools = await import(${JSON.stringify(pathToFileURL(entrypoint).href)}); process.stdout.write(String(typeof tools.reconstructObservedArtifact));`],
     { encoding: "utf8" });

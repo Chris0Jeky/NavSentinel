@@ -15,6 +15,10 @@ const expected: PairExpectation = {
   head: hex("a", 40), productSourceTree: hex("b", 40), lastProductCommit: hex("c", 40), pairId: uuid("a"),
   chrome: { executable: "/opt/google/chrome/chrome", version: "142.0.7444.0", sha256: hex("a") },
 };
+const regression = {
+  patchedAsset: "assets/bridge_outbound-example.js", fixedAssetSha256: hex("7"), regressedAssetSha256: hex("8"),
+  fixedSourceSha256: hex("a"), regressedSourceSha256: hex("f"),
+};
 const marker = (regressed: boolean): ObserverMarker => ({
   schema: "navsentinel-clipboard-queue-test/v2", classification: "TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE",
   artifactId: uuid(regressed ? "b" : "c"), sourceDist: regressed ? "/sources/regressed" : "/sources/fixed",
@@ -22,8 +26,7 @@ const marker = (regressed: boolean): ObserverMarker => ({
   sourceBundleSha256: hex(regressed ? "f" : "a"), observedBundleSha256: hex(regressed ? "1" : "2"),
 });
 
-function caseFixture(regressed: boolean): PairCaseEvidence {
-  const observer = marker(regressed);
+function caseFixture(regressed: boolean, observer = marker(regressed)): PairCaseEvidence {
   const variant = regressed ? "regressed" : "fixed";
   const receiptPath = `/run/${variant}/receipt.json`;
   const token = (attack: boolean) => uuid(attack ? regressed ? "d" : "e" : regressed ? "f" : "1");
@@ -110,13 +113,31 @@ function mutateOutcomes(evidence: PairCaseEvidence, route: string, replacement: 
 
 describe("strict fixed/regressed clipboard qualification", () => {
   it("accepts the complete fixed pass and directly witnessed command-loss regression", () => {
-    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed: caseFixture(true) }, expected)).not.toThrow();
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed: caseFixture(true) }, expected, regression)).not.toThrow();
+  });
+  it("accepts a verified shared-chunk regression with unchanged MAIN bytes", () => {
+    const fixedMarker = marker(false);
+    const regressedMarker = { ...marker(true), sourceSha256: fixedMarker.sourceSha256 };
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false, fixedMarker),
+      regressed: caseFixture(true, regressedMarker) }, expected, regression)).not.toThrow();
+  });
+  it.each([
+    ["missing reconstruction", undefined],
+    ["unconfined asset", { ...regression, patchedAsset: "../bridge_outbound.js" }],
+    ["identical asset", { ...regression, regressedAssetSha256: regression.fixedAssetSha256 }],
+    ["identical bundle", { ...regression, regressedSourceSha256: regression.fixedSourceSha256 }],
+    ["unbound fixed source", { ...regression, fixedSourceSha256: hex("9") }],
+    ["unbound regressed source", { ...regression, regressedSourceSha256: hex("9") }],
+    ["malformed asset hash", { ...regression, fixedAssetSha256: "not-a-sha256" }],
+  ])("rejects %s even when the native outcomes match", (_label, identity) => {
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed: caseFixture(true) },
+      expected, identity as typeof regression)).toThrow(/QUALIFICATION_INVALID/u);
   });
   it("rejects the consistent command-first counterexample despite identical admission counts and a missing warning", () => {
     const regressed = caseFixture(true);
     mutateOutcomes(regressed, "arms.attack.0.check.queueEvidence.firstDrain.commandLike", 1);
     mutateOutcomes(regressed, "arms.attack.0.check.queueEvidence.firstDrain.other", 31);
-    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected)).toThrow(/actual retained command class/u);
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected, regression)).toThrow(/actual retained command class/u);
   });
   const invalidOutcomes: Array<[string, string, unknown]> = [
     ["v1 witness", "arms.attack.0.check.queueEvidence.schema", "navsentinel-clipboard-queue-test/v1"],
@@ -146,7 +167,7 @@ describe("strict fixed/regressed clipboard qualification", () => {
   it.each(invalidOutcomes)("rejects %s even with the expected nonzero exit", (_label, route, replacement) => {
     const regressed = caseFixture(true);
     mutateOutcomes(regressed, route, replacement);
-    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected)).toThrow(/QUALIFICATION_INVALID/u);
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected, regression)).toThrow(/QUALIFICATION_INVALID/u);
   });
   it.each([
     ["report.suites.0.specs.0.tests.0.results.0.status", "timedOut"],
@@ -164,7 +185,7 @@ describe("strict fixed/regressed clipboard qualification", () => {
   ])("rejects unrelated or malformed %s", (route, replacement) => {
     const regressed = caseFixture(true);
     set(regressed, route as string, replacement);
-    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected)).toThrow(/QUALIFICATION_INVALID/u);
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected, regression)).toThrow(/QUALIFICATION_INVALID/u);
   });
   it("rejects malformed, duplicate and missing structured receipts", () => {
     for (const mode of ["malformed", "duplicate", "missing"]) {
@@ -174,7 +195,7 @@ describe("strict fixed/regressed clipboard qualification", () => {
       if (mode === "malformed") steps[index]!.detail = "{broken";
       if (mode === "duplicate") steps.push(steps[index]!);
       if (mode === "missing") steps.splice(index, 1);
-      expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected)).toThrow(/QUALIFICATION_INVALID/u);
+      expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected, regression)).toThrow(/QUALIFICATION_INVALID/u);
     }
   });
 });

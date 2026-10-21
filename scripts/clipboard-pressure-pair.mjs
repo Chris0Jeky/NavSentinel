@@ -1,5 +1,6 @@
 /**
  * Dedicated hosted diagnostic pair; never replaces ordinary acceptance.
+ * Native CLI execution requires Node.js 24 or newer (the dedicated workflow pins 24).
  * node scripts/clipboard-pressure-pair.mjs run <new output directory> <exact head>
  * node scripts/clipboard-pressure-pair.mjs validate <output directory> <exact head>
  *
@@ -14,11 +15,17 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import {
+const invokedDirectly = process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+// Ordinary unit tests may transform these helpers on Node 20. The native CLI
+// must fail clearly before Node 20 tries to load a TypeScript file itself.
+if (invokedDirectly && Number(process.versions.node.split(".")[0]) < 24) {
+  throw new Error(`clipboard-pressure-pair.mjs requires Node.js 24 or newer; received ${process.versions.node}`);
+}
+const {
   buildClipboardPressureObservedBundle, hashClipboardPressureBundle,
-} from "../tests/acceptance/clipboard-pressure-observed-bundle.ts";
-import { buildPr599RegressedBundle, REGRESSED_BUNDLE_MARKER } from "../tests/acceptance/pr599-regressed-bundle.ts";
-import { validateClipboardPressurePair } from "../tests/acceptance/clipboard-pressure-qualification.ts";
+} = await import("../tests/acceptance/clipboard-pressure-observed-bundle.ts");
+const { buildPr599RegressedBundle, REGRESSED_BUNDLE_MARKER } = await import("../tests/acceptance/pr599-regressed-bundle.ts");
+const { validateClipboardPressurePair } = await import("../tests/acceptance/clipboard-pressure-qualification.ts");
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CHROME = "/opt/google/chrome/chrome";
@@ -58,13 +65,19 @@ export function verifyRegressedSource(fixedSource, regressedSource) {
     delete actualFiles[REGRESSED_BUNDLE_MARKER];
     delete expectedFiles[REGRESSED_BUNDLE_MARKER];
     requireEvidence(canonical(actualFiles) === canonical(expectedFiles), "regressed source differs outside the exact #599 patch");
+    const fixedFiles = fileHashes(fixedSource);
+    const patchedAsset = `assets/${rebuilt.patchedAsset}`;
+    const changedFiles = [...new Set([...Object.keys(fixedFiles), ...Object.keys(actualFiles)])]
+      .filter((filename) => fixedFiles[filename] !== actualFiles[filename]);
+    requireEvidence(changedFiles.length === 1 && changedFiles[0] === patchedAsset, "regression must change exactly its resolved policy asset");
     const actualMarker = readJson(path.join(regressedSource, REGRESSED_BUNDLE_MARKER));
     const expectedMarker = readJson(path.join(rebuilt.extensionPath, REGRESSED_BUNDLE_MARKER));
     requireEvidence(Object.keys(actualMarker).sort().join("|") === Object.keys(expectedMarker).sort().join("|"), "regression marker fields differ");
     requireEvidence(typeof actualMarker.createdAt === "string" && Number.isFinite(Date.parse(actualMarker.createdAt)), "invalid regression marker time");
     delete actualMarker.createdAt; delete expectedMarker.createdAt;
     requireEvidence(canonical(actualMarker) === canonical(expectedMarker), "regression source identity differs");
-    return { patchedAsset: rebuilt.patchedAsset, fixedSourceSha256: hashClipboardPressureBundle(fixedSource, true),
+    return { patchedAsset, fixedAssetSha256: fixedFiles[patchedAsset], regressedAssetSha256: actualFiles[patchedAsset],
+      fixedSourceSha256: hashClipboardPressureBundle(fixedSource, true),
       regressedSourceSha256: hashClipboardPressureBundle(regressedSource, true) };
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
@@ -157,7 +170,7 @@ export function loadAndValidatePair(directory, expectedHead) {
       process: readJson(path.join(caseDirectory, "process.json")), artifact };
     fs.copyFileSync(receiptPath, path.join(caseDirectory, "receipt.json"));
   }
-  validateClipboardPressurePair(cases, manifest.expected);
+  validateClipboardPressurePair(cases, manifest.expected, regression);
   return { schema: "navsentinel-clipboard-pressure-pair-qualification/v1", qualified: true,
     classification: "TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE", expected: manifest.expected, regression,
     fixed: cases.fixed.artifact, regressed: cases.regressed.artifact,
@@ -205,7 +218,6 @@ export function runPair(directory, expectedHead) {
   return loadAndValidatePair(directory, expectedHead);
 }
 
-const invokedDirectly = process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   const [mode, output, expectedHead] = process.argv.slice(2);
   if (!["run", "validate"].includes(mode) || !output || !expectedHead) invalid("usage: run|validate <output directory> <exact head>");

@@ -92,6 +92,14 @@ export type PairExpectation = {
   pairId: string;
   chrome: { executable: string; version: string; sha256: string };
 };
+/** Computed from the runner's independently reconstructed, one-asset #599 copy. */
+export type PairRegressionIdentity = {
+  patchedAsset: string;
+  fixedAssetSha256: string;
+  regressedAssetSha256: string;
+  fixedSourceSha256: string;
+  regressedSourceSha256: string;
+};
 export type PairCaseEvidence = {
   receipt: unknown;
   report: unknown;
@@ -370,13 +378,23 @@ function validateCase(evidence: PairCaseEvidence, expected: PairExpectation, reg
 }
 
 /** All evidence is required. A nonzero exit, aggregate drop count or absent warning is never sufficient. */
-export function validateClipboardPressurePair(cases: { fixed: PairCaseEvidence; regressed: PairCaseEvidence }, expected: PairExpectation): void {
+export function validateClipboardPressurePair(cases: { fixed: PairCaseEvidence; regressed: PairCaseEvidence }, expected: PairExpectation,
+  regression: PairRegressionIdentity): void {
   try {
     for (const value of [expected.head, expected.productSourceTree, expected.lastProductCommit]) requireEvidence(HEX40.test(value), "invalid trusted Git identity");
     requireEvidence(UUID.test(expected.pairId), "invalid trusted pair nonce");
     requireEvidence(/^\d+\.\d+\.\d+\.\d+$/u.test(expected.chrome.version) && HEX64.test(expected.chrome.sha256) && expected.chrome.executable.startsWith("/"), "invalid trusted Chrome identity");
     requireEvidence(cases.fixed.artifact.marker.artifactId !== cases.regressed.artifact.marker.artifactId, "both runs reused one observed artifact identity");
-    requireEvidence(cases.fixed.artifact.marker.sourceSha256 !== cases.regressed.artifact.marker.sourceSha256, "fixed and regressed MAIN bytes are identical");
+    const source = object(regression, "independently reconstructed regression");
+    fields(source, ["patchedAsset", "fixedAssetSha256", "regressedAssetSha256", "fixedSourceSha256", "regressedSourceSha256"], "regression identity");
+    requireEvidence(typeof source.patchedAsset === "string" && /^assets\/[A-Za-z0-9_$.-]+\.js$/u.test(source.patchedAsset), "invalid regression asset path");
+    for (const key of ["fixedAssetSha256", "regressedAssetSha256", "fixedSourceSha256", "regressedSourceSha256"]) {
+      requireEvidence(typeof source[key] === "string" && HEX64.test(source[key]), `invalid regression ${key}`);
+    }
+    requireEvidence(source.fixedAssetSha256 !== source.regressedAssetSha256, "fixed and regressed policy asset bytes are identical");
+    requireEvidence(source.fixedSourceSha256 !== source.regressedSourceSha256, "fixed and regressed source bundles are identical");
+    same(cases.fixed.artifact.marker.sourceBundleSha256, source.fixedSourceSha256, "fixed reconstructed source bundle");
+    same(cases.regressed.artifact.marker.sourceBundleSha256, source.regressedSourceSha256, "regressed reconstructed source bundle");
     const documents = new Set<string>();
     validateCase(cases.fixed, expected, false, documents);
     validateCase(cases.regressed, expected, true, documents);
