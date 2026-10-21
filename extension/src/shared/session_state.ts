@@ -119,6 +119,7 @@ export const isValidFormNavigation = (v: unknown): v is FormNavigationEntry =>
   isString(v.sourceDocumentId) && v.sourceDocumentId.length > 0 && v.sourceDocumentId.length <= 128 &&
   typeof v.get === "boolean" &&
   typeof v.top === "boolean" &&
+  (v.submitted === undefined || v.submitted === true) &&
   (v.startedUrl === undefined || isString(v.startedUrl) && v.startedUrl.length <= 8192) &&
   isFiniteNumber(v.issuedAt) && isFiniteNumber(v.expiresAt) && v.expiresAt === v.issuedAt + 1500 &&
   typeof v.phase === "string" && ["a", "s", "p"].includes(v.phase) &&

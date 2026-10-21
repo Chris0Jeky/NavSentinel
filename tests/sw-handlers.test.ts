@@ -328,6 +328,113 @@ describe("service worker handlers", () => {
     vi.unstubAllGlobals();
   });
 
+  describe("top-target form submission ordering (#707)", () => {
+    it.each([undefined, true] as const)("requires explicit confirmation after hydration (%s)", async submitted => {
+      const mock = createChromeMock();
+      const tabId = 73;
+      const url = "https://receiver.test/accept?fixed=1";
+      const issuedAt = Date.now() - 1;
+      mock.chrome.storage.session._store["ns_sw:allowTarget"] = {
+        [tabId]: {
+          url, expiresAt: issuedAt + 1500,
+          form: {
+            attemptId: "a".repeat(32), sourceFrameId: 4, sourceDocumentId: "child-document",
+            get: false, top: true, issuedAt, expiresAt: issuedAt + 1500, phase: "s",
+            startedUrl: url, startedAt: Date.now(), ...(submitted ? { submitted } : {}),
+          },
+        },
+      };
+      mock.chrome.storage.session._store["ns_sw:lastUrl"] = { [tabId]: "https://fixture.test/parent" };
+      await loadSw(mock);
+      const { swState } = await import("../extension/src/shared/session_state");
+      await swState.hydrate();
+      mock.emitCommitted({ tabId, frameId: 0, url, transitionType: "form_submit" });
+      expect(swState.lastCommittedByTab.get(tabId)?.allowedAtCommit).toBe(submitted === true);
+      expect(swState.pendingRollbackByTab.has(tabId)).toBe(submitted !== true);
+    });
+
+    it.each([
+      ["confirmation before the first start", ["confirm", "start", "commit"], true],
+      ["the first start before confirmation", ["start", "confirm", "commit"], true],
+      ["a confirmed server redirect after the first start", ["start", "confirm", "redirect-commit"], true],
+      ["a commit before confirmation", ["start", "commit", "confirm"], false],
+      ["cancellation before the first start", ["cancel", "confirm", "start", "commit"], false],
+      ["cancellation after the first start", ["start", "cancel", "confirm", "commit"], false],
+      ["a canceled replacement commit before cancellation arrives", ["start", "commit", "cancel"], false],
+      ["a repeated same-URL start", ["start", "start", "confirm", "commit"], false],
+      ["a repeated changed-URL start", ["start", "other-start", "confirm", "commit"], false],
+      ["a mismatched first destination", ["confirm", "other-start", "commit"], false],
+      ["source-frame replacement", ["confirm", "source-navigation", "start", "commit"], false],
+      ["a navigation error", ["confirm", "start", "error", "commit"], false],
+      ["an expired first start", ["confirm", "expire-arm", "start", "commit"], false],
+      ["an expired started navigation", ["confirm", "start", "expire-start", "commit"], false],
+      ["confirmation from another attempt", ["start", "wrong-attempt", "commit"], false],
+      ["confirmation from another frame", ["start", "wrong-frame", "commit"], false],
+      ["confirmation from another document", ["start", "wrong-document", "commit"], false],
+      ["a truthy nonnumeric confirmation", ["invalid-confirm", "start", "commit"], false],
+      ["an older attempt confirming a replacement arm", ["rearm", "start", "confirm", "commit"], false],
+      ["a non-form commit", ["confirm", "start", "link-commit"], false],
+    ] as const)("handles %s without widening form authority", async (_name, steps, allowed) => {
+      const mock = createChromeMock();
+      await loadSw(mock);
+      const { swState } = await import("../extension/src/shared/session_state");
+      await swState.hydrate();
+      const tabId = 73;
+      const sender = { id: "mock-id", frameId: 4, documentId: "child-document", tab: { id: tabId, url: "https://fixture.test/parent" } };
+      const attemptId = "a".repeat(32);
+      const url = "https://receiver.test/accept?fixed=1";
+      const intent = { type: "ns-form-intent", attemptId, issuedAt: Date.now(), formIntent: [url, "post", "application/x-www-form-urlencoded", "_top", "top"] };
+      const confirmation = { type: "ns-form-intent-cancel", attemptId, s: 1 };
+      const navigation = { tabId, frameId: 0, url };
+      const dispatch = async (message: RuntimeMessage, source: RuntimeSender = sender) => {
+        await expect(mock.dispatchRuntimeMessageAsync(message, source).response).resolves.toEqual({ ok: true });
+      };
+      await dispatch(intent);
+      let form = swState.allowTargetByTab.get(tabId)!.form!;
+      expect(form).toMatchObject({ phase: "a", attemptId });
+
+      for (const step of steps) {
+        switch (step) {
+          case "confirm": await dispatch(confirmation); break;
+          case "cancel": await dispatch({ ...confirmation, s: 0 }); break;
+          case "start": mock.emitBeforeNavigate(navigation); break;
+          case "other-start": mock.emitBeforeNavigate({ ...navigation, url: "https://receiver.test/other" }); break;
+          case "source-navigation": mock.emitBeforeNavigate({ ...navigation, frameId: sender.frameId }); break;
+          case "error": mock.chrome.webNavigation.onErrorOccurred.emit(navigation); break;
+          case "expire-arm": vi.setSystemTime(Date.now() + 1500); break;
+          case "expire-start": vi.setSystemTime(Date.now() + 10_000); break;
+          case "wrong-attempt": await dispatch({ ...confirmation, attemptId: "c".repeat(32) }); break;
+          case "wrong-frame": await dispatch(confirmation, { ...sender, frameId: 5 }); break;
+          case "wrong-document": await dispatch(confirmation, { ...sender, documentId: "other-document" }); break;
+          case "invalid-confirm": await dispatch({ ...confirmation, s: "1" }); break;
+          case "rearm":
+            await dispatch({ ...intent, attemptId: "b".repeat(32) });
+            form = swState.allowTargetByTab.get(tabId)!.form!;
+            break;
+          case "commit": mock.emitCommitted({ ...navigation, transitionType: "form_submit" }); break;
+          case "link-commit": mock.emitCommitted({ ...navigation, transitionType: "link" }); break;
+          case "redirect-commit":
+            mock.emitCommitted({ ...navigation, url: "https://redirect.test/result", transitionType: "form_submit", transitionQualifiers: ["server_redirect"] });
+            break;
+        }
+      }
+
+      expect(swState.lastCommittedByTab.get(tabId)?.allowedAtCommit).toBe(allowed);
+      expect(swState.pendingRollbackByTab.has(tabId)).toBe(!allowed);
+      expect(swState.allowTargetByTab.has(tabId)).toBe(false);
+      expect(form.phase).toBe("p");
+      expect(form).not.toHaveProperty("submitted");
+      if (allowed) {
+        // A late/replayed confirmation cannot recreate the consumed arm.
+        await dispatch(confirmation);
+        mock.emitBeforeNavigate(navigation);
+        mock.emitCommitted({ ...navigation, transitionType: "form_submit" });
+        expect(swState.lastCommittedByTab.get(tabId)?.allowedAtCommit).toBe(false);
+        expect(swState.pendingRollbackByTab.has(tabId)).toBe(true);
+      }
+    });
+  });
+
   describe("pending-decision broker boundary", () => {
     it("keeps the async port open and completes sanitized create/list/consume flow", async () => {
       const mock = createChromeMock();

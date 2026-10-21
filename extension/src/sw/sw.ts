@@ -646,9 +646,12 @@ function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: str
   // than to a replacement submission. The arm is one-use, so every second start
   // burns it. A server-redirect commit may still be accepted when Chrome reports
   // one matched start, but a repeated changed start is conservatively untrusted.
+  // The first start may precede source confirmation; it cannot authorize a
+  // commit until submit dispatch has settled without cancellation.
   if (form.phase !== "a" || now < form.issuedAt || now >= form.expiresAt ||
-      !formDestinationMatches(form, target, url) || (form.top && form.startedUrl !== "")) {
+      !formDestinationMatches(form, target, url)) {
     form.phase = "p";
+    delete form.submitted;
     delete form.startedUrl;
     delete form.startedAt;
     return;
@@ -659,11 +662,12 @@ function startForm(form: FormNavigationEntry, target: AllowTargetEntry, url: str
 }
 
 function consumeForm(form: FormNavigationEntry, target: AllowTargetEntry, url: string, transition: string, qualifiers: readonly string[], now: number): boolean {
-  const allowed = form.phase === "s" && now < formDeadline(form) && form.top &&
+  const allowed = form.phase === "s" && form.submitted === true && now < formDeadline(form) && form.top &&
     transition === "form_submit" && !!form.startedUrl && formDestinationMatches(form, target, form.startedUrl) &&
     !qualifiers.includes("forward_back") && !qualifiers.includes("client_redirect") &&
     (formDestinationMatches(form, target, url) || qualifiers.includes("server_redirect"));
   form.phase = "p";
+  delete form.submitted;
   delete form.startedUrl;
   delete form.startedAt;
   return allowed;
@@ -682,10 +686,11 @@ function handleChildFormMessage(
   const current = allowTargetByTab.get(tabId)?.form;
   if (message.type === "ns-form-intent-cancel") {
     if (current && current.attemptId === message.attemptId && current.sourceFrameId === frameId && current.sourceDocumentId === documentId) {
-      if (message.s) {
-        current.startedUrl ||= "";
+      if (message.s === 1) {
+        if (current.phase === "a" || current.phase === "s") current.submitted = true;
       } else {
         current.phase = "p";
+        delete current.submitted;
         current.startedUrl = current.startedAt = undefined;
       }
       swState.persistMap(allowTargetByTab, "allowTarget");
@@ -1160,6 +1165,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
       const entry = allowTargetByTab.get(details.tabId)?.form;
       if (entry?.sourceFrameId === details.frameId) {
         entry.phase = "p";
+        delete entry.submitted;
         delete entry.startedUrl;
         delete entry.startedAt;
         swState.persistMap(allowTargetByTab, "allowTarget");
@@ -1437,7 +1443,7 @@ chrome.webNavigation.onErrorOccurred?.addListener((details) => {
 });
 function onErrorOccurredHandler(details: { tabId: number; frameId: number; url?: string }): void {
   const form = allowTargetByTab.get(details.tabId)?.form;
-  if (form) { form.phase = "p"; delete form.startedUrl; }
+  if (form) { form.phase = "p"; delete form.submitted; delete form.startedUrl; }
   const forward = pendingForwardByTab.get(details.tabId);
   const rollbackReturn = getActiveRollbackReturn(details.tabId);
   const preserveForwardOffer =

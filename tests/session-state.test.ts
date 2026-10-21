@@ -94,6 +94,30 @@ describe("SessionStateManager", () => {
     });
   });
 
+  it("restores only absent or explicit form submission confirmation", async () => {
+    const base = {
+      attemptId: "a".repeat(32), sourceFrameId: 4, sourceDocumentId: "child-document",
+      get: false, top: true, issuedAt: 100, expiresAt: 1600, phase: "s",
+      startedUrl: "https://receiver.test/accept", startedAt: 101,
+    };
+    const confirmations = [{}, { submitted: true }, { submitted: false }, { submitted: "true" }, { submitted: 1 }, { submitted: null }];
+    await sessionStorage.mock.set({
+      "ns_sw:allowTarget": Object.fromEntries(confirmations.map((confirmation, index) => [
+        String(index + 1), { url: base.startedUrl, expiresAt: base.expiresAt, form: { ...base, ...confirmation } },
+      ])),
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const mgr = new SessionStateManager();
+      await mgr.hydrate();
+      expect([...mgr.allowTargetByTab.keys()]).toEqual([1, 2]);
+      expect(mgr.allowTargetByTab.get(1)?.form).not.toHaveProperty("submitted");
+      expect(mgr.allowTargetByTab.get(2)?.form).toMatchObject({ submitted: true });
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("gracefully handles corrupted session storage data", async () => {
     await sessionStorage.mock.set({
       "ns_sw:allowUntil": "not-an-object",
