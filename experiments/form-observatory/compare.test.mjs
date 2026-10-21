@@ -541,3 +541,39 @@ test("matching receiver receipts never excuse invalid document attribution", () 
   assert.equal(result.receiverEvidence.error, "FORM_TRACE_INVALID");
   assert.equal(result.matched, false);
 });
+
+test("campaign certifier and CLI accept form-campaign document evidence", (t) => {
+  const rows = documentRows();
+  const full = records();
+  full[0].attempts = [{ role: "harm", method: "POST", accepted: true, ordinal: 1 }];
+  setTraceReceivers(rows[0], full[0].attempts);
+  assert.equal(validateFormTraces(rows).matched, true);
+  const { status, result } = runCampaign(t, full, full, rows);
+  assert.equal(status, 0);
+  assert.equal(result.matched, true);
+  assert.equal(result.traceEvidence.matched, true);
+  assert.equal(result.receiverEvidence.matched, true);
+});
+
+for (const experiment of [
+  "same-url-siblings", "same-frame-reload", "same-document-navigation",
+  "frame-replacement", "spoofed-identity-disposal", "borrowed-reporting-function",
+]) {
+  test(`campaign certifier and CLI refuse lifecycle label ${experiment}`, (t) => {
+    const rows = documentRows();
+    rows[0].experiment = experiment;
+    const full = records();
+    const direct = validateFormTraces(rows);
+    const { status, result } = runCampaign(t, full, full, rows);
+    const differences = [`FORM_TRACE_CONTRACT:${expectedKeys[0]}`];
+    assert.equal(status, 1);
+    assert.equal(direct.matched, false);
+    assert.deepEqual(direct.differences, differences);
+    assert.equal(result.parityEvidence.matched, true);
+    assert.equal(result.traceEvidence.matched, false);
+    assert.deepEqual(result.traceEvidence.differences, differences);
+    assert.equal(result.receiverEvidence.error, "FORM_TRACE_INVALID");
+    assert.equal(result.receiverEvidence.matched, false);
+    assert.equal(result.matched, false);
+  });
+}

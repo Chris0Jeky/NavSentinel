@@ -24,10 +24,8 @@ const TOP_LEVEL_KEYS = [
 ].sort();
 const DOCUMENT_TRACE_SCHEMA = "navsentinel.observatory.form.v2";
 const DOCUMENT_BINDING_POLICY = "CDP_DEFAULT_WORLD_DOCUMENT";
-const DOCUMENT_EXPERIMENTS = new Set([
-  "form-campaign", "same-url-siblings", "same-frame-reload", "same-document-navigation",
-  "frame-replacement", "spoofed-identity-disposal", "borrowed-reporting-function",
-]);
+// Lifecycle diagnostics are separate from the campaign this certifier checks.
+const DOCUMENT_CAMPAIGN_EXPERIMENT = "form-campaign";
 const DOCUMENT_TOP_LEVEL_KEYS = [...TOP_LEVEL_KEYS, "bindingPolicy", "experiment"].sort();
 const IDENTITY_KEYS = ["extensionSha256", "fixtureSha256", "head", "tree"].sort();
 const EVENT_KEYS = ["data", "elapsedMs", "id", "kind", "sequence", "source"].sort();
@@ -249,7 +247,7 @@ function validateTrace(row, index, differences, campaign) {
   if (typeof row.protectedArm !== "boolean") add(differences, "FORM_TRACE_ARM_TYPE", key);
   if ((!documentBound && row.schema !== FORM_TRACE_SCHEMA) || row.mode !== FORM_TRACE_MODE || row.scenarioId !== FORM_SCENARIO_ID ||
       row.requiredObservationMs !== FORM_REQUIRED_OBSERVATION_MS || row.evidencePolicy !== FORM_EVIDENCE_POLICY ||
-      (documentBound && (row.bindingPolicy !== DOCUMENT_BINDING_POLICY || !DOCUMENT_EXPERIMENTS.has(row.experiment)))) {
+      (documentBound && (row.bindingPolicy !== DOCUMENT_BINDING_POLICY || row.experiment !== DOCUMENT_CAMPAIGN_EXPERIMENT))) {
     add(differences, "FORM_TRACE_CONTRACT", key);
   }
   if (!HEX64.test(row.pairId) || !UUID_V4.test(row.runId) || !BROWSER_VERSION.test(row.browserVersion)) {
