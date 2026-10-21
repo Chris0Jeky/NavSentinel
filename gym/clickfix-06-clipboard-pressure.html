@@ -198,7 +198,7 @@
         const evidence = check.queueEvidence;
         const first = evidence?.firstVerification;
         const expectedCommandLike = MODE === "attack" ? 1 : 0;
-        if (evidence?.schema !== "navsentinel-clipboard-queue-test/v1" ||
+        if (evidence?.schema !== "navsentinel-clipboard-queue-test/v2" ||
             typeof evidence.artifactId !== "string" || !evidence.artifactId ||
             evidence.verificationCount !== 1 || evidence.queuedAfterVerification !== 0 ||
             s.attempted !== FLOOD_WRITES + expectedCommandLike ||

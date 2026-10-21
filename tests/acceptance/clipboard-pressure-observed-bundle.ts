@@ -19,7 +19,7 @@ import ts from "typescript";
 
 export const PRESSURE_OBSERVER_MARKER = "navsentinel-clipboard-queue-test.json";
 export const PRESSURE_OBSERVER_PROPERTY = "__navsentinelClipboardQueueTestEvidence";
-export const PRESSURE_OBSERVER_SCHEMA = "navsentinel-clipboard-queue-test/v1";
+export const PRESSURE_OBSERVER_SCHEMA = "navsentinel-clipboard-queue-test/v2";
 const OBSERVER = "__nsClipboardQueueObserver963";
 
 type Counts = { clipboardEnqueueCalls: number; commandLike: number; other: number };
@@ -28,21 +28,24 @@ export type ClipboardQueueEvidence = {
   artifactId: string;
   verificationCount: number;
   queuedAfterVerification: number;
+  drainCount: number;
+  drainsBeforeVerification: number;
   firstVerification: (Counts & { queueSize: number; dropped: number; coalesced: number }) | null;
+  firstDrain: { verificationCount: number; total: number; commandLike: number; other: number; dropped: number; coalesced: number } | null;
 };
 
 function fail(message: string): never { throw new Error(`TEST_INVALID: ${message}`); }
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
-/** Hash every bundle file; the observer marker itself is excluded to avoid recursion. */
-function bundleHash(root: string): string {
+/** Hash ordinary bundle files; exclude the marker by default to avoid recursion. */
+export function hashClipboardPressureBundle(root: string, includeObserverMarker = false): string {
   const files: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const target = path.join(directory, entry.name);
       if (entry.isDirectory()) visit(target);
       else if (entry.isFile()) {
-        if (target !== path.join(root, PRESSURE_OBSERVER_MARKER)) files.push(target);
+        if (includeObserverMarker || target !== path.join(root, PRESSURE_OBSERVER_MARKER)) files.push(target);
       } else fail("observed bundle must contain only ordinary files and directories");
     }
   };
@@ -108,22 +111,44 @@ export function instrumentClipboardQueue(source: string, artifactId: string): st
   if (!handler || handler !== enclosingFunction(ready) || verified.end >= ready.pos ||
       !handler.getText(file).includes("ns-challenge-response")) fail("accepted challenge ordering changed");
 
+  const drain = only(nodes(file, ts.isCallExpression).filter((call) =>
+    ts.isPropertyAccessExpression(call.expression) && ts.isIdentifier(call.expression.expression) &&
+    call.expression.expression.text === queueName && call.expression.name.text === "drain"), "MAIN queue drain");
+  let flush: ts.Node | undefined = drain.parent;
+  while (flush && !ts.isFunctionDeclaration(flush)) flush = flush.parent;
+  if (!flush || !ts.isFunctionDeclaration(flush) || !flush.name || !ts.isVariableDeclaration(drain.parent) ||
+      drain.parent.initializer !== drain || !ts.isObjectBindingPattern(drain.parent.name)) fail("MAIN flush declaration changed");
+  const items = only(drain.parent.name.elements.filter((entry) =>
+    (entry.propertyName ?? entry.name).getText(file) === "items" && ts.isIdentifier(entry.name)), "drain items binding");
+  const sendLoop = only(nodes(flush, ts.isForOfStatement).filter((loop) =>
+    loop.expression.getText(file) === items.name.getText(file) && nodes(loop, ts.isCallExpression).some((call) =>
+      ts.isIdentifier(call.expression) && call.expression.text === postName)), "drained-message send loop");
+  const flushName = flush.name.text;
+  const flushCall = only(nodes(file, ts.isCallExpression).filter((call) =>
+    ts.isIdentifier(call.expression) && call.expression.text === flushName), "accepted challenge flush call");
+  if (drain.end >= sendLoop.pos || enclosingFunction(flushCall) !== handler || flushCall.pos <= ready.end) {
+    fail("MAIN drain/verification/flush ordering changed");
+  }
+
   const edits = [
     { start: queueCall.parent.end, end: queueCall.parent.end,
       text: `${OBSERVER}.queued(${message.text},${verifiedName});` },
     { start: verified.getStart(file), end: verified.end,
       text: `(${verified.getText(file)},${OBSERVER}.verified(${queueName}),true)` },
+    { start: drain.getStart(file), end: drain.end,
+      text: `${OBSERVER}.drained(${drain.getText(file)})` },
   ].sort((left, right) => right.start - left.start);
   let patched = source;
   for (const edit of edits) patched = patched.slice(0, edit.start) + edit.text + patched.slice(edit.end);
   // Only counters live here. No page callbacks, clipboard contents, timestamps,
-  // postMessage, DOM writes, or scheduling changes execute at either boundary.
+  // postMessage, DOM writes, or scheduling changes execute at these boundaries.
   const prelude = `const ${OBSERVER}=(()=>{
     const counts={clipboardEnqueueCalls:0,commandLike:0,other:0};
-    let verificationCount=0,queuedAfterVerification=0,firstVerification=null;
+    let verificationCount=0,queuedAfterVerification=0,drainCount=0,drainsBeforeVerification=0,firstVerification=null,firstDrain=null;
     Object.defineProperty(globalThis,${JSON.stringify(PRESSURE_OBSERVER_PROPERTY)},{
       configurable:false,get:()=>({schema:${JSON.stringify(PRESSURE_OBSERVER_SCHEMA)},artifactId:${JSON.stringify(artifactId)},
-        verificationCount,queuedAfterVerification,firstVerification:firstVerification&&{...firstVerification}})
+        verificationCount,queuedAfterVerification,drainCount,drainsBeforeVerification,
+        firstVerification:firstVerification&&{...firstVerification},firstDrain:firstDrain&&{...firstDrain}})
     });
     return {
       queued(message,verified){
@@ -135,13 +160,26 @@ export function instrumentClipboardQueue(source: string, artifactId: string): st
       verified(queue){
         verificationCount++;
         if(verificationCount===1)firstVerification={...counts,queueSize:queue.size,dropped:queue.droppedCount,coalesced:queue.coalescedCount};
+      },
+      drained(result){
+        drainCount++;
+        if(!verificationCount)drainsBeforeVerification++;
+        if(drainCount===1){
+          let commandLike=0,other=0;
+          for(const message of result.items){
+            if(message.type!=="ns-clipboard-write")continue;
+            if(message.payload?.looksLikeCommand===true)commandLike++;else other++;
+          }
+          firstDrain={verificationCount,total:result.items.length,commandLike,other,dropped:result.dropped,coalesced:result.coalesced};
+        }
+        return result;
       }
     };
   })();\n`;
   return prelude + patched;
 }
 
-type ObserverMarker = {
+export type ObserverMarker = {
   schema: typeof PRESSURE_OBSERVER_SCHEMA;
   classification: "TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE";
   artifactId: string;
@@ -154,7 +192,7 @@ type ObserverMarker = {
   observedBundleSha256: string;
 };
 
-export function buildClipboardPressureObservedBundle(sourceDist: string, outputRoot: string): { extensionPath: string; marker: ObserverMarker } {
+export function buildClipboardPressureObservedBundle(sourceDist: string, outputRoot: string, artifactId = randomUUID()): { extensionPath: string; marker: ObserverMarker } {
   if (!fs.existsSync(path.join(sourceDist, "manifest.json"))) fail(`no built extension at ${sourceDist}`);
   if (fs.existsSync(path.join(sourceDist, PRESSURE_OBSERVER_MARKER))) fail("source is already instrumented");
   const assets = path.join(sourceDist, "assets");
@@ -162,20 +200,20 @@ export function buildClipboardPressureObservedBundle(sourceDist: string, outputR
     .filter((name) => fs.readFileSync(path.join(assets, name), "utf8").includes("ns-challenge-response"));
   const patchedAsset = only(candidates, "built MAIN guard module");
   const source = fs.readFileSync(path.join(assets, patchedAsset), "utf8");
-  const artifactId = randomUUID();
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(artifactId)) fail("invalid diagnostic artifact identifier");
   const observed = instrumentClipboardQueue(source, artifactId);
   const extensionPath = path.join(outputRoot, "extension");
   if (fs.existsSync(extensionPath)) fail(`${extensionPath} already exists`);
-  const sourceBundleSha256 = bundleHash(sourceDist);
+  const sourceBundleSha256 = hashClipboardPressureBundle(sourceDist);
   fs.cpSync(sourceDist, extensionPath, { recursive: true });
-  if (bundleHash(extensionPath) !== sourceBundleSha256) fail("source bundle changed while copying");
+  if (hashClipboardPressureBundle(extensionPath) !== sourceBundleSha256) fail("source bundle changed while copying");
   fs.writeFileSync(path.join(extensionPath, "assets", patchedAsset), observed);
   const marker: ObserverMarker = {
     schema: PRESSURE_OBSERVER_SCHEMA,
     classification: "TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE",
     artifactId, sourceDist: path.resolve(sourceDist), patchedAsset,
     sourceSha256: sha256(source), observedSha256: sha256(observed),
-    sourceBundleSha256, observedBundleSha256: bundleHash(extensionPath),
+    sourceBundleSha256, observedBundleSha256: hashClipboardPressureBundle(extensionPath),
   };
   fs.writeFileSync(path.join(extensionPath, PRESSURE_OBSERVER_MARKER), `${JSON.stringify(marker, null, 2)}\n`);
   return { extensionPath, marker };
@@ -191,7 +229,7 @@ export function readClipboardPressureObserverMarker(extensionPath: string): Obse
       !/^[a-f0-9]{64}$/u.test(marker.sourceSha256) || !/^[a-f0-9]{64}$/u.test(marker.sourceBundleSha256)) fail("invalid observer artifact marker");
   const source = fs.readFileSync(path.join(extensionPath, "assets", marker.patchedAsset), "utf8");
   if (sha256(source) !== marker.observedSha256) fail("observed MAIN module hash does not match its marker");
-  if (bundleHash(extensionPath) !== marker.observedBundleSha256) fail("observed bundle hash does not match its marker");
+  if (hashClipboardPressureBundle(extensionPath) !== marker.observedBundleSha256) fail("observed bundle hash does not match its marker");
   return marker;
 }
 
