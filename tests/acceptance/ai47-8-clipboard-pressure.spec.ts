@@ -1,5 +1,5 @@
 /**
- * AI-47 row 8 / former AI-37 — #599 clipboard pressure on a release build.
+ * AI-47 row 8 / former AI-37 — #599 clipboard pressure on an observed test copy.
  * Mirrors docs/agentic/GATE3_GUIDES.md "AI-47 row 8" in a fresh branded Chrome
  * profile: a benign copy-code page and its local verification checkbox stay
  * silent, then gym/clickfix-06-clipboard-pressure.html floods the clipboard
@@ -7,8 +7,10 @@
  *
  * Why this can fail on a #599 regression. The fixture fires its burst as soon
  * as the MAIN-world clipboard hook is installed and before the public
- * bridge-ready marker appears, so the receipts wait in the unverified
- * OutboundQueue that #599 coalesces. Its overlay carries no verification or
+ * bridge-ready marker appears. A builder-controlled observer in a copied
+ * bundle must separately prove that the actual receipts reached the unverified
+ * OutboundQueue before its first accepted handshake. Marker gaps cannot prove
+ * this ordering. Its overlay carries no verification or
  * paste wording, so a benign write alone scores nothing; only the command-like
  * receipt (written after 40 benign ones) can raise the warning. With #599 the
  * queue keeps the latest other receipt and the latest command-like one: the
@@ -16,23 +18,28 @@
  * appears. Without it the flood fills the 32-slot queue, the command-like
  * receipt is dropped, the attack arm stays silent, and both arms log an
  * overflow row. Proof: `node tests/acceptance/pr599-regressed-bundle.ts` builds
- * that regression (the NS-ADV-SELF-005 baseline patch); run this spec with
- * EXTENSION_PATH pointing at it and it must fail.
+ * that regression (the NS-ADV-SELF-005 baseline patch). This spec automatically
+ * creates an observed copy of its source EXTENSION_PATH (default extension/dist),
+ * scoped to this session. Run it again with EXTENSION_PATH pointing at the
+ * regressed source copy. With valid direct queue evidence, the regression must
+ * fail the unchanged behavior assertions.
  *
  * Chrome only lets a page write the clipboard without a click when the site's
  * Clipboard permission is Allow, so step 5 sets it through Chrome's own Site
  * settings page, exactly as the owner does. The hostile same-session bridge
  * retry stays automated-only in NS-ADV-SELF-005 (#186).
- * Automated agent evidence, not the owner Gate-3 result.
+ * This proves only the explicitly instrumented diagnostic artifact. It is
+ * neither unchanged release-artifact evidence nor an owner Gate-3 result.
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { AcceptanceSession, extensionPath, repoRoot, toastState, trustedClick } from "./acceptance_harness";
 import { OPTIONS_PAGE, TRUSTED_DOMAINS_KEY } from "./extension_ui_helpers";
 import { optionsEventRows, showOptionsEventLog } from "./attribution_helpers";
 import { REGRESSED_BUNDLE_MARKER } from "./pr599-regressed-bundle";
+import { readClipboardPressureObserverMarker, withClipboardPressureObservedBundle, type ClipboardQueueEvidence } from "./clipboard-pressure-observed-bundle";
 
 const PR_599_MERGE = "d4b1acf5843605f519ffe1732050a2c1bb501ee1";
 const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
@@ -56,6 +63,7 @@ type SelfCheck = {
   beforeReady: number;
   burstSpreadMs: number | null;
   readyGapMs: number | null;
+  queueEvidence: ClipboardQueueEvidence | null;
 };
 
 /** Every distinct toast text seen on the page during the window. */
@@ -113,6 +121,12 @@ async function waitForEventLogQuiescence(
 async function readSelfCheck(page: Page): Promise<SelfCheck> {
   return page.evaluate(() => {
     const data = document.documentElement.dataset;
+    // Read the builder's non-configurable getter directly. The DOM copy is
+    // presentation only and cannot authorize an acceptance verdict.
+    const descriptor = Object.getOwnPropertyDescriptor(window, "__navsentinelClipboardQueueTestEvidence");
+    const queueEvidence = descriptor?.get && descriptor.configurable === false
+      ? (window as typeof window & { __navsentinelClipboardQueueTestEvidence?: ClipboardQueueEvidence }).__navsentinelClipboardQueueTestEvidence ?? null
+      : null;
     return {
       state: data.pressureState ?? "",
       reason: data.pressureReason ?? "",
@@ -122,6 +136,7 @@ async function readSelfCheck(page: Page): Promise<SelfCheck> {
       beforeReady: Number(data.pressureBeforeReady ?? "0"),
       burstSpreadMs: data.pressureBurstSpreadMs ? Number(data.pressureBurstSpreadMs) : null,
       readyGapMs: data.pressureReadyGapMs ? Number(data.pressureReadyGapMs) : null,
+      queueEvidence,
     };
   });
 }
@@ -150,13 +165,14 @@ async function allowClipboardForSite(session: AcceptanceSession, origin: string)
 }
 
 /**
- * Load one fixture arm until its self-check reads VALID (the whole burst
- * finished before the bridge-ready marker), reloading like the owner's F5 on a
- * RETRY. Returns the page and the event log captured just before the valid load.
+ * Load one fixture arm until the whole burst has a direct queue witness from
+ * the intended diagnostic artifact. Returns the page and the existing log
+ * baseline. The separate discarded-page attribution issue remains held (#963).
  */
 async function loadValidPressureArm(
   session: AcceptanceSession,
   arm: "benign" | "attack",
+  artifactId: string,
 ): Promise<{ page: Page; check: SelfCheck; logBefore: Array<Record<string, unknown>> }> {
   const url = session.url(`${PRESSURE_FIXTURE}?mode=${arm}`, "localhost");
   let page: Page | null = null;
@@ -193,13 +209,18 @@ async function loadValidPressureArm(
     beforeReady: expectedWrites,
   });
   expect(check.readyGapMs, "the self-check requires a measured post-write ready gap").not.toBeNull();
+  expect(check.queueEvidence, "the actual queue witness must belong to this diagnostic copy").toMatchObject({
+    schema: "navsentinel-clipboard-queue-test/v1", artifactId,
+    verificationCount: 1, queuedAfterVerification: 0,
+    firstVerification: { clipboardEnqueueCalls: expectedWrites, other: FLOOD_WRITES, commandLike: arm === "attack" ? 1 : 0 },
+  });
   const markers = await session.requireReady(page);
   expect(markers.capture).toBe("1");
   expect(markers.bridge).toBe("1");
   return { page, check, logBefore };
 }
 
-async function collectPressureTimingSamples(session: AcceptanceSession): Promise<SelfCheck[]> {
+async function collectPressureTimingSamples(session: AcceptanceSession, artifactId: string): Promise<SelfCheck[]> {
   const samples: SelfCheck[] = [];
   const url = session.url(`${PRESSURE_FIXTURE}?mode=benign`, "localhost");
   for (let index = 1; index <= PRESSURE_TIMING_SAMPLES; index++) {
@@ -213,11 +234,13 @@ async function collectPressureTimingSamples(session: AcceptanceSession): Promise
         { timeout: 20_000 },
       );
       const check = await readSelfCheck(page);
+      expect(check.queueEvidence?.artifactId, "sample observer belongs to the selected test artifact").toBe(artifactId);
       samples.push(check);
       session.observe(`clipboard-pressure timing sample ${index}`, JSON.stringify({
         state: check.state,
         burstSpreadMs: check.burstSpreadMs,
         readyGapMs: check.readyGapMs,
+        queueEvidence: check.queueEvidence,
         reason: check.reason,
       }));
     } finally {
@@ -234,19 +257,24 @@ async function collectPressureTimingSamples(session: AcceptanceSession): Promise
 }
 
 
-test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboard flood keeps the command-like receipt (#599, #947)", async ({}, testInfo) => {
-  const session = await AcceptanceSession.open(testInfo, "AI-47.8-former-AI-37-PR599");
+async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensionPath: string): Promise<void> {
+  const observer = readClipboardPressureObserverMarker(observedExtensionPath);
+  const session = await AcceptanceSession.open(testInfo, "AI-47.8-former-AI-37-PR599-diagnostic-queue", {
+    extensionPath: observedExtensionPath, classification: observer.classification,
+  });
   try {
     await session.step("1. tested head contains the PR #599 merge and has no product-source changes", async () => {
       execFileSync("git", ["merge-base", "--is-ancestor", PR_599_MERGE, "HEAD"], { cwd: repoRoot });
       expect(session.receipt.git.productSourceClean, "no uncommitted product source changes").toBe(true);
-      const regressedMarker = path.join(extensionPath, REGRESSED_BUNDLE_MARKER);
+      const regressedMarker = path.join(observedExtensionPath, REGRESSED_BUNDLE_MARKER);
       session.observe(
         "bundle under test",
         fs.existsSync(regressedMarker)
           ? `REGRESSED COPY (#599 coalescing removed; this run must fail): ${fs.readFileSync(regressedMarker, "utf8").trim()}`
-          : `as built: ${extensionPath}`,
+          : `fixed queue policy in an instrumented test copy: ${observedExtensionPath}`,
       );
+      session.observe("direct queue observer artifact", JSON.stringify(observer));
+      session.note("TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE: synchronous queue counters; no bridge delays; discarded-page attribution remains held (#963).");
       session.note(`tested head ${session.receipt.git.head}; ui-guard ${session.guardRevision}; Chrome ${session.chromeVersion}`);
     });
 
@@ -293,8 +321,8 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
       session.observe("clipboard permission set through", `${route} for ${pressureOrigin}`);
     });
 
-    await session.step("6. collect ten branded-browser samples of burst spread and the bridge-marker gap", async () => {
-      const samples = await collectPressureTimingSamples(session);
+    await session.step("6. collect ten diagnostic timing samples and direct queue witnesses", async () => {
+      const samples = await collectPressureTimingSamples(session, observer.artifactId);
       const readyGaps = samples.map((sample) => sample.readyGapMs).filter((value): value is number => value !== null);
       const burstSpreads = samples.map((sample) => sample.burstSpreadMs).filter((value): value is number => value !== null);
       session.observe("clipboard-pressure timing summary", JSON.stringify({
@@ -304,8 +332,8 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
       }));
     });
 
-    const benign = await session.step("7. pressure page, benign arm: the self-check reads VALID with a bounded ready gap", async () =>
-      loadValidPressureArm(session, "benign"));
+    const benign = await session.step("7. pressure page, benign arm: VALID requires the direct pre-verification queue witness", async () =>
+      loadValidPressureArm(session, "benign", observer.artifactId));
     if (!benign) throw new Error("TEST_INVALID: the benign arm did not load");
 
     await session.step("8. benign arm: no ClickFix or clipboard warning, no clickfix_detected, no bridge_buffer_overflow", async () => {
@@ -323,8 +351,8 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
     }, { soft: true });
     await benign.page.close();
 
-    const attack = await session.step("9. pressure page, attack arm: the self-check reads VALID with a bounded ready gap", async () =>
-      loadValidPressureArm(session, "attack"));
+    const attack = await session.step("9. pressure page, attack arm: VALID requires the direct pre-verification queue witness", async () =>
+      loadValidPressureArm(session, "attack", observer.artifactId));
     if (!attack) throw new Error("TEST_INVALID: the attack arm did not load");
 
     await session.step("10. attack arm: the fake-verification clipboard warning is shown without any click", async () => {
@@ -366,4 +394,10 @@ test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboar
   } finally {
     await session.close();
   }
+}
+
+test("AI-47.8 / former AI-37: benign copy stays silent; a pre-handshake clipboard flood keeps the command-like receipt (#599, #947)", async ({}, testInfo) => {
+  test.skip(!fs.existsSync(path.join(extensionPath, "manifest.json")), "Build extension/dist before the acceptance lane.");
+  await withClipboardPressureObservedBundle(extensionPath, ({ extensionPath: observedExtensionPath }) =>
+    runObservedPressureAcceptance(testInfo, observedExtensionPath));
 });
