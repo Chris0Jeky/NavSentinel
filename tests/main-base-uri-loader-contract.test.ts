@@ -1,10 +1,15 @@
 import vm from "node:vm";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { readCapturedFormTarget } from "../extension/src/content/main_guard_helpers";
 import {
   assertEarlyMainClock,
   assertEarlyMainPrelude,
   EARLY_MAIN_BASE_URI,
   EARLY_MAIN_CLOCK,
+  EARLY_MAIN_FORM_TARGET,
+  EARLY_MAIN_GET_ATTRIBUTE,
   EARLY_MAIN_PRELUDE,
   installEarlyMainClockText,
 } from "../scripts/content-loader-contract.mjs";
@@ -28,6 +33,21 @@ function realmWithNode(): vm.Context {
 const loaderPrefix = `(function(){'use strict';${EARLY_MAIN_PRELUDE}})();`;
 
 describe("MAIN-world early baseURI capture (#900)", () => {
+  it("reads the captured base through the guard after own and prototype call tampering", () => {
+    const context = realmWithNode();
+    vm.runInContext(loaderPrefix, context);
+    const guard = readFileSync("extension/src/content/main_guard.ts", "utf8");
+    const reader = guard.slice(guard.indexOf("const earlyBaseURI = "), guard.indexOf("/** The absolute URL"));
+    vm.runInContext(ts.transpile(reader), context);
+    vm.runInContext(
+      "globalThis.document = doc;" +
+      "globalThis.__navsentinelMainBaseURI.call = () => 'http://localhost:1/';" +
+      "Function.prototype.call = () => 'http://localhost:1/';",
+      context,
+    );
+    expect(vm.runInContext("documentBaseUrl()", context)).toBe("http://127.0.0.2:9/");
+  });
+
   it("installs the whole prelude, clock first, directly after 'use strict' and before the async import", () => {
     const loader = installEarlyMainClockText(GENERATED);
     const prelude = loader.indexOf(EARLY_MAIN_PRELUDE);
@@ -43,7 +63,10 @@ describe("MAIN-world early baseURI capture (#900)", () => {
     expect(() => assertEarlyMainPrelude(installed.replace(EARLY_MAIN_BASE_URI, ""))).toThrow(/missing early baseURI capture/);
     expect(() => assertEarlyMainPrelude(`${installed}${EARLY_MAIN_BASE_URI}`)).toThrow(/more than one early baseURI/);
     // Separated from the clock capture: the prelude block no longer follows 'use strict' intact.
-    expect(() => assertEarlyMainPrelude(installed.replace(EARLY_MAIN_PRELUDE, `${EARLY_MAIN_CLOCK}void 0;${EARLY_MAIN_BASE_URI}`))).toThrow(/directly follow/);
+    expect(() => assertEarlyMainPrelude(installed.replace(
+      EARLY_MAIN_PRELUDE,
+      `${EARLY_MAIN_CLOCK}void 0;${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}`,
+    ))).toThrow(/directly follow/);
     const moved = GENERATED.replace("'use strict';", `'use strict';\n  ${EARLY_MAIN_CLOCK}`).replace(
       "await import(",
       `await import(${JSON.stringify("")}) ,${EARLY_MAIN_BASE_URI}await import(`,
@@ -59,7 +82,7 @@ describe("MAIN-world early baseURI capture (#900)", () => {
       context,
     );
     expect(vm.runInContext("doc.baseURI", context)).toBe("http://localhost:1/");
-    expect(vm.runInContext("globalThis.__navsentinelMainBaseURI.call(doc)", context)).toBe("http://127.0.0.2:9/");
+    expect(vm.runInContext("globalThis.__navsentinelMainBaseURI(doc)", context)).toBe("http://127.0.0.2:9/");
     const descriptor = vm.runInContext("Object.getOwnPropertyDescriptor(globalThis, '__navsentinelMainBaseURI')", context);
     expect(descriptor).toMatchObject({ writable: false, configurable: false });
   });
@@ -87,5 +110,88 @@ describe("MAIN-world early baseURI capture (#900)", () => {
     vm.runInContext("globalThis.Node = function Node() {}; Node.prototype.baseURI = 'http://localhost:1/';", valueOnly);
     expect(() => vm.runInContext(loaderPrefix, valueOnly)).not.toThrow();
     expect(vm.runInContext("'__navsentinelMainBaseURI' in globalThis", valueOnly)).toBe(false);
+  });
+});
+
+function realmWithForm(): vm.Context {
+  const context = vm.createContext({});
+  vm.runInContext(
+    "globalThis.HTMLFormElement = function HTMLFormElement() {};" +
+      "Object.defineProperty(HTMLFormElement.prototype, 'target', { configurable: true, get() { return this.realTarget; } });" +
+      "globalThis.form = Object.assign(Object.create(HTMLFormElement.prototype), { realTarget: '_top' });",
+    context,
+  );
+  return context;
+}
+
+describe("MAIN-world early form target capture (#1055)", () => {
+  it("reads _top through the helper after own and prototype call tampering", () => {
+    const context = realmWithForm();
+    vm.runInContext(loaderPrefix, context);
+    vm.runInContext(
+      "globalThis.__navsentinelMainFormTarget.call = () => '';" +
+      "Function.prototype.call = () => '';",
+      context,
+    );
+    const form = vm.runInContext("form", context) as HTMLFormElement;
+    const read = vm.runInContext("globalThis.__navsentinelMainFormTarget", context) as (form: HTMLFormElement) => string;
+    expect(readCapturedFormTarget(form, read)).toBe("_top");
+  });
+
+  it("installs the capture after baseURI and before the async import", () => {
+    const loader = installEarlyMainClockText(GENERATED);
+    expect(loader.indexOf(EARLY_MAIN_BASE_URI)).toBeLessThan(loader.indexOf(EARLY_MAIN_FORM_TARGET));
+    expect(loader.indexOf(EARLY_MAIN_FORM_TARGET)).toBeLessThan(loader.indexOf("await import("));
+    expect(() => assertEarlyMainPrelude(loader)).not.toThrow();
+  });
+
+  it("rejects a missing, duplicated, or reordered form target capture", () => {
+    const installed = installEarlyMainClockText(GENERATED);
+    expect(() => assertEarlyMainPrelude(installed.replace(EARLY_MAIN_FORM_TARGET, ""))).toThrow(/missing early form target/);
+    expect(() => assertEarlyMainPrelude(`${installed}${EARLY_MAIN_FORM_TARGET}`)).toThrow(/more than one early form target/);
+    const swapped = installed.replace(
+      `${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}`,
+      `${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_BASE_URI}`,
+    );
+    expect(() => assertEarlyMainPrelude(swapped)).toThrow(/must follow the baseURI/);
+  });
+
+  it("keeps the platform getter when the page replaces HTMLFormElement.prototype.target afterwards", () => {
+    const context = realmWithForm();
+    vm.runInContext(loaderPrefix, context);
+    vm.runInContext(
+      "Object.defineProperty(HTMLFormElement.prototype, 'target', { configurable: true, get() { return ''; } })",
+      context,
+    );
+    expect(vm.runInContext("form.target", context)).toBe("");
+    expect(vm.runInContext("globalThis.__navsentinelMainFormTarget(form)", context)).toBe("_top");
+    const descriptor = vm.runInContext("Object.getOwnPropertyDescriptor(globalThis, '__navsentinelMainFormTarget')", context);
+    expect(descriptor).toMatchObject({ writable: false, configurable: false });
+  });
+
+  it("keeps the first capture when the loader is evaluated again after tampering", () => {
+    const context = realmWithForm();
+    vm.runInContext(loaderPrefix, context);
+    const first = vm.runInContext("globalThis.__navsentinelMainFormTarget", context);
+    vm.runInContext(
+      "Object.defineProperty(HTMLFormElement.prototype, 'target', { configurable: true, get() { return ''; } })",
+      context,
+    );
+    expect(() => vm.runInContext(loaderPrefix, context)).not.toThrow();
+    expect(vm.runInContext("globalThis.__navsentinelMainFormTarget", context)).toBe(first);
+  });
+
+  it("stores nothing, and does not throw, when there is no HTMLFormElement or no getter", () => {
+    const bare = vm.createContext({});
+    expect(() => vm.runInContext(loaderPrefix, bare)).not.toThrow();
+    expect(vm.runInContext("'__navsentinelMainFormTarget' in globalThis", bare)).toBe(false);
+
+    const valueOnly = vm.createContext({});
+    vm.runInContext(
+      "globalThis.HTMLFormElement = function HTMLFormElement() {}; HTMLFormElement.prototype.target = '_top';",
+      valueOnly,
+    );
+    expect(() => vm.runInContext(loaderPrefix, valueOnly)).not.toThrow();
+    expect(vm.runInContext("'__navsentinelMainFormTarget' in globalThis", valueOnly)).toBe(false);
   });
 });

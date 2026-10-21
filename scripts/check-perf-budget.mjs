@@ -83,12 +83,20 @@ const budgets = [
   {
     label: "main_guard (MAIN world)",
     glob: "assets/main_guard.ts-*.js",
-    maxKB: 20,
+    // Bumped 20 -> 20.5 (#1086): main sat at 20.0KB (100%) and the bounded popup-name text walk adds ~0.1KB.
+    // Bumped 20.5 -> 21 (#1060): main sat at 20,883 bytes after #1017/#1023 compaction and the document-start
+    // form-target and baseURI invoker captures (page-tamper hardening) add ~0.2KB (~21.1KB). #1062/#1065 re-measure.
+    maxKB: 21,
   },
   {
     label: "credential_guard (content script)",
     glob: "assets/credential_guard.ts-*.js",
-    maxKB: 30,
+    // Bumped 30 -> 31.5 (#1084, P1): main sat 49 bytes under 30KB and the re-entrant submit retarget fix (formdata
+    // destination check, window-capture listener, one re-check prompt) adds ~1.06KB after compaction (31.0KB).
+    // #1085 (bounded huge-DOM htmlSnippet copy) and #1105 (document.open() listener re-registration) each asked for
+    // 30.5 alone. Both fit under this ceiling together (31,901 B measured) after #1085 dropped the credential
+    // prompt stylesheet's base indent, so the cap was not raised for them.
+    maxKB: 31.5,
   },
   {
     label: "service worker",
