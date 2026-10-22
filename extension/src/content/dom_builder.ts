@@ -121,6 +121,23 @@ function composedParentElement(el: Element): Element | null {
   return root instanceof ShadowRoot ? root.host : null;
 }
 
+function isTopLayerElement(el: Element): boolean {
+  const root = el.getRootNode();
+  // Document.fullscreenElement retargets to the host for a shadow descendant;
+  // use that descendant's own root to find the actual fullscreen boundary.
+  if ((root instanceof ShadowRoot ? root.fullscreenElement : el.ownerDocument.fullscreenElement) === el) {
+    return true;
+  }
+  for (const selector of [":modal", ":popover-open"]) {
+    try {
+      if (el.matches(selector)) return true;
+    } catch {
+      // Older engines may lack either selector; check the other independently.
+    }
+  }
+  return false;
+}
+
 function effectiveOpacity(el: Element): number {
   let product = 1;
   const seen = new Set<Element>();
@@ -134,6 +151,9 @@ function effectiveOpacity(el: Element): number {
     if (seen.size >= 512) return 0;
     seen.add(current);
     product *= ownOpacity(current);
+    // Top-layer boxes keep their own/descendant opacity, but are rendered
+    // outside their former ancestors' opacity groups (#925).
+    if (isTopLayerElement(current)) break;
   }
   return product;
 }
