@@ -481,6 +481,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     const pageSite = risk.page.registrableDomain || risk.page.host;
 
     if (
+      // An opaque page has no trusted identity; enabled guards must prompt.
+      risk.page.host &&
       !shouldPromptCredentialSubmit({
         mode: cfg.mode,
         riskScore: risk.score,

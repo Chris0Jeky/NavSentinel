@@ -336,6 +336,22 @@ describe("credential_guard", () => {
       );
     });
 
+    it("prompts for an opaque page even when ordinary risk settings would silently allow", async () => {
+      stubLocation("about:srcdoc");
+      const risk = defaultRisk();
+      risk.page = { ...risk.page, url: "about:srcdoc", host: "", registrableDomain: "", isHttps: false };
+      mockComputeRisk.mockReturnValue(risk);
+      mockShouldPrompt.mockReturnValue(false);
+      const form = createPasswordForm("https://evil.com/collect");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+
+      await dispatchSubmit(form);
+
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+    });
+
     it("logs cred_submit_prompt event before showing modal", async () => {
       const form = createPasswordForm();
       await dispatchSubmit(form);

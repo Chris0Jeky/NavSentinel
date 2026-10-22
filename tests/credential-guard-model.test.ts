@@ -27,13 +27,19 @@ function cfg(overrides: Partial<CredentialSettings> = {}): CredentialSettings {
 }
 
 describe("getCredentialPageUrl", () => {
-  it.each(["about:blank", "about:srcdoc", "about:blank#login"])("uses the inherited security origin for %s", (url) => {
+  it.each([
+    "about:blank", "about:srcdoc", "about:blank#login",
+    "blob:https://untrusted.test/id", "filesystem:https://untrusted.test/temporary/login.html",
+  ])("uses the inherited security origin for %s", (url) => {
     expect(getCredentialPageUrl(url, "https://victim.test:8443")).toBe("https://victim.test:8443/");
     expect(getCredentialPageUrl(url, "http://victim.test")).toBe("http://victim.test/");
   });
 
   it.each(["null", "", "not a URL", "data:text/html,hello", "file:///"])("does not invent an identity for %s", (origin) => {
     expect(getCredentialPageUrl("about:srcdoc", origin)).toBe("about:srcdoc");
+    expect(getCredentialPageUrl("blob:https://victim.test/id", origin)).toBe("blob:https://victim.test/id");
+    expect(getCredentialPageUrl("filesystem:https://victim.test/temporary/login.html", origin))
+      .toBe("filesystem:https://victim.test/temporary/login.html");
   });
 
   it("preserves ordinary document URLs and ignores a different origin argument", () => {

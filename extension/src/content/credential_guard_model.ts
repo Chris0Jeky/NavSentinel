@@ -9,7 +9,10 @@ import type { RiskReason, RiskResult } from "../shared/domain";
 export function getCredentialPageUrl(documentUrl: string, securityOrigin: string): string {
   try {
     const url = new URL(documentUrl);
-    if (url.protocol === "about:" && (url.pathname === "blank" || url.pathname === "srcdoc")) {
+    if (
+      (url.protocol === "about:" && (url.pathname === "blank" || url.pathname === "srcdoc")) ||
+      url.protocol === "blob:" || url.protocol === "filesystem:"
+    ) {
       const inherited = new URL(securityOrigin);
       if (inherited.protocol === "https:" || inherited.protocol === "http:") return `${inherited.origin}/`;
     }
