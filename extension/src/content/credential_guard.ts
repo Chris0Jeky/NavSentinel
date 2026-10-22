@@ -20,6 +20,7 @@ import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 import { queryPasswordInputs } from "./password_field";
 import { addPersistentListener } from "./persistent_listener";
+import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
 
@@ -70,19 +71,22 @@ function isPasswordForm(form: HTMLFormElement): boolean {
     // query misses. Union both sources for resilience across DOM implementations,
     // then require at least one ENABLED password field (#227.2).
     const seen = new Set<Element>();
-    const collection = form.elements;
+    const collection = domProperty(HTMLFormElement.prototype, form, "elements");
     if (collection) {
-      for (let i = 0; i < collection.length; i++) {
-        const el = collection.item(i);
+      for (let i = 0; i < domProperty(HTMLCollection.prototype, collection, "length"); i++) {
+        const el = HTMLCollection.prototype.item.call(collection, i);
         if (el) seen.add(el);
       }
     }
     queryPasswordInputs(form).forEach((el) => seen.add(el));
     return Array.from(seen).some(
-      (el) => el instanceof HTMLInputElement && el.type === "password" && !el.disabled
+      (el) => el instanceof HTMLInputElement &&
+        domProperty(HTMLInputElement.prototype, el, "type") === "password" &&
+        !domProperty(HTMLInputElement.prototype, el, "disabled")
     );
   } catch {
-    return false;
+    // Classification failure must not discard a password seen in form.elements.
+    return true;
   }
 }
 
@@ -105,9 +109,7 @@ function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null):
     // destination, not just the form's action. A submitter carrying the
     // formaction attribute (even empty, which the browser resolves to the current
     // document) overrides the form action; otherwise fall back to it (#227.1).
-    const rawAttr = submitter?.hasAttribute("formaction")
-      ? submitter.getAttribute("formaction") || ""
-      : form.getAttribute("action") || "";
+    const rawAttr = (submitter && domAttribute(submitter, "formaction")) ?? domAttribute(form, "action") ?? "";
 
     // #410: bound the JS-level scan only -- head-slice a probe before trim().
     // Deliberately NOT the content_analyzer pattern of resolving the *sliced*
@@ -198,12 +200,13 @@ const DEST_CHANGED_MSG =
 // actionMoved's tolerance) plus the exact method and target.
 function resolveDestination(form: HTMLFormElement, submitter: HTMLElement | null): [string, string] {
   const attr = (name: string, formName: string): string =>
-    (submitter?.hasAttribute(name) ? submitter.getAttribute(name) : form.getAttribute(formName)) ?? "";
+    (submitter && domAttribute(submitter, name)) ?? domAttribute(form, formName) ?? "";
   // A form with no target falls back to the first <base target>.
+  const base = document.querySelector("base[target]");
   return [
     resolveActionUrl(form, submitter),
     attr("formmethod", "method").trim().toLowerCase() + " " +
-      (attr("formtarget", "target") || document.querySelector("base[target]")?.getAttribute("target"))
+      (attr("formtarget", "target") || (base ? domAttribute(base, "target") : undefined))
   ];
 }
 
@@ -271,7 +274,7 @@ function settleResumeBinding(b: ResumeBinding): void {
   if (!rechecking.delete(b.form)) {
     recheckRequested.add(b.form);
     try {
-      b.form.requestSubmit(b.submitter);
+      HTMLFormElement.prototype.requestSubmit.call(b.form, b.submitter);
       return;
     } catch {
       // The submitter left the form; block below.
@@ -299,7 +302,7 @@ function resumeSubmit(
   resumeBinding = binding;
 
   try {
-    form.requestSubmit(submitter);
+    HTMLFormElement.prototype.requestSubmit.call(form, submitter);
   } catch {
     // requestSubmit failed (e.g. the submit control was detached or re-associated
     // during the await window). Nothing was submitted; the `finally` below revokes
@@ -310,7 +313,7 @@ function resumeSubmit(
     // tell the user instead of silently downgrading the target (R1 finding 1) --
     // UNLESS the caller assessed nothing (off mode / pre-assessment fail-open),
     // where blocking a disabled guard would be a regression (R2 L2).
-    if (submitter?.hasAttribute("formaction") && !opts?.allowUnsafeFallback) {
+    if (submitter && domAttribute(submitter, "formaction") !== null && !opts?.allowUnsafeFallback) {
       showToast({
         message: "The sign-in could not be completed safely (the submit control changed). Please try again.",
         timeoutMs: 8000
@@ -318,7 +321,7 @@ function resumeSubmit(
       return;
     }
     try {
-      form.submit();
+      HTMLFormElement.prototype.submit.call(form);
     } catch (e) {
       console.warn("[NavSentinel] form submit fallback failed:", e);
     }
@@ -358,7 +361,8 @@ async function blockIfActionMutated(
   // change (R1 finding 1/2).
   const submitterReassociated =
     (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
-    submitter.form !== form;
+    domProperty(submitter instanceof HTMLButtonElement ? HTMLButtonElement.prototype : HTMLInputElement.prototype,
+      submitter, "form") !== form;
   if (!submitterReassociated && !actionMoved(assessedActionUrl, liveActionUrl)) return false;
 
   const liveHost = actionHost(liveActionUrl);
@@ -699,7 +703,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 
     const t = evt.target;
     if (!(t instanceof HTMLInputElement)) return;
-    if ((t.getAttribute("type") || "").toLowerCase() !== "password") return;
+    if ((domAttribute(t, "type") || "").toLowerCase() !== "password") return;
 
     const trusted = await getTrustedDomains();
     const host = normalizeHost(location.hostname);
