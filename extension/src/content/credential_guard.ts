@@ -562,16 +562,20 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // (P5-C1 / #238 consistency fix).
     const credDest = risk.action.host || risk.action.registrableDomain || undefined;
 
-    if (choice === "cancel") {
-      decided = true;
+    const recordOutcome = (outcome: "cancel" | "trust" | "allow_once"): void => {
       void appendPromptOutcome({
         domain: credDomain,
         ...(credDest ? { destDomain: credDest } : {}),
         type: "cred",
         score: risk.score,
-        outcome: "cancel",
+        outcome,
         reasons: credReasons
-      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (cancel):", e); });
+      }).catch((e) => { console.warn(`[NavSentinel] prompt outcome append failed (${outcome}):`, e); });
+    };
+
+    if (choice === "cancel") {
+      decided = true;
+      recordOutcome("cancel");
       return;
     }
 
@@ -585,25 +589,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       return;
     }
 
-    if (choice === "trust_site" || choice === "trust_dest") {
-      void appendPromptOutcome({
-        domain: credDomain,
-        ...(credDest ? { destDomain: credDest } : {}),
-        type: "cred",
-        score: risk.score,
-        outcome: "trust",
-        reasons: credReasons
-      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (trust):", e); });
-    } else {
-      void appendPromptOutcome({
-        domain: credDomain,
-        ...(credDest ? { destDomain: credDest } : {}),
-        type: "cred",
-        score: risk.score,
-        outcome: "allow_once",
-        reasons: credReasons
-      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (allow_once):", e); });
-    }
+    recordOutcome(choice === "trust_site" || choice === "trust_dest" ? "trust" : "allow_once");
 
     // Trust writes are .catch-guarded so a failed write is non-fatal (log and
     // proceed with the approved submit) and cannot unwind to the fail-open catch.
