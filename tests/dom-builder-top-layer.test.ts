@@ -3,11 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildClickContextFromEvents,
   buildKeyboardClickContext,
+  captureClick,
+  capturePointerDown,
 } from "../extension/src/content/dom_builder";
 import { computeCDS } from "../extension/src/shared/scoring";
 
 beforeEach(() => { document.body.innerHTML = ""; });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(document, "elementsFromPoint");
+});
+
+// happy-dom does not implement coordinate hit testing.
+function mockHitStack(root: Document | ShadowRoot, hits: Element[], method = "elementsFromPoint") {
+  Object.defineProperty(root, method, {
+    configurable: true, value: () => method === "elementsFromPoint" ? [...hits] : hits[0] ?? null,
+  });
+}
 
 function fixture(tag: string) {
   const outer = document.createElement("div");
@@ -37,6 +49,31 @@ describe("effective opacity stops at the actual top layer (#925)", () => {
   // happy-dom has no top-layer rendering. Model only the browser-owned selector
   // state; the real showModal()/showPopover() states are pinned in Playwright.
   for (const [tag, selector] of [["dialog", ":modal"], ["div", ":popover-open"]] as const) {
+    it.each(["elementsFromPoint", "elementFromPoint"])(`${selector} resolves nested open shadow hits via %s`, (method) => {
+      const { boundary, link } = fixture(tag);
+      vi.spyOn(boundary, "matches").mockImplementation((query) => query === selector);
+      const host = document.createElement("div");
+      vi.spyOn(host, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 120, 24));
+      boundary.replaceWith(host);
+      const shadow = host.attachShadow({ mode: "open" });
+      const nestedHost = document.createElement("div");
+      shadow.append(nestedHost);
+      const nestedShadow = nestedHost.attachShadow({ mode: "open" });
+      nestedShadow.append(boundary);
+      mockHitStack(document, [host, document.body]);
+      mockHitStack(shadow, [nestedHost, host, document.body], method);
+      mockHitStack(nestedShadow, [link, boundary, nestedHost, host], method);
+      const down = capturePointerDown(new PointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+      const click = captureClick(new MouseEvent("click", { clientX: 10, clientY: 10 }));
+      const ctx = buildClickContextFromEvents({ down, click });
+      expect(ctx.top.opacity).toBe(1);
+      expect(computeCDS(ctx)).toEqual({ cds: 0, reasonCodes: [] });
+      expect(down.top).toBe(host);
+      expect(click.top).toBe(host);
+      expect(down.stack).toEqual([host, document.body]);
+      expect(click.stack).toEqual([host, document.body]);
+    });
+
     it(`${selector} excludes the former ancestor from pointer and keyboard scoring`, () => {
       const { boundary, link } = fixture(tag);
       vi.spyOn(boundary, "matches").mockImplementation((query) => query === selector);
@@ -58,6 +95,43 @@ describe("effective opacity stops at the actual top layer (#925)", () => {
       expect(pointerContext(boundary).top.opacity).toBeCloseTo(0.2, 6);
     });
   }
+
+  it("keeps ordinary open-shadow captures and scoring identical to document hit testing", () => {
+    const host = document.createElement("x-control");
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 120, 24));
+    host.setAttribute("role", "button");
+    host.setAttribute("aria-label", "Open details");
+    const shadow = host.attachShadow({ mode: "open" });
+    const link = document.createElement("a");
+    link.href = "#details";
+    link.textContent = "Open details";
+    link.style.opacity = "0.01";
+    shadow.append(link);
+    const underlying = document.createElement("button");
+    underlying.textContent = "Underlying action";
+    document.body.append(underlying, host);
+    const stack = [host, underlying, document.body];
+    mockHitStack(document, stack);
+    mockHitStack(shadow, [link, host, underlying, document.body]);
+    const down = capturePointerDown(new PointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    const click = captureClick(new MouseEvent("click", { clientX: 10, clientY: 10 }));
+    // HEAD capture semantics: the document's first hit and unmodified stack.
+    const baseline = buildClickContextFromEvents({
+      down: { ...down, top: host, stack }, click: { ...click, top: host, stack },
+    });
+    const ctx = buildClickContextFromEvents({ down, click });
+    expect(down.top).toBe(host);
+    expect(click.top).toBe(host);
+    expect(down.stack).toEqual(stack);
+    expect(click.stack).toEqual(stack);
+    expect(ctx).toEqual(baseline);
+    expect(ctx.top.tag).toBe("X-CONTROL");
+    expect(ctx.top.opacity).toBe(1);
+    expect(ctx.underlying).toMatchObject({ tag: "BUTTON", textLength: 16 });
+    expect(ctx.retargeted).toBe(false);
+    expect(ctx.isLegitModalBackdrop).toBe(false);
+    expect(computeCDS(ctx)).toEqual({ cds: 0, reasonCodes: [] });
+  });
 
   it.each(["ordinary container", "non-modal open dialog", "closed popover"])(
     "%s still includes its ancestors' opacity",

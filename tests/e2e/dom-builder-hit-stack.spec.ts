@@ -122,8 +122,71 @@ test.describe("top-layer click scoring (#925)", () => {
     scoringScript = chunk.code;
   });
 
-  for (const mode of ["modal", "popover", "ordinary"] as const) {
-    test(`${mode} uses rendered opacity for a trusted click @regression`, async ({ page }) => {
+  test("ordinary open-shadow clicks keep document captures and underlying scoring @regression", async ({ page }) => {
+    await page.setContent(`
+      <button id="underlying" style="position:absolute;left:20px;top:20px;width:160px;height:32px">Underlying action</button>
+      <x-control id="host" role="button" aria-label="Open details"
+        style="position:absolute;left:20px;top:20px;width:160px;height:32px;z-index:2"></x-control>
+    `);
+    await page.evaluate(() => {
+      document.getElementById("host")!.attachShadow({ mode: "open" }).innerHTML =
+        '<a id="link" href="#details" style="display:block;width:160px;height:32px;opacity:0.01">Open details</a>';
+    });
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      const { frameTree } = await cdp.send("Page.getFrameTree");
+      const { executionContextId } = await cdp.send("Page.createIsolatedWorld", {
+        frameId: frameTree.frame.id, worldName: "ordinary-shadow-scoring-925",
+      });
+      const installed = await cdp.send("Runtime.evaluate", {
+        contextId: executionContextId,
+        expression: `${scoringScript}
+          let down = null;
+          let downMatchesDocument = false;
+          let lastCapture = null;
+          const sameStack = (a, b) => a.length === b.length && a.every((el, i) => el === b[i]);
+          document.addEventListener('pointerdown', e => {
+            down = ClickScoring.capturePointerDown(e);
+            const stack = document.elementsFromPoint(e.clientX, e.clientY);
+            downMatchesDocument = down.top === stack[0] && sameStack(down.stack, stack);
+          }, true);
+          document.addEventListener('click', e => {
+            e.preventDefault();
+            const click = ClickScoring.captureClick(e);
+            const stack = document.elementsFromPoint(e.clientX, e.clientY);
+            const ctx = ClickScoring.buildClickContextFromEvents({ down, click });
+            lastCapture = {
+              trusted: e.isTrusted, downMatchesDocument,
+              clickMatchesDocument: click.top === stack[0] && sameStack(click.stack, stack),
+              downTop: down.top.id, clickTop: click.top.id,
+              topTag: ctx.top.tag, opacity: ctx.top.opacity, underlying: ctx.underlying,
+              retargeted: ctx.retargeted, backdrop: ctx.isLegitModalBackdrop,
+              ...ClickScoring.computeCDS(ctx)
+            };
+          }, true);
+        `,
+      });
+      expect(installed.exceptionDetails).toBeUndefined();
+      await page.locator("#link").click();
+      const result = await cdp.send("Runtime.evaluate", {
+        contextId: executionContextId, expression: "lastCapture", returnByValue: true,
+      });
+      expect(result.exceptionDetails).toBeUndefined();
+      expect(result.result.value).toMatchObject({
+        trusted: true, downMatchesDocument: true, clickMatchesDocument: true,
+        downTop: "host", clickTop: "host", topTag: "X-CONTROL", opacity: 1,
+        underlying: { tag: "BUTTON", textLength: 16 }, retargeted: false, backdrop: false,
+        cds: 0, reasonCodes: [],
+      });
+    } finally {
+      await cdp.detach();
+    }
+  });
+
+  const cases = [false, true].flatMap((inShadow) =>
+    (["modal", "popover", "ordinary"] as const).map((mode) => ({ mode, inShadow })));
+  for (const { mode, inShadow } of cases) {
+    test(`${mode} uses rendered opacity for a trusted click (shadow root: ${inShadow}) @regression`, async ({ page }) => {
       await page.setContent(`
         <div id="outer" style="opacity:0.01">
           <${mode === "modal" ? "dialog" : "div"} id="surface" ${mode === "popover" ? 'popover="manual"' : ""}>
@@ -131,8 +194,16 @@ test.describe("top-layer click scoring (#925)", () => {
           </${mode === "modal" ? "dialog" : "div"}>
         </div>
       `);
-      const state = await page.evaluate((mode) => {
+      const state = await page.evaluate(({ mode, inShadow }) => {
         const surface = document.getElementById("surface")!;
+        if (inShadow) {
+          const host = document.createElement("div");
+          // Keep a nonzero host box so this fixture isolates opacity, while
+          // all other hints retain document-hit (host) semantics.
+          host.style.cssText = "width:160px;height:32px";
+          surface.replaceWith(host);
+          host.attachShadow({ mode: "open" }).append(surface);
+        }
         if (mode === "modal") (surface as HTMLDialogElement).showModal();
         if (mode === "popover") surface.showPopover();
         return {
@@ -141,7 +212,7 @@ test.describe("top-layer click scoring (#925)", () => {
           ownOpacity: getComputedStyle(surface).opacity,
           ancestorOpacity: getComputedStyle(document.getElementById("outer")!).opacity,
         };
-      }, mode);
+      }, { mode, inShadow });
       expect(state).toEqual({
         modal: mode === "modal", popover: mode === "popover", ownOpacity: "1", ancestorOpacity: "0.01",
       });
@@ -182,9 +253,10 @@ test.describe("top-layer click scoring (#925)", () => {
         } else {
           expect(score).toEqual({ trusted: true, opacity: 1, cds: 0, reasonCodes: [] });
           await page.evaluate(() => {
-            document.getElementById("surface")!.style.opacity = "0.2";
-            document.getElementById("inner")!.style.opacity = "0.25";
-            document.getElementById("link")!.style.opacity = "0.5";
+            const root = document.querySelector("#outer > div")?.shadowRoot ?? document;
+            (root.querySelector("#surface") as HTMLElement).style.opacity = "0.2";
+            (root.querySelector("#inner") as HTMLElement).style.opacity = "0.25";
+            (root.querySelector("#link") as HTMLElement).style.opacity = "0.5";
           });
           await page.locator("#link").click();
           const concealed = await readScore();
