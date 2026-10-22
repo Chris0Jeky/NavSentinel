@@ -12,6 +12,7 @@ import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
 import {
   deriveCredentialPasteState,
+  getCredentialPageUrl,
   getCredentialReasonLines,
   isCrossSiteCredentialAction,
   shouldPromptCredentialSubmit
@@ -22,6 +23,12 @@ import { queryPasswordInputs } from "./password_field";
 import { addPersistentListener } from "./persistent_listener";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
+
+// In this isolated world, self.origin is the browser's inherited security
+// origin, unlike location.origin ("null" in about:blank/about:srcdoc).
+function pageIdentity(): URL {
+  return new URL(getCredentialPageUrl(location.href, self.origin));
+}
 
 // #227.5: the credential mode, cached synchronously so handleSubmit can decide
 // whether to interpose BEFORE preventDefault. When the guard is disabled it must
@@ -258,8 +265,8 @@ function settleResumeBinding(b: ResumeBinding): void {
   window.stop();
   void appendEvent({
     kind: "cred_submit_prompt",
-    site: normalizeHost(location.hostname),
-    url: location.href,
+    site: normalizeHost(pageIdentity().hostname),
+    url: pageIdentity().href,
     destHost: actionHost(resolveActionUrl(b.form, b.submitter)),
     extra: { error: "action_mutated_during_resubmit" }
   }).catch(console.warn);
@@ -420,7 +427,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     const trusted = await getTrustedDomains();
     assessedActionUrl = resolveActionUrl(form, submitter);
     const risk = computeCredentialRisk({
-      pageUrl: location.href,
+      pageUrl: pageIdentity().href,
       actionUrl: assessedActionUrl,
       trustedDomains: trusted,
       config: cfg
@@ -434,7 +441,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // the fail-open catch and bypass the prompt.
     if (!risk.page.isTrusted) {
       try {
-        const pageHost = normalizeHost(location.hostname);
+        const pageHost = normalizeHost(pageIdentity().hostname);
         const pageDomain = getRegistrableDomain(pageHost) || pageHost;
         const contentAnalysis = analyzePageContent(document, pageDomain);
         if (contentAnalysis.score > 0) {
@@ -454,7 +461,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // Skip entirely for trusted domains -- consistent with content analysis above.
     if (!risk.page.isTrusted) {
       try {
-        const sriAnalysis = checkSRI(document, location.href, location.origin);
+        const page = pageIdentity();
+        const sriAnalysis = checkSRI(document, page.href, page.origin);
         if (sriAnalysis.score !== 0) {
           risk.score = Math.max(0, Math.min(100, risk.score + sriAnalysis.score));
           const sriCode = sriAnalysis.score > 0 ? "SRI_MISSING_ON_CREDENTIAL_PAGE" : "SRI_PRESENT_ON_CREDENTIAL_PAGE";
@@ -663,8 +671,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
             form,
             submitter,
             assessedActionUrl,
-            normalizeHost(location.hostname),
-            location.href
+            normalizeHost(pageIdentity().hostname),
+            pageIdentity().href
           ))
         ) {
           // mutated during the fault -> do not resume
@@ -682,8 +690,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     try {
       await appendEvent({
         kind: "cred_submit_prompt",
-        site: normalizeHost(location.hostname),
-        url: location.href,
+        site: normalizeHost(pageIdentity().hostname),
+        url: pageIdentity().href,
         extra: { error: e instanceof Error ? e.message : String(e) }
       });
     } catch (logErr) {
@@ -702,9 +710,9 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
     if ((t.getAttribute("type") || "").toLowerCase() !== "password") return;
 
     const trusted = await getTrustedDomains();
-    const host = normalizeHost(location.hostname);
+    const host = normalizeHost(pageIdentity().hostname);
     const reg = getRegistrableDomain(host);
-    const pasteState = deriveCredentialPasteState(location.href, trusted);
+    const pasteState = deriveCredentialPasteState(pageIdentity().href, trusted);
     if (!pasteState.shouldWarn) return;
 
     showToast({
@@ -716,7 +724,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
           onClick: async () => {
             try {
               if (reg) await addTrustedDomain(reg);
-              await appendEvent({ kind: "cred_trust_domain", site: reg || host, url: location.href });
+              await appendEvent({ kind: "cred_trust_domain", site: reg || host, url: pageIdentity().href });
             } catch (e) {
               console.warn("[NavSentinel] event log append failed (cred_trust_domain/paste):", e);
             }
@@ -725,7 +733,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
       ]
     });
 
-    await appendEvent({ kind: "cred_paste_warn", site: pasteState.siteLabel, url: location.href });
+    await appendEvent({ kind: "cred_paste_warn", site: pasteState.siteLabel, url: pageIdentity().href });
   } catch (e) {
     console.warn("[NavSentinel] credential paste handler failed:", e);
   }

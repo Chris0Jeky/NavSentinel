@@ -25,7 +25,8 @@ vi.mock("../extension/src/content/credential_modal", () => ({
   showCredentialModal: vi.fn(),
 }));
 
-vi.mock("../extension/src/content/credential_guard_model", () => ({
+vi.mock("../extension/src/content/credential_guard_model", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../extension/src/content/credential_guard_model")>()),
   deriveCredentialPasteState: vi.fn(),
   getCredentialReasonLines: vi.fn(),
   isCrossSiteCredentialAction: vi.fn(),
