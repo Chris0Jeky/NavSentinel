@@ -40,7 +40,7 @@ const BRIEF_RECOVERY_DISMISS_MS = 2000;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-const controlActions = new WeakMap<EventTarget, (event?: MouseEvent) => boolean | void>();
+const controlActions = new WeakMap<EventTarget, (event?: MouseEvent | KeyboardEvent) => boolean | void>();
 const cardRemovers = new WeakMap<HTMLElement, (notifyDismiss?: boolean) => void>();
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
@@ -63,7 +63,7 @@ function isolateInteraction(event: Event): void {
   }
 }
 
-function bindControl(control: HTMLElement, action: (event?: MouseEvent) => boolean | void): void {
+function bindControl(control: HTMLElement, action: (event?: MouseEvent | KeyboardEvent) => boolean | void): void {
   controlActions.set(control, action);
   // Direct listener: in a real browser the document-start fence consumes
   // trusted input at window capture and calls activateOwnedToastControl
@@ -85,7 +85,7 @@ function bindControl(control: HTMLElement, action: (event?: MouseEvent) => boole
  * bound. A page-created element that copies the host id or any attribute
  * therefore cannot activate a real control. Returns whether an action ran.
  */
-export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[], event?: MouseEvent): boolean {
+export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[], event?: MouseEvent | KeyboardEvent): boolean {
   if (!host || eventHost !== host) return false;
   for (const node of path) {
     if (node === host) return false;

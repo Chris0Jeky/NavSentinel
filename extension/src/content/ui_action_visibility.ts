@@ -74,14 +74,14 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   frame = requestAnimationFrame(tick);
 
   return {
-    accepts(button: HTMLElement, event?: MouseEvent): boolean {
+    accepts(button: HTMLElement, event?: MouseEvent | KeyboardEvent): boolean {
       sample();
       let allowed = !disposed && !!event && visibleSince !== null &&
         performance.now() - visibleSince >= DBLCLICK_WINDOW_MS && buttonSince.has(button) &&
         performance.now() - buttonSince.get(button)! >= DBLCLICK_WINDOW_MS && rendered(button);
       if (allowed && event) {
         const rect = button.getBoundingClientRect();
-        const keyboard = event.detail === 0;
+        const keyboard = event instanceof KeyboardEvent || event.detail === 0;
         const x = keyboard ? rect.x + rect.width / 2 : event.clientX;
         const y = keyboard ? rect.y + rect.height / 2 : event.clientY;
         allowed = (!keyboard || root.activeElement === button) &&

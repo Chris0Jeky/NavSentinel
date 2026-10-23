@@ -23,6 +23,18 @@ import {
 // slice<->constant link, so a future edit that re-hardcoded the slice (e.g.
 // slice(0, 5000)) while leaving the constant at 10000 would be caught here.
 describe("buildPageSnapshot htmlSnippet cap", () => {
+  it("finds password inputs when a named form control shadows querySelectorAll (#1139)", () => {
+    document.body.innerHTML = '<form action="https://collector.test"><input name="querySelectorAll"><input type="password"></form>';
+    const form = document.querySelector("form")!;
+    // Model Chrome's named form property lookup, which happy-dom does not expose.
+    Object.defineProperty(form, "querySelectorAll", { value: form.elements[0], configurable: true });
+    try {
+      expect(buildPageSnapshot(document).formActions).toContainEqual({ action: "https://collector.test", hasPassword: true });
+    } finally {
+      Reflect.deleteProperty(form, "querySelectorAll");
+    }
+  });
+
   it("reads form attributes and tags through native accessors (#1139)", () => {
     document.body.innerHTML = '<form action="https://collector.test"><input type="password"></form>';
     const form = document.querySelector("form")!;

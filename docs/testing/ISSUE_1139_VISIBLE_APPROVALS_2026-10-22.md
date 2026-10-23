@@ -102,3 +102,84 @@ Intended commit message: `fix: require visible armed credential and toast approv
 ## Driver note (2026-10-23)
 
 The draft also moved `DBLCLICK_WINDOW_MS` out of `main_guard.ts`; that edit was reverted so this PR leaves the MAIN-world bundle untouched (main_guard keeps its own 800 ms constant; `shared/doubleclick_timing.ts` mirrors it for the isolated UI). Re-verified after the revert: build, content-loader, mv3-worker, perf budgets (main_guard unchanged, credential_guard 30.2 KB/31.5 KB, ui_toast 7.8 KB/8 KB), typecheck, 178 focused unit tests, and `CI=1` e2e (credential-modal-visibility + credential-document-open) 8 passed.
+
+## Independent review fixes (2026-10-24)
+
+Candidate: uncommitted changes on `fix/1139-prompt-visible-clicks`, based on
+`296c0df5d8eee724cd0f565f85a4b750ec3a193b`. **Merge remains blocked by the
+nested-frame keyboard test below.** No Git-writing command, remote service,
+dependency installation, or owner-browser reload was used.
+
+The HIGH finding is fixed in source: the built input fence forwards
+`sink(host,path,e)`, and toast activation and the visibility gate accept the
+fence's `KeyboardEvent` as well as pointer clicks. Three built-extension
+regressions prove immediate refusal followed by exactly one approved popup
+after arming for pointer, Enter, and Space. The shared E2E helpers now wait for
+arming, including the blocked-action authority and evasion specs. Direct Trust
+and nested-frame Undo helpers also wait. Existing assertions remain intact.
+
+The LOW finding is fixed in the shared `queryPasswordInputs` helper: element
+roots use `Element.prototype.querySelectorAll.call`, preserving document/root
+support. The analyzer regression models `<input name="querySelectorAll">`
+shadowing explicitly, because happy-dom does not reproduce Chrome's named-form
+property lookup.
+
+Red evidence before the source fixes:
+
+```text
+npx --no-install vitest run tests/content-analyzer-snapshot.test.ts -t "named form control shadows"
+Exit 1: 1 failed, 50 skipped; TypeError: root.querySelectorAll is not a function.
+
+CI=1 npx --no-install playwright test tests/e2e/credential-modal-visibility.spec.ts --grep "built toast fence"
+Exit 1: all 3 new tests failed, including their retries, waiting for the armed approval's popup.
+```
+
+The required checks were run sequentially, with one heavy command at a time:
+
+| Check | Observed result |
+| --- | --- |
+| `npm run typecheck` | Exit 0, including after diagnostic cleanup |
+| `npm run lint` | Exit 0; 10 existing warnings in unchanged observatory tests |
+| Focused Vitest command below | Exit 0; 4 files, 164 tests passed |
+| `npm run build` | Exit 0; interaction-only; worker/profile checks passed |
+| `npm run check:content-loader` | Exit 0; revision `ded807920e14`, loader SHA-256 prefix `4fdbbf0b9def` |
+| `npm run check:perf-budget` | Exit 0; all 12 budgets passed |
+| Five-spec Playwright command below | Exit 1; 38 passed, 1 failed (2.7 minutes) |
+
+```text
+npx vitest run tests/credential-modal-visibility.test.ts tests/credential-modal.test.ts tests/ui-toast.test.ts tests/content-analyzer-snapshot.test.ts
+
+CI=1 npx --no-install playwright test tests/e2e/credential-modal-visibility.spec.ts tests/e2e/blocked-action-id-authority.spec.ts tests/e2e/evasion.spec.ts tests/e2e/credential-guard.spec.ts tests/e2e/overlay-cleanup-nesting.spec.ts
+```
+
+The failing case is `toast mouse and keyboard controls do not leak
+capture-phase input into the protected page` in
+`tests/e2e/overlay-cleanup-nesting.spec.ts`. Initially its final assertion found
+the original overlay still hidden. A timing trace measured an ancestor
+mutation at 1830 ms and focused Undo input at 2210 ms, inside the renewed
+800 ms refusal window. The final test waits for the fixture's known
+`style-rewritten` phase before arming.
+
+Waiting past that mutation exposed a timeout at the armed keyboard action.
+A full rerun with an experimental observer-based test helper also returned
+38 passed / 1 failed (6.4 minutes); that helper was removed. Isolated checks
+with a phase wait, `noWaitAfter`, and explicit focus plus native keyboard input
+also timed out. The last bounded check failed at 20 seconds; default-budget
+checks timed out at 120 seconds. Diagnostic logging, the observer helper,
+alternative input methods, and the diagnostic timeout were removed. The final
+test retains the original `button.press("Enter")` and all original assertions.
+There is no passing final five-spec result after cleanup, and the cause is
+unclassified, not claimed flaky or pre-existing. Investigation is parked at
+the finite gate budget and recorded in `docs/agentic/failure_ledger.jsonl`.
+
+Resume at `pressFrameToastButton` and the hostile fixture's keyboard section:
+separate native key delivery and the Undo callback from Playwright's action
+completion, then require the exact five-spec command above to pass before merge.
+The other 38 cases include the new built-fence pointer/Enter/Space regressions,
+the original-closure authority check, Trust persistence, and the evasion Undo cases.
+
+Human Chrome Gate-3 remains **NOT RUN** in `ACTION_ITEMS.md`. No remote CI,
+commit, push, or merge is claimed. Occlusion-v2, transforms/blend modes, rAF
+hardening, and closing the toast shadow root remain outside this change.
+
+Intended commit message: `fix: relay toast approval events and protect form queries`.

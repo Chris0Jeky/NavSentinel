@@ -11,6 +11,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 import {
   getGymBaseUrl,
   readBuiltUiGuardRevision,
@@ -106,12 +107,14 @@ async function waitForFrameToast(frame: Frame, pattern: RegExp): Promise<void> {
 async function clickFrameToastButton(frame: Frame, label: string): Promise<void> {
   const button = frame.getByRole("button", { name: label, exact: true });
   await expect(button).toBeVisible();
+  await waitForVisibleAction(button);
   await button.click();
 }
 
 async function pressFrameToastButton(frame: Frame, label: string): Promise<void> {
   const button = frame.getByRole("button", { name: label, exact: true });
   await expect(button).toBeVisible();
+  await waitForVisibleAction(button);
   await button.press("Enter");
 }
 
@@ -379,6 +382,8 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "hostile");
     await waitForFrameToast(frame, /overlay hidden/i);
+    // This timed ancestor mutation resets arming; wait before the exposure window.
+    await frame.waitForFunction(() => document.documentElement.dataset.hostilePhase === "style-rewritten");
     await pressFrameToastButton(frame, "Undo");
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageControlEventCount ?? "0"),

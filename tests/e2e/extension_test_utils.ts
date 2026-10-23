@@ -2,6 +2,7 @@ import fs from "fs";
 import * as http from "node:http";
 import path from "path";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 import {
   assertContentAddressedLoader,
   assertUiGuardRevision,
@@ -156,6 +157,9 @@ export async function readToastText(page: Page): Promise<string | null> {
 }
 
 export async function clickToastButton(page: Page, label: string): Promise<void> {
+  if (label !== "Dismiss") {
+    await waitForVisibleAction(page.locator("#__navsentinel_toast_host").getByRole("button", { name: label, exact: true }).first());
+  }
   // Trusted activation only (#783): extension-owned controls ignore
   // page-synthesized clicks, so resolve the button's viewport coordinates
   // in-page and drive a real (trusted) mouse click at that point — the same
@@ -291,6 +295,7 @@ export async function waitForCredentialModal(
 }
 
 export async function clickModalButton(page: Page, label: string): Promise<void> {
+  if (label !== "Cancel") await waitForVisibleAction(page.locator(`#${CREDENTIAL_MODAL_HOST_ID}`));
   // Trusted activation only (#783): see clickToastButton.
   const point = await evaluateInCredentialModal(
     page,

@@ -1,5 +1,6 @@
 import { expect, test, chromium } from "@playwright/test";
 import fs from "fs";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -378,6 +379,7 @@ test("credential guard warns on password paste and trust action persists @regres
 
       const trustButton = toast.getByRole("button", { name: "Trust 127.0.0.1" });
       await expect(trustButton).toBeVisible();
+      await waitForVisibleAction(trustButton);
       await trustButton.click();
 
       const serviceWorker = await getServiceWorker(context);

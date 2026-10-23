@@ -68,7 +68,10 @@ export function isPasswordTypeInput(el: Element): boolean {
  * its own `input[type="password"]` selector. (#820)
  */
 export function queryPasswordInputs(root: ParentNode): Element[] {
-  const all = root.querySelectorAll("input");
+  // Named form controls can shadow the instance method.
+  const all = root instanceof Element
+    ? Element.prototype.querySelectorAll.call(root, "input")
+    : root.querySelectorAll("input");
   const out: Element[] = [];
   for (let i = 0; i < all.length; i++) {
     const el = all[i]!;

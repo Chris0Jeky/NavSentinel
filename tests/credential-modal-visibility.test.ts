@@ -109,7 +109,7 @@ describe("credential and toast visible approval (#1139)", () => {
     expect(p.settled).not.toHaveBeenCalled();
   });
 
-  it("does not invoke a hidden toast Undo or remove its card", async () => {
+  it.each(["Enter", " "])("refuses hidden toast Undo, then accepts armed keyup %s", async (key) => {
     const toast = await import("../extension/src/content/ui_toast");
     const undo = vi.fn();
     toast.showToast({ message: "Blocked", timeoutMs: 0, actions: [{ label: "Undo", onClick: undo }] });
@@ -122,7 +122,7 @@ describe("credential and toast visible approval (#1139)", () => {
     expect(undo).not.toHaveBeenCalled();
     expect(button.isConnected).toBe(true);
     host.style.opacity = "1";
-    const keyboard = new MouseEvent("click", { detail: 0 });
+    const keyboard = new KeyboardEvent("keyup", { key });
     expect(toast.activateOwnedToastControl(host, [button], keyboard)).toBe(false);
     vi.advanceTimersByTime(1000);
     expect(toast.activateOwnedToastControl(host, [button], keyboard)).toBe(true);

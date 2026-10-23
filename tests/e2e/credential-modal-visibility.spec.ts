@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
 import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
-import { evaluateInCredentialModal, getServiceWorker, waitForCredentialModal, clickModalButton } from "./extension_test_utils";
+import { evaluateInCredentialModal, getServiceWorker, waitForCredentialModal, clickModalButton, waitForNavSentinelBridge, waitForToastText } from "./extension_test_utils";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 
 for (const activation of ["pointer", "Enter", "Space"] as const) {
 test(`page CSS cannot turn an invisible credential prompt into approval; visible ${activation} works (#1139) @regression`, async () => {
@@ -69,6 +70,56 @@ test(`page CSS cannot turn an invisible credential prompt into approval; visible
       await page.keyboard.press(activation);
     }
     await expect.poll(() => posts).toBe(1);
+  } finally {
+    await context?.close();
+    fs.rmSync(profile, { recursive: true, force: true });
+  }
+});
+}
+
+for (const activation of ["pointer", "Enter", "Space"] as const) {
+test(`built toast fence refuses immediate approval and permits armed ${activation} (#1139) @regression`, async () => {
+  test.setTimeout(60_000);
+  const extensionPath = path.resolve("extension/dist");
+  expect(fs.existsSync(extensionPath), "build required").toBe(true);
+  fs.mkdirSync("test-results", { recursive: true });
+  const profile = fs.mkdtempSync(path.resolve("test-results/toast-visible-profile-"));
+  let context: BrowserContext | undefined;
+  try {
+    context = await chromium.launchPersistentContext(profile, {
+      headless: false,
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    });
+    await context.route("http://toast.test/**", (route) => route.fulfill({
+      contentType: "text/html", body: "<p>Local toast approval fixture</p>",
+    }));
+    const page = await context.newPage();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("http://toast.test/start");
+    await waitForNavSentinelBridge(page);
+    const started = await page.evaluate(() => {
+      const started = performance.now();
+      window.open("http://toast.test/approved", "_blank");
+      return started;
+    });
+    await waitForToastText(page, "Blocked popup");
+    const button = page.locator("#__navsentinel_toast_host").getByRole("button", { name: "Allow once", exact: true });
+    const activate = async () => {
+      if (activation === "pointer") await button.click();
+      else await button.press(activation);
+    };
+    await activate();
+    expect(await page.evaluate(() => performance.now()) - started, "first trusted input must precede arming").toBeLessThan(DBLCLICK_WINDOW_MS);
+    expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank")).toHaveLength(0);
+    await expect(button, "refused approval keeps the original action pending").toBeVisible();
+
+    await waitForVisibleAction(button);
+    const popupPromise = context.waitForEvent("page", { timeout: 5000 });
+    await activate();
+    const popup = await popupPromise;
+    await expect(popup).toHaveURL("http://toast.test/approved");
+    await expect(button).toHaveCount(0);
+    expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank")).toEqual([popup]);
   } finally {
     await context?.close();
     fs.rmSync(profile, { recursive: true, force: true });
