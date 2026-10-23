@@ -28,6 +28,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { startProvingGroundEgressFence } from "./proving_ground_fake_sink";
 import {
   getGymBaseUrl,
   waitForNavSentinelBridge,
@@ -48,10 +49,12 @@ test.setTimeout(180_000);
 async function withExtension(run: (context: BrowserContext, baseUrl: string) => Promise<void>): Promise<void> {
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-form-submit-"));
+  const fence = await startProvingGroundEgressFence([], new Set([new URL(baseUrl).origin]));
   try {
     const context = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
       timeout: 60_000,
+      proxy: { server: fence.proxyServer },
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     try {
@@ -60,6 +63,7 @@ async function withExtension(run: (context: BrowserContext, baseUrl: string) => 
       await context.close();
     }
   } finally {
+    await fence.close();
     if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }

@@ -42,6 +42,7 @@ const COMPILED = ts.transpileModule(SLICE, {
 /** Instantiate the actual function with only the two captured native globals. */
 function loadActualOpen(protoValue: unknown, instanceValue: unknown): OpenFn {
   const sandbox = vm.createContext({
+    nativeApply: Reflect.apply,
     nativeProtoOpen: protoValue,
     nativeOpen: instanceValue,
   });

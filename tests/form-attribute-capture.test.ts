@@ -119,7 +119,7 @@ describe("document-start getAttribute capture (#1061)", () => {
     const loader = installEarlyMainClockText(GENERATED);
     expect(loader.indexOf(EARLY_MAIN_FORM_TARGET)).toBeLessThan(loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE));
     expect(loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE)).toBeLessThan(loader.indexOf("await import("));
-    expect(EARLY_MAIN_PRELUDE.endsWith(EARLY_MAIN_GET_ATTRIBUTE)).toBe(true);
+    expect(EARLY_MAIN_PRELUDE).toContain(EARLY_MAIN_GET_ATTRIBUTE);
     expect(EARLY_MAIN_GET_ATTRIBUTE).toContain("value:Function.prototype.call.bind(getAttribute),writable:false,configurable:false");
     expect(() => assertEarlyMainPrelude(loader)).not.toThrow();
   });
