@@ -18,6 +18,16 @@
  * can never push out a buffered alert. Dropped messages are counted (not
  * silently discarded) so the count can be surfaced once the bridge is ready.
  */
+import type {} from "./main_world_natives";
+
+// MAIN uses document-start invokers; the isolated world has trusted prototypes.
+const early = globalThis.__navsentinelMainNatives;
+const push = early?.push ?? Function.prototype.call.bind(Array.prototype.push);
+const splice = early?.splice ?? Function.prototype.call.bind(Array.prototype.splice);
+const findIndex = early?.findIndex ?? Function.prototype.call.bind(Array.prototype.findIndex);
+const setHas = early?.setHas ?? Function.prototype.call.bind(Set.prototype.has);
+const starts = early?.starts ?? Function.prototype.call.bind(String.prototype.startsWith);
+
 export interface OutboundMessage {
   type: string;
   payload?: Record<string, unknown>;
@@ -72,7 +82,7 @@ export class OutboundQueue {
     coalesceKey?: string,
   ): void {
     if (coalesceKey) {
-      const existingIndex = this.items.findIndex((item) => item.coalesceKey === coalesceKey);
+      const existingIndex = findIndex(this.items, (item: QueuedMessage) => item.coalesceKey === coalesceKey);
       if (existingIndex !== -1) {
         const existing = this.items[existingIndex];
         if (!existing) return;
@@ -83,8 +93,8 @@ export class OutboundQueue {
           this.dropped++;
           return;
         }
-        this.items.splice(existingIndex, 1);
-        this.items.push({ message, priority, floodable, coalesceKey });
+        splice(this.items, existingIndex, 1);
+        push(this.items, { message, priority, floodable, coalesceKey });
         this.coalesced++;
         return;
       }
@@ -94,7 +104,7 @@ export class OutboundQueue {
       return;
     }
     if (this.items.length < this.cap) {
-      this.items.push({ message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
+      push(this.items, { message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
       if (floodable) this.floodableCount++;
       return;
     }
@@ -105,14 +115,14 @@ export class OutboundQueue {
     }
     // An alert must be admitted: displace the oldest routine message. If the
     // buffer is entirely alerts, keep the earliest and drop this one.
-    const routineIdx = this.items.findIndex((q) => !q.priority);
+    const routineIdx = findIndex(this.items, (q: QueuedMessage) => !q.priority);
     if (routineIdx === -1) {
       this.dropped++;
       return;
     }
-    this.items.splice(routineIdx, 1);
+    splice(this.items, routineIdx, 1);
     this.dropped++;
-    this.items.push({ message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
+    push(this.items, { message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
     if (floodable) this.floodableCount++;
   }
 
@@ -122,7 +132,9 @@ export class OutboundQueue {
    * counters. Safe to call when empty.
    */
   drain(): { items: OutboundMessage[]; dropped: number; coalesced: number } {
-    const items = this.items.splice(0, this.items.length).map((q) => q.message);
+    const queued = splice(this.items, 0, this.items.length) as QueuedMessage[];
+    const items: OutboundMessage[] = [];
+    for (let index = 0; index < queued.length; index++) items[index] = queued[index]!.message;
     const dropped = this.dropped;
     const coalesced = this.coalesced;
     this.dropped = 0;
@@ -173,10 +185,10 @@ const MAIN_GUARD_ALERT_TYPES = new Set<string>([
  */
 export function isMainGuardAlertType(type: string): boolean {
   return (
-    MAIN_GUARD_ALERT_TYPES.has(type) ||
-    type.startsWith("ns-js-") ||
-    type.startsWith("ns-dblclick-") ||
-    type.startsWith("ns-allow")
+    setHas(MAIN_GUARD_ALERT_TYPES, type) ||
+    starts(type, "ns-js-") ||
+    starts(type, "ns-dblclick-") ||
+    starts(type, "ns-allow")
   );
 }
 
@@ -220,5 +232,5 @@ const FLOODABLE_ALERT_TYPES = new Set<string>([
 /** Whether an alert is high-frequency per-navigation telemetry subject to the
  *  OutboundQueue floodable cap. (#377/F2) */
 export function isFloodableAlertType(type: string): boolean {
-  return FLOODABLE_ALERT_TYPES.has(type);
+  return setHas(FLOODABLE_ALERT_TYPES, type);
 }
