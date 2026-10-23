@@ -25,7 +25,8 @@ vi.mock("../extension/src/content/credential_modal", () => ({
   showCredentialModal: vi.fn(),
 }));
 
-vi.mock("../extension/src/content/credential_guard_model", () => ({
+vi.mock("../extension/src/content/credential_guard_model", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../extension/src/content/credential_guard_model")>()),
   deriveCredentialPasteState: vi.fn(),
   getCredentialReasonLines: vi.fn(),
   isCrossSiteCredentialAction: vi.fn(),
@@ -450,6 +451,22 @@ describe("credential_guard", () => {
           outsideAction: "cancel",
         }),
       );
+    });
+
+    it("prompts for an opaque page even when ordinary risk settings would silently allow", async () => {
+      stubLocation("about:srcdoc");
+      const risk = defaultRisk();
+      risk.page = { ...risk.page, url: "about:srcdoc", host: "", registrableDomain: "", isHttps: false };
+      mockComputeRisk.mockReturnValue(risk);
+      mockShouldPrompt.mockReturnValue(false);
+      const form = createPasswordForm("https://evil.com/collect");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+
+      await dispatchSubmit(form);
+
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
     });
 
     it("logs cred_submit_prompt event before showing modal", async () => {
