@@ -4,7 +4,7 @@
  * so it is not unit-importable). The MAIN-world wiring that calls these is
  * covered by the Gym/E2E pushstate fixtures. (#301, #302)
  */
-import type {} from "./main_world_natives";
+import type { MainWorldNatives } from "./main_world_natives";
 
 /**
  * Create a guard-local blocked-action ID allocator (#933). The returned closure
@@ -35,10 +35,9 @@ export function createBlockedActionIdAllocator(initialSequence = 0n): () => stri
  * once; an evicted entry's allow-closure is gone, but the ns-allow-action
  * handler degrades gracefully (missing id → no-op).
  */
-export function enforceMapSizeCap<K, V>(map: Map<K, V>, maxSize: number): number {
+export function enforceMapSizeCap<K, V>(map: Map<K, V>, maxSize: number, natives?: MainWorldNatives): number {
   if (maxSize < 0) maxSize = 0;
   let evicted = 0;
-  const natives = globalThis.__navsentinelMainNatives;
   while ((natives ? natives.mapSize(map) : map.size) > maxSize) {
     const oldest = natives ? natives.oldest(map) : map.keys().next();
     if (oldest.done) break;
@@ -62,12 +61,16 @@ export function pruneTimestampWindow(
   now: number,
   windowMs: number,
   cap: number,
+  natives?: MainWorldNatives,
 ): number[] {
   const cutoff = now - windowMs;
   const pruned: number[] = [];
   for (let index = 0; index < timestamps.length; index++) {
     const ts = timestamps[index]!;
-    if (ts >= cutoff) pruned[pruned.length] = ts;
+    if (ts >= cutoff) {
+      if (natives) natives.push(pruned, ts);
+      else pruned.push(ts);
+    }
   }
   // A non-positive cap means "keep nothing". Guard it explicitly: slice(-cap) with
   // cap === 0 is slice(-0), and -0 normalizes to +0 under ToIntegerOrInfinity, so
@@ -273,6 +276,7 @@ export function armSameTaskRedirect(
   gestureTs: number,
   scope: RedirectAllowanceScope,
   limits: RedirectAllowanceLimits,
+  natives?: MainWorldNatives,
 ): void {
   if (gestureTs <= state.retiredThrough) return;
   state.count = 0;
@@ -280,7 +284,8 @@ export function armSameTaskRedirect(
   state.sameTaskArmedAt = now;
   state.sameTaskRestrict = scope.restrict;
   state.sameTaskTarget = scope.target;
-  state.pendingFollowUps[state.pendingFollowUps.length] = gestureTs;
+  if (natives) natives.push(state.pendingFollowUps, gestureTs);
+  else state.pendingFollowUps.push(gestureTs);
   if (state.pendingFollowUps.length > limits.maxPendingFollowUps) dropFollowUps(state.pendingFollowUps, 1);
 }
 
@@ -387,10 +392,10 @@ export interface AnchorOpenIntent {
   until: number;
 }
 
-export function anchorOpenIntentFor(href: string, now: number, ttlMs: number): AnchorOpenIntent | null {
+export function anchorOpenIntentFor(href: string, now: number, ttlMs: number, natives?: MainWorldNatives): AnchorOpenIntent | null {
   let parsed: Pick<URL, "protocol" | "origin" | "pathname">;
   try {
-    parsed = globalThis.__navsentinelMainNatives?.url(href) ?? new URL(href);
+    parsed = natives ? natives.url(href) : new URL(href);
   } catch {
     return null;
   }
@@ -404,9 +409,9 @@ export function matchesAnchorOpenIntent(
   url: string | undefined,
   target: string | undefined,
   baseHref: string,
+  natives?: MainWorldNatives,
 ): boolean {
   if (!intent || now > intent.until) return false;
-  const natives = globalThis.__navsentinelMainNatives;
   const normalizedTarget = natives ? natives.lower(natives.trim(target ?? "")) : (target ?? "").trim().toLowerCase();
   if (normalizedTarget !== "" && normalizedTarget !== "_blank") return false;
   if (url === undefined || (natives ? natives.trim(url) : url.trim()) === "") return false;
@@ -486,9 +491,9 @@ function trimHtmlWhitespace(value: string): string {
 export function resolveFormActionUrl(
   rawAction: string | null | undefined,
   documentUrl: string,
-  baseUrl: string | null
+  baseUrl: string | null,
+  natives?: MainWorldNatives,
 ): string | null {
-  const natives = globalThis.__navsentinelMainNatives;
   const action = trimHtmlWhitespace(rawAction ?? "");
   try {
     if (natives) return !action ? natives.url(documentUrl).href : natives.url(action, baseUrl ?? undefined).href;

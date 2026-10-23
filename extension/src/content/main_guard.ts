@@ -101,15 +101,15 @@ let bridgeHandshakeTimer = 0;
 // Buffers messages produced before the bridge is verified. On overflow it keeps
 // security-relevant alerts (never evicted by routine traffic) and the earliest
 // of equal-priority messages — see bridge_outbound.ts for the rationale.
-const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS, natives.define);
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
     const message = { type, ...(payload !== undefined ? { payload } : {}) };
     pendingOutbound.enqueue(
       message,
-      isMainGuardAlertType(type),
-      isFloodableAlertType(type),
+      isMainGuardAlertType(type, natives),
+      isFloodableAlertType(type, natives),
       coalesceKeyForMainGuardMessage(message),
     );
     return;
@@ -429,7 +429,7 @@ function consumeAnchorOpenIntent(url: string | undefined, target: string | undef
   // An empty URL (about:blank) never matched a link's destination; keep it so.
   const resolved = url === undefined || natives.trim(url) === "" ? null : resolveAgainstBase(url);
   if (!event || resolved === null) return false;
-  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved)) return false;
+  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved, natives)) return false;
   try {
     // isTrusted is an unforgeable own property, and re-dispatching the saved
     // event with dispatchEvent() makes it false: a later replay cannot pose as
@@ -564,7 +564,7 @@ function registerBlockedAction(params: {
   const { action, ...description } = params;
   natives.mapSet(blockedActions, id, { action, expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS, ...description });
   // Bound the Map against a synchronous flood the TTL prune can't catch (#301).
-  enforceMapSizeCap(blockedActions, MAX_BLOCKED_ACTIONS);
+  enforceMapSizeCap(blockedActions, MAX_BLOCKED_ACTIONS, natives);
   postBlocked({ id, ...description });
 }
 
@@ -1162,7 +1162,7 @@ function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null
     ? submitterAction
     : readCapturedAttribute(form, "action", nativeGetAttribute);
   if (raw === undefined) return undefined;
-  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
+  return resolveFormActionUrl(raw, location.href, documentBaseUrl(), natives) ?? undefined;
 }
 
 /**
@@ -1451,7 +1451,7 @@ document.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
-    armSameTaskRedirect(redirectAllowance, nowMs(), nativeApply(nativeEventTimestamp, event, []), { restrict: false, target: "" }, REDIRECT_LIMITS);
+    armSameTaskRedirect(redirectAllowance, nowMs(), nativeApply(nativeEventTimestamp, event, []), { restrict: false, target: "" }, REDIRECT_LIMITS, natives);
     if (!sameTaskRedirectTimer) {
       sameTaskRedirectTimer = nativeSetTimeout(() => {
         sameTaskRedirectTimer = 0;
@@ -1486,7 +1486,7 @@ document.addEventListener(
     } catch {
       return;
     }
-    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS);
+    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS, natives);
     anchorOpenIntentEvent = anchorOpenIntent ? event : null;
   },
   true
@@ -1728,6 +1728,7 @@ function checkPushStateSuspicious(url: string | null | undefined, _method: strin
     now,
     PUSHSTATE_RAPID_WINDOW_MS,
     PUSHSTATE_RAPID_CAP,
+    natives,
   );
 
   if (pushStateTimestamps.length >= PUSHSTATE_RAPID_THRESHOLD) {

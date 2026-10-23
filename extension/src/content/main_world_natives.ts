@@ -6,9 +6,8 @@ export interface MainWorldNatives {
   includes(value: string, search: string): boolean;
   starts(value: string, search: string): boolean;
   split(value: string, separator: string): string[];
+  define: typeof Reflect.defineProperty;
   push<T>(values: T[], value: T): number;
-  splice<T>(values: T[], start: number, count: number): T[];
-  findIndex<T>(values: T[], predicate: (value: T) => boolean): number;
   setHas<T>(values: Set<T>, value: T): boolean;
   test(pattern: RegExp, value: string): boolean;
   mapGet<K, V>(map: Map<K, V>, key: K): V | undefined;
