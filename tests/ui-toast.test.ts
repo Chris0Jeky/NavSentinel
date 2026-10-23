@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubVisibleUi, armVisibleControl } from "./helpers/visible-ui";
+stubVisibleUi();
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -14,7 +16,10 @@ async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
   controlToast = mod.controlToast;
-  activateOwnedToastControl = mod.activateOwnedToastControl;
+  activateOwnedToastControl = (host, path) => {
+    const button = path.find((node) => node instanceof HTMLElement) as HTMLElement | undefined;
+    return mod.activateOwnedToastControl(host, path, button ? armVisibleControl(button) : undefined);
+  };
   showOverlayCleanupToast = mod.showOverlayCleanupToast;
 }
 
@@ -28,7 +33,7 @@ describe("ui_toast", () => {
   });
 
   afterEach(() => {
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
     vi.useRealTimers();
     document.documentElement.querySelectorAll("#__navsentinel_toast_host").forEach((n) => n.remove());
     document.body.innerHTML = "";

@@ -1,4 +1,5 @@
 import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
+import { visibleActionGate } from "./ui_action_visibility";
 
 export type ToastAction = {
   label: string;
@@ -39,7 +40,7 @@ const BRIEF_RECOVERY_DISMISS_MS = 2000;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-const controlActions = new WeakMap<EventTarget, () => void>();
+const controlActions = new WeakMap<EventTarget, (event?: MouseEvent) => boolean | void>();
 const cardRemovers = new WeakMap<HTMLElement, (notifyDismiss?: boolean) => void>();
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
@@ -62,7 +63,7 @@ function isolateInteraction(event: Event): void {
   }
 }
 
-function bindControl(control: HTMLElement, action: () => void): void {
+function bindControl(control: HTMLElement, action: (event?: MouseEvent) => boolean | void): void {
   controlActions.set(control, action);
   // Direct listener: in a real browser the document-start fence consumes
   // trusted input at window capture and calls activateOwnedToastControl
@@ -71,7 +72,7 @@ function bindControl(control: HTMLElement, action: () => void): void {
   // activateOwnedToastControl directly.
   control.addEventListener("click", (e) => {
     if (!e.isTrusted) return;
-    action();
+    action(e);
   });
 }
 
@@ -84,7 +85,7 @@ function bindControl(control: HTMLElement, action: () => void): void {
  * bound. A page-created element that copies the host id or any attribute
  * therefore cannot activate a real control. Returns whether an action ran.
  */
-export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[]): boolean {
+export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[], event?: MouseEvent): boolean {
   if (!host || eventHost !== host) return false;
   for (const node of path) {
     if (node === host) return false;
@@ -92,8 +93,7 @@ export function activateOwnedToastControl(eventHost: unknown, path: readonly unk
       ? controlActions.get(node as EventTarget)
       : undefined;
     if (action) {
-      action();
-      return true;
+      return action(event) !== false;
     }
   }
   return false;
@@ -211,6 +211,7 @@ function renderFullCard(opts: ToastOptions): void {
   const remove = (notifyDismiss = false) => {
     if (removed) return;
     removed = true;
+    visibility?.dispose();
     if (timeout) window.clearTimeout(timeout);
     if (outsidePointerDown) {
       document.removeEventListener("pointerdown", outsidePointerDown, true);
@@ -229,7 +230,8 @@ function renderFullCard(opts: ToastOptions): void {
     const btn = document.createElement("button");
     btn.className = "action";
     btn.textContent = a.label;
-    bindControl(btn, () => {
+    bindControl(btn, (event) => {
+      if (!visibility?.accepts(btn, event)) return false;
       actionClicked = true;
       try { a.onClick(); } finally {
         remove();
@@ -250,6 +252,7 @@ function renderFullCard(opts: ToastOptions): void {
   wrap.appendChild(row);
 
   root.appendChild(wrap);
+  const visibility = actions.length ? visibleActionGate(host!, root, wrap) : null;
 
   if (opts.briefRecovery) {
     outsidePointerDown = (event: PointerEvent) => {

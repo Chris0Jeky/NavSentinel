@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubVisibleUi, armVisibleControl } from "./helpers/visible-ui";
+stubVisibleUi();
 
 type ShowToast = typeof import("../extension/src/content/ui_toast").showToast;
 type ActivateOwnedToastControl =
@@ -11,7 +13,10 @@ let activateOwnedToastControl: ActivateOwnedToastControl;
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
-  activateOwnedToastControl = mod.activateOwnedToastControl;
+  activateOwnedToastControl = (host, path) => {
+    const button = path.find((node) => node instanceof HTMLElement) as HTMLElement | undefined;
+    return mod.activateOwnedToastControl(host, path, button ? armVisibleControl(button) : undefined);
+  };
 }
 
 function getHost(): HTMLElement | null {

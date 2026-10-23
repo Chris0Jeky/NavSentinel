@@ -23,6 +23,22 @@ import {
 // slice<->constant link, so a future edit that re-hardcoded the slice (e.g.
 // slice(0, 5000)) while leaving the constant at 10000 would be caught here.
 describe("buildPageSnapshot htmlSnippet cap", () => {
+  it("reads form attributes and tags through native accessors (#1139)", () => {
+    document.body.innerHTML = '<form action="https://collector.test"><input type="password"></form>';
+    const form = document.querySelector("form")!;
+    // happy-dom's style implementation calls the instance getAttribute itself;
+    // browser CSSStyleDeclaration does not. Keep this fixture at our DOM boundary.
+    Object.defineProperty(form, "style", { value: { display: "", visibility: "" }, configurable: true });
+    for (const name of ["getAttribute", "hasAttribute", "tagName"]) {
+      Object.defineProperty(form, name, { value: document.createElement("input"), configurable: true });
+    }
+    try {
+      expect(buildPageSnapshot(document).formActions).toContainEqual({ action: "https://collector.test", hasPassword: true });
+    } finally {
+      for (const name of ["getAttribute", "hasAttribute", "tagName"]) Reflect.deleteProperty(form, name);
+      Reflect.deleteProperty(form, "style");
+    }
+  });
   it("preserves native serialization for ordinary markup and detector fixtures", () => {
     document.documentElement.innerHTML = `<head><title>A &amp; B</title>
       <script>if (a < b) window.marker = "&";</script><style>a > b { color: red }</style></head>
