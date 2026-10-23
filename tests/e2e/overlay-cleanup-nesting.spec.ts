@@ -382,8 +382,6 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "hostile");
     await waitForFrameToast(frame, /overlay hidden/i);
-    // This timed ancestor mutation resets arming; wait before the exposure window.
-    await frame.waitForFunction(() => document.documentElement.dataset.hostilePhase === "style-rewritten");
     await pressFrameToastButton(frame, "Undo");
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageControlEventCount ?? "0"),

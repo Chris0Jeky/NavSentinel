@@ -9,6 +9,7 @@ describe("credential and toast visible approval (#1139)", () => {
     vi.clearAllTimers(); vi.useRealTimers();
     document.getElementById("__sentinelsuite_cred_modal_host__")?.remove();
     document.getElementById("__navsentinel_toast_host")?.remove();
+    document.documentElement.removeAttribute("data-test-route");
   });
 
   async function prompt() {
@@ -107,6 +108,110 @@ describe("credential and toast visible approval (#1139)", () => {
     p.click();
     await Promise.resolve();
     expect(p.settled).not.toHaveBeenCalled();
+  });
+
+  it("keeps arming through unrelated html attribute churn", async () => {
+    const p = await prompt();
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(200);
+      document.documentElement.setAttribute("data-test-route", String(i));
+      await vi.advanceTimersByTimeAsync(1);
+    }
+    // Also exercise records still queued when the click samples visibility.
+    document.documentElement.setAttribute("data-test-route", "last");
+    expect(p.click(0)).toBe(true);
+    await Promise.resolve();
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("resets arming when a mutation hides the host between animation frames", async () => {
+    const p = await prompt();
+    vi.advanceTimersByTime(400);
+    p.host.style.opacity = "0";
+    await vi.advanceTimersByTimeAsync(1);
+    p.host.style.opacity = "1";
+    vi.advanceTimersByTime(450);
+    expect(p.click(0)).toBe(false);
+    await Promise.resolve();
+    expect(p.settled).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(850);
+    expect(p.click(0)).toBe(true);
+    await Promise.resolve();
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("does not bank exposure during a rendering gap despite html attribute churn", async () => {
+    const p = await prompt();
+    // Let the already scheduled frame run, then suspend further painted samples.
+    vi.spyOn(globalThis, "requestAnimationFrame").mockReturnValue(0);
+    for (let i = 0; i < 17; i++) {
+      vi.advanceTimersByTime(50);
+      document.documentElement.setAttribute("data-test-route", String(i));
+      await vi.advanceTimersByTimeAsync(1);
+    }
+    expect(p.click(0)).toBe(false);
+    await Promise.resolve();
+    expect(p.settled).not.toHaveBeenCalled();
+  });
+
+  it.each(["x", "y", "width", "height"] as const)("resets arming when button %s changes without a mutation", async (field) => {
+    const p = await prompt();
+    vi.advanceTimersByTime(400);
+    const rect = p.button.getBoundingClientRect();
+    vi.spyOn(p.button, "getBoundingClientRect").mockReturnValue({ ...rect, [field]: rect[field] + 2 });
+    vi.advanceTimersByTime(450);
+    expect(p.click(0)).toBe(false);
+    await Promise.resolve();
+    expect(p.settled).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(850);
+    expect(p.click(0)).toBe(true);
+    await Promise.resolve();
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("resets arming when a button is removed and reinserted between frames", async () => {
+    const p = await prompt();
+    vi.advanceTimersByTime(400);
+    const parent = p.button.parentElement!;
+    p.button.remove();
+    await vi.advanceTimersByTimeAsync(1);
+    parent.appendChild(p.button);
+    p.button.focus();
+    vi.advanceTimersByTime(450);
+    expect(p.click(0)).toBe(false);
+    await Promise.resolve();
+    expect(p.settled).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(850);
+    expect(p.click(0)).toBe(true);
+  });
+
+  it("tolerates subpixel jitter but resets cumulative movement from the arming box", async () => {
+    const p = await prompt();
+    vi.advanceTimersByTime(400);
+    const rect = p.button.getBoundingClientRect();
+    const box = vi.spyOn(p.button, "getBoundingClientRect");
+    box.mockReturnValue({ ...rect, x: rect.x + 0.75 });
+    vi.advanceTimersByTime(200);
+    box.mockReturnValue({ ...rect, x: rect.x + 1.5 });
+    vi.advanceTimersByTime(250);
+    expect(p.click(0)).toBe(false);
+    await Promise.resolve();
+    expect(p.settled).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(850);
+    expect(p.click(0)).toBe(true);
+  });
+
+  it("keeps arming through one CSS pixel of button geometry jitter", async () => {
+    const p = await prompt();
+    vi.advanceTimersByTime(400);
+    const rect = p.button.getBoundingClientRect();
+    vi.spyOn(p.button, "getBoundingClientRect").mockReturnValue({
+      ...rect, x: rect.x + 1, y: rect.y - 1, width: rect.width + 1, height: rect.height - 1,
+    });
+    vi.advanceTimersByTime(450);
+    expect(p.click(0)).toBe(true);
+    await Promise.resolve();
+    expect(p.settled).toHaveBeenCalledWith("proceed");
   });
 
   it.each(["Enter", " "])("refuses hidden toast Undo, then accepts armed keyup %s", async (key) => {

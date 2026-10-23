@@ -6,7 +6,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   let lastFrame = performance.now();
   let frame = 0;
   let disposed = false;
-  const buttonSince = new Map<HTMLElement, number>();
+  const buttonExposure = new Map<HTMLElement, { since: number; rect: DOMRect }>();
 
   function rendered(element: Element): boolean {
     if (!element.isConnected || document.visibilityState === "hidden") return false;
@@ -43,29 +43,42 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   }
 
   function sample(): void {
-    if (observer.takeRecords().length) { visibleSince = null; buttonSince.clear(); }
+    // Mutations request a fresh visibility check; unchanged visibility banks exposure.
+    observer.takeRecords();
     const now = performance.now();
     // Background tabs and stalled rendering cannot bank an exposure window.
     if (now - lastFrame > 100 || !visible()) visibleSince = null;
     else visibleSince ??= now;
+    for (const button of buttonExposure.keys()) {
+      if (!surface.contains(button)) buttonExposure.delete(button);
+    }
     for (const button of Array.from(surface.querySelectorAll<HTMLElement>("button"))) {
       const rect = button.getBoundingClientRect();
       if (visibleSince === null || !rendered(button) ||
-          !hit(button, rect.x + rect.width / 2, rect.y + rect.height / 2)) buttonSince.delete(button);
-      else if (!buttonSince.has(button)) buttonSince.set(button, now);
+          !hit(button, rect.x + rect.width / 2, rect.y + rect.height / 2)) buttonExposure.delete(button);
+      else {
+        const exposure = buttonExposure.get(button);
+        // Allow <=1 CSS px of jitter per component, measured from the arming box
+        // so incremental movement cannot bank exposure at a new position or size.
+        if (!exposure || (["x", "y", "width", "height"] as const)
+          .some((field) => Math.abs(rect[field] - exposure.rect[field]) > 1)) {
+          buttonExposure.set(button, { since: now, rect });
+        }
+      }
     }
-    lastFrame = now;
   }
 
   function tick(): void {
     if (disposed) return;
     sample();
+    // Mutation and input samples must not disguise a gap in animation frames.
+    lastFrame = performance.now();
     frame = requestAnimationFrame(tick);
   }
 
-  // Catch hide/show mutations even if they happen between animation frames or
-  // in an earlier listener of the very click being checked.
-  const observer = new MutationObserver(() => { visibleSince = null; buttonSince.clear(); });
+  // Recheck mutations between animation frames; accepts also samples synchronously
+  // after any earlier listener of the very click being checked.
+  const observer = new MutationObserver(sample);
   for (let node: Element | null = host; node; node = node.parentElement) {
     observer.observe(node, { attributes: true });
   }
@@ -76,9 +89,10 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   return {
     accepts(button: HTMLElement, event?: MouseEvent | KeyboardEvent): boolean {
       sample();
+      const exposure = buttonExposure.get(button);
       let allowed = !disposed && !!event && visibleSince !== null &&
-        performance.now() - visibleSince >= DBLCLICK_WINDOW_MS && buttonSince.has(button) &&
-        performance.now() - buttonSince.get(button)! >= DBLCLICK_WINDOW_MS && rendered(button);
+        performance.now() - visibleSince >= DBLCLICK_WINDOW_MS && exposure !== undefined &&
+        performance.now() - exposure.since >= DBLCLICK_WINDOW_MS && rendered(button);
       if (allowed && event) {
         const rect = button.getBoundingClientRect();
         const keyboard = event instanceof KeyboardEvent || event.detail === 0;
@@ -89,7 +103,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       }
       if (!allowed) {
         visibleSince = null;
-        buttonSince.clear();
+        buttonExposure.clear();
         // Keep the decision pending and recover a detached/hidden top layer.
         if (host.parentElement !== document.documentElement) document.documentElement.appendChild(host);
         try { if (!topLayer()) host.showPopover(); } catch { /* Re-arm once renderable. */ }
