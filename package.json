@@ -68,7 +68,7 @@
     "check:mv3-worker": "node scripts/check-mv3-worker-imports.mjs"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.7.1",
+    "@crxjs/vite-plugin": "^3.0.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.49.0",
     "@types/chrome": "^0.0.260",

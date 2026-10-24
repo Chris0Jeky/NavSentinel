@@ -66,6 +66,17 @@ export default defineConfig({
         evidence: resolve(import.meta.dirname, "extension/src/evidence/evidence.html")
       },
       output: {
+        // CRXJS 3 names manifest entries from their full relative paths. Keep
+        // the three measured content entries stable without renaming shared chunks.
+        chunkFileNames: ({ facadeModuleId, name }) => {
+          const modulePath = facadeModuleId?.replaceAll("\\", "/").split(/[?#]/, 1)[0];
+          const contentEntry = modulePath?.match(
+            /(?:^|\/)src\/content\/(capture_isolated|main_guard|credential_guard)\.ts$/,
+          ) ?? name.match(/^src-content-(capture_isolated|main_guard|credential_guard)\.ts$/);
+          return contentEntry
+            ? `assets/${contentEntry[1]}.ts-[hash].js`
+            : "assets/[name]-[hash].js";
+        },
         // Chrome MV3 module workers require static imports. Keep the pending-decision
         // runtime out of the 25 KiB worker entry without turning it into import().
         codeSplitting: {
