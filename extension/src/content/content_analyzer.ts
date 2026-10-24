@@ -540,6 +540,8 @@ function isPrunedBodyBranch(el: Element): boolean {
   const tag = Object.getOwnPropertyDescriptor(Element.prototype, "tagName")!.get!.call(el) as string;
   if (NON_RENDERED_TAGS.has(tag.toUpperCase())) return true;
   if (Element.prototype.hasAttribute.call(el, "hidden")) return true;
+  // Avoid materializing an inline style declaration for every unstyled node.
+  if (!Element.prototype.hasAttribute.call(el, "style")) return false;
   // `.style` is absent on non-HTML elements (e.g. inside an XML document);
   // those carry no inline style and cannot be inline-hidden.
   const style = (el as HTMLElement).style;
