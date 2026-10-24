@@ -11,6 +11,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 import {
   getGymBaseUrl,
   readBuiltUiGuardRevision,
@@ -106,12 +107,14 @@ async function waitForFrameToast(frame: Frame, pattern: RegExp): Promise<void> {
 async function clickFrameToastButton(frame: Frame, label: string): Promise<void> {
   const button = frame.getByRole("button", { name: label, exact: true });
   await expect(button).toBeVisible();
+  await waitForVisibleAction(button);
   await button.click();
 }
 
 async function pressFrameToastButton(frame: Frame, label: string): Promise<void> {
   const button = frame.getByRole("button", { name: label, exact: true });
   await expect(button).toBeVisible();
+  await waitForVisibleAction(button);
   await button.press("Enter");
 }
 

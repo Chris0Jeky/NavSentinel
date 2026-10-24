@@ -2,6 +2,8 @@ import fs from "fs";
 import * as http from "node:http";
 import path from "path";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
 import {
   assertContentAddressedLoader,
   assertUiGuardRevision,
@@ -156,6 +158,9 @@ export async function readToastText(page: Page): Promise<string | null> {
 }
 
 export async function clickToastButton(page: Page, label: string): Promise<void> {
+  if (label !== "Dismiss") {
+    await waitForVisibleAction(page.locator("#__navsentinel_toast_host").getByRole("button", { name: label, exact: true }).first());
+  }
   // Trusted activation only (#783): extension-owned controls ignore
   // page-synthesized clicks, so resolve the button's viewport coordinates
   // in-page and drive a real (trusted) mouse click at that point — the same
@@ -291,6 +296,9 @@ export async function waitForCredentialModal(
 }
 
 export async function clickModalButton(page: Page, label: string): Promise<void> {
+  // waitForCredentialModal already proved the host. A locator wait would also wait
+  // on the held submit's pending navigation, so only allow the arming window here.
+  if (label !== "Cancel") await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
   // Trusted activation only (#783): see clickToastButton.
   const point = await evaluateInCredentialModal(
     page,

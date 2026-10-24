@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubVisibleUi } from "./helpers/visible-ui";
+stubVisibleUi();
 import { dispatchUntrusted, stubTrustedInput } from "./helpers/trusted-input";
 import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
 import type { credentialModalRoot as CredentialModalRootType } from "../extension/src/content/credential_modal";
@@ -68,7 +70,7 @@ describe("credential modal trusted input gating (#826)", () => {
 
   it("ignores an untrusted button click: prompt stays pending", async () => {
     const promise = showCredentialModal(minimalSpec());
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
     let settled: string | null = null;
     void promise.then((id) => {
       settled = id;
@@ -90,7 +92,7 @@ describe("credential modal trusted input gating (#826)", () => {
 
   it("ignores an untrusted Escape keydown", async () => {
     const promise = showCredentialModal(minimalSpec());
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
     let settled: string | null = null;
     void promise.then((id) => {
       settled = id;
@@ -108,7 +110,7 @@ describe("credential modal trusted input gating (#826)", () => {
 
   it("ignores an untrusted outside mousedown on the backdrop", async () => {
     const promise = showCredentialModal(minimalSpec());
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
     let settled: string | null = null;
     void promise.then((id) => {
       settled = id;
@@ -126,7 +128,7 @@ describe("credential modal trusted input gating (#826)", () => {
 
   it("ignores an untrusted Tab keydown: a synthetic Tab cannot move focus between actions", async () => {
     const promise = showCredentialModal(minimalSpec());
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
 
     // Focus sits on the last action. A synthetic Tab from page script would
     // otherwise wrap focus onto the first action ("Allow"), so the user's next
@@ -146,7 +148,7 @@ describe("credential modal trusted input gating (#826)", () => {
 
   it("still resolves on trusted input (shim sanity)", async () => {
     const promise = showCredentialModal(minimalSpec());
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
 
     getButtons().find((b) => b.textContent === "Allow")!.click();
     await expect(promise).resolves.toBe("allow");

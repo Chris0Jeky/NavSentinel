@@ -4,6 +4,7 @@
  * trusted input; they never call into the extension.
  */
 import { expect, type BrowserContext, type Frame, type Page } from "@playwright/test";
+import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 
 export type Scope = Page | Frame;
 
@@ -89,7 +90,10 @@ export async function toastButtonCenter(scope: Scope, label: string, kind: "full
 export async function clickToastButton(_page: Page, scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<void> {
   // Wait for stable geometry and receive native trusted input. A sampled point
   // can move while the card's entrance animation is still running.
-  await toastButton(scope, label, kind).click();
+  const button = toastButton(scope, label, kind);
+  if (label !== "Dismiss") await waitForVisibleAction(button);
+  // Brief cards expire; a missed window must fail the step, not hang the procedure.
+  await button.click({ timeout: 3000 });
 }
 
 /** Label of the toast button holding focus in this document, if focus is inside the real host. */
