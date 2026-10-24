@@ -13,6 +13,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { AcceptanceSession, toastButtonPoint, toastState, trustedClick } from "./acceptance_harness";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
 import { listTargets } from "./cdp_page_client";
 import { TabObserver, assertSmartModeNoLoopbackTrust, eventKindsSince, expectStable, openPages, shortUrl, tabTo, waitForToast } from "./history_helpers";
 
@@ -27,6 +28,9 @@ function recordCreatedPages(session: AcceptanceSession): Created[] {
 }
 
 async function clickToastButton(page: Page, label: string): Promise<void> {
+  if (!await toastButtonPoint(page, label)) throw new Error(`toast button "${label}" is not rendered`);
+  // Owned actions arm only after a continuous visible exposure window (#1139).
+  await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
   const point = await toastButtonPoint(page, label);
   if (!point) throw new Error(`toast button "${label}" is not rendered`);
   await page.mouse.click(point.x, point.y);
