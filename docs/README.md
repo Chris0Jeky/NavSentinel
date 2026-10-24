@@ -1,4 +1,4 @@
-# NavSentinel Docs
+# Heedline Docs
 
 This folder mixes current operating documents with explicitly dated historical
 analysis. Use the labels below rather than assuming every page describes the
