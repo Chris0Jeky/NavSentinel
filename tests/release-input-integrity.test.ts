@@ -106,7 +106,9 @@ afterEach(() => {
   }
 });
 
-describe("release input integrity", () => {
+// Each case spawns several Git processes; under parallel CI load they exceed
+// vitest's 5 s default (#766, #1143).
+describe("release input integrity", { timeout: 30_000 }, () => {
   it("attests a full immutable commit/tree and exact raw worktree", () => {
     const root = createRepository("exact");
     const snapshot = assertExactCommittedInputs(root);
@@ -493,7 +495,7 @@ function pathFixture(format: "sha1" | "sha256", name: string): string {
 }
 
 for (const format of ["sha1", "sha256"] as const) {
-  describe(`release path byte identity (${format})`, () => {
+  describe(`release path byte identity (${format})`, { timeout: 30_000 }, () => {
     for (const name of ["\uFEFFproof.txt", "\uFEFFfolder/proof.txt"]) {
       it(`preserves the leading U+FEFF in ${JSON.stringify(name)}`, () => {
         const root = pathFixture(format, name);
