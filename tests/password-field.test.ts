@@ -13,6 +13,16 @@ function pwInput(attrs: string): HTMLInputElement {
 }
 
 describe("isVisiblePasswordField", () => {
+  it.each(["disabled", "style"])("ignores an own %s property on a password input", (name) => {
+    const input = pwInput("");
+    Object.defineProperty(input, name, { value: name === "disabled" ? true : { display: "none" }, configurable: true });
+    try {
+      expect(isVisiblePasswordField(input)).toBe(true);
+    } finally {
+      Reflect.deleteProperty(input, name);
+    }
+  });
+
   it("is visible for a plain password input", () => {
     expect(isVisiblePasswordField(pwInput(""))).toBe(true);
   });
@@ -134,6 +144,35 @@ describe("hasVisiblePasswordField", () => {
 });
 
 describe("isPasswordTypeInput / queryPasswordInputs (#820)", () => {
+  it.each(["tagName", "getAttribute"])("ignores an own %s property during password type detection", (name) => {
+    const input = pwInput("");
+    Object.defineProperty(input, name, { value: document.createElement("input"), configurable: true });
+    try {
+      expect(isPasswordTypeInput(input)).toBe(true);
+    } finally {
+      Reflect.deleteProperty(input, name);
+    }
+  });
+
+  it("bypasses a form's named querySelectorAll control", () => {
+    document.body.innerHTML = '<form><input name="querySelectorAll"><input type="password"></form>';
+    const form = document.querySelector("form")!;
+    const password = document.querySelector('input[type="password"]')!;
+    Object.defineProperty(form, "querySelectorAll", { value: form.firstElementChild, configurable: true });
+    expect(queryPasswordInputs(form)).toEqual([password]);
+  });
+
+  it("queries document fragments and shadow roots through their prototypes", () => {
+    const fragment = document.createDocumentFragment();
+    const shadow = document.createElement("div").attachShadow({ mode: "closed" });
+    for (const root of [fragment, shadow]) {
+      const password = document.createElement("input");
+      password.type = "password";
+      root.appendChild(password);
+      expect(queryPasswordInputs(root)).toEqual([password]);
+    }
+  });
+
   function el(html: string): Element {
     document.body.innerHTML = html;
     return document.body.firstElementChild!;

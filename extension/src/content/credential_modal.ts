@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
+import { attachUiHost } from "./ui_host";
 import modalStyles from "./credential_modal.css?inline";
 import { visibleActionGate } from "./ui_action_visibility";
 
@@ -143,7 +144,10 @@ function listFocusable(rootNode: ParentNode): HTMLElement[] {
 }
 
 function ensureHost(): void {
-  if (host && root) return;
+  if (host && root) {
+    attachUiHost(host);
+    return;
+  }
   host = document.createElement("div");
   // Without this our own fullscreen prompt classifies as a HIGH overlay and
   // the opt-in cleanup hides it (plus a bogus toast at default settings). (#824)
@@ -166,20 +170,12 @@ function ensureHost(): void {
   // Keep styles in the closed root; the CSS import lets Vite compact the payload.
   style.textContent = modalStyles;
   root.appendChild(style);
-  document.documentElement.appendChild(host);
+  attachUiHost(host);
   // Place the host in the top layer (same pattern as ui_toast): a page layer
   // inserted later at the same maximum z-index would otherwise paint above
   // this security prompt (later DOM order wins a z-index tie) and cover its
   // buttons. `manual` popovers are never light-dismissed; older engines
   // without the Popover API keep the z-index-only host. (#824)
-  try {
-    if ("showPopover" in host) {
-      host.setAttribute("popover", "manual");
-      host.showPopover();
-    }
-  } catch {
-    // Unsupported document state; the z-index host remains usable.
-  }
 }
 
 function removeModal(): void {
@@ -297,6 +293,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
 
     function cleanupListeners(): void {
       visibility.dispose();
+      removalObserver.disconnect();
       window.removeEventListener("keydown", onKeyDown, true);
       clearFocusTrap(card);
     }
@@ -314,6 +311,12 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       activeDispose = null;
       resolve(outside);
     };
+
+    // Keep this exact pending decision accessible; removal is never a decision.
+    const removalObserver = new MutationObserver(() => {
+      ensureHost();
+    });
+    removalObserver.observe(document, { childList: true, subtree: true });
 
     function onKeyDown(e: KeyboardEvent): void {
       // Trusted input only (see the button listener below). (#826) This covers

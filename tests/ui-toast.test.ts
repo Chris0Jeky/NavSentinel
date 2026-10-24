@@ -71,6 +71,19 @@ describe("ui_toast", () => {
   }
 
   describe("host and shadow DOM setup", () => {
+    it("reattaches a removed host when a new warning arrives", () => {
+      showToast({ message: "First warning", timeoutMs: 0 });
+      const host = getHost()!;
+      const showPopover = vi.fn();
+      Object.defineProperty(host, "showPopover", { value: showPopover, configurable: true });
+      host.remove();
+      showToast({ message: "Next warning", timeoutMs: 0 });
+      expect(getHost()).toBe(host);
+      expect(host.isConnected).toBe(true);
+      expect(host.shadowRoot!.textContent).toContain("Next warning");
+      expect(showPopover).toHaveBeenCalledOnce();
+    });
+
     it("creates host element on first showToast call", () => {
       expect(getHost()).toBeNull();
       showToast({ message: "Test" });

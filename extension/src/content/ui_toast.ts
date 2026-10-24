@@ -1,5 +1,6 @@
 import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
 import { visibleActionGate } from "./ui_action_visibility";
+import { attachUiHost } from "./ui_host";
 
 export type ToastAction = {
   label: string;
@@ -100,7 +101,10 @@ export function activateOwnedToastControl(eventHost: unknown, path: readonly unk
 }
 
 function ensureHost() {
-  if (host && root) return;
+  if (host && root) {
+    attachUiHost(host);
+    return;
+  }
 
   host = document.createElement("div");
   registerExtensionOwnedOverlayElement(host);
@@ -133,7 +137,7 @@ function ensureHost() {
   style.textContent = `.wrap{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;width:360px;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:12px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);color:#f6efe1;overflow:hidden;border:1px solid #2a2530;animation:ns-slide-up 0.2s ease-out;}@keyframes ns-slide-up{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}.head{display:flex;align-items:center;gap:8px;padding:10px 12px 0;}.head-dot{width:6px;height:6px;border-radius:50%;background:#f5a623;box-shadow:0 0 8px rgba(245,166,35,0.5);animation:pulse 1.6s infinite;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}.head-label{font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:#756a5a;font-weight:500;}.body{padding:8px 12px 10px;font-size:13px;line-height:1.4;color:#c4b69c;}.row{display:flex;gap:8px;padding:10px 12px 12px;border-top:1px solid #1c181f;justify-content:flex-end;flex-wrap:wrap;}button{all:unset;cursor:pointer;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid #2a2530;font-size:11px;font-weight:500;color:#c4b69c;transition:background 0.12s;}button:hover{background:rgba(255,255,255,0.1);}button:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.danger{background:rgba(208,69,49,0.12);border-color:rgba(208,69,49,0.3);color:#d04531;}.danger:hover{background:rgba(208,69,49,0.2);}.action{background:rgba(245,166,35,0.1);border-color:rgba(245,166,35,0.25);color:#f5a623;}.action:hover{background:rgba(245,166,35,0.18);}.brief-recovery{width:min(280px,calc(100vw - 24px));display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;border-radius:9px;}.brief-recovery .head{padding:0 0 0 10px;}.brief-recovery .head-label{display:none;}.brief-recovery .body{padding:8px 7px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.brief-recovery .row{padding:5px 7px 5px 0;border:0;flex-wrap:nowrap;}.brief-recovery button{padding:4px 7px;font-size:10px;}.pill{display:flex;align-items:center;gap:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.4),0 0 0 1px rgba(245,166,35,0.15);border-radius:999px;background:linear-gradient(180deg,#110f13 0%,#08070a 100%);border:1px solid #2a2530;color:#c4b69c;padding:8px 14px;font-size:13px;cursor:pointer;animation:ns-slide-up 0.2s ease-out;transition:opacity 0.4s ease;opacity:1;}.pill:hover{opacity:1;}.pill.idle{opacity:0.45;}.pill:focus-visible{outline:2px solid #f5a623;outline-offset:2px;}.pill-count{color:#f5a623;font-weight:600;}@media (prefers-reduced-motion:reduce){.wrap,.pill{animation:none;transition:none;}.head-dot{animation:none;}}`;
   root.appendChild(style);
 
-  document.documentElement.appendChild(host);
+  attachUiHost(host);
   // Place the host in the top layer. A page layer inserted later at the same
   // maximum z-index would otherwise paint above the notice (later DOM order
   // wins a z-index tie) and swallow every click meant for its controls. The
@@ -141,14 +145,6 @@ function ensureHost() {
   // `manual` popovers are never light-dismissed. Inline styles above still
   // position the host, so the popover UA defaults (inset/margin/border) do not
   // apply. Older engines without the Popover API keep the z-index-only host.
-  try {
-    if ("showPopover" in host) {
-      host.setAttribute("popover", "manual");
-      host.showPopover();
-    }
-  } catch {
-    // Unsupported document state; the z-index host remains usable.
-  }
   bindNavReset();
 }
 

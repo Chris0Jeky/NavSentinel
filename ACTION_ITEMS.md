@@ -280,6 +280,16 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
 
 ### Branch-held Gate-3 items
 
+**OPEN — credential named-property and UI-host recovery candidate**
+(branch `fix/credential-named-property-and-host-reattach`).
+This changes shipped credential interception and warning visibility; Gate-3 applies.
+No human browser result is recorded. On the owner's loaded candidate build, use only
+local fixture hosts and dummy credentials: submit a cross-site password POST whose form
+contains `<input name="querySelectorAll">`; the prompt must appear and Cancel must send
+zero POSTs. Remove a toast host, trigger another warning, and confirm it is visible.
+Remove an open credential-modal host; the same pending decision must reappear and remain
+usable. Automated Vitest/Playwright evidence does not complete this human check.
+
 - **Issue #1139 — visible approval gate, branch `fix/1139-prompt-visible-clicks`:**
   Human Chrome result **NOT RUN**. Credential and toast approvals now require
   visible, unobscured controls and 800 ms of arming. Automated pointer/Enter/Space
