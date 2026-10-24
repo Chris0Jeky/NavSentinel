@@ -6,6 +6,10 @@ describe("credential and toast visible approval (#1139)", () => {
   stubVisibleUi();
   beforeEach(() => { vi.useFakeTimers(); vi.resetModules(); });
   afterEach(() => {
+    // Settle pending modals first: their removal observer reattaches a removed host.
+    const escape = new KeyboardEvent("keydown", { key: "Escape" });
+    Object.defineProperty(escape, "isTrusted", { value: true });
+    window.dispatchEvent(escape);
     vi.clearAllTimers(); vi.useRealTimers();
     document.getElementById("__sentinelsuite_cred_modal_host__")?.remove();
     document.getElementById("__navsentinel_toast_host")?.remove();
