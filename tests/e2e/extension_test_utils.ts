@@ -3,6 +3,7 @@ import * as http from "node:http";
 import path from "path";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 import { waitForVisibleAction } from "../helpers/visible-ui-browser";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
 import {
   assertContentAddressedLoader,
   assertUiGuardRevision,
@@ -295,7 +296,9 @@ export async function waitForCredentialModal(
 }
 
 export async function clickModalButton(page: Page, label: string): Promise<void> {
-  if (label !== "Cancel") await waitForVisibleAction(page.locator(`#${CREDENTIAL_MODAL_HOST_ID}`));
+  // waitForCredentialModal already proved the host. A locator wait would also wait
+  // on the held submit's pending navigation, so only allow the arming window here.
+  if (label !== "Cancel") await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
   // Trusted activation only (#783): see clickToastButton.
   const point = await evaluateInCredentialModal(
     page,
