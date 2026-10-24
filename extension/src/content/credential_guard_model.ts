@@ -2,6 +2,26 @@ import { getRegistrableDomain, hostForUrl, normalizeHost } from "../shared/domai
 import type { CredMode, CredentialSettings } from "../shared/storage";
 import type { RiskReason, RiskResult } from "../shared/domain";
 
+/** Use the browser's security origin for inherited-origin documents (#1114).
+ * Never infer identity from baseURI or referrer: the page can change its base,
+ * and a sandboxed (opaque-origin) frame must not inherit its referrer's trust.
+ */
+export function getCredentialPageUrl(documentUrl: string, securityOrigin: string): string {
+  try {
+    const url = new URL(documentUrl);
+    if (
+      (url.protocol === "about:" && (url.pathname === "blank" || url.pathname === "srcdoc")) ||
+      url.protocol === "blob:" || url.protocol === "filesystem:"
+    ) {
+      const inherited = new URL(securityOrigin);
+      if (inherited.protocol === "https:" || inherited.protocol === "http:") return `${inherited.origin}/`;
+    }
+  } catch {
+    // Opaque origins ("null") have no trusted HTTP(S) identity to adopt.
+  }
+  return documentUrl;
+}
+
 export function shouldPromptCredentialSubmit(params: {
   mode: CredMode;
   riskScore: number;

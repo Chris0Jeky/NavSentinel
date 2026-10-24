@@ -11,7 +11,6 @@
  */
 import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
@@ -36,7 +35,9 @@ const LOGIN_FORM = `<form id="login" method="post" action="${ATTACKER_URL}">
 </form>`;
 
 async function withVictimPage(run: (page: Page, attacker: string[]) => Promise<void>): Promise<void> {
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-cred-docopen-"));
+  const profiles = path.resolve(__dirname, "../../test-results/credential-document-open-profiles");
+  fs.mkdirSync(profiles, { recursive: true });
+  const userDataDir = fs.mkdtempSync(path.join(profiles, "probe-"));
   let context: BrowserContext | null = null;
   try {
     context = await chromium.launchPersistentContext(userDataDir, {
