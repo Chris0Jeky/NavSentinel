@@ -337,7 +337,7 @@ describe("ui_toast", () => {
         briefRecovery: true,
       });
 
-      vi.advanceTimersByTime(1999);
+      vi.advanceTimersByTime(2799);
       expect(getWraps()).toHaveLength(1);
       vi.advanceTimersByTime(1);
 

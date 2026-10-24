@@ -37,7 +37,9 @@ const COALESCE_THRESHOLD = 3;
 const COALESCE_WINDOW_MS = 8000;
 /** Pill auto-removes after this long with no new block. */
 const PILL_IDLE_DISMISS_MS = 12000;
-const BRIEF_RECOVERY_DISMISS_MS = 2000;
+/** Undo arms only after the 800 ms visible-exposure window (#1139), so the card
+ *  stays that much longer to keep about 2 s of usable Undo. */
+const BRIEF_RECOVERY_DISMISS_MS = 2800;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
