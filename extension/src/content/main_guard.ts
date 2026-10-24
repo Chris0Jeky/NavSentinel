@@ -28,6 +28,7 @@ import {
   resolveChildNavigable,
   resolveFormActionUrl,
   readCapturedAttribute,
+  readCapturedClosest,
   readCapturedFormTarget,
   shouldEmitRapidPushState,
   type ChildNavigableView,
@@ -288,7 +289,7 @@ function textLength(el: Element): number {
 }
 
 function attrLength(el: Element, name: string): number {
-  const value = el.getAttribute(name);
+  const value = readCapturedAttribute(el, name, nativeGetAttribute);
   if (!value) return 0;
   return Math.min(value.length, 80);
 }
@@ -317,17 +318,20 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
   if (!target || typeof (target as Node).nodeType !== "number") return null;
   if ((target as Node).nodeType !== Node.ELEMENT_NODE) return null;
   const el = target as Element;
-  if (el.closest("a")) return null;
+  // Only a confirmed miss may arm: an unreadable ancestor is not "no anchor".
+  if (readCapturedClosest(el, "a", nativeClosest) !== null) return null;
   // Walk outward like the original value-selector did (skipping non-matching
   // inputs), but compare `type` ASCII case-insensitively: the keyword is
   // enumerated, so `type="SUBMIT"` submits while `[type='submit']` misses it.
   // Programmatic on purpose — see findSubmitControl in nav_authority.ts. (#820)
   let current: Element | null = el;
   while (current) {
-    const candidate: Element | null = current.closest("button, input");
+    const candidate = readCapturedClosest(current, "button, input", nativeClosest);
     if (!candidate) return null;
     if (candidate.tagName.toLowerCase() === "button") return candidate;
-    const type = (candidate.getAttribute("type") ?? "").toLowerCase();
+    const typeAttr = readCapturedAttribute(candidate, "type", nativeGetAttribute);
+    if (typeAttr === undefined) return null;
+    const type = (typeAttr ?? "").toLowerCase();
     if (type === "button" || type === "submit") return candidate;
     current = candidate.parentElement;
   }
@@ -562,7 +566,8 @@ function registerBlockedAction(params: {
   postBlocked({ id, ...description });
 }
 
-const nativeProtoOpen = Window.prototype.open;
+const windowPrototype = Window.prototype;
+const nativeProtoOpen = windowPrototype.open;
 const nativeOpen = window.open;
 // Reuse the same captured prototypes throughout native-reader installation.
 const formPrototype = HTMLFormElement.prototype;
@@ -571,12 +576,16 @@ const eventPrototype = Event.prototype;
 const nativeFormSubmit = formPrototype.submit;
 // #943: read link and click state through the platform getters, not through
 // properties a page can shadow on the element or event.
-function capturedGetter<T>(proto: object, prop: string, fallback: (self: never) => T): (this: unknown) => T {
-  const getter = Object.getOwnPropertyDescriptor(proto, prop)?.get;
-  return (getter ?? fallback) as (this: unknown) => T;
+function capturedGetter<T>(proto: object, prop: string, fallback: (self: never) => T): (this: unknown) => T;
+function capturedGetter<T>(proto: object, prop: string): ((this: unknown) => T) | undefined;
+function capturedGetter<T>(proto: object, prop: string, fallback?: (self: never) => T): ((this: unknown) => T) | undefined {
+  const getter = nativeGetOwnPropertyDescriptor(proto, prop)?.get;
+  return (getter ?? fallback) as ((this: unknown) => T) | undefined;
 }
-const nativeAnchorHref = capturedGetter<string>(HTMLAnchorElement.prototype, "href", () => "");
-const nativeAnchorTarget = capturedGetter<string>(HTMLAnchorElement.prototype, "target", () => "");
+const anchorPrototype = HTMLAnchorElement.prototype;
+const nativeGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+const nativeAnchorHref = capturedGetter<string>(anchorPrototype, "href", () => "");
+const nativeAnchorTarget = capturedGetter<string>(anchorPrototype, "target", () => "");
 const nativeEventPhase = capturedGetter<number>(eventPrototype, "eventPhase", () => 0);
 const NativeEvent = Event;
 const nativeEventTimestamp = capturedGetter<number>(eventPrototype, "timeStamp", () => Number.NaN);
@@ -585,20 +594,21 @@ const nativePreventDefault = eventPrototype.preventDefault;
 const nativeFormRequestSubmit = formPrototype.requestSubmit as typeof formPrototype.requestSubmit | undefined;
 const NativeFormData = FormData;
 const NativeURL = URL;
-const nativeFormDataForEach = FormData.prototype.forEach;
-const nativeFormDataDelete = FormData.prototype.delete;
-const nativeFormDataAppend = FormData.prototype.append as unknown as (
+const formDataPrototype = FormData.prototype;
+const nativeFormDataForEach = formDataPrototype.forEach;
+const nativeFormDataDelete = formDataPrototype.delete;
+const nativeFormDataAppend = formDataPrototype.append as unknown as (
   this: FormData,
   name: string,
   value: string | Blob,
   filename?: string,
 ) => void;
-const nativeGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const nativeGetPrototypeOf = Object.getPrototypeOf;
 const nativeApply = Reflect.apply;
 const nativeArrayPush = Array.prototype.push;
 const nativeStringToLowerCase = String.prototype.toLowerCase;
-const nativeElementGetAttribute = Element.prototype.getAttribute;
+const elementPrototype = Element.prototype;
+const nativeElementGetAttribute = elementPrototype.getAttribute;
 // #1061: the loader captures a tamper-safe getAttribute invoker before the async
 // import. Without it, action and method reads fail closed as unknown attributes.
 const earlyGetAttribute = (globalThis as typeof globalThis & {
@@ -606,59 +616,66 @@ const earlyGetAttribute = (globalThis as typeof globalThis & {
 }).__navsentinelMainGetAttribute;
 const nativeGetAttribute =
   typeof earlyGetAttribute === "function" ? earlyGetAttribute : undefined;
-const nativeDocumentQuerySelector = Document.prototype.querySelector;
-const nativeCreateElement = Document.prototype.createElement;
-const nativeAttachShadow = Element.prototype.attachShadow;
+// #1063: use the same document-start bound invoker as the form readers. A
+// module-time fallback could already be replaced and cannot grant popup intent.
+const earlyClosest = (globalThis as typeof globalThis & {
+  __navsentinelMainClosest?: (element: Element, selector: string) => Element | null;
+}).__navsentinelMainClosest;
+const nativeClosest = typeof earlyClosest === "function" ? earlyClosest : undefined;
+const documentPrototype = Document.prototype;
+const nativeDocumentQuerySelector = documentPrototype.querySelector;
+const nativeCreateElement = documentPrototype.createElement;
+const nativeAttachShadow = elementPrototype.attachShadow;
 const nativeAppendChild = nodePrototype.appendChild;
 const nativeRemoveChild = nodePrototype.removeChild;
-const nativeSetAttribute = Element.prototype.setAttribute;
+const nativeSetAttribute = elementPrototype.setAttribute;
 const nativeAddEventListener = EventTarget.prototype.addEventListener;
 const nativeFormDataEventDataGetter =
   typeof FormDataEvent === "undefined"
     ? undefined
-    : nativeGetOwnPropertyDescriptor(FormDataEvent.prototype, "formData")?.get;
+    : capturedGetter<FormData>(FormDataEvent.prototype, "formData");
 
 type NativeStringGetter<T> = (this: T) => string;
 type NativeBooleanGetter<T> = (this: T) => boolean;
 type NativeOwnerDocumentGetter = (this: Node) => Document | null;
-const nativeFormActionGetter = nativeGetOwnPropertyDescriptor(
+const nativeFormActionGetter = capturedGetter<string>(
   formPrototype,
   "action",
-)?.get as NativeStringGetter<HTMLFormElement> | undefined;
-const nativeFormMethodGetter = nativeGetOwnPropertyDescriptor(
+) as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeFormMethodGetter = capturedGetter<string>(
   formPrototype,
   "method",
-)?.get as NativeStringGetter<HTMLFormElement> | undefined;
-const nativeFormEnctypeGetter = nativeGetOwnPropertyDescriptor(
+) as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeFormEnctypeGetter = capturedGetter<string>(
   formPrototype,
   "enctype",
-)?.get as NativeStringGetter<HTMLFormElement> | undefined;
-const nativeFormAcceptCharsetGetter = nativeGetOwnPropertyDescriptor(
+) as NativeStringGetter<HTMLFormElement> | undefined;
+const nativeFormAcceptCharsetGetter = capturedGetter<string>(
   formPrototype,
   "acceptCharset",
-)?.get as NativeStringGetter<HTMLFormElement> | undefined;
+) as NativeStringGetter<HTMLFormElement> | undefined;
 // #1055: the loader captures HTMLFormElement.prototype.target before the async
 // import. This module can run after an early page script, so the self-exemption
-// prefers that capture and uses the module-level descriptor only when it is absent.
+// requires that document-start bound invoker.
 const earlyFormTarget = (globalThis as typeof globalThis & {
   __navsentinelMainFormTarget?: (form: HTMLFormElement) => string;
 }).__navsentinelMainFormTarget;
 // Without the document-start capture there is no trustworthy getter: fail closed
 // (no self-exemption) like documentBaseUrl, rather than trust a module-load read.
 const nativeFormTargetGetter = typeof earlyFormTarget === "function" ? earlyFormTarget : undefined;
-const nativeNodeIsConnectedGetter = nativeGetOwnPropertyDescriptor(
+const nativeNodeIsConnectedGetter = capturedGetter<boolean>(
   nodePrototype,
   "isConnected",
-)?.get as NativeBooleanGetter<Node> | undefined;
-const nativeNodeOwnerDocumentGetter = nativeGetOwnPropertyDescriptor(
+) as NativeBooleanGetter<Node> | undefined;
+const nativeNodeOwnerDocumentGetter = capturedGetter<Document | null>(
   nodePrototype,
   "ownerDocument",
-)?.get as NativeOwnerDocumentGetter | undefined;
-const nativeWindowNameGetter = nativeGetOwnPropertyDescriptor(window, "name")?.get;
-const nativeWindowLengthGetter = nativeGetOwnPropertyDescriptor(window, "length")?.get;
+) as NativeOwnerDocumentGetter | undefined;
+const nativeWindowNameGetter = capturedGetter<string>(window, "name");
+const nativeWindowLengthGetter = capturedGetter<number>(window, "length");
 const windowNamedProperties: object | null = (() => {
   try {
-    return nativeGetPrototypeOf(Window.prototype) as object | null;
+    return nativeGetPrototypeOf(windowPrototype) as object | null;
   } catch {
     return null;
   }
@@ -1750,8 +1767,9 @@ function checkPushStateSuspicious(url: string | null | undefined, _method: strin
   return null;
 }
 
-const nativePushState = History.prototype.pushState;
-const nativeReplaceState = History.prototype.replaceState;
+const historyPrototype = History.prototype;
+const nativePushState = historyPrototype.pushState;
+const nativeReplaceState = historyPrototype.replaceState;
 
 function patchHistory(): void {
   for (const [method, native] of [["pushState", nativePushState], ["replaceState", nativeReplaceState]] as const) {

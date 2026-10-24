@@ -97,7 +97,7 @@ describe("dispatchFormSubmit self-exemption (#1055)", () => {
     expect(binding).toContain("__navsentinelMainFormTarget");
     expect(binding).toContain("typeof earlyFormTarget === \"function\"");
     expect(binding.indexOf("__navsentinelMainFormTarget")).toBeLessThan(
-      binding.indexOf("nativeGetOwnPropertyDescriptor"),
+      binding.indexOf("capturedGetter"),
     );
     expect(guard.slice(dispatchAt, guard.indexOf("function patchForms("))).not.toContain("form.target");
   });
