@@ -889,9 +889,13 @@ pair. Do not pass an already observed copy: row 8 applies the observer itself.
 The standalone `clipboard-pressure-observed-bundle.ts` CLI is for inspecting
 that transformation. A missed natural startup window remains
 `TEST_INVALID`; timings, extra sleeps or a delayed public marker cannot authorize
-`VALID`. These runs establish only instrumented diagnostic behavior. The
-discarded-page event-attribution issue in #963 remains open: three stable log
-snapshots do not prove that an old producer has finished.
+`VALID`. These runs establish only instrumented diagnostic behavior. Each
+fixture load is served under its own path label
+(`/acceptance/pressure-load/load-N/...`), which the stored event `url` keeps,
+and the arms count `clickfix_detected` rows by label. A discarded RETRY load's
+late row therefore stays attributed to that load, and any new row without an
+issued label, origin or site makes the run `TEST_INVALID` (#954). The RETRY
+path itself has not yet been observed natively.
 
 **Retained human procedure — pending the validity repair above.**
 

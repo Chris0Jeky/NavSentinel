@@ -174,7 +174,7 @@ export function loadAndValidatePair(directory, expectedHead) {
   return { schema: "navsentinel-clipboard-pressure-pair-qualification/v1", qualified: true,
     classification: "TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE", expected: manifest.expected, regression,
     fixed: cases.fixed.artifact, regressed: cases.regressed.artifact,
-    held: ["Discarded-page event attribution (#963 P2)", "Unchanged release artifact and owner Gate-3 proof"] };
+    held: ["RETRY-path per-load attribution not natively observed (#954)", "Unchanged release artifact and owner Gate-3 proof"] };
 }
 
 export function runPair(directory, expectedHead) {
