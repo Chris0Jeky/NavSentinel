@@ -8,7 +8,7 @@ import { chromium, expect, test, type BrowserContext, type Frame, type Page } fr
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { waitForNavSentinelBridge } from "./extension_test_utils";
+import { getServiceWorker, waitForNavSentinelBridge } from "./extension_test_utils";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const extensionPath = process.env.EXTENSION_PATH
@@ -44,6 +44,12 @@ async function withProbe(kind: string, run: (page: Page, frame: Frame, hits: str
       headless: false,
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
+    const worker = await getServiceWorker(context);
+    // Rollback needs the initial top-level commit, so do not race navigation
+    // against the fresh worker installing its browser-navigation listeners.
+    await expect.poll(() => worker.evaluate(() => chrome.webNavigation.onCommitted.hasListeners()), {
+      timeout: 30_000,
+    }).toBe(true);
     const hits: string[] = [];
     await context.route(/^https?:\/\//, async (route) => {
       const url = route.request().url();
@@ -107,6 +113,61 @@ for (const kind of ["about:blank", "srcdoc", "blob", "same-origin"] as const) {
       });
       await expect.poll(() => frame.url(), { timeout: 5_000 }).toBe("https://victim.test/child-ok?");
       expect(page.url()).toBe(`https://victim.test/page?kind=${kind}`);
+    });
+  });
+}
+
+for (const request of [false, true]) {
+  test(`about:blank child ${request ? "requestSubmit" : "submit"} to self grants no top-tab authority #1155 @regression`, async () => {
+    await withProbe("about:blank", async (page, frame, hits) => {
+      await frame.waitForFunction(
+        () => document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1",
+      );
+      // Let the initial page.goto's typed-origin context expire. No trusted
+      // input, cross-realm call, or test-created allowance precedes the attack.
+      await page.waitForTimeout(5_200);
+      const originalUrl = page.url();
+      const destination = "https://attacker.test/sink?";
+      const worker = await getServiceWorker(page.context());
+      const tabId = await worker.evaluate(async (url) => {
+        const tab = (await chrome.tabs.query({})).find((candidate) => candidate.url === url);
+        if (typeof tab?.id !== "number") throw new Error("Probe tab not found");
+        return tab.id;
+      }, originalUrl);
+      await expect.poll(() => worker.evaluate(async (id) => {
+        const stored = await chrome.storage.session.get("ns_sw:lastUrl");
+        return (stored["ns_sw:lastUrl"] as Record<string, unknown> | undefined)?.[String(id)];
+      }, tabId), { message: "the worker observed the source commit before the attack" }).toBe(originalUrl);
+
+      await frame.evaluate((request) => {
+        const form = document.createElement("form");
+        form.action = "https://attacker.test/sink";
+        document.body.appendChild(form);
+        if (request) form.requestSubmit();
+        else form.submit();
+      }, request);
+      await expect.poll(() => frame.url(), { timeout: 5_000 }).toBe(destination);
+      expect(hits, "the benign child-only submission actually reached its sink").toContain(destination);
+      expect(page.url()).toBe(originalUrl);
+      // Allow the capture bridge's asynchronous grant message to reach the SW.
+      await page.waitForTimeout(250);
+      const childGrant = await worker.evaluate(async (id) => {
+        const stored = await chrome.storage.session.get("ns_sw:allowTarget");
+        return (stored["ns_sw:allowTarget"] as Record<string, unknown> | undefined)?.[String(id)] ?? null;
+      }, tabId);
+
+      const commits: string[] = [];
+      page.on("framenavigated", (candidate) => {
+        if (candidate === page.mainFrame()) commits.push(candidate.url());
+      });
+      await page.evaluate((url) => {
+        window.setTimeout(() => location.assign(url), 0);
+      }, destination);
+      // Require the attack to commit before checking rollback, so an assertion
+      // on the original URL cannot pass merely because navigation is pending.
+      await expect.poll(() => commits, { timeout: 5_000 }).toContain(destination);
+      expect.soft(childGrant, "child self-submission minted no tab-wide target grant").toBeNull();
+      await expect(page).toHaveURL(originalUrl, { timeout: 5_000 });
     });
   });
 }
