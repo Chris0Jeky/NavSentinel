@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEvidenceExport, evidenceHostname, filterEvidence, MAX_EVIDENCE_EVENTS, projectEvidence, summarizeEvidence } from "../extension/src/evidence/evidence_model";
+import { createEvidenceExport, evidenceHostname, filterEvidence, MAX_EVIDENCE_EVENTS, projectEvidence, summarizeEvidence, type EvidenceEvent } from "../extension/src/evidence/evidence_model";
 import type { EventLogEntry } from "../extension/src/shared/storage";
 
 const event = (patch: Partial<EventLogEntry> = {}): EventLogEntry => ({
@@ -96,5 +96,62 @@ describe("projectEvidence reason limits", () => {
       "no_accessible_name", "nrs_cross_site",
       ...distinct.filter(code => code !== "no_accessible_name" && code !== "nrs_cross_site"),
     ].slice(0, 16));
+  });
+});
+
+describe("createEvidenceExport re-projects a caller-supplied view", () => {
+  const view = (patch: Partial<EvidenceEvent> = {}): EvidenceEvent => ({
+    id: "event-1", timestamp: "2023-11-14T22:13:20.000Z", kind: "nav_click_block", sourceSite: "a.test",
+    destinationSite: "b.test", outcome: "recorded", reasons: ["no_accessible_name"], score: 42, ...patch,
+  });
+  it("nulls URL-shaped hosts instead of exporting them", () => {
+    const [row] = createEvidenceExport([view({ sourceSite: "https://evil.test/p?token=secret", destinationSite: "user@evil.test" })], new Date(0)).events;
+    expect(row).toMatchObject({ sourceSite: null, destinationSite: null });
+  });
+  it("drops unknown kinds and invalid timestamps, and clamps or drops hostile scores", () => {
+    const events = createEvidenceExport([
+      view({ kind: "invented" as EvidenceEvent["kind"] }), view({ timestamp: "not a date" }),
+      view({ score: 150 }), view({ score: -1 }), view({ score: NaN }),
+    ], new Date(0)).events;
+    expect(events.map(e => e.score)).toEqual([100, undefined, undefined]);
+  });
+  it("exports only registry reasons, deduplicated", () => {
+    const [row] = createEvidenceExport([view({ reasons: ["no_accessible_name", "no_accessible_name", "free text", "__proto__"] })], new Date(0)).events;
+    expect(row?.reasons).toEqual(["no_accessible_name"]);
+  });
+});
+
+describe("filterEvidence guards", () => {
+  const rows = projectEvidence([
+    event({ site: "src.test", destHost: "dst.test", score: 5 }),
+    event({ kind: "cred_form_evaluated", site: "cred.test" }),
+    event({ kind: "mutation_alert", site: "act.test" }),
+    event({ kind: "suite_config_update", site: "cfg.test" }),
+    event({ kind: "clickfix_detected", site: "" }),
+  ]);
+  it("splits kinds into navigation, credential and activity by prefix", () => {
+    const kindsOf = (category: "navigation" | "credential" | "activity") => filterEvidence(rows, "", category, false).map(r => r.kind);
+    expect(kindsOf("navigation")).toEqual(["nav_click_block"]);
+    expect(kindsOf("credential")).toEqual(["cred_form_evaluated"]);
+    expect(kindsOf("activity")).toEqual(["clickfix_detected", "suite_config_update", "mutation_alert"]);
+  });
+  it("keeps only scored events (including a score of 0) when scoredOnly is set", () => {
+    const mixed = projectEvidence([event({ score: 0 }), event({ site: "unscored.test" }), event({ score: 90 })]);
+    expect(filterEvidence(mixed, "", "all", true).map(r => r.score)).toEqual([90, 0]);
+    expect(filterEvidence(mixed, "", "all", false)).toHaveLength(3);
+  });
+  it("matches the destination host and trims and lowercases the query", () => {
+    expect(filterEvidence(rows, "  DST.Test ", "all", false).map(r => r.kind)).toEqual(["nav_click_block"]);
+    expect(filterEvidence(rows, "nomatch.test", "all", false)).toEqual([]);
+  });
+  it("skips events with no host rather than throwing or matching them", () => {
+    expect(filterEvidence(rows, "test", "all", false).map(r => r.kind)).not.toContain("clickfix_detected");
+  });
+  it("bounds the query at the 253-char hostname maximum", () => {
+    const host = `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(61)}`;
+    expect(host).toHaveLength(253);
+    const long = projectEvidence([event({ site: host })]);
+    expect(long).toHaveLength(1);
+    expect(filterEvidence(long, `${host}zzz`, "all", false)).toHaveLength(1);
   });
 });
