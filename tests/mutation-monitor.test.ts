@@ -1773,6 +1773,53 @@ describe("mutation_monitor flood-then-inject reserve past the alert cap (#413)",
     stopMutationMonitor();
   });
 
+  it("stops one added subtree at MAX_ALERTS even though the scan gate runs once per node (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+    const forms = await floodWithBenignAlerts();
+
+    // One wrapper carries 60 distinct credential fields. The batch loop checks
+    // `alerts.length < MAX_ALERTS` once for this node, so only pushAlert's own
+    // hard cap keeps the scan from emitting all 60.
+    const wrapper = document.createElement("div");
+    for (let i = 0; i < 60; i++) {
+      const input = document.createElement("input");
+      input.type = "password";
+      wrapper.appendChild(input);
+    }
+    document.body.appendChild(wrapper);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(getMutationAlertCount()).toBe(50);
+    expect(alerts.length).toBe(50);
+
+    wrapper.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
+  it("admits a post-flood hidden cross-domain iframe into the reserved tail (#413)", async () => {
+    const alerts: MutationAlert[] = [];
+    startMutationMonitor(document, (a) => alerts.push(a));
+    await vi.advanceTimersByTimeAsync(200);
+    const forms = await floodWithBenignAlerts();
+    const before = getMutationAlertCount();
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "https://evil.example.com/exfil";
+    document.body.appendChild(iframe);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(alerts.filter((a) => a.type === "suspicious_iframe")).toHaveLength(1);
+    expect(getMutationAlertCount()).toBe(before + 1);
+
+    iframe.remove();
+    for (const form of forms) form.remove();
+    stopMutationMonitor();
+  });
+
   it("charges one reserved slot per element, so re-adding one node cannot burn the reserve (#413)", async () => {
     const alerts: MutationAlert[] = [];
     startMutationMonitor(document, (a) => alerts.push(a));
