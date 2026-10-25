@@ -309,6 +309,11 @@ zero POSTs. Remove a toast host, trigger another warning, and confirm it is visi
 Remove an open credential-modal host; the same pending decision must reappear and remain
 usable. Automated Vitest/Playwright evidence does not complete this human check.
 
+**OPEN — #1134 navigation guard in origin-fallback frames** (branch `sol/navsentinel-1134`).
+`main_guard` and `capture_isolated` now also run in about:blank, srcdoc and blob frames; MAIN-world
+interception changed, so Gate-3 applies. The procedure is in that PR's body. Beyond the probe, watch
+ordinary pages with about:blank ad or editor frames for new toasts, prompts or broken clicks.
+
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and the procedure named in its entry; `main` carries no procedure for them, so
 this list is a pointer, not the gate. Read that procedure before acting and
