@@ -418,6 +418,57 @@ test("cleanup hides a compact interactive attack while preserving small benign c
   }
 });
 
+for (const { fixtureCase, overlay } of [
+  { fixtureCase: "deep-static", overlay: "#deep-static-overlay" },
+  { fixtureCase: "shadow-static", overlay: "#shadow-static-overlay" },
+]) {
+  test(`initial cleanup hides a pre-existing ${fixtureCase} overlay, Undo restores it, and disabled stays inert @regression`, async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+    const { page, context, cleanup } = await setupNestedTest(`overlay-nesting-lab.html?case=${fixtureCase}`);
+
+    try {
+      let frame = await childFrame(page, fixtureCase);
+      await page.waitForTimeout(1200);
+      await expect(frame.locator(overlay)).toBeVisible();
+
+      await updateNavigationSettings(context, { autoDismissOverlays: true });
+      const pageCount = context.pages().length;
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+      await waitForNavSentinelBridge(page);
+      frame = await childFrame(page, fixtureCase);
+      await expect(frame.locator(overlay)).toBeHidden({ timeout: 4000 });
+      await expect(frame.locator("#underlay")).toBeVisible();
+      await waitForFrameToast(frame, /overlay hidden/i);
+
+      await clickFrameToastButton(frame, "Undo");
+      await expect(frame.locator(overlay)).toBeVisible();
+      // Undo must hold through the remaining settle rescans.
+      await page.waitForTimeout(2500);
+      await expect(frame.locator(overlay)).toBeVisible();
+      expect(context.pages()).toHaveLength(pageCount);
+    } finally {
+      await cleanup();
+    }
+  });
+}
+
+test("initial cleanup preserves deep dialog layers and shadow-hosted chat widgets @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const { page, context, cleanup } = await setupNestedTest("overlay-nesting-lab.html?case=deep-benign");
+
+  try {
+    await updateNavigationSettings(context, { autoDismissOverlays: true });
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
+    await waitForNavSentinelBridge(page);
+    const frame = await childFrame(page, "deep-benign");
+    await page.waitForTimeout(3000);
+    await expect(frame.locator("#deep-dialog-panel")).toBeVisible();
+    await expect(frame.locator("#chat-panel")).toBeVisible();
+  } finally {
+    await cleanup();
+  }
+});
+
 test("nested cleanup stays inert when disabled or Navigation is Off and preserves benign layers @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { page, context, baseUrl, cleanup } = await setupNestedTest("overlay-nesting-lab.html?case=exact");

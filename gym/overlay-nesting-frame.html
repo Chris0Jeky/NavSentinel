@@ -280,6 +280,70 @@
         document.body.appendChild(wrapper);
       }
 
+      // #564: these exist before the opt-in monitor arms (500ms after DCL), so
+      // only the initial/settle scan can see them, not the mutation path.
+      const nestStatic = (child, depth) => {
+        const outer = document.createElement("div");
+        let current = outer;
+        for (let level = 1; level < depth; level += 1) {
+          const next = document.createElement("div");
+          next.className = "wrapper";
+          current.appendChild(next);
+          current = next;
+        }
+        current.appendChild(child);
+        return outer;
+      };
+
+      if (fixtureCase === "deep-static") {
+        const overlay = document.createElement("a");
+        overlay.id = "deep-static-overlay";
+        overlay.className = "attack";
+        overlay.dataset.attack = "true";
+        overlay.href = "#";
+        overlay.addEventListener("click", (event) => event.preventDefault());
+        overlay.textContent = "Deeply nested static overlay — expected hidden";
+        document.body.appendChild(nestStatic(overlay, 7));
+      }
+
+      if (fixtureCase === "shadow-static") {
+        const host = document.createElement("div");
+        host.id = "shadow-static-host";
+        const shadow = host.attachShadow({ mode: "open" });
+        const style = document.createElement("style");
+        style.textContent = ".attack{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;background:rgba(40,18,52,.94);color:#fff}";
+        const overlay = document.createElement("div");
+        overlay.id = "shadow-static-overlay";
+        overlay.className = "attack";
+        overlay.textContent = "Shadow-root overlay — expected hidden";
+        shadow.append(style, nestStatic(overlay, 3));
+        document.body.appendChild(nestStatic(host, 3));
+      }
+
+      if (fixtureCase === "deep-benign") {
+        const dialog = document.createElement("div");
+        dialog.id = "deep-benign-dialog";
+        dialog.setAttribute("role", "dialog");
+        dialog.setAttribute("aria-label", "Deep accessible dialog");
+        const panel = document.createElement("div");
+        panel.id = "deep-dialog-panel";
+        panel.className = "attack";
+        panel.textContent = "Deep dialog layer — expected visible";
+        dialog.appendChild(nestStatic(panel, 6));
+        document.body.appendChild(nestStatic(dialog, 4));
+
+        const chatHost = document.createElement("div");
+        chatHost.id = "intercom-container";
+        const shadow = chatHost.attachShadow({ mode: "open" });
+        const style = document.createElement("style");
+        style.textContent = "#chat-panel{position:fixed;inset:0 0 0 40%;z-index:2147483000;background:#fff;color:#222}";
+        const chatPanel = document.createElement("div");
+        chatPanel.id = "chat-panel";
+        chatPanel.textContent = "Shadow chat widget — expected visible";
+        shadow.append(style, chatPanel);
+        document.body.appendChild(nestStatic(chatHost, 3));
+      }
+
       if (fixtureCase === "delayed") {
         setTimeout(() => addHtmlDirectFrame(
           "delayed-overlay-frame",
