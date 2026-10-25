@@ -22,6 +22,7 @@ import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
 import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
 import { readToastState } from "./toast_state_reader";
+import { pressureLoadGymPath } from "./pressure_load_attribution";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const extensionPath = process.env.EXTENSION_PATH
@@ -638,8 +639,11 @@ export async function startAcceptanceServer(): Promise<{ baseUrl: string; close:
     const rawPath = decodeURIComponent(requestUrl.pathname);
     // Any `/acceptance/dest/<marker path>` serves the shared destination page,
     // so procedures can put a unique marker in the destination path itself.
-    const decoded = rawPath.startsWith("/acceptance/dest/") ? "/acceptance/destination.html" : rawPath;
-    const [root, relative] = decoded.startsWith("/acceptance/")
+    // `/acceptance/pressure-load/<label>/<gym file>` serves that Gym file, so
+    // each load's event rows carry their own path label (#954).
+    const loadGymPath = pressureLoadGymPath(rawPath);
+    const decoded = loadGymPath ?? (rawPath.startsWith("/acceptance/dest/") ? "/acceptance/destination.html" : rawPath);
+    const [root, relative] = !loadGymPath && decoded.startsWith("/acceptance/")
       ? [ACCEPTANCE_FIXTURE_ROOT, decoded.slice("/acceptance".length)]
       : [gymRoot, decoded === "/" ? "/index.html" : decoded];
     const resolved = path.resolve(root, `.${relative}`);

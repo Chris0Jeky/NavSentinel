@@ -46,6 +46,7 @@ import { optionsEventRows, showOptionsEventLog } from "./attribution_helpers";
 import { REGRESSED_BUNDLE_MARKER } from "./pr599-regressed-bundle";
 import { readClipboardPressureObserverMarker, withClipboardPressureObservedBundle, type ClipboardQueueEvidence } from "./clipboard-pressure-observed-bundle";
 import { PRESSURE_OUTCOMES_TITLE, PressurePhase, type PressureOutcomes } from "./clipboard-pressure-qualification";
+import { attributedCount, pressureLoadPath } from "./pressure_load_attribution";
 
 const PR_599_MERGE = "d4b1acf5843605f519ffe1732050a2c1bb501ee1";
 const ALLOWLIST_KEY = "sentinelsuite:nav_allowlist_v1";
@@ -103,25 +104,33 @@ function mentionsLoopback(value: unknown): string[] {
   return LOOPBACK_HOSTS.filter((host) => text.includes(host));
 }
 
-async function waitForEventLogQuiescence(
-  session: AcceptanceSession,
-  timeoutMs = 6_000,
-): Promise<Array<Record<string, unknown>>> {
-  const deadline = Date.now() + timeoutMs;
-  let previous = await session.eventLog();
-  let stableSamples = 0;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    const current = await session.eventLog();
-    if (JSON.stringify(current) === JSON.stringify(previous)) {
-      stableSamples += 1;
-      if (stableSamples >= 3) return current;
-    } else {
-      previous = current;
-      stableSamples = 0;
-    }
+/**
+ * Every pressure-fixture load gets its own path label, and clickfix_detected
+ * rows are counted per label. A late row from a discarded RETRY load is then
+ * attributed to that load, not to the next arm; a row no issued label explains
+ * is TEST_INVALID (#954).
+ */
+class PressureLoads {
+  readonly issued = new Set<string>();
+  readonly benign = new Set<string>();
+  private readonly origin: string;
+
+  constructor(private readonly session: AcceptanceSession, private readonly preexisting: ReadonlySet<string>) {
+    this.origin = new URL(session.url("/", "localhost")).origin;
   }
-  throw new Error("TEST_INVALID: event log did not quiesce after a discarded pressure load");
+
+  next(arm: "benign" | "attack"): { label: string; url: string } {
+    const label = `load-${this.issued.size + 1}`;
+    this.issued.add(label);
+    if (arm === "benign") this.benign.add(label);
+    return { label, url: this.session.url(`${pressureLoadPath(label, PRESSURE_FIXTURE)}?mode=${arm}`, "localhost") };
+  }
+
+  clickfix(log: Array<Record<string, unknown>>, labels: ReadonlySet<string>): number {
+    return attributedCount(log, "clickfix_detected", labels, {
+      origin: this.origin, host: "localhost", gymPath: PRESSURE_FIXTURE, issued: this.issued, preexisting: this.preexisting,
+    });
+  }
 }
 
 async function readSelfCheck(page: Page): Promise<SelfCheck> {
@@ -172,39 +181,40 @@ async function allowClipboardForSite(session: AcceptanceSession, origin: string)
 
 /**
  * Load one fixture arm until the whole burst has a direct queue witness from
- * the intended diagnostic artifact. Returns the page and the existing log
- * baseline. The separate discarded-page attribution issue remains held (#963).
+ * the intended diagnostic artifact. Returns the page, the existing log and the
+ * load labels whose clickfix_detected rows this arm counts: the selected attack
+ * load alone, or every benign-mode load (a discarded load's late row stays its own).
  */
 async function loadValidPressureArm(
   session: AcceptanceSession,
   arm: "benign" | "attack",
   artifactId: string,
   outcomes: PressureOutcomes,
-): Promise<{ page: Page; check: SelfCheck; logBefore: Array<Record<string, unknown>>; documentToken: string }> {
-  const url = session.url(`${PRESSURE_FIXTURE}?mode=${arm}`, "localhost");
+  loads: PressureLoads,
+): Promise<{ page: Page; check: SelfCheck; logBefore: Array<Record<string, unknown>>; documentToken: string; labels: ReadonlySet<string> }> {
   let page: Page | null = null;
   let check: SelfCheck | null = null;
   let logBefore: Array<Record<string, unknown>> = [];
   let documentToken = "";
+  let labels: ReadonlySet<string> = new Set();
   for (let attempt = 1; attempt <= PRESSURE_ATTEMPTS; attempt++) {
-    if (page) {
-      await page.close();
-      await waitForEventLogQuiescence(session);
-    }
+    if (page) await page.close();
+    const load = loads.next(arm);
+    labels = arm === "attack" ? new Set([load.label]) : loads.benign;
     logBefore = await session.eventLog();
     documentToken = randomUUID();
     page = await session.newPage();
     await page.bringToFront();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+    await page.goto(load.url, { waitUntil: "domcontentloaded", timeout: 20_000 });
     await page.waitForFunction(
       () => ["valid", "retry", "failed", "idle"].includes(document.documentElement.dataset.pressureState ?? ""),
       null,
       { timeout: 20_000 },
     );
     check = await readSelfCheck(page);
-    session.observe(`${arm} arm load ${attempt} self-check`, JSON.stringify(check));
+    session.observe(`${arm} arm load ${attempt} self-check (${load.label})`, JSON.stringify(check));
     outcomes.arms[arm].push({ attempt, documentToken,
-      baseline: { clickfix: kindCount(logBefore, "clickfix_detected"), overflow: kindCount(logBefore, "bridge_buffer_overflow") }, check });
+      baseline: { clickfix: loads.clickfix(logBefore, labels), overflow: kindCount(logBefore, "bridge_buffer_overflow") }, check });
     if (check.state !== "retry") break;
   }
   if (!check || !page) throw new Error("TEST_INVALID: the pressure fixture never reported a self-check");
@@ -228,13 +238,13 @@ async function loadValidPressureArm(
   const markers = await session.requireReady(page);
   expect(markers.capture).toBe("1");
   expect(markers.bridge).toBe("1");
-  return { page, check, logBefore, documentToken };
+  return { page, check, logBefore, documentToken, labels };
 }
 
-async function collectPressureTimingSamples(session: AcceptanceSession, artifactId: string): Promise<SelfCheck[]> {
+async function collectPressureTimingSamples(session: AcceptanceSession, artifactId: string, loads: PressureLoads): Promise<SelfCheck[]> {
   const samples: SelfCheck[] = [];
-  const url = session.url(`${PRESSURE_FIXTURE}?mode=benign`, "localhost");
   for (let index = 1; index <= PRESSURE_TIMING_SAMPLES; index++) {
+    const { url } = loads.next("benign");
     const page = await session.newPage();
     await page.bringToFront();
     try {
@@ -256,7 +266,6 @@ async function collectPressureTimingSamples(session: AcceptanceSession, artifact
       }));
     } finally {
       await page.close();
-      await waitForEventLogQuiescence(session);
     }
   }
   expect(samples).toHaveLength(PRESSURE_TIMING_SAMPLES);
@@ -298,7 +307,7 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
           : `fixed queue policy in an instrumented test copy: ${observedExtensionPath}`,
       );
       session.observe("direct queue observer artifact", JSON.stringify(observer));
-      session.note("TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE: synchronous queue counters; no bridge delays; discarded-page attribution remains held (#963).");
+      session.note("TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE: synchronous queue counters; no bridge delays; clickfix_detected rows are counted per load path label (#954).");
       session.note(`tested head ${session.receipt.git.head}; ui-guard ${session.guardRevision}; Chrome ${session.chromeVersion}`);
     });
 
@@ -340,13 +349,15 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
     }, { soft: true });
 
     const pressureOrigin = new URL(session.url("/", "localhost")).origin;
+    // Rows already present predate the pressure fixture; every later clickfix_detected row must carry an issued load label.
+    const loads = new PressureLoads(session, new Set((await session.eventLog()).map((row) => String(row.id))));
     await session.step("5. Site settings: Clipboard is Allow for the pressure page's origin (localhost)", async () => {
       const route = await allowClipboardForSite(session, pressureOrigin);
       session.observe("clipboard permission set through", `${route} for ${pressureOrigin}`);
     });
 
     await session.step("6. collect ten diagnostic timing samples and direct queue witnesses", async () => {
-      const samples = await collectPressureTimingSamples(session, observer.artifactId);
+      const samples = await collectPressureTimingSamples(session, observer.artifactId, loads);
       outcomes.timingSampleCount = samples.length;
       const readyGaps = samples.map((sample) => sample.readyGapMs).filter((value): value is number => value !== null);
       const burstSpreads = samples.map((sample) => sample.burstSpreadMs).filter((value): value is number => value !== null);
@@ -358,7 +369,7 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
     });
 
     const benign = await session.step("7. pressure page, benign arm: VALID requires the direct pre-verification queue witness", async () =>
-      loadValidPressureArm(session, "benign", observer.artifactId, outcomes));
+      loadValidPressureArm(session, "benign", observer.artifactId, outcomes, loads));
     if (!benign) throw new Error("TEST_INVALID: the benign arm did not load");
 
     await session.step("8. benign arm: no ClickFix or clipboard warning, no clickfix_detected, no bridge_buffer_overflow", async () => {
@@ -368,18 +379,18 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
       await session.screenshot(benign.page, "pressure-benign-arm");
       const log = await phase.read(() => session.eventLog("event log after the benign arm"));
       session.observe("benign arm log delta", JSON.stringify({
-        clickfix_detected: kindCount(log, "clickfix_detected") - kindCount(benign.logBefore, "clickfix_detected"),
+        clickfix_detected: loads.clickfix(log, benign.labels) - loads.clickfix(benign.logBefore, benign.labels),
         bridge_buffer_overflow: kindCount(log, "bridge_buffer_overflow"),
       }));
       phase.record.observations = { warningCount: toasts.filter((text) => CLICKFIX_WARNING.test(text)).length,
-        baselineClickfix: kindCount(benign.logBefore, "clickfix_detected"), clickfix: kindCount(log, "clickfix_detected"),
+        baselineClickfix: loads.clickfix(benign.logBefore, benign.labels), clickfix: loads.clickfix(log, benign.labels),
         overflow: kindCount(log, "bridge_buffer_overflow") };
       await phase.check("benign.no-warning", () =>
         expect(toasts.filter((text) => CLICKFIX_WARNING.test(text)), "a benign flood alone must not warn").toEqual([]),
       () => toasts.filter((text) => CLICKFIX_WARNING.test(text)).length === 0);
       await phase.check("benign.no-clickfix", () =>
-        expect(kindCount(log, "clickfix_detected")).toBe(kindCount(benign.logBefore, "clickfix_detected")),
-      () => kindCount(log, "clickfix_detected") === kindCount(benign.logBefore, "clickfix_detected"));
+        expect(loads.clickfix(log, benign.labels)).toBe(loads.clickfix(benign.logBefore, benign.labels)),
+      () => loads.clickfix(log, benign.labels) === loads.clickfix(benign.logBefore, benign.labels));
       await phase.check("benign.no-overflow", () =>
         expect(kindCount(log, "bridge_buffer_overflow"), "the benign flood must not overflow the pre-handshake queue").toBe(0),
       () => kindCount(log, "bridge_buffer_overflow") === 0);
@@ -388,7 +399,7 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
     await benign.page.close();
 
     const attack = await session.step("9. pressure page, attack arm: VALID requires the direct pre-verification queue witness", async () =>
-      loadValidPressureArm(session, "attack", observer.artifactId, outcomes));
+      loadValidPressureArm(session, "attack", observer.artifactId, outcomes, loads));
     if (!attack) throw new Error("TEST_INVALID: the attack arm did not load");
 
     await session.step("10. attack arm: the fake-verification clipboard warning is shown without any click", async () => {
@@ -405,20 +416,20 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
     await session.step("11. the event log has the attack arm's clickfix_detected, no bridge_buffer_overflow, and no raw clipboard value", async () => {
       const phase = new PressurePhase(outcomes, "attack-log", attack.documentToken);
       const observations = phase.record.observations;
-      const baselineClickfix = kindCount(attack.logBefore, "clickfix_detected");
+      const baselineClickfix = loads.clickfix(attack.logBefore, attack.labels);
       observations.baselineClickfix = baselineClickfix;
       observations.lastPolledClickfix = null;
       await phase.check("attack.clickfix", async () => {
         await expect.poll(async () => {
-          const count = kindCount(await phase.read(() => session.eventLog()), "clickfix_detected");
+          const count = loads.clickfix(await phase.read(() => session.eventLog()), attack.labels);
           observations.lastPolledClickfix = count;
           return count;
-        }, { timeout: 5000 }).toBe(kindCount(attack.logBefore, "clickfix_detected") + 1);
+        }, { timeout: 5000 }).toBe(baselineClickfix + 1);
       }, () => observations.lastPolledClickfix === baselineClickfix + 1, 5000);
       // Persist and check the remaining original observations even when the
       // preceding matcher fails. Its failure is rethrown at the group boundary.
       const log = await phase.read(() => session.eventLog("event log after the attack arm"));
-      observations.clickfix = kindCount(log, "clickfix_detected");
+      observations.clickfix = loads.clickfix(log, attack.labels);
       observations.overflow = kindCount(log, "bridge_buffer_overflow");
       await phase.check("attack.no-overflow", () => expect(kindCount(log, "bridge_buffer_overflow")).toBe(0),
         () => kindCount(log, "bridge_buffer_overflow") === 0);

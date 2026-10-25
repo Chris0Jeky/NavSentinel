@@ -148,19 +148,21 @@ describe("ClickFix clipboard-pressure self-check hardening (#954)", () => {
     expect(acceptance).toContain("burstSpreadMs");
   });
 
-  it("retires a discarded page and waits for event-log quiescence before the next baseline", () => {
+  it("gives every load its own label before the baseline and counts ClickFix rows by label (#954)", () => {
     const start = acceptance.indexOf("async function loadValidPressureArm(");
     const end = acceptance.indexOf("\ntest(", start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const loader = acceptance.slice(start, end);
 
-    expect(acceptance).toContain("async function waitForEventLogQuiescence(");
     expect(loader).toContain("await page.close()");
-    expect(loader).toContain("await waitForEventLogQuiescence(session)");
+    expect(loader.indexOf("loads.next(arm)")).toBeGreaterThan(loader.indexOf("await page.close()"));
+    expect(loader.indexOf("loads.next(arm)")).toBeLessThan(loader.indexOf("logBefore = await session.eventLog()"));
+    expect(loader).toContain("page.goto(load.url");
+    // Quiet-log polling is not a completion fence for a discarded page.
+    expect(acceptance).not.toContain("waitForEventLogQuiescence");
     expect(loader).not.toContain("await page.waitForTimeout(1000)");
-    expect(loader.indexOf("await waitForEventLogQuiescence(session)")).toBeLessThan(
-      loader.lastIndexOf("logBefore = await session.eventLog()"),
-    );
+    expect(acceptance).not.toMatch(/kindCount\([^)]*"clickfix_detected"\)[^;]*\+ 1/u);
+    expect(acceptance).not.toContain("session.url(`${PRESSURE_FIXTURE}");
   });
 });
