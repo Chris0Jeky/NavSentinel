@@ -1294,11 +1294,11 @@ function sanitizeEventExtra(
 
 /**
  * Normalize runtime string fields before write-path validation can silently
- * evict them. Nullish fields stay absent; other values become bounded strings.
+ * evict them. Nullish and non-primitive fields stay absent (an object would
+ * otherwise persist as "[object Object]"); other primitives become strings.
  */
 function coerceEventLogString(value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  return typeof value === "string" ? value : String(value);
+  return value == null || typeof value === "object" || typeof value === "function" ? undefined : String(value);
 }
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
