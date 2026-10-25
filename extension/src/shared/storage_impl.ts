@@ -1298,7 +1298,7 @@ function sanitizeEventExtra(
  * otherwise persist as "[object Object]"); other primitives become strings.
  */
 function coerceEventLogString(value: unknown): string | undefined {
-  return value == null || typeof value === "object" || typeof value === "function" ? undefined : String(value);
+  return value === undefined || typeof value === "object" || typeof value === "function" ? undefined : String(value);
 }
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
