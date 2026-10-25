@@ -2138,16 +2138,18 @@ function buildPromptOutcomeRecord(
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
-  // Reject corrupt scores; optional replay fields use their producer's bounds.
-  if (Number.isFinite(partial.score) &&
-    !isBoundedNumber(partial.score, 0, 1000)) return undefined;
+  // Reject corrupt scores, non-finite ones included: coercing NaN to 0 would
+  // record a low-risk allow, which adaptive scoring weights as full trust and
+  // so bypasses its high-score allow discount (#1147). Optional replay fields
+  // use their producer's bounds.
+  if (!isBoundedNumber(partial.score, 0, 1000)) return undefined;
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     domain,
     ...(destDomain ? { destDomain } : {}),
     type: partial.type,
-    score: Number.isFinite(partial.score) ? partial.score : 0,
+    score: partial.score,
     outcome: partial.outcome,
     ...(reasons !== undefined ? { reasons } : {}),
     ...(nrsFactors !== undefined && nrsFactors.length > 0 ? { nrsFactors } : {}),
@@ -2164,7 +2166,7 @@ export function appendPromptOutcome(
 ): Promise<void> {
   const entry = buildPromptOutcomeRecord(partial);
   // Prompt outcomes are best-effort adaptive-scoring input. A malformed
-  // caller-supplied domain is dropped rather than stored verbatim or allowed to
+  // caller-supplied domain or score is dropped rather than stored verbatim or allowed to
   // surface in exports.
   if (!entry) return Promise.resolve();
   if (shouldDelegatePromptOutcomeWrite()) {
