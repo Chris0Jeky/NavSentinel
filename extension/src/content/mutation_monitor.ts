@@ -118,6 +118,12 @@ const OVERLAY_CLEANUP_CANDIDATES_PER_BATCH = 64;
 /** Maximum prominent existing layers considered by one settle/scroll rescan. */
 const OVERLAY_CLEANUP_RESCAN_LIMIT = 8;
 const OVERLAY_CLEANUP_RESCAN_DELAY_MS = 150;
+/**
+ * Elements one existing-overlay scan may visit beyond the shallow ClickFix walk
+ * (deep descendants and open shadow trees, newest-first). Each visit is one
+ * computed-style read; only positioned high-z layers reach layout. (#564)
+ */
+const OVERLAY_DEEP_SCAN_NODE_LIMIT = 2000;
 
 /**
  * Legitimate iframe providers to ignore (reCAPTCHA, analytics, ad frames, embeds).
@@ -603,14 +609,93 @@ function collectForegroundOverlays(
     if (!element) break;
     elements.push(element);
   }
+  if (elements.length < limit) {
+    const deepDetails = collectDeepForegroundOverlays(doc, elements, limit);
+    if (!details) details = deepDetails;
+  }
   return { elements, details };
+}
+
+function parentOrShadowHost(el: Element): Element | null {
+  return el.parentElement ?? (el.getRootNode() as Partial<ShadowRoot>).host ?? null;
+}
+
+/**
+ * Deep candidates sit below wrappers the 5-level benign check may not reach,
+ * and shadow content has no parentElement path to a cookie/chat/dialog host.
+ * Walk the composed ancestor chain (only for high-severity candidates) so a
+ * layer inside a preserved container or an already-claimed overlay is skipped.
+ */
+function isInsideBenignOrClaimedLayer(el: Element, claimed: readonly Element[]): boolean {
+  for (let node = parentOrShadowHost(el); node; node = parentOrShadowHost(node)) {
+    if (claimed.includes(node) || node.matches(DIALOG_SELECTOR)) return true;
+    const haystack = `${node.id ?? ""} ${typeof node.className === "string" ? node.className : ""}`;
+    if (COOKIE_CONSENT_PATTERNS.some((pattern) => pattern.test(haystack))) return true;
+    if (CHAT_WIDGET_PATTERNS.some((pattern) => pattern.test(haystack))) return true;
+  }
+  return false;
+}
+
+/** Reverse document order (newest/frontmost-looking first), lazily. */
+function reverseElementWalk(doc: Document, root: Node): () => Node | null {
+  const walker = doc.createTreeWalker(root, 1); // NodeFilter.SHOW_ELEMENT
+  while (walker.lastChild()) { /* descend to the last descendant */ }
+  let started = false;
+  return () => {
+    if (started) return walker.previousNode();
+    started = true;
+    return walker.currentNode;
+  };
+}
+
+/**
+ * Bounded worklist over deep static descendants and pre-existing shadow trees
+ * that the shallow ClickFix walk skips. Shadow trees are walked as soon as
+ * their host is reached so the node budget covers them in composed order.
+ */
+function collectDeepForegroundOverlays(
+  doc: Document,
+  elements: Element[],
+  limit: number,
+): string {
+  const root = doc.body ?? doc.documentElement;
+  if (!root) return "";
+  let details = "";
+  let visits = OVERLAY_DEEP_SCAN_NODE_LIMIT;
+  const walks = [reverseElementWalk(doc, root)];
+  while (walks.length > 0 && visits > 0 && elements.length < limit) {
+    const node = walks[walks.length - 1]!();
+    if (!node) {
+      walks.pop();
+      continue;
+    }
+    if (node.nodeType !== 1) continue;
+    visits -= 1;
+    const el = node as Element;
+    try {
+      const shadow = tryGetShadowRoot(el);
+      if (shadow && !isNavSentinelHost(el) && !isExtensionOwnedOverlayElement(el)) {
+        walks.push(reverseElementWalk(doc, shadow));
+      }
+      if (elements.includes(el) || restoredOverlayCleanupExclusions.has(el)) continue;
+      const classification = classifyOverlayElement(el);
+      if (classification?.severity !== "high") continue;
+      if (isInsideBenignOrClaimedLayer(el, elements)) continue;
+      elements.push(el);
+      if (!details) details = classification.details;
+    } catch {
+      // A hostile/custom element must not abort the rest of the bounded walk.
+    }
+  }
+  return details;
 }
 
 /**
  * Classify one prominent foreground overlay that already exists when the
- * opt-in baseline arms. The candidate walk is shared with ClickFix:
- * open dialogs, direct body children, and one framework-wrapper level. This
- * keeps the opt-in scan bounded instead of forcing layout across the full DOM.
+ * opt-in baseline arms. The candidate walk starts with ClickFix's (open
+ * dialogs, direct body children, one framework-wrapper level), then fills any
+ * remaining slots from a bounded deep/shadow walk (#564). Both are capped, so
+ * the opt-in scan never forces layout across an arbitrarily large DOM.
  */
 export function scanExistingForegroundOverlay(doc: Document): boolean {
   if (!observer) return false;
