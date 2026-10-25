@@ -1749,7 +1749,7 @@ function clampStr(value: unknown): string | undefined {
 function sanitizeElementHint(value: unknown): ElementHint | undefined {
   if (!value || typeof value !== "object") return undefined;
   const e = value as Record<string, unknown>;
-  if (typeof e.tag !== "string") return undefined;
+  if (typeof e.tag !== "string" || !e.tag) return undefined;
   const out: ElementHint = { tag: e.tag.slice(0, MAX_REASON_CODE_LEN) };
   const role = clampStr(e.role); if (role !== undefined) out.role = role;
   if (typeof e.hasOnClick === "boolean") out.hasOnClick = e.hasOnClick;
@@ -1758,17 +1758,20 @@ function sanitizeElementHint(value: unknown): ElementHint | undefined {
   // cursors are kept and a url() cursor (never "pointer") is safely omitted.
   const cursor = clampStr(e.cursor);
   if (cursor !== undefined && !/url\(/i.test(cursor)) out.cursor = cursor;
-  if (typeof e.textLength === "number" && Number.isFinite(e.textLength)) out.textLength = e.textLength;
-  if (typeof e.ariaLabelLength === "number" && Number.isFinite(e.ariaLabelLength)) out.ariaLabelLength = e.ariaLabelLength;
-  if (typeof e.titleLength === "number" && Number.isFinite(e.titleLength)) out.titleLength = e.titleLength;
   if (typeof e.targetBlank === "boolean") out.targetBlank = e.targetBlank;
   const rect = sanitizeRectHint(e.rect); if (rect) out.rect = rect;
-  if (typeof e.opacity === "number" && Number.isFinite(e.opacity)) out.opacity = e.opacity;
   const visibility = clampStr(e.visibility); if (visibility !== undefined) out.visibility = visibility;
   const display = clampStr(e.display); if (display !== undefined) out.display = display;
   const pointerEvents = clampStr(e.pointerEvents); if (pointerEvents !== undefined) out.pointerEvents = pointerEvents;
   const position = clampStr(e.position); if (position !== undefined) out.position = position;
-  if (typeof e.zIndex === "number" && Number.isFinite(e.zIndex)) out.zIndex = e.zIndex;
+  // Clamp numeric hints to the ranges the live producer (content/dom_builder.ts) can emit:
+  // lengths are capped at 80, opacity is a [0, 1] product, zIndex is a CSS 32-bit integer.
+  // A crafted backup otherwise skews replay scoring (#1147).
+  for (const [k, lo, hi] of [["textLength", 0, 80], ["ariaLabelLength", 0, 80], ["titleLength", 0, 80],
+    ["opacity", 0, 1], ["zIndex", -2147483648, 2147483647]] as const) {
+    const v = e[k];
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = Math.min(Math.max(v, lo), hi);
+  }
   return out;
 }
 
