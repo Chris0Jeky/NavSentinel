@@ -2957,25 +2957,23 @@ describe("prompt outcome append — non-finite sanitization", () => {
     vi.resetModules();
   });
 
-  it("coerces a non-finite score so the outcome persists instead of being dropped", async () => {
-    const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
-    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+  // A NaN score used to be coerced to a measured 0: a low-risk allow that
+  // adaptive scoring weights as full trust, skipping its discount for allows
+  // at or above the block threshold. Drop it like an out-of-range score. (#1147)
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "drops an outcome whose score is %s instead of recording a measured 0",
+    async (score) => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { appendPromptOutcome } = await import("../extension/src/shared/storage");
 
-    await appendPromptOutcome({
-      id: "nan-score",
-      domain: "x.example",
-      type: "nav",
-      score: Number.NaN,
-      outcome: "allow",
-    });
+      await appendPromptOutcome({ id: "bad-score", domain: "x.example", type: "nav", score, outcome: "allow" });
+      await appendPromptOutcome({ id: "good-score", domain: "x.example", type: "nav", score: 12, outcome: "allow" });
 
-    const entries = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string; score: number }>) ?? [];
-    const entry = entries.find((e) => e.id === "nan-score");
-    expect(entry).toBeDefined();
-    expect(Number.isFinite(entry!.score)).toBe(true);
-    expect(entry!.score).toBe(0);
-  });
+      const entries = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>) ?? [];
+      expect(entries.map((e) => e.id)).toEqual(["good-score"]);
+    }
+  );
 
   it("coerces a non-finite ts so the outcome persists with a finite timestamp", async () => {
     const { chrome, store } = createChromeMock();
