@@ -236,6 +236,7 @@ Heedline does **not** currently claim:
 - measured efficacy or a reduction in real-world compromise;
 - complete coverage of browser navigation, frames, forms, or extension races;
 - a released Chrome Web Store package;
+- Firefox support. Chromium is the only supported and tested target: the build packages `extension/manifest.json` only, and CI installs only Chromium. `extension/manifest.firefox.json` is an unbuilt draft for the frozen Firefox port (roadmap P4-03), and Gecko behaviour such as the credential guard's `formdata`-time resubmit binding is unmeasured ([#1101](https://github.com/Chris0Jeky/NavSentinel/issues/1101));
 - external security audit or independent validation;
 - a reputation service, cloud dashboard, enterprise policy plane, or automatic remediation;
 - that a blocked event was necessarily malicious, or that an allowed event was safe.
