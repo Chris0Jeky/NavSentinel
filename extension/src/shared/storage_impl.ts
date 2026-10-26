@@ -1328,7 +1328,8 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   };
 }
 
-async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
+/** Resolves false only when every verify re-read missed the entry (#1147). */
+async function persistEventLogEntry(entry: EventLogEntry): Promise<boolean> {
   const settings = await getSuiteSettings();
   const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
 
@@ -1350,18 +1351,19 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
     // persisted the correct log, so that is success — not a failed write. Without
     // this, appendEvent would burn all 3 retries and console.warn on every silent
     // allow once the log fills with loud events. (#236)
-    if (!next.some((item) => item.id === entry.id)) return;
+    if (!next.some((item) => item.id === entry.id)) return true;
 
     const verify = await chrome.storage.local.get(EVENT_LOG_KEY);
     const verifyLog = normalizeEventLog(verify[EVENT_LOG_KEY]);
     if (verifyLog.some((item) => item.id === entry.id)) {
-      return;
+      return true;
     }
   }
   console.warn("[NavSentinel] appendEvent: failed to persist after 3 attempts, id:", entry.id);
+  return false;
 }
 
-function appendEventDirect(entry: EventLogEntry): Promise<void> {
+function appendEventDirect(entry: EventLogEntry): Promise<boolean> {
   return queueEventLogWrite(async () => {
     await hydrateEventLogResetCutoff();
     // `<=` deliberately rejects the one-millisecond control boundary as well:
@@ -1369,8 +1371,8 @@ function appendEventDirect(entry: EventLogEntry): Promise<void> {
     // resurrect the prior corpus. An append issued after a queued control is
     // already ordered after it, so only cross-message retries can take this
     // bounded same-ms path.
-    if (entry.ts <= eventLogResetCutoffTs) return;
-    await persistEventLogEntry(entry);
+    if (entry.ts <= eventLogResetCutoffTs) return true;
+    return persistEventLogEntry(entry);
   });
 }
 
@@ -1503,7 +1505,7 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
   if (shouldDelegateEventLogWrite()) {
     return delegateEventLogAppend({ type: "ns-event-log-append", entry });
   }
-  return appendEventDirect(entry);
+  await appendEventDirect(entry);
 }
 
 /**
@@ -1541,11 +1543,13 @@ export async function handleEventLogAppendMessage(
     // browser cannot provide a safe HTTP(S) hostname).
     const pageSite = deriveSenderPageSite(sender);
     const { pageSite: _ignoredPageSite, ...entryWithoutPageSite } = message.entry;
-    await appendEventDirect(buildEventLogEntry({
+    const persisted = await appendEventDirect(buildEventLogEntry({
       ...entryWithoutPageSite,
       ...(pageSite === undefined ? {} : { pageSite }),
     }));
-    return { ok: true };
+    // An unverified write replies ok:false so the delegating sender retries
+    // (idempotent: entries dedup by id); its own drop + log stays best effort.
+    return persisted ? { ok: true } : { ok: false, error: "Event log append not persisted" };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -2377,6 +2381,12 @@ export async function handlePromptOutcomeStorageMessage(
     } else if (message.type === "ns-prompt-outcome-reset-adaptive") {
       await clearPromptOutcomeAdaptiveScoresDirect();
     } else {
+      // A non-empty replacement whose every row fails normalization would wipe
+      // history; refuse it. An explicit [] still clears. (Page senders pre-bound
+      // their rows, so import keeps its reset-on-no-valid-outcomes contract.) (#1147)
+      if (message.outcomes.length > 0 && boundPromptOutcomeLog(message.outcomes).length === 0) {
+        return { ok: false, error: "No valid prompt outcomes in replacement" };
+      }
       await replacePromptOutcomesDirect(message.outcomes);
     }
     return { ok: true };
