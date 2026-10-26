@@ -63,7 +63,9 @@ afterEach(() => {
   for (const root of roots.splice(0)) removeReleaseTempRoot(root);
 });
 
-describe.each<ObjectFormat>(["sha1", "sha256"])("release object identity (%s)", (format) => {
+// Each case spawns several Git processes; under parallel CI load they exceed
+// vitest's 5 s default (#766, #1143).
+describe.each<ObjectFormat>(["sha1", "sha256"])("release object identity (%s)", { timeout: 30_000 }, (format) => {
   it("accepts packed objects, empty/binary blobs and UTF-8 nested paths", () => {
     const root = repository(format);
     fs.writeFileSync(path.join(root, "src", "données.txt"), Buffer.from([0, 0xff, 0x0a, 0x80]));

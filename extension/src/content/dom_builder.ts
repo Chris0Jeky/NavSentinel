@@ -121,6 +121,23 @@ function composedParentElement(el: Element): Element | null {
   return root instanceof ShadowRoot ? root.host : null;
 }
 
+function isTopLayerElement(el: Element): boolean {
+  const root = el.getRootNode();
+  // Document.fullscreenElement retargets to the host for a shadow descendant;
+  // use that descendant's own root to find the actual fullscreen boundary.
+  if ((root instanceof ShadowRoot ? root.fullscreenElement : el.ownerDocument.fullscreenElement) === el) {
+    return true;
+  }
+  for (const selector of [":modal", ":popover-open"]) {
+    try {
+      if (el.matches(selector)) return true;
+    } catch {
+      // Older engines may lack either selector; check the other independently.
+    }
+  }
+  return false;
+}
+
 function effectiveOpacity(el: Element): number {
   let product = 1;
   const seen = new Set<Element>();
@@ -134,6 +151,9 @@ function effectiveOpacity(el: Element): number {
     if (seen.size >= 512) return 0;
     seen.add(current);
     product *= ownOpacity(current);
+    // Top-layer boxes keep their own/descendant opacity, but are rendered
+    // outside their former ancestors' opacity groups (#925).
+    if (isTopLayerElement(current)) break;
   }
   return product;
 }
@@ -267,6 +287,34 @@ function detectLegitModalBackdrop(
   return false;
 }
 
+function opacityHitFromPoint(top: Element, x: number, y: number): Element {
+  const leaf = top;
+  const seen = new Set([top]);
+  // Document hit testing retargets shadow descendants to their host. Follow
+  // only the hit path, so effectiveOpacity can reach a real top-layer boundary.
+  // Closed roots are inaccessible here and retain host-based scoring.
+  for (let depth = 0; depth < 64; depth++) {
+    const root = top.shadowRoot;
+    if (!root) break;
+    const hits = root.elementsFromPoint?.(x, y) ?? [root.elementFromPoint?.(x, y)];
+    // Shadow hit stacks can also include the host and document ancestors.
+    const inner = hits.find((el): el is Element => !!el && el.getRootNode() === root && !seen.has(el));
+    if (!inner) break;
+    seen.add(inner);
+    top = inner;
+  }
+  // Ordinary components retain host-based opacity as well as their document
+  // hit stack. Only a top-layer boundary inside the shadow tree needs the
+  // deeper opacity path; no other scoring input uses this hit.
+  const ancestors = new Set<Element>();
+  for (let current: Element | null = top; current && current !== leaf; current = composedParentElement(current)) {
+    if (ancestors.has(current) || ancestors.size >= 512) break;
+    ancestors.add(current);
+    if (isTopLayerElement(current)) return top;
+  }
+  return leaf;
+}
+
 export function capturePointerDown(e: PointerEvent): DownCapture {
   const x = e.clientX;
   const y = e.clientY;
@@ -316,6 +364,10 @@ export function buildClickContextFromEvents(params: {
   const topEl = activatedAncestor(params.click.stack, leafEl, params.click.x, params.click.y) ?? leafEl;
   const underEl = firstUnderlyingCandidate(params.click.stack, topEl);
   const top = buildElementHint(topEl, { wantRect: true, wantStyle: true });
+  if (leafEl.shadowRoot) {
+    const opacityEl = opacityHitFromPoint(leafEl, params.click.x, params.click.y);
+    if (opacityEl !== leafEl) top.opacity = effectiveOpacity(opacityEl);
+  }
   const isLegitModalBackdrop = detectLegitModalBackdrop(topEl, params.click.stack, viewport);
 
   const ctx: ClickContext = {

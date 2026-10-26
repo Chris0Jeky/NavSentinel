@@ -212,6 +212,10 @@ export function recordNavigation(
     const profiles = await loadProfiles();
 
     let profile = profiles.get(domain);
+    if (!Number.isFinite(nrs)) {
+      return profile ? computeAssessment(profile) :
+        { avgNRS: 0, consistency: 0, isRepeatOffender: false, topFactors: [] };
+    }
     if (!profile) {
       profile = {
         domain,

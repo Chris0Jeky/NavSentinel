@@ -76,6 +76,7 @@ describe("credential modal", () => {
   });
 
   afterEach(() => {
+    window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape" })));
     vi.useRealTimers();
     document.getElementById(HOST_ID)?.remove();
   });
@@ -361,6 +362,38 @@ describe("credential modal", () => {
   });
 
   describe("ensureHost idempotency", () => {
+    it("reattaches a removed host for a new warning", async () => {
+      const first = showCredentialModal(minimalSpec());
+      activateButton(getButtons()[1]!);
+      await first;
+      const host = getHost()!;
+      host.remove();
+      const next = showCredentialModal(minimalSpec({ title: "Next warning" }));
+      expect(getHost()).toBe(host);
+      expect(host.isConnected).toBe(true);
+      expect(getCard()!.textContent).toContain("Next warning");
+      activateButton(getButtons()[1]!);
+      await expect(next).resolves.toBe("block");
+    });
+
+    it("restores a removed pending decision without resolving it", async () => {
+      const settled = vi.fn();
+      const pending = showCredentialModal(minimalSpec()).then(settled);
+      const host = getHost()!;
+      const card = getCard()!;
+      const showPopover = vi.fn();
+      Object.defineProperty(host, "showPopover", { value: showPopover, configurable: true });
+      host.remove();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.isConnected).toBe(true);
+      expect(getCard()).toBe(card);
+      expect(showPopover).toHaveBeenCalledOnce();
+      expect(settled).not.toHaveBeenCalled();
+      activateButton(getButtons()[1]!);
+      await pending;
+      expect(settled).toHaveBeenCalledExactlyOnceWith("block");
+    });
+
     it("does not create duplicate hosts on repeated calls", async () => {
       const p1 = showCredentialModal(minimalSpec());
       vi.runAllTimers();
