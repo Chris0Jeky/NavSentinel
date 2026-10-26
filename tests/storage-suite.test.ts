@@ -1350,7 +1350,7 @@ describe("suite storage and allowlist migration", () => {
     const setSpy = vi.spyOn(chrome.storage.local, "set");
     const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
     expect(await handlePromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes: [{}] } as never, {}))
-      .toMatchObject({ ok: false, error: expect.stringContaining("no valid prompt outcomes") });
+      .toMatchObject({ ok: false, error: expect.stringMatching(/no valid prompt outcomes/i) });
     expect(store).toEqual(before);
     expect(setSpy).not.toHaveBeenCalled();
   });
