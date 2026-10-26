@@ -3,8 +3,9 @@
  *
  * Branded Google Chrome ignores `--load-extension` since Chrome 137, so the
  * E2E specs (which pass that flag to `chromium.launchPersistentContext`) can
- * only exercise Playwright's bundled Chromium. This preload rewrites those
- * launches to use an installed branded Chrome with a fresh profile and loads
+ * only exercise Playwright's bundled Chromium. This preload rewrites Chromium
+ * persistent launches, including native controls, to the same selected Chrome
+ * with a fresh profile and loads
  * the same unpacked build through the DevTools `Extensions.loadUnpacked`
  * command, which Chrome accepts when started with
  * `--enable-unsafe-extension-debugging` over the pipe transport Playwright
@@ -137,11 +138,13 @@ if (browserChoice.channel || browserChoice.executablePath) {
     const original = proto.launchPersistentContext;
     proto.launchPersistentContext = async function brandedLaunchPersistentContext(userDataDir, options = {}) {
       const { extensions, kept } = splitExtensionArgs(options.args);
-      if (extensions.length === 0 || this.name() !== "chromium") {
+      if (this.name() !== "chromium") {
         return original.call(this, userDataDir, options);
       }
       const realistic = process.env.NAVSENTINEL_REALISTIC_CHROME === "1";
-      const extraIgnored = ["--disable-extensions"];
+      // Native controls retain Playwright's extension isolation. Only an arm
+      // loading unpacked extensions needs the default disable flag removed.
+      const extraIgnored = extensions.length ? ["--disable-extensions"] : [];
       if (realistic) {
         extraIgnored.push(...REALISM_DISTORTING_SWITCHES);
         const features = playwrightDisableFeaturesSwitch(browserChoice.channel);
@@ -161,12 +164,14 @@ if (browserChoice.channel || browserChoice.executablePath) {
       });
       try {
         const browser = context.browser();
-        if (!browser) throw new Error("branded Chrome context has no browser handle for Extensions.loadUnpacked");
-        const session = await browser.newBrowserCDPSession();
-        for (const extension of extensions) {
-          await session.send("Extensions.loadUnpacked", { path: extension });
+        if (!browser) throw new Error("branded Chrome context has no browser handle");
+        if (extensions.length) {
+          const session = await browser.newBrowserCDPSession();
+          for (const extension of extensions) {
+            await session.send("Extensions.loadUnpacked", { path: extension });
+          }
+          await session.detach().catch(() => undefined);
         }
-        await session.detach().catch(() => undefined);
         if (process.env.NAVSENTINEL_BRANDED_RECORD) {
           fs.appendFileSync(process.env.NAVSENTINEL_BRANDED_RECORD, `${JSON.stringify({ version: browser.version(), ...browserChoice, realistic, extensions, at: new Date().toISOString() })}\n`);
         }
