@@ -1852,6 +1852,15 @@ function boundPromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
   return normalizePromptOutcomeLog(value).slice(-PROMPT_OUTCOMES_LIMIT);
 }
 
+function normalizePromptOutcomeReplacement(outcomes: unknown[]): PromptOutcomeEntry[] {
+  const normalized = boundPromptOutcomeLog(outcomes);
+  // An explicit [] can clear history; corrupt non-empty input must not do so.
+  if (outcomes.length > 0 && normalized.length === 0) {
+    throw new Error("Import contains no valid prompt outcomes");
+  }
+  return normalized;
+}
+
 export function isPromptOutcomeStorageMessage(message: unknown): message is PromptOutcomeStorageMessage {
   if (!message || typeof message !== "object") return false;
   const candidate = message as Record<string, unknown>;
@@ -2259,7 +2268,7 @@ export function clearAdaptiveScores(): Promise<void> {
 async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
   // Rebuild every imported row so backups retain only declared bounded replay
   // fields and host-only source/destination identifiers.
-  const importedOutcomes = boundPromptOutcomeLog(outcomes);
+  const importedOutcomes = normalizePromptOutcomeReplacement(outcomes);
   await queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
@@ -2283,7 +2292,7 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
 // (PromptOutcomeDeliveryError) and reports a partial result rather than a flat
 // "Import failed." (#188 R1).
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
-  const boundedOutcomes = boundPromptOutcomeLog(outcomes);
+  const boundedOutcomes = normalizePromptOutcomeReplacement(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
     return delegatePromptOutcomeWrite(
       { type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes },
@@ -2579,8 +2588,11 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
     );
   }
 
-  const hasPromptOutcomes = Array.isArray(p.promptOutcomes);
-  if (!hasPromptOutcomes) {
+  // Validate destructive replacements before committing ANY core section.
+  const importedOutcomes = Array.isArray(p.promptOutcomes)
+    ? normalizePromptOutcomeReplacement(p.promptOutcomes)
+    : null;
+  if (!importedOutcomes) {
     // Intentional: any import without valid outcomes resets adaptive scores
     // to prevent stale data. adaptiveScores from payload are ignored —
     // they are recomputed from outcomes to prevent injection. Folded into the
@@ -2612,8 +2624,8 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
   // scores; may be SW-delegated and reject on exhaustion → surfaced as a partial
   // import by the options UI). The core sections above are already consistent. ---
   try {
-    if (hasPromptOutcomes) {
-      await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
+    if (importedOutcomes) {
+      await replacePromptOutcomes(importedOutcomes);
     } else {
       // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
       // an already-running startup migration cannot restore a stale derivative.
