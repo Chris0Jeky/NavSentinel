@@ -54,7 +54,7 @@ test("corrupt prompt-history imports preserve Chrome storage and report failure 
 
     expect(await options.evaluate(() => chrome.runtime.sendMessage({
       type: "ns-prompt-outcome-replace", outcomes: [{}],
-    }))).toMatchObject({ ok: false, error: expect.stringContaining("no valid prompt outcomes") });
+    }))).toMatchObject({ ok: false, error: expect.stringMatching(/no valid prompt outcomes/i) });
     expect(await snapshot()).toEqual(before);
 
     // An intentional empty backup still clears history through the same file UI.
