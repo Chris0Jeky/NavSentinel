@@ -1337,6 +1337,27 @@ describe("appendEvent", () => {
     );
   });
 
+  it("replies ok:false to a delegated append whose writes never verify (#1147)", async () => {
+    const brokenChrome = {
+      storage: {
+        local: {
+          async get() { return {}; },
+          async set() {},
+        },
+        session: { async get() { return {}; }, async set() {} },
+        onChanged: { addListener() {} },
+      },
+    };
+    vi.stubGlobal("chrome", brokenChrome as unknown as typeof globalThis.chrome);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await expect(handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "unverified", ts: Date.now(), kind: "nav_click_block" },
+    })).resolves.toMatchObject({ ok: false });
+  });
+
   it("survives null/undefined items in existing log array", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [null, undefined, { id: "valid-1", ts: 1, kind: "nav_click_block" }, { notAnId: true }],
@@ -2490,6 +2511,28 @@ describe("prompt outcome storage — sender authorization", () => {
     );
     expect(res.ok).toBe(false);
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seedOutcome]);
+  });
+
+  it("refuses a non-empty replace that normalizes to nothing, but an explicit [] still clears (#1147)", async () => {
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seedOutcome] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+
+    const refused = await handlePromptOutcomeStorageMessage(
+      {
+        type: "ns-prompt-outcome-replace",
+        outcomes: [{ junk: true }, null] as never,
+      },
+      OPTIONS_SENDER
+    );
+    expect(refused.ok).toBe(false);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seedOutcome]);
+
+    expect(await handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-replace", outcomes: [] },
+      OPTIONS_SENDER
+    )).toEqual({ ok: true });
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
   });
 
   it("rejects an adaptive reset from a content-script sender", async () => {
