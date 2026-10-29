@@ -58,9 +58,13 @@ export function projectProtection(log: readonly unknown[]): { events: Protection
   }
   const events: ProtectionEvent[] = [];
   for (const entry of unique.values()) {
+    // Local identity includes the record, so a reused ID cannot inherit reading state.
+    // Never assign this key to the DOM; export independently regenerates its IDs.
+    let id: string;
+    try { id = JSON.stringify(entry); } catch { excluded++; continue; }
     const event = projectEvidence([entry])[0];
     if (!event) { excluded++; continue; }
-    events.push({ ...event, id: `event-${events.length + 1}`, ...classify(entry) });
+    events.push({ ...event, id, ...classify(entry) });
   }
   events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   return { events, excluded, duplicates };
