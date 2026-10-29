@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-// #980: popup needs a real h1; the evidence h1 must expose a spaced
-// accessible name ("Your browsing. A clearer picture.") for screen readers.
+// #980: each page needs one readable h1 for screen readers.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
