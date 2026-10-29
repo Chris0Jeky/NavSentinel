@@ -26,9 +26,9 @@ describe("popup heading (#980)", () => {
 });
 
 describe("evidence heading (#980)", () => {
-  it("reads 'Your browsing. A clearer picture.' with a space for screen readers", () => {
+  it("exposes one clear protection activity heading to screen readers", () => {
     const headings = parse("evidence/evidence.html").querySelectorAll("h1");
     expect(headings).toHaveLength(1);
-    expect(accessibleName(headings[0]!)).toBe("Your browsing. A clearer picture.");
+    expect(accessibleName(headings[0]!)).toBe("Your protection activity.");
   });
 });
