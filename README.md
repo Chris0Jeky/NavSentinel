@@ -1,6 +1,6 @@
 # Heedline
 
-<p align="center"><img src="docs/assets/NavSentinel-loop.svg" alt="NavSentinel workflow, animated" width="100%"></p>
+<p align="center"><img src="docs/assets/NavSentinel-loop.svg" alt="Heedline interaction guard, illustrative animated workflow" width="100%"></p>
 
 Local-first Chrome MV3 interaction guard: it checks deceptive navigation and risky browser actions, explains why it intervened, and makes no runtime network calls.
 
