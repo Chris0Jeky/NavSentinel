@@ -244,8 +244,11 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-56 | #1060 subframe form-target capture (MAIN world) | merge commit `a0035874` (merged 2026-10-18) | OPEN — not run |
 | AI-52 | #1072 CRXJS 3 build pipeline | merge commit `44d8875a` (merged 2026-10-24) | OPEN — not run |
 | AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
+| AI-58 | Journal reading continuity (#1162) | [Issue and merge receipt](https://github.com/Chris0Jeky/NavSentinel/issues/1162) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-58 (#1162):** follow the [journal continuity checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional history. Check retained expansion, keyboard focus and reading position during arrivals; Show latest and explicit navigation; removal after replacement, eviction and clear; and the unchanged frozen export preview. Confirm screen-reader and physical-input behavior. The linked merge receipt identifies the exact merge commit. Automated evidence does not complete this check; a failed owner check gets a revert PR for that commit.
 
 - **AI-57 (#1163):** follow [Protection Center activity](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional records. Review the four categories and separate corrections, keyboard drill-down, Today/history, narrow themes and reduced motion; use existing Options backup/import/clear only on that fictional history. Confirm screen-reader and physical-input behavior. Automated receipts do not complete this check. The PR's merge receipt records the exact merge commit; a failed owner check gets a revert PR for that commit.
 

@@ -51,6 +51,14 @@ remains the existing `navsentinel-evidence` schema 1, with its explicit preview 
 minimized fields; it is not a backup of cleanup metadata or a new diagnostic bundle.
 Category and recovery context are display-only and are not added to that format.
 
+While a journal row is expanded or contains keyboard focus, background updates
+keep its retained page, row and reading position. Counts and export still use all
+current matching records; **Show latest**, filters and page controls deliberately
+leave that reading view. Replacement (even with a reused ID), eviction and clear
+remove old details and announce the disappearance; removed focus returns to the
+journal. An already-open export preview remains the exact snapshot prepared for
+review. Reading state is local to the page and never stored or exported.
+
 #591 remains open for local Should block / Should allow labels, richer lifecycle
 diagnostics and its redacted bundle. This feature uses the existing safe journal
 and preview; it does not claim that broader dependency complete.
@@ -63,6 +71,13 @@ and existing backup import, all three themes at normal/narrow widths, and reduce
 motion. Exported JSON must keep the existing fields and exclude raw IDs, extra,
 full URLs and new category metadata. The shield settles once; reduced motion
 shows the same final state without animation.
+
+For #1162, expand and focus an older row while fictional records arrive across a
+25-row boundary. Check expansion, focus and scroll position at normal and narrow
+widths, then Show latest, filters and page navigation. Replace the same record ID,
+evict it and clear history: stale details must disappear and focus must return to
+the journal. Reimporting cleared records must not restore their old expansion.
+Check that an open export preview stays frozen while the journal updates.
 
 Automated branded-Chrome receipts are not owner Gate-3. The owner-only check uses
 the merged build and verifies the same journey and screen-reader/physical input
