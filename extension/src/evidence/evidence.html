@@ -11,24 +11,24 @@
       <div class="rail-bottom"><label for="theme">Appearance</label><select id="theme"><option value="forest">Forest</option><option value="paper">Paper</option><option value="midnight">Midnight</option></select><p>Appearance is stored only for this page. Protection settings are unchanged.</p></div>
     </aside>
     <main id="overview">
-      <header class="page-head"><div><h1>Your protection activity.</h1><p class="lede">A local record of interventions, warnings and your choices. Every number has a story you can review.</p></div><button id="refresh" class="secondary">Refresh evidence</button></header>
+      <header class="page-head"><div><h1>Your protection activity.</h1><p class="lede">Your local record of interventions, warnings and choices. Select a category to review.</p></div><button id="refresh" class="secondary">Refresh evidence</button></header>
       <p id="status" class="status" role="status" aria-live="polite">Loading local evidence…</p>
-      <section class="panel activity" id="activity" aria-labelledby="activity-title">
-        <div class="section-head">
-          <div class="activity-heading"><svg id="activityShield" viewBox="0 0 48 56" aria-hidden="true" focusable="false"><path d="M24 3 44 11v16c0 12-9 20-20 26C13 47 4 39 4 27V11Z"/><path class="shield-line" d="m14 27 7 7 14-16"/></svg><div><h2 id="activity-title">Retained local history</h2><p id="milestone">Reading your local record…</p></div></div>
-          <div class="time-window" role="group" aria-label="Time window"><button id="history" aria-pressed="true">Retained history</button><button id="today" aria-pressed="false" hidden>Today</button></div>
-        </div>
-        <p id="retention" class="fine">Reading the retention boundary…</p>
-        <div class="activity-categories" role="group" aria-label="Review activity by category">
-          <button id="overlaysFilter" class="activity-category" aria-controls="journal"><span>Overlay interventions</span><strong id="overlaysCount">—</strong><small>Review cleanup records</small></button>
-          <button id="clicksFilter" class="activity-category" aria-controls="journal"><span>Clicks blocked</span><strong id="clicksCount">—</strong><small>Review held clicks</small></button>
-          <button id="redirectsFilter" class="activity-category" aria-controls="journal"><span>Redirect / popup interventions</span><strong id="redirectsCount">—</strong><small>Review holds & rollbacks</small></button>
-          <button id="warningsFilter" class="activity-category" aria-controls="journal"><span>Warnings only</span><strong id="warningsCount">—</strong><small>Review warnings without a block</small></button>
-        </div>
-        <button id="correctionsFilter" class="correction-summary" aria-controls="journal"><span><strong>Choices & corrections</strong><small>Review recovery and trust decisions · counted separately</small></span><strong id="correctionsCount">—</strong><span aria-hidden="true">→</span></button>
-        <p id="historyQuality" class="fine"></p>
-        <p class="fine">One category per retained action record. Counts are not verified attacks prevented. Reassertions and other observations stay in the journal. Corrections cannot be reliably matched to an earlier action.</p>
-      </section>
+<section class="panel activity" id="activity" aria-labelledby="activity-title">
+<div class="section-head">
+<div class="activity-heading"><svg id="activityShield" viewBox="0 0 48 56" aria-hidden="true" focusable="false"><path d="M24 3 44 11v16c0 12-9 20-20 26C13 47 4 39 4 27V11Z"/><path class="shield-line" d="m14 27 7 7 14-16"/></svg><div><h2 id="activity-title">Retained local history</h2><p id="milestone">Loading…</p></div></div>
+<div class="time-window" role="group" aria-label="Time window"><button id="history" aria-pressed="true">Retained history</button><button id="today" aria-pressed="false" hidden>Today</button></div>
+</div>
+<p id="retention" class="fine">Loading…</p>
+<div class="activity-categories" role="group" aria-label="Review activity by category">
+<button id="overlaysFilter" class="activity-category" aria-controls="journal">Overlay interventions<strong id="overlaysCount">—</strong></button>
+<button id="clicksFilter" class="activity-category" aria-controls="journal">Clicks blocked<strong id="clicksCount">—</strong></button>
+<button id="redirectsFilter" class="activity-category" aria-controls="journal">Redirect / popup interventions<strong id="redirectsCount">—</strong></button>
+<button id="warningsFilter" class="activity-category" aria-controls="journal">Warnings only<strong id="warningsCount">—</strong></button>
+</div>
+<button id="correctionsFilter" class="correction-summary" aria-controls="journal"><span><strong>Choices & corrections</strong><small>Recovery and trust decisions · counted separately</small></span><strong id="correctionsCount">—</strong><span aria-hidden="true">→</span></button>
+<p id="historyQuality" class="fine"></p>
+<p class="fine">One category per action record, not attacks prevented. Reassertions stay in the journal. Corrections cannot be matched reliably to earlier actions.</p>
+</section>
       <p class="evidence-summary" aria-label="Recorded evidence summary"><span><strong id="total">—</strong> retained events</span><span><strong id="scored">—</strong> with heuristic scores</span><span><strong id="sites">—</strong> hostnames in history</span></p>
       <section class="panel" aria-labelledby="modes-title"><div class="section-head"><div><p class="eyebrow">YOUR CONFIGURATION</p><h2 id="modes-title">Protection modes</h2></div><a href="../options/options.html">Change settings ↗</a></div><p id="modes">Reading settings…</p><p class="fine">These are saved preferences. They do not prove the guard is running in a particular tab or that this extension build was reloaded.</p></section>
       <section class="panel" id="journal" aria-labelledby="journal-title" tabindex="-1"><div class="section-head"><div><p class="eyebrow">RECORDED OBSERVATIONS</p><h2 id="journal-title">Evidence journal</h2></div><button id="export" disabled>Export visible events</button></div>

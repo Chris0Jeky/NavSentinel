@@ -1,7 +1,7 @@
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, getEventLog, getSuiteSettings } from "../shared/storage";
 import { explainJournalReason } from "./evidence_reasons";
 import { eventTitle, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
-import { PROTECTION_CATEGORIES, inProtectionRange, projectProtection, summarizeProtection, type ProtectionCategory, type ProtectionEvent, type ProtectionRange } from "./protection_model";
+import { PROTECTION_CATEGORIES, inProtectionRange, projectProtection, summarizeProtection, type ProtectionEvent, type ProtectionRange } from "./protection_model";
 import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, type EvidenceExportSnapshot } from "./evidence_export";
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -37,7 +37,7 @@ function render(): void {
   byId("today").hidden = supported.length === 0;
   if (!supported.length) range = "history";
   const counts = summarizeProtection(events, range, snapshotAt);
-  for (const key of Object.keys(PROTECTION_CATEGORIES) as ProtectionCategory[]) byId(`${key}Count`).textContent = String(counts[key]);
+  for (const key of PROTECTION_CATEGORIES) byId(`${key}Count`).textContent = String(counts[key]);
   for (const value of ["today", "history"]) byId(value).setAttribute("aria-pressed", String(range === value));
   byId("activity-title").textContent = range === "today" ? "Today in your retained history" : "Retained local history";
   const interventions = counts.overlays + counts.clicks + counts.redirects;
@@ -111,9 +111,9 @@ async function refresh(): Promise<void> {
     const first = supported[0];
     const last = supported.at(-1);
     byId("retention").textContent = `Up to ${settings.logLimit ?? 5000} local records. ${first && last
-      ? `Supported timestamps: ${new Date(first.timestamp).toLocaleString()} – ${new Date(last.timestamp).toLocaleString()}.`
-      : "No supported timestamps in this snapshot."} May include imports. This is a record limit, not continuous coverage or a lifetime total. Today uses this device's local date at refresh.`;
-    byId("historyQuality").textContent = `${projection.duplicates} duplicate rows collapsed · ${projection.excluded} unreadable rows excluded · ${events.length - supported.length} future-dated rows outside the totals. Legacy records without action metadata remain observations; malformed rows rejected by storage are unavailable.`;
+      ? `Timestamp span: ${new Date(first.timestamp).toLocaleString()} – ${new Date(last.timestamp).toLocaleString()}.`
+      : "No supported timestamps in this snapshot."} May include imports and gaps; not lifetime coverage. Today uses this device's date at refresh.`;
+    byId("historyQuality").textContent = `${projection.duplicates} duplicate rows collapsed · ${projection.excluded} unreadable rows excluded · ${events.length - supported.length} future-dated rows outside totals. Missing action metadata stays observational; storage-rejected rows are unavailable.`;
     byId("modes").textContent = `Navigation: ${settings.nav.defaultMode} · Credentials: ${settings.credential.mode} · Automatic overlay cleanup: ${settings.nav.autoDismissOverlays ? "on" : "off"}`;
     status.textContent = `Local snapshot refreshed at ${snapshotAt.toLocaleTimeString()}. ${projection.excluded} entries excluded by the evidence format.`;
     render();
@@ -128,7 +128,7 @@ async function refresh(): Promise<void> {
 for (const control of [search, category, scoredOnly, activityFilter]) control.addEventListener("input", () => { page = 0; render(); });
 function resetFilters(): void { search.value = ""; category.value = "all"; activityFilter.value = "all"; scoredOnly.checked = false; page = 0; }
 byId("resetFilters").addEventListener("click", () => { resetFilters(); render(); });
-for (const key of Object.keys(PROTECTION_CATEGORIES) as ProtectionCategory[]) {
+for (const key of PROTECTION_CATEGORIES) {
   byId(`${key}Filter`).addEventListener("click", () => {
     resetFilters(); activityFilter.value = key; render(); byId("journal").focus();
   });
