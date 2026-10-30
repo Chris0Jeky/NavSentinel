@@ -47,6 +47,7 @@ const ALL_KNOWN_CODES = [
   "nrs_js_behavior_suspicious",
   "clipboard_command_with_overlay",
   "clipboard_write_with_overlay",
+  "clipboard_command_with_lure_text",
   "clickfix_instruction_pattern",
   "clickfix_paste_instruction",
   "clickfix_captcha_text_with_overlay",

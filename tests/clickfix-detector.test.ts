@@ -562,3 +562,77 @@ describe("scanForClickFix not suppressed by a hidden/spoofed captcha iframe (#20
     expect(result.score).toBeGreaterThan(0);
   });
 });
+
+// --- #1167: overlay-free lures, wider instruction patterns, script-free text ---
+
+describe("widened instruction patterns (#1167)", () => {
+  it("matches Run-dialog and Win+X shortcut spellings", () => {
+    for (const text of ["Press Win + R", "Press the Windows key + R", "Press ⊞ Win + R", "Press Win + X and pick Terminal (Admin)"]) {
+      expect(matchesInstructionPattern(text), text).toBe(true);
+    }
+  });
+
+  it("matches Terminal and FileFix wording", () => {
+    for (const text of ["Open the Terminal app", "Launch Windows Terminal", "Paste the path into the File Explorer address bar", "Press Ctrl + L, then paste"]) {
+      expect(matchesInstructionPattern(text), text).toBe(true);
+    }
+  });
+
+  it("does NOT match benign look-alikes", () => {
+    for (const text of ["Win rewards every day", "Win + Xbox Game Pass bundle", "Use Ctrl + Left to jump a word", "Darwin+R is a package"]) {
+      expect(matchesInstructionPattern(text), text).toBe(false);
+    }
+  });
+});
+
+describe("scanForClickFix without an overlay (#1167)", () => {
+  beforeEach(() => {
+    _resetClipboardEvents();
+  });
+
+  const pageWith = (html: string): Document => {
+    const root = document.implementation.createHTMLDocument("t");
+    root.body.innerHTML = html;
+    return root;
+  };
+  const commandWrite = (): void =>
+    recordClipboardWrite({ ts: Date.now(), contentLength: 40, looksLikeCommand: true });
+
+  it("detects a command write plus fake-verification text", () => {
+    commandWrite();
+    const result = scanForClickFix(pageWith("<h1>Verify you are human</h1><p>Checking your browser.</p>"));
+    expect(result.detected).toBe(true);
+    expect(result.reasons).toContain("clipboard_command_with_lure_text");
+  });
+
+  it("detects a command write plus Run-dialog steps", () => {
+    commandWrite();
+    expect(scanForClickFix(pageWith("<p>Press Win + X, choose Terminal, then Ctrl + V</p>")).detected).toBe(true);
+  });
+
+  it("detects a command write plus FileFix steps", () => {
+    commandWrite();
+    expect(scanForClickFix(pageWith("<p>Paste the file path into the File Explorer address bar</p>")).detected).toBe(true);
+  });
+
+  it("does NOT detect a docs-style copy of a command next to generic terminal wording", () => {
+    commandWrite();
+    const result = scanForClickFix(pageWith("<p>Open a terminal and run the install script, or copy and paste it.</p>"));
+    expect(result.detected).toBe(false);
+  });
+
+  it("does NOT detect a non-command write plus fake-verification text", () => {
+    recordClipboardWrite({ ts: Date.now(), contentLength: 12, looksLikeCommand: false });
+    expect(scanForClickFix(pageWith("<h1>Verify you are human</h1>")).detected).toBe(false);
+  });
+
+  it("ignores script/style padding when building the scanned text", () => {
+    commandWrite();
+    const padding = "x".repeat(6000);
+    const root = pageWith(
+      `<script>var pad = "${padding}";</script><style>.p{content:"${padding}"}</style>` +
+        "<p>Press Win + R and paste</p>",
+    );
+    expect(scanForClickFix(root).detected).toBe(true);
+  });
+});

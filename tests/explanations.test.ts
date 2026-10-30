@@ -45,6 +45,7 @@ const KNOWN_NRS_CODES = [
 const KNOWN_CLICKFIX_CODES = [
   "clipboard_command_with_overlay",
   "clipboard_write_with_overlay",
+  "clipboard_command_with_lure_text",
   "clickfix_instruction_pattern",
   "clickfix_paste_instruction",
   "clickfix_captcha_text_with_overlay",
