@@ -43,6 +43,8 @@ export interface TabnabPendingEntry {
   ts: number;
   /** Opener was active under a popup window: deliver only once the user returns to it (#1205). */
   w?: 1;
+  /** Device-code phishing: origReg is the site that sent the user to a device sign-in page. */
+  k?: 1;
 }
 
 export interface AllowTargetEntry {
