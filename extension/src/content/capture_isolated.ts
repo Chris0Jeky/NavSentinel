@@ -1005,38 +1005,6 @@ function handleClickFixScan(): void {
   });
 }
 
-// --- Tech-support-scam fullscreen locker (#1171) ---
-// Loaded lazily on the first fullscreenchange: the classifier is large relative
-// to the capture chunk's perf headroom and almost every page never needs it.
-let fullscreenGuard: Promise<typeof import("./fullscreen_guard")> | null = null;
-
-function handleFullscreenChange(): void {
-  if (settings.defaultMode === "off" || !document.fullscreenElement) return;
-  fullscreenGuard ??= Promise.resolve().then(() => import("./fullscreen_guard"));
-  const loading = fullscreenGuard;
-  void loading.then((guard) => {
-    const verdict = guard.guardFullscreen();
-    if (!verdict?.notify) return;
-    sendIconUpdate("red");
-    appendEventSafely({
-      kind: "fullscreen_locker_exit",
-      site: siteKeyFromLocation(),
-      url: location.href,
-      reasons: verdict.reasons,
-    });
-    showToast({
-      message: "Heedline closed a full-screen warning page. Real security companies do not lock your browser or ask you to call them.",
-      timeoutMs: 0,
-    });
-  }).catch((err) => {
-    // Do not cache a failed import forever: the next fullscreenchange retries.
-    if (fullscreenGuard === loading) fullscreenGuard = null;
-    if (debugEnabled) console.warn("[NavSentinel] fullscreen guard failed to load:", err);
-  });
-}
-
-document.addEventListener("fullscreenchange", handleFullscreenChange, true);
-
 // --- Mutation monitor ---
 
 const MUTATION_START_DELAY_MS = 2000;
