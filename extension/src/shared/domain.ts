@@ -307,9 +307,26 @@ function charScript(cp: number): ScriptClass {
 export function isMixedScript(host: string): boolean {
   const h = normalizeHost(host);
   if (!h) return false;
+  // Punycode labels are ASCII, so also check each decoded xn-- label on its own:
+  // xn--pypal-4ve (Cyrillic a in paypal) is mixed; xn--wgv71a (CJK) is not (#1196).
+  // Decoded labels count only a mix of the confusable scripts (Latin, Cyrillic,
+  // Greek): Latin+CJK labels such as tokyo-<kanji> are ordinary Japanese hosts.
+  return hasTwoLetterScripts(h) || h.split(".").some((label) =>
+    label.startsWith("xn--") && hasTwoConfusableScripts(decodePunycode(label.slice(4)) ?? ""));
+}
 
+function hasTwoConfusableScripts(text: string): boolean {
   const scripts = new Set<ScriptClass>();
-  for (const ch of h) {
+  for (const ch of text) {
+    const script = charScript(ch.codePointAt(0) ?? 0);
+    if (script === "Latin" || script === "Cyrillic" || script === "Greek") scripts.add(script);
+  }
+  return scripts.size >= 2;
+}
+
+function hasTwoLetterScripts(text: string): boolean {
+  const scripts = new Set<ScriptClass>();
+  for (const ch of text) {
     const cp = ch.codePointAt(0) ?? 0;
     const script = charScript(cp);
     if (script === "Digit" || script === "Common") continue;
@@ -370,16 +387,24 @@ export function levenshtein(a: string, b: string): number {
 
 export function findClosestLookalike(
   currentRegDomain: string,
-  trustedRegDomains: string[]
+  trustedRegDomains: string[],
+  // The host as the user's browser sees it when currentRegDomain is its IDN
+  // skeleton; only an exact match with this one is "the trusted domain itself".
+  selfRegDomain: string = currentRegDomain
 ): { target: string; distance: number } | null {
   const cur = normalizeHost(currentRegDomain);
   if (!cur) return null;
+  const self = normalizeHost(selfRegDomain);
 
   let best: { target: string; distance: number } | null = null;
   for (const t of trustedRegDomains ?? []) {
     const target = normalizeHost(t);
-    if (!target || target === cur) continue;
-    const distance = levenshtein(cur, target);
+    if (!target || target === self) continue;
+    // Raw and decoded forms both count, so decoding can only add a lookalike hit:
+    // a trusted IDN (example.xn--p1acf) stays close to its raw-form spoofs.
+    const distance = self && self !== cur
+      ? Math.min(levenshtein(cur, target), levenshtein(self, target))
+      : levenshtein(cur, target);
     if (!best || distance < best.distance) {
       best = { target, distance };
     }
@@ -529,8 +554,11 @@ export function computeCredentialRisk(params: {
   const maxDistance = Number.isFinite(cfg.similarity.maxDistance)
     ? cfg.similarity.maxDistance
     : 2;
+  // Lookalike checks run on the decoded IDN skeleton, so xn--pypal-4ve.com is
+  // compared as "paypal.com"; any other host is its own skeleton.
+  const lookReg = pageHost ? getRegistrableDomain(idnSkeletonHost(pageHost)) : "";
   const lookalike = cfg.similarity.enabled && pageReg
-    ? findClosestLookalike(pageReg, trusted)
+    ? findClosestLookalike(lookReg, trusted, pageReg)
     : null;
 
   if (cfg.similarity.enabled) {
@@ -787,6 +815,106 @@ export function normalizeHomoglyphs(input: string): string {
 }
 
 /**
+ * RFC 3492 Punycode decode of one label body (the part after "xn--"), local and
+ * allocation-light. Returns null on malformed input instead of throwing.
+ */
+export function decodePunycode(input: string): string | null {
+  // A DNS label is at most 63 characters; anything longer is not a real host.
+  if (input.length > 63) return null;
+  const delim = input.lastIndexOf("-");
+  const basicEnd = Math.max(delim, 0);
+  const out: number[] = [];
+  for (let j = 0; j < basicEnd; j++) {
+    const c = input.charCodeAt(j);
+    if (c >= 0x80) return null;
+    out.push(c);
+  }
+  let n = 128;
+  let i = 0;
+  let bias = 72;
+  let pos = basicEnd > 0 ? basicEnd + 1 : 0;
+  while (pos < input.length) {
+    const oldi = i;
+    let w = 1;
+    for (let k = 36; ; k += 36) {
+      if (pos >= input.length) return null;
+      const c = input.charCodeAt(pos++);
+      const digit =
+        c >= 97 && c <= 122 ? c - 97
+        : c >= 65 && c <= 90 ? c - 65
+        : c >= 48 && c <= 57 ? c - 22
+        : 36;
+      if (digit >= 36 || digit > (0x7fffffff - i) / w) return null;
+      i += digit * w;
+      const t = k <= bias ? 1 : k >= bias + 26 ? 26 : k - bias;
+      if (digit < t) break;
+      w *= 36 - t;
+    }
+    const len = out.length + 1;
+    // Bias adaptation (RFC 3492 section 6.1).
+    let delta = Math.floor((i - oldi) / (oldi === 0 ? 700 : 2));
+    delta += Math.floor(delta / len);
+    let k = 0;
+    while (delta > 455) {
+      delta = Math.floor(delta / 35);
+      k += 36;
+    }
+    bias = k + Math.floor((36 * delta) / (delta + 38));
+    n += Math.floor(i / len);
+    i %= len;
+    if (n > 0x10ffff) return null;
+    out.splice(i++, 0, n);
+  }
+  return String.fromCodePoint(...out);
+}
+
+/**
+ * Cyrillic/Greek/Latin-extended letters that render like a Latin letter, as
+ * [code point, Latin letter] (a small subset of the Unicode confusables list,
+ * limited to the pairs seen in real homograph phishing; lowercase only since
+ * normalizeHost lowercases first).
+ */
+const CONFUSABLE_LATIN: ReadonlyMap<number, string> = new Map([
+  [0x430, "a"], [0x441, "c"], [0x435, "e"], [0x43e, "o"], [0x440, "p"],
+  [0x445, "x"], [0x443, "y"], [0x456, "i"], [0x458, "j"], [0x455, "s"],
+  [0x4bb, "h"], [0x501, "d"], [0x51b, "q"], [0x51d, "w"], [0x475, "v"],
+  [0x4cf, "l"], [0x3bf, "o"], [0x3b1, "a"], [0x3bd, "v"], [0x3c1, "p"],
+  [0x3b9, "i"], [0x3ba, "k"], [0x3c5, "u"], [0x3c7, "x"], [0x3f2, "c"],
+  [0x261, "g"], [0x251, "a"], [0x131, "i"]
+]);
+
+/**
+ * Decode every xn-- label and fold confusable letters to Latin, so a punycode
+ * homograph (xn--pypal-4ve.com -> "paypal.com") reaches the ASCII lookalike and
+ * brand checks. A label stays encoded unless it folds entirely to ASCII, so a
+ * plain IDN (xn--mller-kva.de, xn--wgv71a.jp) is returned unchanged and gains
+ * no signal. Local only; no network.
+ */
+export function idnSkeletonHost(host: string): string {
+  const h = normalizeHost(host);
+  if (!h.includes("xn--")) return h;
+  return h
+    .split(".")
+    .map((label) => {
+      if (!label.startsWith("xn--") || label.length > 63) return label;
+      try {
+        const decoded = decodePunycode(label.slice(4));
+        if (decoded === null) return label;
+        let folded = "";
+        for (const ch of decoded.normalize("NFKC").toLowerCase()) {
+          folded += CONFUSABLE_LATIN.get(ch.codePointAt(0) ?? 0) ?? ch;
+        }
+        // Letters, digits and hyphen only: NFKC can emit dots or slashes that
+        // would shift label boundaries.
+        return /^[a-z0-9-]+$/.test(folded) ? folded : label;
+      } catch {
+        return label;
+      }
+    })
+    .join(".");
+}
+
+/**
  * Strip hyphens and dots from a string for fuzzy brand-keyword matching.
  * This lets us detect "pay-pal" or "pay.pal" as containing "paypal".
  */
@@ -848,7 +976,8 @@ function brandKeywordMatch(strippedLabel: string, brand: string): boolean {
  * or if no brand keyword is found.
  */
 export function detectBrandInDomain(
-  registrableDomain: string
+  registrableDomain: string,
+  idnFolded = false
 ): BrandMatch | null {
   const reg = normalizeHost(registrableDomain);
   if (!reg) return null;
@@ -872,14 +1001,18 @@ export function detectBrandInDomain(
   // false positives on legitimate hyphenated dictionary-word domains (#208 R2).
   // Separator-only exact spoofs (pay-pal.com) need a coined-vs-generic-brand
   // distinction + FP measurement and are tracked as a follow-up. (#discovery cycle 3)
-  const homoglyphRewrote = strippedLabel !== stripSeparators(label.toLowerCase());
+  // idnFolded: the caller decoded a punycode host and folded Cyrillic/Greek
+  // lookalikes to Latin (idnSkeletonHost). The real brand domain has only ASCII
+  // labels, so a folded host that reads as the brand (or an alias) is a spoof.
+  const homoglyphRewrote =
+    idnFolded || strippedLabel !== stripSeparators(label.toLowerCase());
 
   for (const [brand, canonical] of BRAND_LIST) {
     const canonicalReg = getBrandRegDomain(canonical);
     // Skip if this IS the brand's own domain
-    if (reg === canonicalReg) continue;
+    if (!idnFolded && reg === canonicalReg) continue;
     // Skip known legitimate brand-owned aliases (e.g. microsoftonline.com)
-    if (isBrandAlias(brand, reg)) continue;
+    if (!idnFolded && isBrandAlias(brand, reg)) continue;
 
     if (brandKeywordMatch(strippedLabel, brand)) {
       return { brand, canonicalDomain: canonicalReg, exact: false };
@@ -960,18 +1093,25 @@ export function detectLookalike(
   brandKeyword: BrandMatch | null;
   subdomainStuffing: BrandMatch | null;
 } {
-  const h = normalizeHost(fullHost);
-  const reg = h ? getRegistrableDomain(h) : "";
+  const rawHost = normalizeHost(fullHost);
+  const reg = rawHost ? getRegistrableDomain(rawHost) : "";
+  // Compare the decoded IDN skeleton (xn--pypal-4ve.com -> paypal.com); `reg`
+  // stays the host as written so the trusted domain itself is never its own lookalike.
+  const h = idnSkeletonHost(rawHost);
+  const skelReg = h !== rawHost ? getRegistrableDomain(h) : reg;
+  // Only a folded registrable domain is a spoof; a folded subdomain of a genuine
+  // brand domain (xn--80a.paypal.com) keeps the brand-own-domain exemptions.
+  const idnFolded = skelReg !== reg;
 
   // Use precomputed raw Levenshtein if provided, otherwise compute it
   const lev = rawLookalike !== undefined
     ? rawLookalike
-    : (reg ? findClosestLookalike(reg, trustedDomains) : null);
+    : (reg ? findClosestLookalike(skelReg, trustedDomains, reg) : null);
 
   // Homoglyph-normalized Levenshtein: normalize both sides then compare
   let homoglyphLev: { target: string; distance: number } | null = null;
   if (reg) {
-    const normalizedCur = normalizeHomoglyphs(reg);
+    const forms = idnFolded ? [normalizeHomoglyphs(skelReg), normalizeHomoglyphs(reg)] : [normalizeHomoglyphs(skelReg)];
     let best: { target: string; distance: number } | null = null;
     // Null-safe like findClosestLookalike: a nullish trusted list means "no
     // Levenshtein targets", not a TypeError (brand/stuffing checks below still run).
@@ -979,12 +1119,12 @@ export function detectLookalike(
       const target = normalizeHost(t);
       if (!target || target === reg) continue;
       const normalizedTarget = normalizeHomoglyphs(target);
-      if (normalizedCur === normalizedTarget) {
+      if (forms.includes(normalizedTarget)) {
         // Perfect match after normalization -- distance 0
         best = { target, distance: 0 };
         break;
       }
-      const dist = levenshtein(normalizedCur, normalizedTarget);
+      const dist = Math.min(...forms.map((form) => levenshtein(form, normalizedTarget)));
       if (!best || dist < best.distance) {
         best = { target, distance: dist };
       }
@@ -995,8 +1135,10 @@ export function detectLookalike(
     }
   }
 
-  const brandKeyword = reg ? detectBrandInDomain(reg) : null;
-  const subStuffing = h ? detectSubdomainStuffing(h) : null;
+  const brandKeyword = reg ? detectBrandInDomain(skelReg, idnFolded) : null;
+  // Both forms, so decoding can only add a stuffing hit, never hide one.
+  const subStuffing =
+    detectSubdomainStuffing(rawHost) ?? (h !== rawHost ? detectSubdomainStuffing(h) : null);
 
   return {
     levenshtein: lev,
