@@ -1073,7 +1073,7 @@ test.describe("Content Fingerprinting", () => {
   test("content-fp-01 brand mismatch: detected on credential submit @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
-    const { page, cleanup } = await setupFixtureTest("content-fp-01-brand-mismatch.html");
+    const { page, context, cleanup } = await setupFixtureTest("content-fp-01-brand-mismatch.html");
 
     try {
       // The page mimics a Google login form on a non-Google domain.
@@ -1087,6 +1087,11 @@ test.describe("Content Fingerprinting", () => {
       // The credential guard should prompt because the page references
       // "Google" in the title but is served from localhost
       await waitForCredentialModal(page, 6000);
+
+      // The analyzer is a lazily imported chunk: prove it loaded in Chrome and
+      // its signal reached the prompt (the modal alone fires on any untrusted host).
+      const prompt = (await extractEventLog(context)).find((e) => e.kind === "cred_submit_prompt");
+      expect(prompt?.reasons).toContain("CONTENT_FP");
     } finally {
       await cleanup();
     }
