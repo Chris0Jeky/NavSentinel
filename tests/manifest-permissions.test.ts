@@ -31,8 +31,17 @@ function loadManifest(name: string): Manifest {
 function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[] {
   // Only the permission table counts: a backticked token elsewhere (the
   // certification answers mention `activeTab`) is not a disclosure.
-  const table = disclosure.split(/\r?\n/).filter((line) => line.startsWith("|")).join("\n");
-  const disclosed = new Set(Array.from(table.matchAll(/`([^`\r\n]+)`/g), (match) => match[1]));
+  const lines = disclosure.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^### Permission Justifications\s*$/.test(line));
+  const tail = start < 0 ? [] : lines.slice(start + 1);
+  const end = tail.findIndex((line) => /^#{1,3}\s/.test(line));
+  const table = end < 0 ? tail : tail.slice(0, end);
+  // Each grant must be the first backticked token in the permission column,
+  // not merely a mention in another column or another table.
+  const disclosed = new Set(table.filter((line) => line.startsWith("|")).flatMap((line) => {
+    const match = line.split("|")[1]?.match(/`([^`\r\n]+)`/);
+    return match ? [match[1]] : [];
+  }));
   const grants = {
     permissions: manifest.permissions ?? [],
     optional_permissions: manifest.optional_permissions ?? [],
@@ -69,6 +78,17 @@ describe("manifest permissions", () => {
     // Outside the permission table a backticked mention is not a disclosure.
     expect(findUndisclosedGrants(copy, `${disclosure}\nWe never use \`${fakeGrant}\`.`)).toEqual([`${field}: ${fakeGrant}`]);
     expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}\` | x |`)).toEqual([]);
+  });
+
+  it("does not count grants in other sections or justification cells", () => {
+    const manifest: Manifest = { permissions: ["clipboardRead"] };
+    const heading = "### Permission Justifications\n\n| Permission | Justification |\n";
+    const otherSection = heading + "| `storage` | Stores data. |\n\n### Other\n| Example | Notes |\n| `clipboardRead` | Example only. |\n";
+    const otherCell = heading + "| `storage` | Unlike `clipboardRead`, stores data. |\n";
+    expect(findUndisclosedGrants(manifest, otherSection)).toEqual(["permissions: clipboardRead"]);
+    expect(findUndisclosedGrants(manifest, otherCell)).toEqual(["permissions: clipboardRead"]);
+    expect(findUndisclosedGrants(manifest, heading + "| `clipboardRead` | Reads clipboard. |\n")).toEqual([]);
+    expect(findUndisclosedGrants(manifest, "| `clipboardRead` | No permission section. |\n")).toEqual(["permissions: clipboardRead"]);
   });
 
   it.each(MANIFESTS)("%s requests no declarativeNetRequest permission", (name) => {
