@@ -53,7 +53,7 @@ import {
   type DownCapture
 } from "./dom_builder";
 import type { DebugInfo } from "./debug_overlay";
-import { clickFixToastPrefix, scanForClickFix } from "./clickfix_detector";
+import { clickFixToastPrefix, hasRecentCommandClipboardWrite, scanForClickFix } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { installCopyListener } from "./copy_listener";
 import { OutboundQueue } from "./bridge_outbound";
@@ -959,9 +959,19 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
 // The copy path passes no receipt, so `command` stays false and it never overwrites (#1169).
 installCopyListener(() => settings.defaultMode !== "off", () => handleClickFixScan());
 
-let clickFixRescanned = false;
-function handleClickFixScan(command = false): void {
-  if (settings.defaultMode === "off") return;
+// Instructions shown after the copy (#1218): an undetected command write is
+// rescanned at 1.5, 5 and 15 s (inside the 30 s write window), one chain at a time.
+let clickFixRescanPending = false;
+function rescanClickFix(step = 0): void {
+  clickFixRescanPending = true;
+  setTimeout(() => {
+    clickFixRescanPending = false;
+    if (!handleClickFixScan(false, true) && step < 2) rescanClickFix(step + 1);
+  }, [1500, 3500, 10000][step]);
+}
+
+function handleClickFixScan(command = false, rescan = false): boolean {
+  if (settings.defaultMode === "off") return false;
   const now = Date.now();
 
   const result = scanForClickFix();
@@ -989,16 +999,12 @@ function handleClickFixScan(command = false): void {
   }
 
   if (!result.detected) {
-    // Instructions shown just after the copy (#1218): look once more.
-    if (command && !clickFixRescanned) {
-      clickFixRescanned = true;
-      setTimeout(() => handleClickFixScan(), 1500);
-    }
-    return;
+    if (!rescan && !clickFixRescanPending && hasRecentCommandClipboardWrite()) rescanClickFix();
+    return false;
   }
 
   // Rate-limit standalone toast: at most one alert per 10 seconds
-  if (now - clickFixAlertedAt < 10_000) return;
+  if (now - clickFixAlertedAt < 10_000) return true;
 
   clickFixAlertedAt = now;
   sendIconUpdate("red");
@@ -1025,6 +1031,7 @@ function handleClickFixScan(command = false): void {
     },
     timeoutMs: 0,
   });
+  return true;
 }
 
 // --- Tech-support-scam fullscreen locker (#1171) ---

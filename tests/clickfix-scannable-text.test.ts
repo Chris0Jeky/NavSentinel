@@ -31,4 +31,38 @@ describe("scannableText", () => {
     expect(scannableText(root, 5000)).toHaveLength(5000);
     expect(scannableText(null, 5000)).toBe("");
   });
+
+  it("stops visiting siblings once the cap is reached (lazy walk)", () => {
+    const root = document.createElement("main");
+    const first = document.createElement("p");
+    first.textContent = "y".repeat(6000);
+    root.append(first);
+    let touched = 0;
+    for (let i = 0; i < 2000; i++) {
+      const el = document.createElement("span");
+      Object.defineProperty(el, "shadowRoot", { get: () => { touched++; return null; } });
+      root.append(el);
+    }
+    expect(scannableText(root, 5000)).toHaveLength(5000);
+    expect(touched).toBe(0);
+  });
+
+  it("keeps light-DOM text in document order", () => {
+    const root = document.createElement("main");
+    root.innerHTML = "<p>one</p><div><span>two</span></div><p>three</p>";
+    expect(scannableText(root, 5000).replace(/\s+/g, " ").trim()).toBe("one two three");
+  });
+
+  it("survives thousands of nested empty shadow roots without recursion (no fail-open)", () => {
+    const root = document.createElement("main");
+    let host: Element = root;
+    for (let i = 0; i < 5000; i++) {
+      const next = document.createElement("div");
+      host.attachShadow({ mode: "open" }).append(next);
+      host = next;
+    }
+    host.append("Press Win + R");
+    expect(() => scannableText(root, 5000)).not.toThrow();
+    expect(scannableText(root, 5000)).toContain("Press Win + R");
+  });
 });
