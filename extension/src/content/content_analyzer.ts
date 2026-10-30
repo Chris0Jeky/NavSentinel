@@ -1076,6 +1076,9 @@ const isDigit = (c: string | undefined): boolean => c !== undefined && c >= "0" 
  * Returns undefined when the steps return early (no refresh is scheduled).
  * Otherwise `delay` is the whole seconds (the fraction is ignored) and `url` is
  * null for a refresh of the document's own URL, else the URL string as written.
+ * Chrome follows this digit-only grammar, not a decimal parser (probed in
+ * Chromium 143, #1241): "1e0", "3e2", "+1", "-1", "0x1" and "Infinity" never
+ * schedule, while "1.5", "1." and "1.5.6" run after 1s and ".5" or "0.9" at once.
  * One linear pass, no regex over page text.
  */
 export function parseRefreshContent(input: string): { delay: number; url: string | null } | undefined {
@@ -1116,19 +1119,28 @@ export function parseRefreshContent(input: string): { delay: number; url: string
 const MAX_REFRESH_DELAY = 2147483647;
 
 /**
+ * Reported when a credential page's refresh declarations cannot be read in full
+ * (more than MAX_REFRESH_METAS, or a value cut at MAX_REFRESH_CONTENT before its
+ * target is settled). No real sign-in page needs either, so it fails closed.
+ */
+const REFRESH_UNREADABLE = "its refresh tags are too many or too long to check";
+
+/**
  * Registrable domain of the pending refresh target when it leaves the page's
  * site, else null. Selects the refresh Chromium keeps scheduled: in document
  * order, a declaration replaces the scheduled one unless that one is sooner
  * (HttpRefreshScheduler::Schedule); an empty target reloads the document URL,
- * ignoring <base>, and a javascript: target is refused without replacing
+ * ignoring <base> (Chromium's behaviour; the HTML spec would resolve "" against
+ * the base URL), and a javascript: target is refused without replacing
  * (Document::MaybeHandleHttpRefresh). Reads only the current DOM: a refresh
  * from an HTTP header or a meta removed after insertion is not seen.
  */
 function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): string | null {
   const contents = snapshot.refreshContents;
   const currentReg = getRegistrableDomain(normalizeHost(currentDomain));
+  if (!snapshot.hasPasswordField || !contents || !currentReg) return null;
   // More declarations than the bound: an unread later one could replace any choice.
-  if (!snapshot.hasPasswordField || !contents || !currentReg || contents.length > MAX_REFRESH_METAS) return null;
+  if (contents.length > MAX_REFRESH_METAS) return REFRESH_UNREADABLE;
   const base = snapshot.baseUrl || "https://" + hostForUrl(currentDomain) + "/";
   let scheduledDelay = Infinity;
   let offsite: string | null = null;
@@ -1136,7 +1148,7 @@ function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): st
     const cut = contents[i]!.length > MAX_REFRESH_CONTENT;
     const parsed = parseRefreshContent(contents[i]!.slice(0, MAX_REFRESH_CONTENT));
     // A cut value without a complete target could still be the one scheduled.
-    if (cut && !parsed?.url) return null;
+    if (cut && !parsed?.url) return REFRESH_UNREADABLE;
     if (!parsed || parsed.delay > MAX_REFRESH_DELAY || parsed.delay > scheduledDelay) continue;
     if (!parsed.url) {
       scheduledDelay = parsed.delay;
@@ -1148,9 +1160,9 @@ function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): st
       target = new URL(parsed.url, base);
       // Slicing can manufacture a different host ("https://evil.ex|ample.test").
       // The host is settled only if one more host character cannot change it.
-      if (cut && new URL(parsed.url + "a", base).host !== target.host) return null;
+      if (cut && new URL(parsed.url + "a", base).host !== target.host) return REFRESH_UNREADABLE;
     } catch {
-      if (cut) return null;
+      if (cut) return REFRESH_UNREADABLE;
       continue; // an unparseable URL schedules nothing
     }
     if (target.protocol === "javascript:") continue;

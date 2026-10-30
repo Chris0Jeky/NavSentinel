@@ -131,23 +131,65 @@ describe("off-site refresh signal", () => {
     expect(flagged([offsite, "99999999999;url=/account"]).offsiteRefresh).toBeDefined();
   });
 
-  it("gives no signal when more refresh declarations exist than the bound inspects", () => {
+  it("fails closed when more refresh declarations exist than the bound inspects (#1241)", () => {
     const offsite = "30;url=https://account-check.example/";
-    expect(flagged(Array(MAX_REFRESH_METAS).fill(offsite)).offsiteRefresh).toBeDefined();
-    expect(flagged(Array(MAX_REFRESH_METAS + 1).fill(offsite)).offsiteRefresh).toBeUndefined();
+    expect(flagged(Array(MAX_REFRESH_METAS).fill(offsite)).offsiteRefresh).toContain("account-check.example");
+    // Inert metas (Chrome ignores these delays) must not buy a silent pass.
+    const inert = "99999999999;url=/account";
+    expect(flagged(Array(MAX_REFRESH_METAS + 1).fill(inert)).offsiteRefresh).toContain("too many or too long");
+    expect(flagged([...Array(MAX_REFRESH_METAS).fill(inert), offsite]).score).toBe(25);
+    // Still only on a credential page.
+    expect(flagged(Array(MAX_REFRESH_METAS + 1).fill(inert), { hasPasswordField: false }).offsiteRefresh).toBeUndefined();
   });
 
-  it("keeps a host decided inside the bound and refuses one the bound cuts", () => {
+  it("keeps a host decided inside the bound and fails closed on one the bound cuts (#1241)", () => {
     const longPath = "30;url=https://account-check.example/" + "a".repeat(MAX_REFRESH_CONTENT * 2);
     expect(flagged([longPath.slice(0, MAX_REFRESH_CONTENT + 1)]).offsiteRefresh).toContain("account-check.example");
     const longHost = "30;url=https://" + "a".repeat(MAX_REFRESH_CONTENT * 2) + ".example/";
     const cut = longHost.slice(0, MAX_REFRESH_CONTENT + 1);
-    // Cutting the host would manufacture a different destination: undecided, and
-    // a later declaration must not be taken as operative in its place.
-    expect(flagged([cut]).offsiteRefresh).toBeUndefined();
-    expect(flagged([cut, "30;url=https://account-check.example/"]).offsiteRefresh).toBeUndefined();
+    // Cutting the host would manufacture a different destination: undecided, so
+    // the page is flagged rather than trusted, whatever follows.
+    expect(flagged([cut]).offsiteRefresh).toContain("too many or too long");
+    expect(flagged([cut, "30;url=/account"]).offsiteRefresh).toContain("too many or too long");
+    // Padding the delay pushes the target past the bound, leaving no URL to read.
     const paddedDelay = " ".repeat(MAX_REFRESH_CONTENT + 1);
-    expect(flagged([paddedDelay, "30;url=https://account-check.example/"]).offsiteRefresh).toBeUndefined();
+    expect(flagged([paddedDelay]).offsiteRefresh).toContain("too many or too long");
+    // A cut value that settles on a same-host target is not a signal.
+    const sameLong = "30;url=https://shop.example/" + "a".repeat(MAX_REFRESH_CONTENT * 2);
+    expect(flagged([sameLong.slice(0, MAX_REFRESH_CONTENT + 1)]).offsiteRefresh).toBeUndefined();
+  });
+});
+
+describe("Chrome's refresh delay grammar (#1241, probed in Chromium 143)", () => {
+  const offsite = "https://account-check.example/";
+  it.each(["1e0", "3e2", "+1", "-1", "0x1", "Infinity", "1e"])("%s never schedules, so it is not parsed", (delay) => {
+    expect(parseRefreshContent(`${delay};url=${offsite}`)).toBeUndefined();
+    expect(flagged([`${delay};url=${offsite}`]).offsiteRefresh).toBeUndefined();
+  });
+
+  it("truncates fractions: a later same-second declaration wins, as in Chrome", () => {
+    // Observed: ["1.2;url=/a","1.9;url=/b"] and ["1.9;url=/a","1.2;url=/b"] both land on /b.
+    expect(flagged([`300.1;url=${offsite}`, "300.9;url=/account"]).offsiteRefresh).toBeUndefined();
+    expect(flagged(["300.9;url=/account", `300.1;url=${offsite}`]).offsiteRefresh).toBeDefined();
+  });
+});
+
+describe("current domain forms (#1241)", () => {
+  // flagged() pins the domain to shop.example, so these call analyzeSnapshot directly.
+  function flaggedAt(domain: string, target: string) {
+    return analyzeSnapshot(snapshot([`30;url=${target}`], { baseUrl: `https://${domain}/login` }), domain).offsiteRefresh;
+  }
+
+  it("compares IP-literal hosts exactly", () => {
+    expect(flaggedAt("203.0.113.5", "https://203.0.113.5/next")).toBeUndefined();
+    expect(flaggedAt("203.0.113.5", "https://203.0.113.9/next")).toContain("203.0.113.9");
+    expect(flaggedAt("203.0.113.5", "https://sub.account-check.example/")).toContain("account-check.example");
+  });
+
+  it("compares IDN hosts in their punycode form", () => {
+    // URL parsing punycodes a Unicode target, so it matches the (punycode) page host.
+    expect(flaggedAt("xn--bcher-kva.example", "https://bücher.example/next")).toBeUndefined();
+    expect(flaggedAt("xn--bcher-kva.example", "https://büchér.example/next")).toContain("xn--");
   });
 });
 
