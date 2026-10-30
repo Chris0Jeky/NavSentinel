@@ -1,5 +1,8 @@
 import { DBLCLICK_WINDOW_MS } from "../shared/doubleclick_timing";
 
+/** A control smaller than this in either CSS dimension is not a readable approval (#1142). */
+const MIN_CONTROL_PX = 10;
+
 /** Security controls need a painted, unobscured exposure window, not just trusted input. */
 export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: HTMLElement) {
   let visibleSince: number | null = null;
@@ -7,6 +10,29 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   let frame = 0;
   let disposed = false;
   const buttonExposure = new Map<HTMLElement, { since: number; rect: DOMRect }>();
+  // IntersectionObserver v2 reports the rendered result: occlusion by any later
+  // top-layer or pointer-events:none cover, and opacity, transforms, filters and
+  // blend modes on the target or its ancestors. The browser computes it in the
+  // rendering update after the page's rAF callbacks, so a page cannot restore
+  // the prompt only for our samples (#1142). Maps observed element -> visible since.
+  // Residual: Chrome recomputes at most every `delay` ms between those updates.
+  const painted = new Map<Element, number>();
+  let paint: (IntersectionObserver & { trackVisibility?: boolean }) | null = null;
+  try {
+    paint = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!(entry as IntersectionObserverEntry & { isVisible?: boolean }).isVisible) painted.delete(entry.target);
+        else if (!painted.has(entry.target)) painted.set(entry.target, entry.time);
+      }
+    }, { trackVisibility: true, delay: 100 } as IntersectionObserverInit);
+  } catch { /* Fall back below. */ }
+  // ponytail: without trackVisibility (Chromium builds lacking IO v2) the explicit
+  // checks below stand alone, with the #1142 residuals they cannot see.
+  if (!paint?.trackVisibility) {
+    paint?.disconnect();
+    paint = null;
+  }
+  paint?.observe(surface);
 
   function rendered(element: Element): boolean {
     if (!element.isConnected || document.visibilityState === "hidden") return false;
@@ -20,10 +46,13 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       if (css.display === "none" || css.visibility === "hidden" || css.visibility === "collapse" ||
           (css.opacity !== "" && Number(css.opacity) < 0.99) ||
           (css.filter && css.filter !== "none") || (css.clipPath && css.clipPath !== "none") ||
-          (css.clip && css.clip !== "auto") || (css.maskImage && css.maskImage !== "none")) return false;
+          (css.clip && css.clip !== "auto") || (css.maskImage && css.maskImage !== "none") ||
+          (css.mixBlendMode && css.mixBlendMode !== "normal")) return false;
     }
+    // getBoundingClientRect includes transforms and zoom, so this also refuses
+    // a scaled-down host that checkVisibility still calls visible.
     const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
+    return rect.width >= MIN_CONTROL_PX && rect.height >= MIN_CONTROL_PX;
   }
 
   function topLayer(): boolean {
@@ -53,6 +82,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       if (!surface.contains(button)) buttonExposure.delete(button);
     }
     for (const button of Array.from(surface.querySelectorAll<HTMLElement>("button"))) {
+      paint?.observe(button); // No-op once observed.
       const rect = button.getBoundingClientRect();
       if (visibleSince === null || !rendered(button) ||
           !hit(button, rect.x + rect.width / 2, rect.y + rect.height / 2)) buttonExposure.delete(button);
@@ -86,13 +116,19 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   sample();
   frame = requestAnimationFrame(tick);
 
+  // An element the browser has not reported painted-visible is never armed.
+  const paintedFor = (element: Element, now: number) =>
+    !paint || now - (painted.get(element) ?? now) >= DBLCLICK_WINDOW_MS;
+
   return {
     accepts(button: HTMLElement, event?: MouseEvent | KeyboardEvent): boolean {
       sample();
+      const now = performance.now();
       const exposure = buttonExposure.get(button);
       let allowed = !disposed && !!event && visibleSince !== null &&
-        performance.now() - visibleSince >= DBLCLICK_WINDOW_MS && exposure !== undefined &&
-        performance.now() - exposure.since >= DBLCLICK_WINDOW_MS && rendered(button);
+        now - visibleSince >= DBLCLICK_WINDOW_MS && exposure !== undefined &&
+        now - exposure.since >= DBLCLICK_WINDOW_MS && rendered(button) &&
+        paintedFor(surface, now) && paintedFor(button, now);
       if (allowed && event) {
         const rect = button.getBoundingClientRect();
         const keyboard = event instanceof KeyboardEvent || event.detail === 0;
@@ -114,6 +150,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       disposed = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
+      paint?.disconnect();
     },
   };
 }
