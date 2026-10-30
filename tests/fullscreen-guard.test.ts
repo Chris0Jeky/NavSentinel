@@ -144,8 +144,12 @@ describe("isScarewareFullscreen", () => {
     const deck = (style: string) =>
       div(`<section><h1>Slide 3: phishing awareness</h1></section><section style="${style}"><p>${SCARE_TEXT}</p></section>`);
     expect(isScarewareFullscreen(deck("display: none")).scare).toBe(false);
-    expect(isScarewareFullscreen(deck("visibility: hidden")).scare).toBe(false);
     expect(isScarewareFullscreen(deck("")).scare).toBe(true);
+    // A visibility:hidden or display:contents wrapper still renders its children: still read.
+    const wrapped = (style: string) =>
+      div(`<div style="${style}"><p style="visibility: visible">${SCARE_TEXT}</p></div>`);
+    expect(isScarewareFullscreen(wrapped("visibility: hidden")).scare).toBe(true);
+    expect(isScarewareFullscreen(wrapped("display: contents")).scare).toBe(true);
   });
 
   it("ignores script, style and hidden text", () => {
@@ -177,7 +181,7 @@ describe("isScarewareFullscreen", () => {
 describe("Gym fixtures", () => {
   const load = (name: string, id: string): Element => {
     const html = readFileSync(`gym/${name}`, "utf8");
-    // Attach it: a fullscreen element is always connected, and checkVisibility() is false when not.
+    // Attach it, as a real fullscreen element is, so computed styles resolve.
     return document.body.appendChild(document.adoptNode(new DOMParser().parseFromString(html, "text/html").getElementById(id)!));
   };
 

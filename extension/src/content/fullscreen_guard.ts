@@ -75,8 +75,9 @@ function mediaDominated(el: Element): boolean {
 
 /**
  * Bounded, in-order text of the subtree (open shadow roots included), skipping script/style
- * and anything not rendered (`hidden`, display:none, visibility:hidden): a deck's unshown
- * scam-training slide must not count as what the user sees.
+ * and display:none subtrees (`hidden` included): a deck's unshown scam-training slide must not
+ * count as what the user sees. Only display:none is skipped, since a visibility:hidden or
+ * display:contents wrapper can still render its children.
  */
 function boundedText(root: Element): string {
   let out = "";
@@ -90,8 +91,7 @@ function boundedText(root: Element): string {
     }
     if (n.nodeType === 1) {
       const e = n as Element;
-      if (SKIP_TAGS.has(e.tagName) || e.hasAttribute("hidden") ||
-        e.checkVisibility?.({ visibilityProperty: true }) === false) continue;
+      if (SKIP_TAGS.has(e.tagName) || e.hasAttribute("hidden") || getComputedStyle(e).display === "none") continue;
       if (e.shadowRoot) stack.push(e.shadowRoot);
     }
     for (let c = n.lastChild; c; c = c.previousSibling) stack.push(c);
