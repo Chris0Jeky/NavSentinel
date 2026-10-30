@@ -39,7 +39,11 @@ const ENDPOINTS = [
   "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/deviceauth?user_code=X",
   "https://login.live.com/oauth20_remoteconnect.srf",
   "https://www.google.com/device",
+  // What Chrome commits after google.com/device's server redirect (curl -IL, 2026-10-30).
+  "https://accounts.google.com/o/oauth2/device/usercode",
   "https://github.com/login/device",
+  // Signed out: github.com/login/device redirects here first.
+  "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Flogin%2Fdevice",
 ];
 
 async function setup(opts: { active?: boolean } = {}) {
@@ -140,15 +144,53 @@ describe("device-code phishing warning", () => {
   it.each([
     "https://learn.microsoft.com/en-us/entra",
     "https://portal.azure.com/",
-    "https://www.office.com/",
     "https://microsoft.com/en-us",
-    "https://accounts.google.com/signin",
-    "https://github.com/settings",
-  ])("ignores a source inside the identity-provider family (%s)", async (source) => {
+    "https://login.microsoftonline.com/common/oauth2/authorize",
+  ])("ignores the provider's own sign-in or docs page as the source (%s)", async (source) => {
     const { commit, swState } = await setup();
     swState.lastUrlByTab.set(30, source);
     await commit(DEVICE);
     expect(swState.tabnabPendingByTab.size).toBe(0);
+  });
+
+  it.each([
+    ["https://outlook.office.com/mail/inbox", "office.com"],
+    ["https://mail.google.com/mail/u/0/", "google.com"],
+    ["https://www.google.com/url?q=https://microsoft.com/devicelogin", "google.com"],
+    ["https://docs.google.com/document/d/x", "google.com"],
+    ["https://github.com/someone/repo", "github.com"],
+    ["https://accounts.google.com/signin", "google.com"],
+  ])("warns for mail, hosted documents and other providers as the source (%s)", async (source, from) => {
+    const { commit, swState } = await setup();
+    swState.lastUrlByTab.set(30, source);
+    await commit(DEVICE);
+    expect(swState.tabnabPendingByTab.get(30)).toMatchObject({ origReg: from, k: 1 });
+  });
+
+  it("keeps the source through GitHub's sign-in step back to the device page", async () => {
+    const { commit, complete, warnings } = await setup();
+    await commit("https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Flogin%2Fdevice");
+    await commit("https://github.com/login/device");
+    await complete();
+    expect(warnings()).toEqual([[30, { type: "ns-tabnab-warning", from: "docs-share.example", kind: "devicecode" }, expect.any(Function)]]);
+  });
+
+  it("treats a blob: page as the site that made it", async () => {
+    const { commit, swState } = await setup();
+    swState.lastUrlByTab.set(30, "blob:https://evil.example/6c1c0d2e-0000-4000-8000-000000000000");
+    await commit(DEVICE);
+    expect(swState.tabnabPendingByTab.get(30)).toMatchObject({ origReg: "evil.example", k: 1 });
+  });
+
+  it("lets a later tab swap replace a device-code entry", async () => {
+    const { browser, commit, swState } = await setup({ active: false });
+    await commit(DEVICE);
+    expect(swState.tabnabPendingByTab.get(30)?.k).toBe(1);
+    browser.tabs.onCreated.emit({ id: 40, openerTabId: 30 });
+    await flush();
+    browser.runtime.onMessage.emit({ type: "ns-dblclick-opener-nav", url: "https://phish.example/", ts: Date.now() }, { tab: { id: 40 } }, () => {});
+    await flush();
+    expect(swState.tabnabPendingByTab.get(30)?.k).toBeUndefined();
   });
 
   it.each([

@@ -14,6 +14,7 @@ export function warn(message: { from?: unknown; kind?: unknown }): void {
     showToast({
       message: `${site ? `${site} sent you to this device sign-in page` : "A website sent you to a device sign-in page"}. Only enter a code that your own TV, console or command line showed you. If a website, email or chat gave you this code, close this page: entering it signs that site in to your account.`,
       timeoutMs: 0,
+      persistent: true,
     });
     return;
   }
