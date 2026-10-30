@@ -119,12 +119,16 @@ describe("reverse tabnabbing warning (#1172)", () => {
     const { browser, swState, swap, warnings } = await setup({ url: ORIGINAL, active: true, windowId: 1 });
     await swap(20, SWAPPED, 2);
     expect(swState.tabnabPendingByTab.get(10)).toMatchObject({ origReg: "bank.example" });
+    // The swapped opener finishes loading while the user is still in the popup (Codex P2 on #1211).
+    browser.tabs.onUpdated.emit(10, { status: "complete" }, { id: 10, active: true, url: SWAPPED });
     browser.windows.onFocusChanged.emit(-1);
-    browser.windows.onFocusChanged.emit(2);
-    await flush();
-    expect(warnings()).toHaveLength(0);
     browser.tabs.query.mockImplementation(async ({ windowId }: { windowId: number }) =>
       windowId === 1 ? [{ id: 10 }] : [{ id: 20 }]);
+    browser.windows.onFocusChanged.emit(2);
+    await flush();
+    await flush();
+    expect(warnings()).toHaveLength(0);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(true);
     browser.windows.onFocusChanged.emit(1);
     await flush();
     await flush();

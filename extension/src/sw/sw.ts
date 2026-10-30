@@ -414,7 +414,7 @@ function recordTabnab(openerTabId: number, origReg: string | undefined, writeUrl
     if (tabnabPendingByTab.size >= TABNAB_PRUNE_LIMIT) {
       tabnabPendingByTab.delete(tabnabPendingByTab.keys().next().value!);
     }
-    tabnabPendingByTab.set(openerTabId, { origReg, ts: now });
+    tabnabPendingByTab.set(openerTabId, tab.active ? { origReg, ts: now, w: 1 } : { origReg, ts: now });
     swState.persistMap(tabnabPendingByTab, "tabnabPending");
   }).catch(() => {});
 }
@@ -1453,6 +1453,8 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 function onActivatedHandler(tabId: number): void {
   const pending = tabnabPendingByTab.get(tabId);
   if (!pending) return;
+  // Reached by an activation, a window refocus or a non-w load: the user is on the tab now.
+  delete pending.w;
   const drop = () => {
     tabnabPendingByTab.delete(tabId);
     swState.persistMap(tabnabPendingByTab, "tabnabPending");
@@ -1526,7 +1528,9 @@ function onUpdatedHandler(
   changeInfo: chrome.tabs.TabChangeInfo,
   tab: chrome.tabs.Tab
 ): void {
-  if (changeInfo.status === "complete" && tab.active && tabnabPendingByTab.has(tabId)) {
+  // A popup-window opener (w) loads while the user is still in the popup: wait for its focus.
+  const tabnab = tabnabPendingByTab.get(tabId);
+  if (changeInfo.status === "complete" && tab.active && tabnab && !tabnab.w) {
     onActivatedHandler(tabId);
   }
   const pendingRollback = pendingRollbackByTab.get(tabId);
