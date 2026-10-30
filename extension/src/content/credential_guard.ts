@@ -479,6 +479,9 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
           for (let i = 0; i < contentAnalysis.reasons.length; i++) {
             risk.reasons.push({ code: "CONTENT_FP", label: contentAnalysis.reasons[i] ?? "" });
           }
+          if (contentAnalysis.offsiteRefresh) {
+            risk.reasons.push({ code: "META_REFRESH_OFFSITE", label: contentAnalysis.offsiteRefresh });
+          }
           risk.severity = recalcSeverity(risk.score);
         }
       } catch (err) {
