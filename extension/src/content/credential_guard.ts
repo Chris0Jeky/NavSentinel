@@ -23,7 +23,7 @@ import {
   rememberFlippedPasswords, rememberPasswordInput,
 } from "./password_field";
 import { addPersistentListener, documentRewritten } from "./persistent_listener";
-import { isLoopbackAuthCodePaste } from "./consentfix";
+import { isAuthCodePaste } from "./consentfix";
 import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
@@ -802,7 +802,7 @@ let consentFixAllowed: string | null = null;
 function guardConsentFix(e: Event, text: string): void {
   if (cachedCredMode === "off" || !e.isTrusted) return;
   const host = pageIdentity().hostname;
-  if (!isLoopbackAuthCodePaste(text, host)) return;
+  if (!isAuthCodePaste(text, host)) return;
   if (consentFixAllowed === text) {
     consentFixAllowed = null;
     return;
@@ -810,9 +810,9 @@ function guardConsentFix(e: Event, text: string): void {
   e.preventDefault();
   e.stopImmediatePropagation();
   showToast({
-    message: "Heedline stopped this: a sign-in address with an access code from your own computer (localhost). A page that asks you to paste one is trying to take over your account, so close it.",
+    message: "Heedline stopped this: it carries a sign-in code for your account. Anyone who asks you to paste or send one (a page, a chat or an email) is almost certainly trying to take over your account. Do not share it.",
     timeoutMs: 0,
-    actions: [{ label: "Allow once (my own app)", onClick: () => { consentFixAllowed = text; } }],
+    actions: [{ label: "Allow once (I meant to)", onClick: () => { consentFixAllowed = text; } }],
   });
   void appendEvent({
     kind: "cred_paste_warn",
