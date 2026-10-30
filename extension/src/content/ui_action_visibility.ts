@@ -71,7 +71,10 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   }
 
   function visible(): boolean {
-    if (!topLayer() || !rendered(host) || !rendered(surface)) return false;
+    // No observer sees another window over ours: a page popup placed over an
+    // approval can take the arming window and close on the first press (#1225).
+    // In a subframe this needs that frame's own focus, which clicking it gives.
+    if (!document.hasFocus() || !topLayer() || !rendered(host) || !rendered(surface)) return false;
     const rect = surface.getBoundingClientRect();
     return hit(surface, rect.x + rect.width / 2, rect.y + rect.height / 2);
   }
