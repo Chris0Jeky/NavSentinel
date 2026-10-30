@@ -159,6 +159,9 @@ describe("looksLikeCommand", () => {
     expect(looksLikeCommand('He said "finger food" is fine; 2^10 = 1024.')).toBe(false);
     expect(looksLikeCommand("Write to support@example.com for help")).toBe(false);
     expect(looksLikeCommand("Use the \\\\server\\share path")).toBe(false);
+    // Words ending in "sh" are prose, not the sh shell.
+    expect(looksLikeCommand("Finish the English page, then publish ")).toBe(false);
+    expect(looksLikeCommand("curl -s x | sh -s")).toBe(true);
   });
 
   it("does NOT flag plain text", () => {

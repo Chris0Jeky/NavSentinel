@@ -22,7 +22,7 @@
  * ClickFix payloads.
  */
 export const COMMAND_PATTERN =
-  /powershell|pwsh|cmd\s*\/|cmd\.exe|%comspec%|conhost|mshta|msiexec|certutil|bitsadmin|rundll32|regsvr32|wscript|cscript|forfiles|pcalua|schtasks|installutil|wmic|msbuild|cmstp|curl[ .]|wget[ .]|bash|sh |\/bin\/|osascript|invoke-|iex[ (]|iwr |start-process|download(string|file)|new-object|system\.net|frombase64|base64|-enc(odedcommand| )|finger \S+@|@(ssl|\d+)\\|\\\\[\d.]+\\/i;
+  /powershell|pwsh|cmd\s*\/|cmd\.exe|%comspec%|conhost|mshta|msiexec|certutil|bitsadmin|rundll32|regsvr32|wscript|cscript|forfiles|pcalua|schtasks|installutil|wmic|msbuild|cmstp|curl[ .]|wget[ .]|bash|\bsh |\/bin\/|osascript|invoke-|iex[ (]|iwr |start-process|download(string|file)|new-object|system\.net|frombase64|base64|-enc(odedcommand| )|finger \S+@|@(ssl|\d+)\\|\\\\[\d.]+\\/i;
 
 /**
  * True when the text contains a shell/command keyword (min length 5).
