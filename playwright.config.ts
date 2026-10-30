@@ -7,6 +7,7 @@ import { resolveE2eTopology } from "./tests/e2e/playwright-topology";
 const topology = resolveE2eTopology();
 
 export default defineConfig({
+  globalSetup: "./tests/e2e/build-preflight.ts",
   // Playwright's automatic CI diff capture fetches the PR base with --depth=1,
   // making full checkouts shallow and breaking later acceptance ancestry (#948).
   // Keep read-only commit metadata; our own receipts attest the tested sources.
