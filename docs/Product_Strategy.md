@@ -171,6 +171,8 @@ No claim should inherit a higher level because a neighboring feature reached it.
 
 The first beta should be deliberately small—roughly ten participants is enough to expose gross usability and noise problems without implying statistical validation.
 
+Use the participant-owned, offline [beta study kit](testing/BETA_STUDY_KIT.md) for weekly worksheets, teach-back exercises, and D14/D30 check-ins (EV-01 / #425).
+
 ### Questions to answer
 
 - Did Heedline catch anything the browser/user would otherwise have missed?

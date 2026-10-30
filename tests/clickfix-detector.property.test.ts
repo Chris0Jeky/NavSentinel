@@ -111,7 +111,8 @@ describe("looksLikeCommand property tests", () => {
 
   it("all command keywords are detected", () => {
     for (const kw of ALL_COMMAND_KEYWORDS) {
-      expect(looksLikeCommand("a" + kw + "b")).toBe(true);
+      // A space before the keyword: "sh " is word-bounded so "finish " is prose (#1166).
+      expect(looksLikeCommand("a " + kw + "b")).toBe(true);
     }
   });
 

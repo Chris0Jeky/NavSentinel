@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 // Importing the build script must NOT trigger its network fetch — main() is guarded
 // to run only when the script is invoked directly. (#322 / disc#15)
-import { buildTrie, parsePSL, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildTrie, encodeTrie, parsePSL, renderTrieModule, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
+import { decodePslTrie } from "../extension/src/shared/domain";
+import { PSL_TRIE } from "../extension/src/shared/psl_trie";
 
 describe("update-psl build script: fail-closed on short rule sets (#322 / disc#15)", () => {
   it("parsePSL('') yields an empty rule set (the truncated-/empty-body case)", () => {
@@ -16,7 +20,7 @@ describe("update-psl build script: fail-closed on short rule sets (#322 / disc#1
     const rules = parsePSL("// comment\ncom\norg\nnet\n");
     expect(rules.length).toBeLessThan(MIN_PSL_RULES);
     // Pre-fix: main() had no such guard and would buildTrie([])/short -> overwrite
-    // psl_data.json with a near-empty trie. Now it fails closed before writing.
+    // psl_trie.ts with a near-empty trie. Now it fails closed before writing.
     expect(() => assertEnoughRules(rules)).toThrow(/too short/i);
   });
 
@@ -116,5 +120,28 @@ describe("update-psl build script: fail-closed on malformed rules (#322 / #18)",
       { type: "exact", labels: ["みんな"] },
       { type: "exact", labels: ["امارات"] },
     ]);
+  });
+});
+
+describe("update-psl build script: compact text trie round-trips", () => {
+  it("decodes encodeTrie output to the same trie, including suffix nodes, wildcards and exceptions", () => {
+    const trie = buildTrie(parsePSL("uk\nco.uk\nac.uk\njp\n*.kawasaki.jp\n!city.kawasaki.jp\n*.ck\n!www.ck\ncom\n"));
+    const text = encodeTrie(trie);
+    expect(text).toBe("+uk{co,ac},+jp{kawasaki{*,city{!}}},ck{*,www{!}},com");
+    expect(decodePslTrie(text)).toEqual(trie);
+  });
+
+  it("the committed psl_trie.ts is canonical and decodes to a full-size trie", () => {
+    const trie = decodePslTrie(PSL_TRIE);
+    expect(encodeTrie(trie)).toBe(PSL_TRIE);
+    const moduleText = readFileSync(resolve(__dirname, "../extension/src/shared/psl_trie.ts"), "utf-8");
+    expect(moduleText).toBe(renderTrieModule(PSL_TRIE));
+    expect(Object.keys(trie).length).toBeGreaterThan(1000);
+    expect(Object.getPrototypeOf(trie)).toBeNull();
+  });
+
+  it("refuses labels the text form cannot carry", () => {
+    expect(() => encodeTrie({ "a,b": 1 })).toThrow(/cannot be encoded/);
+    expect(() => encodeTrie({ "+a": 1 })).toThrow(/cannot be encoded/);
   });
 });
