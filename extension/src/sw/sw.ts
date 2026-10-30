@@ -407,9 +407,9 @@ function recordTabnab(openerTabId: number, origReg: string | undefined): void {
     }
     // Keep the first record: a later child may have been opened after the swap.
     if (tabnabPendingByTab.has(openerTabId)) return;
+    // Entries are only inserted, never re-stamped, so Map order is age order: drop the oldest.
     if (tabnabPendingByTab.size >= TABNAB_PRUNE_LIMIT) {
-      const oldest = [...tabnabPendingByTab.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
-      if (oldest) tabnabPendingByTab.delete(oldest[0]);
+      tabnabPendingByTab.delete(tabnabPendingByTab.keys().next().value!);
     }
     tabnabPendingByTab.set(openerTabId, { origReg, ts: now });
     swState.persistMap(tabnabPendingByTab, "tabnabPending");
