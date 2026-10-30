@@ -248,7 +248,7 @@ describe("session-local diagnostic bundle selection", () => {
       } },
       fs: { existsSync: () => true, mkdirSync() {}, rmSync() {}, mkdtempSync: () => "/profile",
         readFileSync: (file: string) => { manifestReads.push(file); return '{"version":"test-version"}'; } },
-      test: { skip() {} }, readBuiltUiGuardRevision: () => "source-guard",
+      test: { skip() {} }, selectBrandedChrome: () => ({}), readBuiltUiGuardRevision: () => "source-guard",
       git: (args: string[]) => args[0] === "status" ? "" : "exact-source-head",
       startAcceptanceServer: async () => ({ baseUrl: "http://127.0.0.1:1", close: async () => undefined }),
       hashDirectory: (directory: string) => { hashes.push(directory); return `hash:${directory}`; },
