@@ -82,8 +82,10 @@ export function focusWarningMessage(code: string): string {
   return `Heedline: this page's address looks risky for a password (${why.charAt(0).toLowerCase()}${why.slice(1)}). Check the address before typing.`;
 }
 
-// Microsoft's sign-in hosts (incl. sovereign clouds and Entra External ID / B2C).
-const MS_LOGIN_HOST = /(?:^|\.)(?:microsoftonline\.(?:com|us|cn)|microsoft\.com|live\.com|office\.com|outlook\.com|microsoft365\.com|chinacloudapi\.cn|b2clogin\.com|ciamlogin\.com)$/i;
+// Microsoft's sign-in hosts (incl. sovereign clouds and Entra External ID). Exact
+// labels where the parent domain also hosts customer content (windows.net,
+// chinacloudapi.cn); b2clogin.com is left out: tenants upload their own page HTML there.
+const MS_LOGIN_HOST = /(?:^|\.)(?:microsoftonline\.(?:com|us|cn)|microsoft\.com|live\.com|office\.com|outlook\.com|microsoft365\.com|ciamlogin\.com)$|^login\.(?:windows\.net|chinacloudapi\.cn)$/i;
 
 /**
  * AiTM proxies (Evilginx, EvilProxy, Tycoon 2FA, Sneaky 2FA) relay Microsoft's
