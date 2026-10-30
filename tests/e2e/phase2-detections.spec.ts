@@ -452,6 +452,28 @@ test.describe("ClickFix", () => {
     }
   });
 
+  test("clickfix-07 lure drawn late inside a shadow root after the command copy still alerts (#1218) @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+      await page.click("h1");
+      // An inert command-like write with nothing on screen yet: the first scan finds no lure.
+      await page.evaluate(() => navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64"));
+      await page.waitForTimeout(400);
+      // The instructions arrive afterwards, drawn in a web component's open shadow root.
+      await page.evaluate(() => {
+        const host = document.createElement("div");
+        host.attachShadow({ mode: "open" }).innerHTML =
+          "<p>Verify you are human: press Win + R, paste with Ctrl + V and press Enter.</p>";
+        document.body.appendChild(host);
+      });
+      await waitForToastMatch(page, /Run-box steps|Do NOT paste/i, 6000);
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("clickfix-02 terminal variant: clipboard write + instructions triggers alert @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 

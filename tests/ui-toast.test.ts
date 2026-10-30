@@ -123,12 +123,36 @@ describe("ui_toast", () => {
         expect(allow).toHaveBeenCalledOnce();
       });
 
+      // The fence delivers the press and then the click (#1203); the root hit-tests by x.
+      function pointerOver(x: number): void {
+        vi.mocked(ShadowRoot.prototype.elementFromPoint).mockImplementation(() => getButtons()[x < 150 ? 0 : 1]!);
+      }
+      function press(mod: ToastModule, host: HTMLElement, x: number) {
+        pointerOver(x);
+        return mod.activateOwnedToastControl(host, [host, document, window], new PointerEvent("pointerdown", { clientX: x, clientY: 40 }));
+      }
+      function release(mod: ToastModule, host: HTMLElement, x: number) {
+        pointerOver(x);
+        return mod.activateOwnedToastControl(host, [host, document, window], new MouseEvent("click", { detail: 1, clientX: x, clientY: 40 }));
+      }
+
       it("activates the hit control for pointer input", async () => {
         const { mod, host, allow } = await allowOnceToast();
         vi.advanceTimersByTime(1000);
-        const click = new MouseEvent("click", { detail: 1, clientX: 120, clientY: 40 });
-        expect(mod.activateOwnedToastControl(host, [host, document.documentElement, document, window], click)).toBe(true);
+        expect(press(mod, host, 120)).toBe(false);
+        expect(allow).not.toHaveBeenCalled();
+        expect(release(mod, host, 120)).toBe(true);
         expect(allow).toHaveBeenCalledOnce();
+      });
+
+      it("refuses a click released over a control other than the pressed one (#1203)", async () => {
+        const { mod, host, allow } = await allowOnceToast();
+        vi.advanceTimersByTime(1000);
+        press(mod, host, 180); // Dismiss
+        expect(release(mod, host, 120)).toBe(false); // Allow once moved under the pointer
+        expect(release(mod, host, 120)).toBe(false); // no press on Allow once at all
+        expect(allow).not.toHaveBeenCalled();
+        expect(getButtons()).toHaveLength(2);
       });
 
       it("activates nothing for keyboard input with no toast control focused", async () => {

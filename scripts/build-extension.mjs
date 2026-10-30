@@ -101,12 +101,13 @@ function installEarlyUiFence() {
   // unreachable from page script, so it needs no captured accessors. It fences
   // trusted pointer, mouse, touch, click, and keyboard input whose composed path
   // includes the extension-owned toast host before any page listener can observe
-  // it, then hands a click or keyboard activation to the module in the same
-  // world. The module accepts the host only by identity and resolves the control
-  // from its own WeakMap, so a page-forged host or attribute never activates a
+  // it, then hands a press, click or keyboard activation to the module in the
+  // same world (the press pins the click to the pressed control, #1203). The
+  // module accepts the host only by identity and resolves the control from its
+  // own WeakMap, so a page-forged host or attribute never activates a
   // real control, and the user's own controls do not depend on the MAIN-world
   // bridge.
-  const fencedLoaderTemplate = `(function(){'use strict';document.documentElement?.setAttribute('data-navsentinel-ui-guard','${UI_GUARD_REVISION_PLACEHOLDER}');let sink=null;const guard=e=>{if(!e.isTrusted)return;const path=e.composedPath();let host=null;for(let i=0;i<path.length;i++){const n=path[i];if(n instanceof Element&&n.id==='__navsentinel_toast_host'){host=n;break}}if(!host)return;const type=e.type,key=(type==='keydown'||type==='keyup')&&(e.key==='Enter'||e.key===' ');if(type==='click'||type==='auxclick'||type==='contextmenu'||key)e.preventDefault();e.stopImmediatePropagation();if(sink&&(type==='click'||type==='keyup'&&key))sink(host,path,e)};for(const type of ['pointerdown','pointerup','pointercancel','mousedown','mouseup','touchstart','touchend','touchcancel','click','dblclick','auxclick','contextmenu','keydown','keyup'])window.addEventListener(type,guard,{capture:true,passive:false});const injectTime=performance.now();(async()=>{const m=await import(chrome.runtime.getURL(${JSON.stringify(chunkPath)}));sink=m.activateUiControl??null;m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
+  const fencedLoaderTemplate = `(function(){'use strict';document.documentElement?.setAttribute('data-navsentinel-ui-guard','${UI_GUARD_REVISION_PLACEHOLDER}');let sink=null;const guard=e=>{if(!e.isTrusted)return;const path=e.composedPath();let host=null;for(let i=0;i<path.length;i++){const n=path[i];if(n instanceof Element&&n.id==='__navsentinel_toast_host'){host=n;break}}if(!host)return;const type=e.type,key=(type==='keydown'||type==='keyup')&&(e.key==='Enter'||e.key===' ');if(type==='click'||type==='auxclick'||type==='contextmenu'||key)e.preventDefault();e.stopImmediatePropagation();if(sink&&(type==='click'||type==='pointerdown'||type==='keyup'&&key))sink(host,path,e)};for(const type of ['pointerdown','pointerup','pointercancel','mousedown','mouseup','touchstart','touchend','touchcancel','click','dblclick','auxclick','contextmenu','keydown','keyup'])window.addEventListener(type,guard,{capture:true,passive:false});const injectTime=performance.now();(async()=>{const m=await import(chrome.runtime.getURL(${JSON.stringify(chunkPath)}));sink=m.activateUiControl??null;m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
   const { content: fencedLoader, revision } = finalizeUiGuardLoader(fencedLoaderTemplate);
   const finalCaptureScript = contentAddressedLoaderPath(captureScript, fencedLoader);
   const finalLoaderPath = path.join(dist, finalCaptureScript);

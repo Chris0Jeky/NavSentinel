@@ -258,6 +258,9 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-68 | #1199 credential risk decodes punycode labels (homograph lookalikes, #1196) | merge commit `025b9dc2` (merged 2026-10-30) | OPEN — not run |
 | AI-69 | #1204 reverse-tabnabbing warning when another tab swapped a hidden page (#1172) | merge commit `3ff1417e` (merged 2026-10-30) | OPEN — not run |
 | AI-70 | #1211 reverse-tabnabbing warning for openers under popup windows (#1205) | merge commit `177b7ace` (merged 2026-10-30) | OPEN — not run |
+| AI-80 | #1216 ConsentFix: a pasted or dropped localhost sign-in URL with an OAuth code is stopped (and first-party redirect codes, this PR) | merge commit `f80e3a67` (merged 2026-10-30) | OPEN — not run |
+| AI-81 | #1222 device-code phishing warning on Microsoft, Google and GitHub device sign-in pages | merge commit `9641f9ef` (merged 2026-10-30) | OPEN — not run |
+| AI-82 | #1224 masked and type-flipped password fields count as password fields for the credential prompt | merge commit `9d3e804e` (merged 2026-10-30) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -315,6 +318,26 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
   Export shows "... include explanations that are not part of the portable export." and the downloaded file
   matches the preview. A failure gets a revert PR for the merge commit.
+
+- **AI-80 (#1216):** nothing typed or pasted here is real. On a public page with a plain text box (for example
+  the search box on `https://www.wikipedia.org/`, without pressing Enter) paste
+  `http://localhost:8400/?code=0.AXoAexampleexample&state=x`: a warning card appears and the box stays empty;
+  pasting again is still stopped; after clicking the card's "Allow once (I meant to)" the next paste goes in. Then
+  paste `https://insiders.vscode.dev/redirect?code=0.AXoAexample` into the same box: stopped the same way. Pasting
+  ordinary text is untouched. A failure gets a revert PR for `f80e3a67` (and for this PR's merge).
+
+- **AI-81 (#1222):** do not enter any code. (1) Open `https://example.com/` and in its DevTools run
+  `location.href = "https://microsoft.com/devicelogin"`: on Microsoft's code-entry page a persistent warning names
+  example.com. (2) In a new tab, type `microsoft.com/devicelogin` in the address bar: no warning. (3) On
+  `https://learn.microsoft.com/` run the same `location.href` line in DevTools: no warning. (4) Repeat (1)
+  with `https://www.google.com/device`: a warning on Google's code page. A failure gets a revert PR for `9641f9ef`.
+
+- **AI-82 (#1224):** dummy credentials only, with the Gym served (`npm run gym:serve`). Open
+  `http://localhost:5173/level11-credential-guard.html` (its form posts cross-site to 127.0.0.1). In DevTools
+  change the password input to `type="text"` with `style="-webkit-text-security: disc"`, type a dummy value and
+  submit: the credential prompt appears; Cancel. Reload, type into the real password field, then in DevTools set its
+  `type` to `text` and submit: the prompt still appears. A cross-site search form on any site (for example a site
+  search box that sets `autocomplete="new-password"`) shows no prompt. A failure gets a revert PR for `9d3e804e`.
 
 - **AI-66 (#1183):** with the Gym served (`npm run gym:serve`): (1) open `gym/rw-fullscreen-locker.html`, press its
   button: fullscreen exits almost at once and the toast "Heedline closed a full-screen warning page..." appears;
