@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'" />
+  <title>Webmail - Sign in</title>
+  <link rel="canonical" href="http://203.0.113.24/webmail/signin" />
+  <style>
+    body { font-family: sans-serif; background: #eef1f5; margin: 0; }
+    .note { margin: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; }
+    .card { width: 360px; margin: 24px auto; background: #fff; border-radius: 8px; padding: 28px; }
+    label { display: block; font-size: 12px; margin-bottom: 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 12px; }
+    button { background: #2f5d8a; color: #fff; border: 0; border-radius: 4px; padding: 10px 18px; }
+  </style>
+</head>
+<body>
+  <p class="note">Synthetic fetch-only credential kit (#1170). There is no form: the button posts with fetch, so no submit event fires. The canonical URL models an http page on a raw IP address (TEST-NET-3); the local page does not acquire it, and on localhost the focus warning is exempt by design. The fetch target is a reserved .invalid host and Content Security Policy (connect-src 'none') blocks it. Expected on a risky address: focusing the password field shows a warn-only Heedline toast. Never enter real credentials.</p>
+  <div class="card">
+    <h1>Webmail</h1>
+    <p>Sign in to continue.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" />
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" />
+    <button type="button" id="signin">Sign in</button>
+    <p id="status"></p>
+  </div>
+  <script>
+    document.getElementById("signin").addEventListener("click", function () {
+      fetch("https://collector.invalid/fixture", { method: "POST", body: "inert" })
+        .catch(function () { document.getElementById("status").textContent = "Request blocked (inert fixture)."; });
+    });
+  </script>
+</body>
+</html>
