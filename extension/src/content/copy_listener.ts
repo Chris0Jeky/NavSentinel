@@ -31,7 +31,7 @@ export function recordCopyEvent(event: ClipboardEvent, now = Date.now()): number
   if (!text) return 0;
   const command = looksLikeCommand(text);
   recordClipboardWrite({ ts: now, contentLength: text.length, looksLikeCommand: command });
-  // Length of a recorded non-command copy (0 when nothing was recorded or it was a command).
+  // -1 for a command, else the trimmed length of the recorded non-command copy.
   return command ? -1 : text.trim().length;
 }
 

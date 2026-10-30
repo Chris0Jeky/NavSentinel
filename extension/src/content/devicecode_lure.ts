@@ -10,7 +10,7 @@ import { showToast } from "./ui_toast";
 // Matched on text with whitespace and invisible characters removed after NFKC, so an
 // address split across elements, broken by <wbr>/zero-width characters, spaced out or
 // written in full-width characters still matches what the victim reads and types.
-const DEVICE_PAGE_TEXT = /microsoft\.com\/devicelogin|aka\.ms\/devicelogin|login\.microsoft(?:online)?\.com\/[\w.-]+\/oauth2\/(?:v2\.0\/)?deviceauth|login\.live\.com\/oauth20_remoteconnect|google\.com\/device|github\.com\/login\/device/i;
+const DEVICE_PAGE_TEXT = /microsoft\.com\/devicelogin|aka\.ms\/devicelogin|login\.microsoft(?:online)?\.com\/[\w.-]+\/oauth2\/(?:v2\.0\/)?deviceauth|login\.live\.com\/oauth20_remoteconnect|google\.com\/device(?!s)|github\.com\/login\/device/i;
 const INVISIBLE = /[\s\u00AD\u200B-\u200F\u2060\uFEFF]+/g;
 // Docs, Q&A and in-browser terminals where users legitimately run `az login` or
 // `gh auth login`. *.github.dev only one label deep: app.github.dev ports serve anyone's pages.

@@ -34,7 +34,7 @@ describe("checkDeviceCodeLure", () => {
     for (const host of ["learn.microsoft.com", "shell.azure.com", "fluffy-space-x.github.dev", "colab.research.google.com"]) {
       checkDeviceCodeLure(host);
     }
-    document.body.innerHTML = "<p>Your order code is ABCD1234.</p>";
+    document.body.innerHTML = "<p>Manage devices at google.com/devices</p><p>Your order code is ABCD1234.</p>";
     checkDeviceCodeLure("shop.example");
     expect(showToast).not.toHaveBeenCalled();
   });
