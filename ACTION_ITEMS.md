@@ -259,9 +259,10 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
 
 - **AI-60 (#1140):** follow [`ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md`](docs/testing/ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md).
   (1) A normal credential prompt's Proceed once and a toast's Trust or Allow once still work by mouse and by
-  Enter/Space after the prompt has been visible briefly. (2) A local page that hides the prompt with CSS
-  (`opacity:0`, `visibility:hidden`) cannot get an approval from a click on the hidden button; Cancel and Escape
-  still work. A failure gets a revert PR for `a75986b9`.
+  Enter/Space once the prompt has been visible for 800 ms. (2) On a local page, hide the prompt host
+  `#__sentinelsuite_cred_modal_host__` with `opacity: 0 !important` (as `tests/e2e/credential-modal-visibility.spec.ts`
+  does): a click on the hidden Proceed once is refused and the decision stays pending; Cancel and Escape still
+  work. After restoring visibility, approvals arm again only after 800 ms. A failure gets a revert PR for `a75986b9`.
 
 - **AI-61 (#1155):** the PR body's "Gate-3 check for the owner" procedure (an about:blank and a srcdoc probe
   frame must not navigate the top page without the guard). Also browse a few ordinary pages with about:blank ad or
@@ -273,7 +274,7 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   a page's own web component still submits. A failure gets a revert PR for `2f28d476`.
 
 - **AI-63 (#1152):** with automatic overlay cleanup turned on in Options, serve the Gym (`npm run gym:serve`) and
-  open `overlay-nesting-lab.html?case=deep-static` and `?case=shadow-static`: the pre-existing deep and shadow-root
+  open `http://localhost:5173/overlay-nesting-lab.html?case=deep-static` and `?case=shadow-static`: the pre-existing deep and shadow-root
   traps are hidden on load with an Undo card. Open `?case=deep-benign`: the slotted dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
   (residual risks are tracked in #1189). A failure gets a revert PR for `2b6523af`.
 
@@ -374,7 +375,7 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
-- **AI-48 to AI-56**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-56) above by
+- **AI-48 to AI-56**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-onward) above by
   owner decision 2026-10-16, with AI-52 (#1072) added on 2026-10-24 after its Windows hold cleared. The AI-48 (#1100) and AI-50 (#1103)
   branch entries were retired here; build their merge commits, not the pre-merge code heads. An AI-49/51/53/54
   entry that a PR branch brings into this list on merge is superseded the same way: run the check on that PR's
