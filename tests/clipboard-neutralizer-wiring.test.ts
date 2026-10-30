@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
  */
 
 const NS_SOURCE = "__navsentinel__";
-const WARNING = "Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal";
+// The existing ClickFix warning: the dialog wording, or the overlay-free wording from #1182.
+const WARNING = /^Heedline (detected a fake verification dialog|saw this page copy a command)/;
 
 const appendEvent = vi.fn(async (_entry: unknown) => {});
 const showToast = vi.fn((_opts: { message: string }) => {});
@@ -112,7 +113,7 @@ describe("ClickFix clipboard neutralizer wiring (#1169)", () => {
   it("keeps the existing warning when the neutralizer fails, and passes the current receipt", async () => {
     sendWrite(true);
     await waitFor(() => showToast.mock.calls.length > 0, "warning toast");
-    expect(showToast.mock.calls[0]![0].message.startsWith(WARNING)).toBe(true);
+    expect(showToast.mock.calls[0]![0].message).toMatch(WARNING);
     await waitFor(() => onClickFixReceipt.mock.calls.length === 1, "neutralizer call");
     expect(onClickFixReceipt.mock.calls[0]![0]).toMatchObject({ command: true, mode: "smart", detected: true });
     await new Promise((resolve) => setTimeout(resolve, 20));
