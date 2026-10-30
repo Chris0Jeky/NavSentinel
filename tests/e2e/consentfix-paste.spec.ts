@@ -3,7 +3,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { assertNoToastFor, waitForNavSentinelBridge, waitForToastMatch } from "./extension_test_utils";
+import { assertNoToastFor, clickToastButton, waitForNavSentinelBridge, waitForToastMatch } from "./extension_test_utils";
 
 // ConsentFix: a page asks the user to paste the localhost URL a real sign-in redirected to.
 // The guard must stop the paste before the page's own capture listener reads the code.
@@ -62,10 +62,16 @@ test("ConsentFix: a pasted localhost sign-in URL with a code is stopped @regress
     await waitForNavSentinelBridge(page);
 
     await pasteText(page, "http://localhost:8400/?code=0.AXoA_example&state=abc");
-    await waitForToastMatch(page, /stopped this paste/i, 6000);
+    await waitForToastMatch(page, /stopped this: a sign-in address/i, 6000);
     expect(await page.inputValue("#box")).toBe("");
     expect(await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen)).toEqual([]);
-    // A deliberate repeat of the same paste (a developer's own callback URL) goes through.
+    // A plain retry (what a coached victim does) is still stopped.
+    await page.click("#box");
+    await page.keyboard.press("Control+V");
+    await page.waitForTimeout(300);
+    expect(await page.inputValue("#box")).toBe("");
+    // The toast's own button lets a developer paste their callback URL once.
+    await clickToastButton(page, "Allow once (my own app)");
     await page.click("#box");
     await page.keyboard.press("Control+V");
     await expect.poll(() => page.inputValue("#box")).toContain("localhost:8400");

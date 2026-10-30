@@ -13,6 +13,14 @@ describe("isLoopbackAuthCodePaste", () => {
     expect(isLoopbackAuthCodePaste("HTTPS://LOCALHOST/?id_token=abc", "lure.example")).toBe(true);
   });
 
+  it("flags the code with the address trimmed off", () => {
+    const tail = "code=0.AXoAexampleexampleexample-abc&state=xyz&session_state=123";
+    expect(isLoopbackAuthCodePaste(tail, "lure.example")).toBe(true);
+    expect(isLoopbackAuthCodePaste(`?${tail}`, "lure.example")).toBe(true);
+    expect(isLoopbackAuthCodePaste("code=short&state=x", "lure.example")).toBe(false);
+    expect(isLoopbackAuthCodePaste("code=0.AXoAexampleexampleexample-abc", "lure.example")).toBe(false);
+  });
+
   it("leaves ordinary pastes and loopback pages alone", () => {
     expect(isLoopbackAuthCodePaste(code, "localhost")).toBe(false);
     expect(isLoopbackAuthCodePaste(code, "127.0.0.1")).toBe(false);
