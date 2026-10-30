@@ -1591,7 +1591,7 @@ function patchClipboard(): void {
   // #1166: wrap the prototype, not the instance. An own-property wrapper is
   // skipped by `delete navigator.clipboard.writeText` or a direct
   // Clipboard.prototype call, which leaves ClickFix without its write receipt.
-  const clip = Object.getPrototypeOf(navigator.clipboard) as Clipboard;
+  const clip = Clipboard.prototype;
 
   // Share the unchanged successful-write receipt across text, item and
   // non-text fallback paths without retaining the clipboard contents.
@@ -1942,10 +1942,10 @@ function patchOpenerLocation(): void {
 
 // Also intercept document.execCommand("copy") as an evasion vector. Wrapped on
 // Document.prototype for the same reason as the clipboard methods (#1166).
-const nativeExecCommand = document.execCommand;
+const nativeExecCommand = document.execCommand.bind(document);
 try {
-  Document.prototype.execCommand = function (this: Document, command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
-    const result = nativeApply(nativeExecCommand, this, [command, ...rest]);
+  Document.prototype.execCommand = function (command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
+    const result = nativeExecCommand(command, ...rest);
     // Only emit clipboard event when the copy actually succeeded
     if (command.toLowerCase() === "copy" && result && !isOff()) {
       // Read the current selection to detect command-like content

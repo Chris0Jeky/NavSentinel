@@ -35,7 +35,8 @@ function boot(sink?: Sink) {
   // The guard wraps the prototype (#1166), so model an instance that inherits it.
   const clipboard = Object.create({ writeText: native }) as { writeText: Sink };
   const sandbox = {
-    exports: {}, navigator: { clipboard }, nativeClipboardWriteText: native,
+    exports: {}, navigator: { clipboard }, Clipboard: { prototype: Object.getPrototypeOf(clipboard) },
+    nativeClipboardWriteText: native,
     nativeClipboardWrite: undefined, nativeApply: Reflect.apply, debug: false, nowMs: () => 123,
     postToIsolated: (type: string, payload: Record<string, unknown>) => receipts.push({ type, payload }),
   };

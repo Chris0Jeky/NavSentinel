@@ -24,7 +24,8 @@ function boot(nativeWrite: () => Promise<void> = () => Promise.resolve()) {
     write: (_items: Item[]) => nativeWrite(), writeText: (_text: string) => Promise.resolve(),
   }) as { write(items: Item[]): Promise<void>; writeText(text: string): Promise<void> };
   vm.runInNewContext(executable, {
-    exports: {}, navigator: { clipboard }, nativeClipboardWrite: clipboard.write,
+    exports: {}, navigator: { clipboard }, Clipboard: { prototype: Object.getPrototypeOf(clipboard) },
+    nativeClipboardWrite: clipboard.write,
     nativeClipboardWriteText: clipboard.writeText, nativeApply: Reflect.apply,
     debug: false, nowMs: () => 123,
     postToIsolated: (type: string, payload: Record<string, unknown>) => rows.push({ type, payload }),
