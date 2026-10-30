@@ -93,8 +93,8 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   "verdict.reasons, notify };": null,
   // Password-focus warning (#1170): one computeCredentialRisk page code.
   '[reason.code, "PASSWORD_FOCUS_WARNING"]': "credential",
-  // Password-focus warning from page content (AiTM / named kits).
-  '["CONTENT_FP", "PASSWORD_FOCUS_WARNING"]': "credential",
+  // Password-focus warning for a relayed Microsoft sign-in form (AiTM).
+  '["RELAYED_MICROSOFT_LOGIN", "PASSWORD_FOCUS_WARNING"]': "credential",
   // Credential modal display lines, never persisted.
   "getCredentialReasonLines(risk.reasons)": null,
   // Prompt-outcome records (a separate store), not the event log.

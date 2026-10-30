@@ -196,41 +196,41 @@ describe("credential_guard password-focus hook", () => {
   });
 });
 
-describe("password-focus warning from page content (AiTM and named kits)", () => {
-  const base = { brandMismatch: false, phishingKitMatch: false, suspiciousFormAction: false, score: 0, reasons: [] };
+describe("password-focus warning for a relayed Microsoft sign-in form (AiTM)", () => {
+  const field = (id: string, name: string): HTMLInputElement => {
+    const input = document.createElement("input");
+    input.type = "password";
+    input.id = id;
+    input.name = name;
+    return input;
+  };
 
-  it("warns on a named kit and on a brand-titled page, not on a logo or a generic fingerprint", async () => {
-    const { contentFocusMessage } = await import("../extension/src/content/credential_focus_warning");
-    expect(contentFocusMessage({ ...base, phishingKitMatch: true, kitName: "EvilProxy" }, "secure-docs.example"))
-      .toContain("known phishing kit (EvilProxy)");
-    expect(contentFocusMessage({ ...base, brandMismatch: true, brandDetected: "PayPal", brandTitleMatch: true }, "pp-verify.example"))
-      .toContain("calls itself PayPal, but its address (pp-verify.example)");
-    // A "Sign in with Microsoft" button: logo/body only, no title match.
-    expect(contentFocusMessage({ ...base, brandMismatch: true, brandDetected: "Microsoft" }, "acme.example")).toBeNull();
-    expect(contentFocusMessage({ ...base, phishingKitMatch: true, kitName: "Hidden-Input-Harvester" }, "acme.example")).toBeNull();
-    expect(contentFocusMessage(base, "acme.example")).toBeNull();
+  it("flags Microsoft's password field on any host that is not Microsoft's", async () => {
+    const { isRelayedMicrosoftLogin } = await import("../extension/src/content/credential_focus_warning");
+    expect(isRelayedMicrosoftLogin(field("i0118", "passwd"), "login.secure-docs-share.com")).toBe(true);
+    for (const host of ["login.microsoftonline.com", "login.live.com", "login.microsoftonline.us", "contoso.b2clogin.com", "contoso.ciamlogin.com"]) {
+      expect(isRelayedMicrosoftLogin(field("i0118", "passwd"), host), host).toBe(false);
+    }
+    // Ordinary password fields, and look-alikes of only one attribute, are not Microsoft's form.
+    expect(isRelayedMicrosoftLogin(field("password", "password"), "acme.example")).toBe(false);
+    expect(isRelayedMicrosoftLogin(field("i0118", "password"), "acme.example")).toBe(false);
+    expect(isRelayedMicrosoftLogin(field("pw", "passwd"), "acme.example")).toBe(false);
   });
 
-  it("runs the content check only when no address signal fires on an eligible page", async () => {
+  it("warns at focus with no address signal, and never on an off-limits page", async () => {
     const { focusWarningReason, warnOnPasswordFocus } = await import("../extension/src/content/credential_focus_warning");
     vi.mocked(getCredentialSettings).mockResolvedValue(smart);
-    vi.mocked(getTrustedDomains).mockResolvedValue(["paypal.com"]);
-    expect(focusWarningReason("https://pp-verify.example/login", [], smart)).toBeNull();
-    expect(focusWarningReason("https://paypal.com/login", ["paypal.com"], smart)).toBeUndefined();
-    expect(focusWarningReason("https://pp-verify.example/login", [], off)).toBeUndefined();
-
+    vi.mocked(getTrustedDomains).mockResolvedValue([]);
+    expect(focusWarningReason("https://login.secure-docs-share.com/", [], smart)).toBeNull();
+    expect(focusWarningReason("https://login.secure-docs-share.com/", [], off)).toBeUndefined();
     vi.mocked(showToast).mockClear();
     vi.mocked(appendEvent).mockClear();
-    document.title = "Log in to PayPal";
-    document.body.innerHTML = '<form><input type="password"></form>';
-    await warnOnPasswordFocus("https://pp-verify.example/login");
-    expect(vi.mocked(showToast).mock.calls[0]?.[0].message).toContain("calls itself PayPal");
-    expect(appendEvent).toHaveBeenCalledWith(expect.objectContaining({ reasons: ["CONTENT_FP", "PASSWORD_FOCUS_WARNING"] }));
-
+    await warnOnPasswordFocus("https://login.secure-docs-share.com/", field("i0118", "passwd"));
+    expect(vi.mocked(showToast).mock.calls[0]?.[0].message).toContain("Microsoft's sign-in form, but it is served by login.secure-docs-share.com");
+    expect(appendEvent).toHaveBeenCalledWith(expect.objectContaining({ reasons: ["RELAYED_MICROSOFT_LOGIN", "PASSWORD_FOCUS_WARNING"] }));
     vi.mocked(showToast).mockClear();
-    document.title = "Log in | Acme";
-    document.body.innerHTML = '<form><input type="password"></form><button><img alt="Microsoft logo">Sign in with Microsoft</button>';
-    await warnOnPasswordFocus("https://acme.example/login");
+    await warnOnPasswordFocus("https://acme.example/login", field("password", "password"));
+    await warnOnPasswordFocus("https://login.secure-docs-share.com/");
     expect(showToast).not.toHaveBeenCalled();
   });
 });

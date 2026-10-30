@@ -1,6 +1,5 @@
 import { appendEvent, getCredentialSettings, getTrustedDomains, type CredentialSettings } from "../shared/storage";
-import { computeCredentialRisk, getRegistrableDomain, isIPAddress, normalizeHost, type RiskReason } from "../shared/domain";
-import type { ContentAnalysisResult } from "./content_analyzer";
+import { computeCredentialRisk, isIPAddress, normalizeHost, type RiskReason } from "../shared/domain";
 import { explainJournalReason } from "../evidence/evidence_reasons";
 import { showToast } from "./ui_toast";
 
@@ -78,51 +77,41 @@ export function focusWarningReason(
   return null;
 }
 
-/**
- * Structural fingerprints that also match ordinary pages; only named kits
- * (EvilProxy, Evilginx, W3LL, Telegram/Discord exfil, ...) warn at focus.
- */
-const GENERIC_KITS = new Set([
-  "Phish-Hidden-Iframe", "Base64-Form-Action", "Exfil-Hidden-Form", "Data-Exfil-Iframe",
-  "Suspicious-Meta-Refresh", "OTP-Kit", "Hidden-Input-Harvester",
-]);
-
-/**
- * AiTM proxies and fetch-exfil kits often sit on an address with no signal at
- * all. At first password focus, a named kit fingerprint or a page title naming
- * a brand the domain does not belong to is strong enough to warn. A logo or a
- * "Sign in with Microsoft" button alone is not.
- */
-export function contentFocusMessage(content: ContentAnalysisResult, host: string): string | null {
-  if (content.phishingKitMatch && content.kitName && !GENERIC_KITS.has(content.kitName)) {
-    return `Heedline: this sign-in page matches a known phishing kit (${content.kitName}). Do not type a password here.`;
-  }
-  if (content.brandTitleMatch && content.brandDetected) {
-    return `Heedline: this page calls itself ${content.brandDetected}, but its address (${host}) is not ${content.brandDetected}'s. Check the address before typing a password.`;
-  }
-  return null;
-}
-
 export function focusWarningMessage(code: string): string {
   const why = explainJournalReason(code);
   return `Heedline: this page's address looks risky for a password (${why.charAt(0).toLowerCase()}${why.slice(1)}). Check the address before typing.`;
 }
 
-export async function warnOnPasswordFocus(pageUrl: string): Promise<void> {
+// Microsoft's sign-in hosts (incl. sovereign clouds and Entra External ID / B2C).
+const MS_LOGIN_HOST = /(?:^|\.)(?:microsoftonline\.(?:com|us|cn)|microsoft\.com|live\.com|office\.com|outlook\.com|microsoft365\.com|chinacloudapi\.cn|b2clogin\.com|ciamlogin\.com)$/i;
+
+/**
+ * AiTM proxies (Evilginx, EvilProxy, Tycoon 2FA, Sneaky 2FA) relay Microsoft's
+ * real sign-in page from their own host, and clone kits copy its markup: the
+ * password field is id "i0118", name "passwd". On any other host that form is a
+ * relay or a copy, even when the address itself carries no signal. Keyed on the
+ * focused field itself, so nothing else on the page can stand in for it.
+ */
+export function isRelayedMicrosoftLogin(field: HTMLInputElement, host: string): boolean {
+  return field.id === "i0118" && field.name === "passwd" && !MS_LOGIN_HOST.test(host);
+}
+
+export async function warnOnPasswordFocus(pageUrl: string, field?: HTMLInputElement): Promise<void> {
   const cfg = await getCredentialSettings();
   const reason = focusWarningReason(pageUrl, await getTrustedDomains(), cfg);
   if (reason === undefined) return;
   const host = normalizeHost(new URL(pageUrl).hostname);
   if (!reason) {
-    const { analyzePageContent } = await import("./content_analyzer");
-    const message = contentFocusMessage(analyzePageContent(document, getRegistrableDomain(host) || host), host);
-    if (!message) return;
-    showToast({ message, timeoutMs: 12000 });
+    if (!field || !isRelayedMicrosoftLogin(field, host)) return;
+    showToast({
+      message: `Heedline: this is Microsoft's sign-in form, but it is served by ${host}, not by Microsoft. Pages that relay Microsoft's sign-in can take over your account even with MFA. Do not sign in here.`,
+      timeoutMs: 0,
+    });
     await appendEvent({
       kind: "cred_paste_warn",
       site: host,
       url: pageUrl,
-      reasons: ["CONTENT_FP", "PASSWORD_FOCUS_WARNING"],
+      reasons: ["RELAYED_MICROSOFT_LOGIN", "PASSWORD_FOCUS_WARNING"],
       extra: { trigger: "password_focus" }
     });
     return;

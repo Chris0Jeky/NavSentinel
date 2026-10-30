@@ -839,7 +839,7 @@ addPersistentListener(window, "focusin", (e) => {
     !isPasswordTypeInput(t) || !isVisiblePasswordField(t)) return;
   focusChecked = true;
   void import("./credential_focus_warning")
-    .then((m) => m.warnOnPasswordFocus(pageIdentity().href))
+    .then((m) => m.warnOnPasswordFocus(pageIdentity().href, t))
     .catch((err) => { console.warn("[NavSentinel] password focus check failed:", err); });
 });
 
