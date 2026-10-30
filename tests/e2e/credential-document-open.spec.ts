@@ -149,6 +149,12 @@ test("a second document.open() keeps the credential guard (#1105 review) @regres
 // #1113: the written script runs inside document.write(), before the guard's
 // MutationObserver re-adds its window listeners, so its capture listener is first.
 const HIDE_SUBMIT = `<script>addEventListener("submit", (e) => e.stopImmediatePropagation(), true);</script>`;
+// The deep review of #1187: after stopping the submit, the page makes the form look
+// password-free (the field list keeps the value) so a live password check misses it.
+const HIDE_SUBMIT_AND_PASSWORD = `<script>addEventListener("submit", (e) => {
+  e.stopImmediatePropagation();
+  for (const f of document.querySelectorAll('input[type="password"]')) f.type = "text";
+}, true);</script>`;
 const HIDE_SUBMIT_AND_FORMDATA = `<script>
   addEventListener("submit", (e) => e.stopImmediatePropagation(), true);
   addEventListener("formdata", (e) => e.stopImmediatePropagation(), true);
@@ -191,5 +197,16 @@ test("document.open() keeps the paste warning (#1105) @regression", async () => 
       document.getElementById("password")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true }));
     });
     await waitForToastText(page, "You pasted into a password field on an untrusted domain");
+  });
+});
+
+test("document.open() + a written listener that hides the password field after the submit sends nothing (#1113 review) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(async (page, attacker) => {
+    await page.evaluate(REWRITE, HIDE_SUBMIT_AND_PASSWORD + LOGIN_FORM);
+    await expect(page.locator("#go")).toBeVisible();
+    await page.click("#go", { noWaitAfter: true });
+    await page.waitForTimeout(1_500);
+    expect(attacker).toEqual([]);
   });
 });

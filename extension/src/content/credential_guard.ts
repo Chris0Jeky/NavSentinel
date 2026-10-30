@@ -227,8 +227,10 @@ type ResumeBinding = {
 };
 
 let resumeBinding: ResumeBinding | null = null;
-// #1113: the destination each resumed form was approved for, read by the navigate listener.
+// #1113: the destination each resumed form was approved for, and the forms whose
+// submit the guard saw and let through; both are read by the navigate listener.
 const resumedTo = new WeakMap<HTMLFormElement, string>();
+const submitSeen = new WeakSet<HTMLFormElement>();
 // One automatic re-check per moved resubmission (settleResumeBinding).
 const recheckRequested = new WeakSet<HTMLFormElement>();
 const rechecking = new WeakSet<HTMLFormElement>();
@@ -751,28 +753,41 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 // Window capture, registered at document_start: ahead of every page submit
 // listener, so page script cannot stop a submit before the guard sees it.
 // #1105: document.open() erases these (window included); the helper re-adds them.
-addPersistentListener(window, "submit", (e) => void handleSubmit(e as SubmitEvent));
+addPersistentListener(window, "submit", (e) => {
+  void handleSubmit(e as SubmitEvent);
+  // handleSubmit cancels synchronously; a submit it held is not "let through".
+  if (!e.defaultPrevented && e.target instanceof HTMLFormElement) submitSeen.add(e.target);
+});
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
 addPersistentListener(window, "formdata", handleFormData);
 
 // #1113: a script written by document.write() in the same task as document.open()
 // adds its window capture listener before the helper above re-adds the guard, so it
 // can stop a submit unseen. document.open() does not erase listeners on the
-// Navigation API object, so this one stays ahead of every page listener. A
-// password form's navigation is cancelled and assessed when the user submitted it
-// and the guard never held it, or when a resumed one left its approved destination.
-// ponytail: same-frame only; a POST to another window still depends on handleFormData.
+// Navigation API object, so this one stays ahead of every page listener. A user
+// form navigation whose submit the guard never saw can only come from such a page
+// listener, so it fails closed whatever the form looks like now (the page can switch
+// the password field's type or move the submitter after submitting); a password form
+// is then assessed. A resumed form is cancelled and re-assessed if it left its
+// approved destination.
+// ponytail: same-frame only; a submit targeting another window or frame stays open (#1186).
 type FormNavigateEvent = Event & { sourceElement?: Element | null; userInitiated: boolean; destination: { url: string } };
 (self as { navigation?: EventTarget }).navigation?.addEventListener("navigate", (e) => {
   const n = e as FormNavigateEvent;
   const s = n.sourceElement;
-  const form = s instanceof HTMLFormElement ? s : (s as HTMLButtonElement | null | undefined)?.form;
-  if (!(form instanceof HTMLFormElement) || cachedCredMode === "off" || !isPasswordForm(form)) return;
-  const approved = resumedTo.get(form);
-  resumedTo.delete(form);
-  if (approved === undefined ? !n.userInitiated : !actionMoved(approved, n.destination.url)) return;
+  // A link has no .form; a submitter detached after its submit has form === null.
+  const owner = s instanceof HTMLFormElement ? s : (s as HTMLButtonElement | null | undefined)?.form;
+  if (owner === undefined || cachedCredMode === "off") return;
+  const form = owner instanceof HTMLFormElement ? owner : null;
+  const approved = form ? resumedTo.get(form) : undefined;
+  const seen = !!form && submitSeen.has(form);
+  if (form) {
+    resumedTo.delete(form);
+    submitSeen.delete(form);
+  }
+  if (approved !== undefined ? !actionMoved(approved, n.destination.url) : seen || !n.userInitiated) return;
   n.preventDefault();
-  void handleSubmit({
+  if (form && isPasswordForm(form)) void handleSubmit({
     target: form,
     submitter: s === form ? null : s,
     preventDefault() {},
