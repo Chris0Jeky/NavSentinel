@@ -176,10 +176,11 @@ describe("device-code phishing warning", () => {
   });
 
   it("warns for a lure on the device page's own provider (Docs to Google, a repo to GitHub)", async () => {
-    for (const [source, target, from] of [
+    const cases: Array<[string, string, string]> = [
       ["https://docs.google.com/document/d/x", "https://accounts.google.com/o/oauth2/device/usercode", "google.com"],
       ["https://github.com/someone/repo", "https://github.com/login/device", "github.com"],
-    ]) {
+    ];
+    for (const [source, target, from] of cases) {
       const { commit, complete, warnings, swState } = await setup();
       swState.lastUrlByTab.set(30, source);
       await commit(target);
