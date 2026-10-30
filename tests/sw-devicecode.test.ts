@@ -150,6 +150,9 @@ describe("device-code phishing warning", () => {
     "https://portal.azure.com/",
     "https://microsoft.com/en-us",
     "https://login.microsoftonline.com/common/oauth2/authorize",
+    "https://login.microsoftonline.us/common/oauth2/authorize",
+    "https://login.partner.microsoftonline.cn/common/oauth2/authorize",
+    "https://login.chinacloudapi.cn/common/oauth2/authorize",
   ])("ignores the provider's own sign-in or docs page as the source (%s)", async (source) => {
     const { commit, swState } = await setup();
     swState.lastUrlByTab.set(30, source);
