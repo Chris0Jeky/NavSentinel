@@ -249,7 +249,8 @@ export function scannableText(root: Element | null | undefined, max: number): st
   });
   let text = "";
   for (let node = walker.nextNode(); node && text.length < max; node = walker.nextNode()) {
-    if (node.nodeType === Node.TEXT_NODE) text += node.nodeValue;
+    // Space-join so adjacent blocks ("...Win + R" then "Hello") stay separate words.
+    if (node.nodeType === Node.TEXT_NODE) text += `${node.nodeValue} `;
   }
   return text.slice(0, max);
 }
@@ -344,6 +345,16 @@ export function findClickFixOverlay(
 }
 
 // --- Combined ClickFix detection ---
+
+/**
+ * Toast lead-in for a detection. The overlay-free lure branch never involves a
+ * dialog, so it must not claim one (#1167).
+ */
+export function clickFixToastPrefix(reasons: readonly string[]): string {
+  return reasons.includes("clipboard_command_with_lure_text")
+    ? "Heedline saw this page copy a command next to fake verification or Run-box steps. Do NOT paste it into Run, Terminal or File Explorer"
+    : "Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal";
+}
 
 export interface ClickFixScanResult {
   /** Whether a ClickFix attack pattern was detected */
