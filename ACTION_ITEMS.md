@@ -245,7 +245,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-52 | #1072 CRXJS 3 build pipeline | merge commit `44d8875a` (merged 2026-10-24) | OPEN — not run |
 | AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
-| AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1179) (candidate until merged) | OPEN — not run |
+| AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
