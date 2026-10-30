@@ -70,7 +70,7 @@ Avoid bulk-reading `node_modules/`, generated output, `test-results/`,
 `.github/workflows/ci.yml` runs product `build-and-unit` and `e2e` jobs, plus a
 tag-only release job. Every Playwright lane needs a build first; the default and branded lanes fail
 fast when `extension/dist/` is absent (`NAVSENTINEL_ALLOW_MISSING_BUILD=1` opts
-out), and the other lanes' specs skip. The default Playwright run selects smoke,
+out); specs in the other lanes may still skip without one. The default Playwright run selects smoke,
 regression, and Phase-2 coverage; PR #504 repaired the `@phase2` project that
 had previously been unreachable under issue #488.
 

@@ -29,7 +29,10 @@ function loadManifest(name: string): Manifest {
 }
 
 function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[] {
-  const disclosed = new Set(Array.from(disclosure.matchAll(/`([^`\r\n]+)`/g), (match) => match[1]));
+  // Only the permission table counts: a backticked token elsewhere (the
+  // certification answers mention `activeTab`) is not a disclosure.
+  const table = disclosure.split(/\r?\n/).filter((line) => line.startsWith("|")).join("\n");
+  const disclosed = new Set(Array.from(table.matchAll(/`([^`\r\n]+)`/g), (match) => match[1]));
   const grants = {
     permissions: manifest.permissions ?? [],
     optional_permissions: manifest.optional_permissions ?? [],
@@ -45,8 +48,8 @@ function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[]
 describe("manifest permissions", () => {
   const disclosure = readFileSync(path.resolve(__dirname, "../docs/cws-listing/PRIVACY_DISCLOSURE.md"), "utf8");
 
-  it("discloses every Chrome permission, host grant, and content-script match", () => {
-    expect(findUndisclosedGrants(loadManifest("manifest.json"), disclosure)).toEqual([]);
+  it.each(MANIFESTS)("%s discloses every permission, host grant, and content-script match", (name) => {
+    expect(findUndisclosedGrants(loadManifest(name), disclosure)).toEqual([]);
   });
 
   it.each([
@@ -62,8 +65,10 @@ describe("manifest permissions", () => {
       ? { ...manifest, content_scripts: [...(manifest.content_scripts ?? []), { matches: [fakeGrant] }] }
       : { ...manifest, [field]: [...(manifest[field] ?? []), fakeGrant] };
     expect(findUndisclosedGrants(copy, disclosure)).toEqual([`${field}: ${fakeGrant}`]);
-    expect(findUndisclosedGrants(copy, `${disclosure}\n\`${fakeGrant}Suffix\``)).toEqual([`${field}: ${fakeGrant}`]);
-    expect(findUndisclosedGrants(copy, `${disclosure}\n\`${fakeGrant}\``)).toEqual([]);
+    expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}Suffix\` | x |`)).toEqual([`${field}: ${fakeGrant}`]);
+    // Outside the permission table a backticked mention is not a disclosure.
+    expect(findUndisclosedGrants(copy, `${disclosure}\nWe never use \`${fakeGrant}\`.`)).toEqual([`${field}: ${fakeGrant}`]);
+    expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}\` | x |`)).toEqual([]);
   });
 
   it.each(MANIFESTS)("%s requests no declarativeNetRequest permission", (name) => {

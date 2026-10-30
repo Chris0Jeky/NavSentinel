@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 
 import { resolveE2eTopology } from "./tests/e2e/playwright-topology";
@@ -7,7 +8,8 @@ import { resolveE2eTopology } from "./tests/e2e/playwright-topology";
 const topology = resolveE2eTopology();
 
 export default defineConfig({
-  globalSetup: "./tests/e2e/build-preflight.ts",
+  // Absolute, so configs that extend this one from elsewhere still find it (#1175).
+  globalSetup: fileURLToPath(new URL("./tests/e2e/build-preflight.ts", import.meta.url)),
   // Playwright's automatic CI diff capture fetches the PR base with --depth=1,
   // making full checkouts shallow and breaking later acceptance ancestry (#948).
   // Keep read-only commit metadata; our own receipts attest the tested sources.
