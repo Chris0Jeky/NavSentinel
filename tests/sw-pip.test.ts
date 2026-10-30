@@ -104,6 +104,13 @@ it("answers open when the tab's frames cannot be listed", async () => {
   expect((await ask()).reply).toBe(true);
 });
 
+it("answers open for a null or empty frame list", async () => {
+  frames = null as unknown as typeof frames;
+  expect((await ask()).reply).toBe(true);
+  frames = [];
+  expect((await ask()).reply).toBe(true);
+});
+
 it("does not answer a sender without a tab", async () => {
   expect(await ask({})).toEqual({ kept: false, reply: undefined });
   expect(browser.webNavigation.getAllFrames).not.toHaveBeenCalled();

@@ -709,13 +709,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // #1244: is a Picture-in-Picture window open in any frame of the sender's tab?
   // Each frame's loader answers from ground truth (UI_FOCUS_FENCE). A frame that
   // cannot answer (no content script, gone mid-query) counts as closed; one that
-  // never answers holds the reply, and the asking gate stays refused.
+  // never answers holds the reply, and the asking gate stays refused. No frame
+  // list (not even the top frame) counts as open.
   if (message.type === "ns-pip") {
     const tabId = sender.tab?.id;
     if (tabId === undefined) return;
     chrome.webNavigation.getAllFrames({ tabId })
-      .then((frames) => Promise.all((frames ?? []).map(({ frameId }) =>
-        chrome.tabs.sendMessage(tabId, { type: "ns-pip" }, { frameId }).then((open) => open === true, () => false))))
+      .then((frames) => frames?.length ? Promise.all(frames.map(({ frameId }) =>
+        chrome.tabs.sendMessage(tabId, { type: "ns-pip" }, { frameId }).then((open) => open === true, () => false))) : [true])
       .then((answers) => sendResponse(answers.includes(true)), () => sendResponse(true));
     return true;
   }

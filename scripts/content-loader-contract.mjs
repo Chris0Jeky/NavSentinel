@@ -51,10 +51,14 @@ export const UI_FENCE_STATE = "__navsentinelUiFence";
 // Page script cannot remove a chrome.runtime listener (document.open() erases
 // only DOM listeners), and Chrome reports a detached video as
 // pictureInPictureElement and a shadow-root one as its host.
+// webNavigation.getAllFrames omits some frames that never navigated (a blob:
+// frame, #1249 review), so the answer also covers every descendant frame this
+// one can read; a cross-origin one throws here, but it navigated and answers itself.
 export const UI_FOCUS_FENCE =
   `const S={h:top===window||document.hasFocus(),u:-1/0,a:false};try{Object.defineProperty(globalThis,'${UI_FENCE_STATE}',{value:S})}catch(_){}` +
   "const fc=e=>{const t=e.type;if(t==='visibilitychange'){if(document.hidden)S.u=performance.now();return}if(e.target instanceof Node)return;S.h=true;if(t==='blur')S.a=!document.hasFocus();if(S.a)S.u=performance.now();if(t==='focus')S.a=false};for(const t of ['blur','focus','visibilitychange'])addEventListener(t,fc,true);" +
-  "chrome.runtime.onMessage.addListener((m,_,r)=>{if(m?.type==='ns-pip')r(!!document.pictureInPictureElement||!!self.documentPictureInPicture?.window)});";
+  "const pf=w=>{try{if(w.document.pictureInPictureElement||w.documentPictureInPicture?.window)return true}catch(_){}try{for(let i=0;i<w.length;i++)if(pf(w[i]))return true}catch(_){}return false};" +
+  "chrome.runtime.onMessage.addListener((m,_,r)=>{if(m?.type==='ns-pip')r(pf(self))});";
 
 /**
  * The synchronous document_start loader for capture_isolated. CRXJS loads the

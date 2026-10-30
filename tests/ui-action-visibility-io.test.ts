@@ -230,13 +230,25 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("stops accepting when the tab stops answering (#1244)", async () => {
+  it("stops accepting once a query has been in flight for over 300 ms (#1244)", async () => {
     FakeVisibilityObserver.supported = false;
     const p = await prompt();
     vi.advanceTimersByTime(1000);
     tabPip.open = null;
-    vi.advanceTimersByTime(1100);
+    // Under 1 s since the last 'closed' answer, but the next query is stuck.
+    vi.advanceTimersByTime(600);
     expect(await p.click()).toBe(false);
+  });
+
+  it("asks again after a rejected query (#1244)", async () => {
+    FakeVisibilityObserver.supported = false;
+    tabPip.open = "reject";
+    const p = await prompt();
+    vi.advanceTimersByTime(100);
+    tabPip.open = false;
+    vi.advanceTimersByTime(2000);
+    expect(vi.mocked(chrome.runtime.sendMessage).mock.calls.length).toBeGreaterThan(1);
+    expect(await p.click()).toBe(true);
   });
 
   it("refuses when the tab cannot be asked (#1244)", async () => {

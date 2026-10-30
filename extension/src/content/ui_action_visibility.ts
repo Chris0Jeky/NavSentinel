@@ -44,8 +44,10 @@ if (!loaderRecord && typeof window === "object") {
 // taking focus, by default over the corner where the toast sits (#1236), here
 // or from another frame of this tab (#1242). The service worker asks every frame
 // of the tab (#1244); only a fresh 'closed' answer arms, so a missing, stale or
-// failed answer refuses. Residual: PiP from another tab, including automatic PiP
-// on a tab switch, and up to one query interval after another frame opens PiP.
+// failed answer refuses, and so does a query in flight for over 300 ms. Residual:
+// PiP from another tab, including automatic PiP on a tab switch, and a 'closed'
+// answer taken just before another frame opens PiP, which still arms until the
+// next query answers or times out: about 0.6 s (250 ms cadence + 300 ms flight).
 let tabPipClosedAt = -Infinity;
 let pipAskedAt = -Infinity;
 let pipAsking = false;
@@ -60,7 +62,7 @@ function askTabPip(): void {
 function pipOpen(): boolean {
   return !!(document.pictureInPictureElement ||
     (window as { documentPictureInPicture?: { window: Window | null } }).documentPictureInPicture?.window) ||
-    performance.now() - tabPipClosedAt > 1000;
+    performance.now() - tabPipClosedAt > 1000 || (pipAsking && performance.now() - pipAskedAt > 300);
 }
 
 /** Security controls need a painted, unobscured exposure window, not just trusted input. */

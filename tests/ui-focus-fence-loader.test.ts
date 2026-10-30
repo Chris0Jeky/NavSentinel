@@ -87,6 +87,23 @@ describe("document_start focus/PiP fence", () => {
     expect(ask()).toEqual([false]);
   });
 
+  it("also answers for a readable descendant frame, and skips one that throws (#1249 review)", () => {
+    // happy-dom has no indexed frames: model window.length / window[i] for a two-level tree.
+    const grandchild = { length: 0, document: { pictureInPictureElement: null as object | null } };
+    const blocked = { length: 0, get document(): never { throw new DOMException("Blocked", "SecurityError"); } };
+    const child = { length: 2, 0: blocked, 1: grandchild, document: { pictureInPictureElement: null } };
+    Object.defineProperty(window, "length", { configurable: true, value: 1 });
+    Object.defineProperty(window, 0, { configurable: true, value: child });
+    try {
+      expect(ask()).toEqual([false]);
+      grandchild.document.pictureInPictureElement = {};
+      expect(ask()).toEqual([true]);
+    } finally {
+      Reflect.deleteProperty(window, 0);
+      Reflect.deleteProperty(window, "length");
+    }
+  });
+
   it("answers no other message", () => {
     expect(ask({ type: "ns-rollback" })).toEqual([]);
     expect(ask(null)).toEqual([]);
