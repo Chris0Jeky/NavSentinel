@@ -32,7 +32,8 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
     paint?.disconnect();
     paint = null;
   }
-  paint?.observe(surface);
+  // Buttons only, not the whole card: our own toast can overlap a card corner on
+  // small windows, and the card centre keeps its hit test below.
 
   function rendered(element: Element): boolean {
     if (!element.isConnected || document.visibilityState === "hidden") return false;
@@ -116,19 +117,16 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   sample();
   frame = requestAnimationFrame(tick);
 
-  // An element the browser has not reported painted-visible is never armed.
-  const paintedFor = (element: Element, now: number) =>
-    !paint || now - (painted.get(element) ?? now) >= DBLCLICK_WINDOW_MS;
-
   return {
     accepts(button: HTMLElement, event?: MouseEvent | KeyboardEvent): boolean {
       sample();
       const now = performance.now();
       const exposure = buttonExposure.get(button);
+      // A button the browser never reported painted-visible is never armed.
       let allowed = !disposed && !!event && visibleSince !== null &&
         now - visibleSince >= DBLCLICK_WINDOW_MS && exposure !== undefined &&
         now - exposure.since >= DBLCLICK_WINDOW_MS && rendered(button) &&
-        paintedFor(surface, now) && paintedFor(button, now);
+        (!paint || now - (painted.get(button) ?? now) >= DBLCLICK_WINDOW_MS);
       if (allowed && event) {
         const rect = button.getBoundingClientRect();
         const keyboard = event instanceof KeyboardEvent || event.detail === 0;

@@ -67,13 +67,13 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(p.settled).not.toHaveBeenCalled();
   });
 
-  it("requires the card as well as the button to be painted-visible", async () => {
+  it("arms once the browser reports the button painted-visible for 800 ms", async () => {
     const p = await prompt();
-    painted(true, (target) => target === p.button);
     vi.advanceTimersByTime(1000);
-    expect(await p.click()).toBe(false);
     painted(true);
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(700);
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
     expect(await p.click()).toBe(true);
     expect(p.settled).toHaveBeenCalledWith("proceed");
   });
