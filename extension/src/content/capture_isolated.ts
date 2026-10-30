@@ -53,8 +53,9 @@ import {
   type DownCapture
 } from "./dom_builder";
 import type { DebugInfo } from "./debug_overlay";
-import { scanForClickFix } from "./clickfix_detector";
+import { clickFixToastPrefix, scanForClickFix } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
+import { installCopyListener } from "./copy_listener";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -954,6 +955,10 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
   _jsBehaviorState.score = computeJsBehaviorScore(_jsBehaviorState);
 }
 
+// Pastejacking: read the page-rewritten copy payload in this world (#1168).
+// The copy path passes no receipt, so `command` stays false and it never overwrites (#1169).
+installCopyListener(() => settings.defaultMode !== "off", () => handleClickFixScan());
+
 function handleClickFixScan(command = false): void {
   if (settings.defaultMode === "off") return;
   const now = Date.now();
@@ -1000,7 +1005,7 @@ function handleClickFixScan(command = false): void {
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage(clickFixToastPrefix(result.reasons), result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),

@@ -268,6 +268,8 @@ describe("matchesInstructionPattern property tests", () => {
     }
   });
 
+  // Separated by spaces: shortcut patterns are word-bounded (#1167), so a
+  // glued alphanumeric prefix ("0windows+r", "darwin+r") is meant to change the word.
   it("prepending/appending text preserves instruction match", () => {
     fc.assert(
       fc.property(
@@ -275,7 +277,7 @@ describe("matchesInstructionPattern property tests", () => {
         fc.string({ maxLength: 50 }),
         fc.string({ maxLength: 50 }),
         (phrase, prefix, suffix) => {
-          expect(matchesInstructionPattern(prefix + phrase + suffix)).toBe(true);
+          expect(matchesInstructionPattern(`${prefix} ${phrase} ${suffix}`)).toBe(true);
         }
       ),
       { numRuns: 200 }
