@@ -675,7 +675,7 @@ describe("edge cases: IP addresses, punycode, empty inputs", () => {
   });
 
   it("detectBrandInDomain returns null for punycode domain", () => {
-    // xn--pypal-4ve.com is a punycode domain, not matching any brand via ASCII
+    // The primitive stays ASCII-only; the decode lives in detectLookalike (#1196).
     expect(detectBrandInDomain("xn--pypal-4ve.com")).toBeNull();
   });
 
@@ -1043,8 +1043,9 @@ describe("isMixedScript CJK/Arabic/Hebrew buckets (A3)", () => {
   it("still flags a Latin+CJK spoof page end-to-end (via punycoding)", () => {
     // WHATWG URL punycodes the host (payp中al.com -> xn--paypal-ew7i.com)
     // before computeCredentialRisk ever sees it, so the credential path flags
-    // the spoof via PUNYCODE_HOST; isMixedScript covers raw-Unicode hosts
-    // passed directly (unit cases above).
+    // the spoof via PUNYCODE_HOST. isMixedScript covers raw-Unicode hosts passed
+    // directly (unit cases above); its decoded-xn-- branch counts only
+    // Latin/Cyrillic/Greek mixes, so this Latin+CJK label gets no MIXED_SCRIPT_HOST (#1196).
     const risk = computeCredentialRisk({
       pageUrl: "https://payp中al.com/login",
       actionUrl: "https://payp中al.com/post",

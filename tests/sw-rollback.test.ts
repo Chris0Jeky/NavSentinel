@@ -129,6 +129,8 @@ function createChromeMock(options: { deferSends?: boolean } = {}) {
         onCreated: tabCreated,
         onRemoved: tabRemoved,
         onUpdated: tabUpdated,
+        onActivated: createEvent(),
+        get: vi.fn().mockResolvedValue({}),
         sendMessage: vi.fn(
           (
             tabId: number,

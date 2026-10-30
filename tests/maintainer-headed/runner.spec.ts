@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium, expect, test, type BrowserContext, type Page, type Worker } from "@playwright/test";
 import { inspectBuiltReleaseProfile } from "../../scripts/check-release-profile.mjs";
-import { readBuiltUiGuardRevision, startGymServer } from "../e2e/extension_test_utils";
+import { assertNoToastFor, readBuiltUiGuardRevision, startGymServer } from "../e2e/extension_test_utils";
 import { startProvingGroundFakeSinkForHost, type ProvingGroundFakeSink } from "../e2e/proving_ground_fake_sink";
 import { installFixtureTargetBootstrap } from "../e2e/local_fixture_target_bootstrap";
 import { MaintainerHeadedError, hashDirectory, hashFiles, parseChromeMetadata, readRepositorySnapshot, redactError, sha256, validateMaintainerInputs, writeEvidenceReceipt } from "./receipt";
@@ -27,12 +27,8 @@ function assertBuild(): { buildSha256: string; profile: Record<string, unknown> 
 }
 
 async function noToast(page: Page, durationMs: number): Promise<boolean> {
-  return page.evaluate(async (duration) => new Promise<boolean>((resolve) => {
-    const started = performance.now();
-    const seen = () => Boolean(document.querySelector("#__navsentinel_toast_host")?.shadowRoot?.querySelector(".body")?.textContent?.trim());
-    const poll = () => { if (seen()) return resolve(false); if (performance.now() - started >= duration) return resolve(true); window.setTimeout(poll, 50); };
-    poll();
-  }), durationMs);
+  // The toast root is closed (#1142); read it through CDP.
+  return assertNoToastFor(page, durationMs).then(() => true, () => false);
 }
 
 function observeWorker(worker: Worker, errors: ErrorDigest[]): void {

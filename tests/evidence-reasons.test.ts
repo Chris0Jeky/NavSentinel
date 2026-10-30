@@ -16,7 +16,7 @@ import {
   isJournalReasonCode,
   JOURNAL_ONLY_REASON_CODES,
 } from "../extension/src/evidence/evidence_reasons";
-import { createEvidenceExport, projectEvidence } from "../extension/src/evidence/evidence_model";
+import { countExportOmittedExplanations, createEvidenceExport, projectEvidence } from "../extension/src/evidence/evidence_model";
 import { computeCredentialRisk } from "../extension/src/shared/domain";
 import { isKnownReasonCode } from "../extension/src/shared/explanations";
 import type { CredentialSettings, EventLogEntry } from "../extension/src/shared/storage";
@@ -51,6 +51,7 @@ const VOCABULARY = {
   credential: [
     ...captures(read("shared/domain.ts"), /\bcode: "([A-Z0-9_]+)"/g),
     ...captures(read("content/credential_guard.ts"), /"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g),
+    ...captures(read("content/credential_focus_warning.ts"), /"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g),
   ],
 } as const;
 
@@ -86,6 +87,8 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   "[alert.type]": "mutation",
   '[typeof data.reason === "string" ? data.reason : "unknown"]': "pushstate",
   "risk.reasons.map((r) => r.code)": "credential",
+  // Password-focus warning (#1170): one computeCredentialRisk page code.
+  '[reason.code, "PASSWORD_FOCUS_WARNING"]': "credential",
   // Credential modal display lines, never persisted.
   "getCredentialReasonLines(risk.reasons)": null,
   // Prompt-outcome records (a separate store), not the event log.
@@ -162,6 +165,21 @@ describe("journal display versus portable export (#867)", () => {
     const [row] = projectEvidence([entry(["NON_HTTPS_PAGE", "IP_HOST", "CONTENT_FP", "CONTENT_FP", "no_accessible_name"])]);
     expect(row?.reasons).toEqual(["NON_HTTPS_PAGE", "IP_HOST", "CONTENT_FP", "no_accessible_name"]);
     expect(createEvidenceExport([row!], new Date(0)).events[0]?.reasons).toEqual(["no_accessible_name"]);
+  });
+
+  it("counts affected records once for credential-only and mixed explanations", () => {
+    const rows = projectEvidence([
+      entry(["NON_HTTPS_PAGE", "IP_HOST"]),
+      entry(["CONTENT_FP", "no_accessible_name"]),
+      entry(["no_accessible_name"]),
+      entry([]),
+    ]);
+    expect(countExportOmittedExplanations(rows)).toBe(2);
+    expect(countExportOmittedExplanations(rows.slice(2))).toBe(0);
+    expect(countExportOmittedExplanations([])).toBe(0);
+    // A correction never displays the legacy cleanup explanation, so nothing displayed is omitted.
+    expect(countExportOmittedExplanations([{ ...rows[0]!, activity: "corrections", reasons: ["overlay_cleanup_undo"] }])).toBe(0);
+    expect(countExportOmittedExplanations([{ ...rows[0]!, reasons: ["raw_legacy_code"] }])).toBe(0);
   });
 
   it("never echoes unknown, legacy or markup-shaped codes", () => {

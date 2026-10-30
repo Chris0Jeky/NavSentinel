@@ -537,10 +537,11 @@ const NON_RENDERED_TAGS: ReadonlySet<string> = new Set([
  * would reintroduce the layout cost this sampler exists to avoid.
  */
 function isPrunedBodyBranch(el: Element): boolean {
-  if (NON_RENDERED_TAGS.has(el.tagName.toUpperCase())) return true;
-  if (el.hasAttribute("hidden")) return true;
+  const tag = Object.getOwnPropertyDescriptor(Element.prototype, "tagName")!.get!.call(el) as string;
+  if (NON_RENDERED_TAGS.has(tag.toUpperCase())) return true;
+  if (Element.prototype.hasAttribute.call(el, "hidden")) return true;
   // Avoid materializing an inline style declaration for every unstyled node.
-  if (!el.hasAttribute("style")) return false;
+  if (!Element.prototype.hasAttribute.call(el, "style")) return false;
   // `.style` is absent on non-HTML elements (e.g. inside an XML document);
   // those carry no inline style and cannot be inline-hidden.
   const style = (el as HTMLElement).style;
@@ -765,7 +766,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     // credential_guard independently re-resolves the submitting form's real
     // destination host at submit time via `new URL` (which strips whitespace),
     // so the credential path is unaffected. (#407 R1)
-    const rawAttr = form.getAttribute("action") || "";
+    const rawAttr = Element.prototype.getAttribute.call(form, "action") || "";
     const bounded = rawAttr.length > MAX_FORM_ACTION_LEN
       ? rawAttr.slice(0, MAX_FORM_ACTION_LEN)
       : rawAttr;

@@ -14,7 +14,7 @@ by monitoring click context and navigation patterns locally.
 | `storage` | Stores settings, allow/trust lists, event and prompt-outcome history, adaptive/domain/category behavior profiles, smart-default cooldowns, and ephemeral security state. Nothing is transmitted. |
 | `webNavigation` | Monitors navigation commits to detect redirect chains, rollback suspicious navigations, and correlate gesture tokens with navigation events. |
 | `tabs` | Tracks tab creation/closure for DoubleClickjacking detection (child window monitoring) and rollback affordances. |
-| `host_permissions: <all_urls>` | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. Interaction data is processed locally and configured security history may be stored locally; nothing is transmitted. |
+| `<all_urls>` (`host_permissions` and `content_scripts.matches`) | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. Interaction data is processed locally and configured security history may be stored locally; nothing is transmitted. |
 
 ### Data Usage Disclosure
 
@@ -66,7 +66,11 @@ minimization sign-off before beta.
   minimized under RI-06
 - Clipboard text/selection is inspected transiently in the page's MAIN world to
   derive length and a command-like boolean. Content is not bridged to the
-  isolated script, stored, or transmitted.
+  isolated script, stored, or transmitted. During a `copy` event the isolated
+  script also reads a page-rewritten copy payload in place to detect
+  pastejacking, keeping only the same length and boolean; the text is never
+  stored, bridged, or transmitted. Ordinary copies the page does not replace
+  are not read.
 - No password values or form-field contents are stored or transmitted. Current
   exact operational URLs can contain OAuth authorization codes, access/ID
   tokens, or other response parameters; RI-06/#455 must redact these before any

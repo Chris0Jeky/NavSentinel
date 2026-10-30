@@ -90,6 +90,17 @@ export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (co
   return events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
+/** Corrections show their recorded result instead of the legacy cleanup explanation. */
+export function isHiddenCorrectionReason(activity: string | undefined, code: string): boolean {
+  return activity === "corrections" && (code === "overlay_cleanup_undo" || code === "overlay_cleanup_setting_off");
+}
+
+/** Count records whose displayed journal explanations the portable export omits. */
+export function countExportOmittedExplanations(events: readonly (EvidenceEvent & { activity?: string })[]): number {
+  return events.filter(event => event.reasons.some(code =>
+    isJournalReasonCode(code) && !isKnownReasonCode(code) && !isHiddenCorrectionReason(event.activity, code))).length;
+}
+
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {
   // Re-project even a caller-supplied view so export cannot inherit extra fields.
   // Only portable registry codes leave the browser: journal-only codes (credential
@@ -120,6 +131,8 @@ export function summarizeEvidence(events: readonly EvidenceEvent[]): { recorded:
   return { recorded: events.length, scored: events.filter(event => event.score !== undefined).length,
     sites: new Set(events.flatMap(event => [event.sourceSite, event.destinationSite].filter((site): site is string => site !== null))).size };
 }
-export function eventTitle(kind: EventKind): string {
+/** The password-focus warning reuses cred_paste_warn (#1170), so its marker reason names it (#1198). */
+export function eventTitle(kind: EventKind, reasons: readonly string[] = []): string {
+  if (kind === "cred_paste_warn" && reasons.includes("PASSWORD_FOCUS_WARNING")) return "credential password focus warning";
   return kind.replace(/^nav_/, "navigation_").replace(/^cred_/, "credential_").replace(/^suite_/, "settings_").replaceAll("_", " ");
 }

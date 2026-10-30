@@ -53,8 +53,9 @@ import {
   type DownCapture
 } from "./dom_builder";
 import type { DebugInfo } from "./debug_overlay";
-import { scanForClickFix } from "./clickfix_detector";
+import { clickFixToastPrefix, scanForClickFix } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
+import { installCopyListener } from "./copy_listener";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -63,19 +64,19 @@ import {
   getDblclickOpenerNavUrl,
 } from "./dblclick_guard";
 import {
+  bypassNextRestoredOverlayAttributeBatch,
+  classifyOverlayElement,
   clearRestoredOverlayCleanupExclusions,
+  isHtmlElementLike,
+  isOverlayCleanupCandidateEligible,
+  resumeOverlayCleanupForElement,
   startMutationMonitor,
   scanExistingForegroundOverlay,
   stopMutationMonitor,
   getMutationAlertCount,
   type MutationAlert,
 } from "./mutation_monitor";
-import {
-  reconcileDetectedOverlay,
-  restoreActiveOverlaySuppressions,
-  suppressHighSeverityOverlayInPath,
-  type OverlaySuppression,
-} from "./overlay_cleanup";
+import type { OverlaySuppression } from "./overlay_cleanup";
 import {
   handleOAuthRuntimeMessage,
   isOAuthRedirectMismatch,
@@ -321,6 +322,7 @@ async function initSettings() {
     console.warn("[NavSentinel] nav anomaly prime failed:", err);
   });
   previousMode = settings.defaultMode;
+  loadOverlayCleanupIfEnabled();
   startMutationMonitorIfReady();
   scanExistingOverlayIfEnabled();
   if (isTopFrame()) {
@@ -348,13 +350,11 @@ if (isTopFrame()) {
 void initSettings();
 
 onNavSettingsChange((s) => {
-  const cleanupWasActive =
-    settings.defaultMode !== "off" && settings.autoDismissOverlays;
+  const cleanupWasActive = isOverlayCleanupEnabled();
   settings = s;
-  const cleanupIsActive =
-    settings.defaultMode !== "off" && settings.autoDismissOverlays;
-  if (cleanupWasActive && !cleanupIsActive) {
-    const restored = restoreActiveOverlaySuppressions();
+  const cleanupIsActive = isOverlayCleanupEnabled();
+  if (overlayCleanup && cleanupWasActive && !cleanupIsActive) {
+    const restored = overlayCleanup.restoreActiveOverlaySuppressions();
     clearRestoredOverlayCleanupExclusions();
     controlToast();
     if (restored) {
@@ -389,6 +389,7 @@ onNavSettingsChange((s) => {
   }
   startMutationMonitorIfReady();
   if (!cleanupWasActive) scanExistingOverlayIfEnabled();
+  loadOverlayCleanupIfEnabled();
   refreshDebug();
 });
 
@@ -954,6 +955,9 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
   _jsBehaviorState.score = computeJsBehaviorScore(_jsBehaviorState);
 }
 
+// Pastejacking: read the page-rewritten copy payload in this world (#1168).
+installCopyListener(() => settings.defaultMode !== "off", handleClickFixScan);
+
 function handleClickFixScan(): void {
   if (settings.defaultMode === "off") return;
   const now = Date.now();
@@ -991,7 +995,7 @@ function handleClickFixScan(): void {
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage(clickFixToastPrefix(result.reasons), result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
@@ -1020,12 +1024,41 @@ function overlayToastControls(suppression: OverlaySuppression | null, coalesce =
   };
 }
 
+// Automatic overlay cleanup is opt-in (default off), so its suppression code
+// loads lazily and stays out of the always-on capture chunk (perf budget).
+// The cleanup lane counts as enabled only once that code is loaded: the
+// monitor's cleanup hooks, the child-frame monitor and the existing-overlay
+// scan all start from the load callback, so nothing scans before it is ready.
+let overlayCleanup: typeof import("./overlay_cleanup") | null = null;
+let overlayCleanupLoad: Promise<void> | null = null;
+
+function loadOverlayCleanupIfEnabled(): void {
+  if (overlayCleanupLoad || settings.defaultMode === "off" || !settings.autoDismissOverlays) return;
+  // Import inside a promise callback, as for the debug panel: the preload
+  // helper must not throw synchronously into settings handling.
+  overlayCleanupLoad = Promise.resolve().then(() => import("./overlay_cleanup")).then((module) => {
+    module.bindOverlayCleanupMonitor({
+      bypassNextRestoredOverlayAttributeBatch,
+      classifyOverlayElement,
+      isOverlayCleanupCandidateEligible,
+      isHtmlElementLike,
+      resumeOverlayCleanupForElement,
+    });
+    overlayCleanup = module;
+    startMutationMonitorIfReady();
+    scanExistingOverlayIfEnabled();
+  }, (err) => {
+    overlayCleanupLoad = null;
+    console.warn("[NavSentinel] overlay cleanup failed to load:", err);
+  });
+}
+
 function isOverlayCleanupEnabled(): boolean {
-  return settings.defaultMode !== "off" && settings.autoDismissOverlays;
+  return !!overlayCleanup && settings.defaultMode !== "off" && settings.autoDismissOverlays;
 }
 
 function handleOverlayCleanupCandidate(alert: MutationAlert): boolean {
-  const cleanup = reconcileDetectedOverlay(alert, isOverlayCleanupEnabled());
+  const cleanup = overlayCleanup?.reconcileDetectedOverlay(alert, isOverlayCleanupEnabled());
   if (!cleanup) return false;
 
   if (cleanup.action === "already_hidden") return true;
@@ -1129,7 +1162,7 @@ function startMutationMonitorIfReady(): void {
   if (
     mutationMonitorState !== 1 ||
     settings.defaultMode === "off" ||
-    (!isTopFrame() && !settings.autoDismissOverlays)
+    (!isTopFrame() && !isOverlayCleanupEnabled())
   ) {
     return;
   }
@@ -1152,7 +1185,7 @@ function stopChildOverlayMonitorIfInactive(): void {
   if (
     isTopFrame() ||
     mutationMonitorState !== 2 ||
-    (settings.defaultMode !== "off" && settings.autoDismissOverlays)
+    isOverlayCleanupEnabled()
   ) {
     return;
   }
@@ -1161,10 +1194,7 @@ function stopChildOverlayMonitorIfInactive(): void {
 }
 
 function scanExistingOverlayIfEnabled(): void {
-  if (
-    settings.defaultMode !== "off" &&
-    settings.autoDismissOverlays
-  ) {
+  if (isOverlayCleanupEnabled()) {
     if (mutationMonitorState <= 0) {
       scheduleEarlyAutoDismissStart();
       return;
@@ -1661,6 +1691,12 @@ if (chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message) => {
     if (!isTopFrame()) return;
     handleDblclickRuntimeMessage(message);
+    // Reverse tabnabbing (#1172): lazy warn-only toast, kept out of the always-on chunk.
+    // Direct import(): the research profile sits ~20 B under the cap, so no Promise.resolve
+    // wrapper; a head-less document just fails this listener and shows no toast.
+    if (message?.type === "ns-tabnab-warning" && settings.defaultMode !== "off") {
+      void import("./tabnab_warning").then(m => m.warn(message));
+    }
   });
 
   // OAuth monitoring: delegate to oauth_monitor module for
@@ -2003,11 +2039,11 @@ window.addEventListener(
       if (interceptBlank || blockSameTab) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        const overlaySuppression = suppressHighSeverityOverlayInPath(
+        const overlaySuppression = overlayCleanup?.suppressHighSeverityOverlayInPath(
           e.composedPath?.() ?? [],
           settings.autoDismissOverlays,
           anchor,
-        );
+        ) ?? null;
         if (interceptBlank) {
           if (nrs >= blockThreshold) {
             decision = "block";

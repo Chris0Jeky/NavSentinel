@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubVisibleUi, armVisibleControl } from "./helpers/visible-ui";
+import { shadowOf } from "./helpers/shadow-roots";
+stubVisibleUi();
 
 type ShowToast = typeof import("../extension/src/content/ui_toast").showToast;
 type ActivateOwnedToastControl =
@@ -11,7 +14,10 @@ let activateOwnedToastControl: ActivateOwnedToastControl;
 async function loadModule(): Promise<void> {
   const mod = await import("../extension/src/content/ui_toast");
   showToast = mod.showToast;
-  activateOwnedToastControl = mod.activateOwnedToastControl;
+  activateOwnedToastControl = (host, path) => {
+    const button = path.find((node) => node instanceof HTMLElement) as HTMLElement | undefined;
+    return mod.activateOwnedToastControl(host, path, button ? armVisibleControl(button) : undefined);
+  };
 }
 
 function getHost(): HTMLElement | null {
@@ -47,7 +53,7 @@ describe("ui_toast burst coalescing", () => {
   });
 
   function getRoot(): ShadowRoot | null {
-    return document.documentElement.querySelector("#__navsentinel_toast_host")?.shadowRoot ?? null;
+    return shadowOf(document.documentElement.querySelector("#__navsentinel_toast_host"));
   }
   function wraps(): NodeListOf<Element> {
     return getRoot()?.querySelectorAll(".wrap") ?? ([] as unknown as NodeListOf<Element>);

@@ -8,6 +8,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
+import { evaluateInToast } from "../e2e/extension_test_utils";
 import { AcceptanceSession, repoRoot, trustedClick } from "./acceptance_harness";
 import {
   briefCardCount,
@@ -186,12 +188,17 @@ test("AI-47.1 / former AI-38: cleanup Undo by mouse and keyboard; cleanup prompt
         // Human fallback timer (10 s); the E2E-only trigger event is not used.
         await expectEventuallyHidden(page, "#malicious-overlay", 16_000, "overlay is hidden automatically");
         await expect.poll(() => briefCardCount(page), { timeout: 1500, intervals: [25] }).toBe(1);
+        const cardSeenAt = Date.now();
         if (input === "mouse") {
           await clickToastButton(page, page, "Undo", "brief");
         } else {
           const presses = await tabToToastButton(page, page, "Undo");
           expect(presses, "Undo is reachable with Tab inside its brief window").toBeGreaterThan(0);
           await installPageInputCounter(page);
+          // Owned actions arm only after the 0.2 s entrance animation plus a continuous
+          // 800 ms visible exposure (#1139), and a refused Enter resets arming. Time the
+          // single press from when the card appeared, not from the end of the Tab walk.
+          await page.waitForTimeout(Math.max(0, DBLCLICK_WINDOW_MS + 500 - (Date.now() - cardSeenAt)));
           await page.keyboard.press("Enter");
         }
         await expect.poll(async () => (await elementVisibility(page, "#malicious-overlay")).visible, { timeout: 1500, intervals: [50] }).toBe(true);
@@ -248,11 +255,17 @@ type SyntheticKind = "element.click()" | "dispatched MouseEvent/PointerEvent" | 
 
 /** Page-world script attempts to activate a real extension-owned control; returns what it could reach. */
 async function pageScriptActivate(page: Page, label: string, kind: SyntheticKind): Promise<string> {
-  return page.evaluate(({ expected, how }) => {
-    const button = Array.from(document.querySelectorAll("#__navsentinel_toast_host"))
-      .flatMap((host) => Array.from(host.shadowRoot?.querySelectorAll("button") ?? []))
+  // The real root is closed (#1142), so page script cannot reach the control.
+  // Record that, then dispatch from the page's main world through DevTools to
+  // model an attacker who could, which still checks the control's own
+  // trusted-input gate (#783).
+  const pageReach = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("#__navsentinel_toast_host")).some((host) => host.shadowRoot !== null));
+  const outcome = await evaluateInToast(page, (roots, { expected, how }) => {
+    const button = roots
+      .flatMap((root) => Array.from(root.querySelectorAll("button")))
       .find((candidate) => candidate.textContent?.trim() === expected) as HTMLButtonElement | undefined;
-    if (!button) return "control-not-reachable-from-page";
+    if (!button) return "control-not-rendered";
     const rect = button.getBoundingClientRect();
     const init = { bubbles: true, composed: true, cancelable: true, view: window, clientX: rect.x + 4, clientY: rect.y + 4, detail: 1 };
     if (how === "element.click()") {
@@ -271,8 +284,9 @@ async function pageScriptActivate(page: Page, label: string, kind: SyntheticKind
         }
       }
     }
-    return "dispatched";
+    return "dispatched via DevTools";
   }, { expected: label, how: kind });
+  return `${pageReach ? "root reachable from page" : "closed root unreachable from page"}; ${outcome}`;
 }
 
 /**
@@ -318,6 +332,8 @@ test("AI-47.1 adversarial: page scripts and a forged host cannot activate NavSen
     await session.step("B. a page-forged #__navsentinel_toast_host cannot activate the real Dismiss", async () => {
       await triggerBlockCard(session, page);
       await page.evaluate(() => {
+        // The real root is closed (#1142), so `dismiss` is undefined: the page
+        // forges the host id and a same-label bait without copying any marks.
         const real = document.querySelector("#__navsentinel_toast_host");
         const dismiss = Array.from(real?.shadowRoot?.querySelectorAll("button") ?? [])
           .find((button) => button.textContent?.trim() === "Dismiss");
@@ -335,8 +351,8 @@ test("AI-47.1 adversarial: page scripts and a forged host cannot activate NavSen
       const openedBefore = opened.length;
       await page.mouse.click(40, 40);
       await page.waitForTimeout(250);
-      const realCards = await page.evaluate(() => Array.from(document.querySelectorAll("#__navsentinel_toast_host"),
-        (host) => host.shadowRoot?.querySelectorAll(".wrap:not([data-persistent='true'])").length ?? 0));
+      const realCards = await evaluateInToast(page, (roots) =>
+        roots.map((root) => root.querySelectorAll(".wrap:not([data-persistent='true'])").length));
       session.note(`full cards per host element after the forged-host click: ${JSON.stringify(realCards)}`);
       expect(realCards.reduce((sum, value) => sum + value, 0), "the real card must remain unactivated").toBe(1);
       expect(opened.length - openedBefore).toBe(0);

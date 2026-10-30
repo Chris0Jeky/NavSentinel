@@ -1,6 +1,6 @@
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, getEventLog, getSuiteSettings } from "../shared/storage";
 import { explainJournalReason } from "./evidence_reasons";
-import { eventTitle, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
+import { countExportOmittedExplanations, eventTitle, isHiddenCorrectionReason, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
 import { PROTECTION_CATEGORIES, inProtectionRange, projectProtection, summarizeProtection, type ProtectionEvent, type ProtectionRange } from "./protection_model";
 import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, type EvidenceExportSnapshot } from "./evidence_export";
 
@@ -17,6 +17,7 @@ const next = byId<HTMLButtonElement>("next");
 const showLatest = byId<HTMLButtonElement>("showLatest");
 const exportDialog = byId<HTMLDialogElement>("exportDialog");
 const exportPreview = byId<HTMLTextAreaElement>("exportPreview");
+const exportOmissions = byId("exportOmissions");
 let preparedExport: EvidenceExportSnapshot | null = null;
 let events: ProtectionEvent[] = [];
 let visible: ProtectionEvent[] = [];
@@ -52,7 +53,7 @@ function createRow(event: ProtectionEvent): HTMLDetailsElement {
   const row = element("details", "", "event");
   const summary = element("summary", "");
   const body = element("div", "", "event-body");
-  body.append(element("div", eventTitle(event.kind), "event-title"), element("div", `${event.sourceSite ?? "Source unavailable"} → ${event.destinationSite ?? "Destination unavailable"}`, "event-route"));
+  body.append(element("div", eventTitle(event.kind, event.reasons), "event-title"), element("div", `${event.sourceSite ?? "Source unavailable"} → ${event.destinationSite ?? "Destination unavailable"}`, "event-route"));
   if (event.activity === "corrections") body.append(element("div", event.activityDetail, "activity-context"));
   const time = element("time", new Date(event.timestamp).toLocaleString());
   time.dateTime = event.timestamp;
@@ -73,7 +74,7 @@ function createRow(event: ProtectionEvent): HTMLDetailsElement {
     const list = element("ul", "");
     for (const code of event.reasons) {
       // The fixed legacy explanation assumes success; use the recorded result above.
-      if (event.activity === "corrections" && (code === "overlay_cleanup_undo" || code === "overlay_cleanup_setting_off")) continue;
+      if (isHiddenCorrectionReason(event.activity, code)) continue;
       list.append(element("li", explainJournalReason(code)));
     }
     detail.append(list);
@@ -201,6 +202,8 @@ exportButton.addEventListener("click", () => {
   // A failed preparation must not leave an older snapshot downloadable.
   preparedExport = null;
   exportPreview.value = "";
+  exportOmissions.hidden = true;
+  exportOmissions.textContent = "";
   try {
     preparedExport = prepareEvidenceExport(visible.slice().reverse());
   } catch (error) {
@@ -214,12 +217,19 @@ exportButton.addEventListener("click", () => {
   }
   exportPreview.value = preparedExport.text;
   byId("exportSummary").textContent = `${preparedExport.count} recorded observations · ${preparedExport.bytes.toLocaleString()} bytes · Prepared ${new Date(preparedExport.exportedAt).toLocaleString()}`;
+  const omitted = countExportOmittedExplanations(visible);
+  exportOmissions.hidden = omitted === 0;
+  exportOmissions.textContent = omitted
+    ? `${omitted} record${omitted === 1 ? " includes" : "s include"} explanations that are not part of the portable export.`
+    : "";
   exportDialog.showModal();
 });
 byId("cancelExport").addEventListener("click", () => exportDialog.close());
 exportDialog.addEventListener("close", () => {
   preparedExport = null;
   exportPreview.value = "";
+  exportOmissions.hidden = true;
+  exportOmissions.textContent = "";
   exportButton.focus();
 });
 byId("downloadExport").addEventListener("click", () => {

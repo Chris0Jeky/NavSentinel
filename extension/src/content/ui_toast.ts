@@ -1,4 +1,5 @@
 import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
+import { visibleActionGate } from "./ui_action_visibility";
 import { attachUiHost } from "./ui_host";
 
 export type ToastAction = {
@@ -36,11 +37,13 @@ const COALESCE_THRESHOLD = 3;
 const COALESCE_WINDOW_MS = 8000;
 /** Pill auto-removes after this long with no new block. */
 const PILL_IDLE_DISMISS_MS = 12000;
-const BRIEF_RECOVERY_DISMISS_MS = 2000;
+/** Undo arms only after the 800 ms visible-exposure window (#1139), so the card
+ *  stays that much longer to keep about 2 s of usable Undo. */
+const BRIEF_RECOVERY_DISMISS_MS = 2800;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
-const controlActions = new WeakMap<EventTarget, () => void>();
+const controlActions = new WeakMap<EventTarget, (event?: MouseEvent | KeyboardEvent) => boolean | void>();
 const cardRemovers = new WeakMap<HTMLElement, (notifyDismiss?: boolean) => void>();
 
 // --- Burst coalescing state (per page, ephemeral, never persisted) ---
@@ -63,7 +66,7 @@ function isolateInteraction(event: Event): void {
   }
 }
 
-function bindControl(control: HTMLElement, action: () => void): void {
+function bindControl(control: HTMLElement, action: (event?: MouseEvent | KeyboardEvent) => boolean | void): void {
   controlActions.set(control, action);
   // Direct listener: in a real browser the document-start fence consumes
   // trusted input at window capture and calls activateOwnedToastControl
@@ -72,7 +75,7 @@ function bindControl(control: HTMLElement, action: () => void): void {
   // activateOwnedToastControl directly.
   control.addEventListener("click", (e) => {
     if (!e.isTrusted) return;
-    action();
+    action(e);
   });
 }
 
@@ -85,16 +88,23 @@ function bindControl(control: HTMLElement, action: () => void): void {
  * bound. A page-created element that copies the host id or any attribute
  * therefore cannot activate a real control. Returns whether an action ran.
  */
-export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[]): boolean {
+export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[], event?: MouseEvent | KeyboardEvent): boolean {
   if (!host || eventHost !== host) return false;
+  // The root is closed (#1142), so the fence's window-level composedPath()
+  // stops at the host. Ask the root where the input landed instead: the
+  // focused control for keyboard (detail 0), the hit control for a pointer.
+  if (path[0] === host && event) {
+    path = [(event.detail
+      ? root!.elementFromPoint((event as MouseEvent).clientX, (event as MouseEvent).clientY)
+      : root!.activeElement)?.closest("button,.pill")];
+  }
   for (const node of path) {
     if (node === host) return false;
     const action = typeof node === "object" && node !== null
       ? controlActions.get(node as EventTarget)
       : undefined;
     if (action) {
-      action();
-      return true;
+      return action(event) !== false;
     }
   }
   return false;
@@ -120,7 +130,11 @@ function ensureHost() {
   host.style.alignItems = "flex-end";
   host.style.gap = "8px";
 
-  root = host.attachShadow({ mode: "open" });
+  // Closed (#1142, as #894 did for the credential prompt): with an open root,
+  // page script could reach the buttons and focus() "Allow once" or "Trust
+  // site" just before the user's next real Enter or Space, or relabel them.
+  // `root` stays the only reference; host.shadowRoot is null everywhere.
+  root = host.attachShadow({ mode: "closed" });
 
   // UI events are composed across a shadow boundary by default. The isolated
   // world's document-start fence consumes trusted input before hostile capture
@@ -207,6 +221,7 @@ function renderFullCard(opts: ToastOptions): void {
   const remove = (notifyDismiss = false) => {
     if (removed) return;
     removed = true;
+    visibility?.dispose();
     if (timeout) window.clearTimeout(timeout);
     if (outsidePointerDown) {
       document.removeEventListener("pointerdown", outsidePointerDown, true);
@@ -225,7 +240,8 @@ function renderFullCard(opts: ToastOptions): void {
     const btn = document.createElement("button");
     btn.className = "action";
     btn.textContent = a.label;
-    bindControl(btn, () => {
+    bindControl(btn, (event) => {
+      if (!visibility?.accepts(btn, event)) return false;
       actionClicked = true;
       try { a.onClick(); } finally {
         remove();
@@ -246,10 +262,12 @@ function renderFullCard(opts: ToastOptions): void {
   wrap.appendChild(row);
 
   root.appendChild(wrap);
+  const visibility = actions.length ? visibleActionGate(host!, root, wrap) : null;
 
   if (opts.briefRecovery) {
     outsidePointerDown = (event: PointerEvent) => {
-      if (!event.isTrusted || event.composedPath().includes(wrap)) return;
+      // A closed root truncates this document-level path at the host.
+      if (!event.isTrusted || event.composedPath().includes(host!)) return;
       remove();
     };
     document.addEventListener("pointerdown", outsidePointerDown, true);
