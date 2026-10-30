@@ -49,6 +49,7 @@ describe("isScarewareFullscreen", () => {
     ["US toll-free with parentheses", "(844) 555-0111"],
     ["US toll-free with +1", "+1 877 555 0123"],
     ["UK freephone", "0800 555 0199"],
+    ["UK freephone 0808", "0808 555 0199"],
     ["international", "+44 20 7946 0999"],
   ])("recognises the phone format: %s", (_name, phone) => {
     const el = div(`<p>Virus detected. Do not close this page. Call ${phone}</p>`);

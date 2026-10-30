@@ -38,7 +38,7 @@ const SCARE: ReadonlyArray<readonly [RegExp, number]> = [
 // US/CA toll-free, UK freephone, and generic +country-code numbers.
 const PHONE: readonly RegExp[] = [
   /(?<!\d)(?:\+?1[\s.-]?)?\(?8(?:00|33|44|55|66|77|88)\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/,
-  /(?<!\d)0[89]00[\s.-]?\d{3}[\s.-]?\d{3,4}(?!\d)/,
+  /(?<!\d)0(?:80[08]|900)[\s.-]?\d{3}[\s.-]?\d{3,4}(?!\d)/,
   /\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}(?!\d)/,
 ];
 
