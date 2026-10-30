@@ -110,6 +110,37 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(p.settled).not.toHaveBeenCalled();
   });
 
+  it("does not arm while another window has focus, and re-arms after focus returns (#1225)", async () => {
+    FakeVisibilityObserver.supported = false;
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    expect(await p.click(0)).toBe(false);
+    focus.mockReturnValue(true);
+    vi.advanceTimersByTime(700);
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("in a subframe, requires focus only once the frame has had it (#1225)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.spyOn(window, "top", "get").mockReturnValue({} as Window);
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    // A never-focused frame (a cleanup chip in an ad frame) still arms.
+    expect(await p.click()).toBe(true);
+    const q = await prompt();
+    focus.mockReturnValue(true);
+    vi.advanceTimersByTime(100);
+    focus.mockReturnValue(false);
+    vi.advanceTimersByTime(1000);
+    expect(await q.click()).toBe(false);
+  });
+
   it("refuses a blended host in the fallback path", async () => {
     FakeVisibilityObserver.supported = false;
     const p = await prompt();
