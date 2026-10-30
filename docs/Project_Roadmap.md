@@ -1382,7 +1382,9 @@ content-script injection timing, background model, and `world:"MAIN"` support.
 - **FF-03** — `session_state` compatibility (Chrome `storage.session` → namespaced `storage.local` fallback via `storageSessionShim`) + restart-clear semantics for ephemerality.
 - **FF-04** — `world:"MAIN"` guard parity once Firefox baseline supports it; redirect/transition detection gaps (`transitionQualifiers` absent on Firefox).
 
-Note: `manifest.firefox.json` references `src/sw/background.html`, which is created in FF-02 (a tracked forward reference, not a broken ref — FF-01 is not wired into a build yet).
+Note: FF-01 is not wired into a build. `vite.config.ts` and `scripts/build-extension.mjs` package `manifest.json` only, nothing in `extension/src` imports the `browser.ts` shim, CI installs only Chromium, and `manifest.firefox.json` (MV3 `background.scripts` since `adf9a457`; version still 0.4.0) is checked only by `tests/manifest-permissions.test.ts`. Chromium is the only supported target until FF-02 lands.
+
+**Re-qualify before shipping Firefox (#1101):** the credential guard's resumed-submit binding (#1084, #1100) relies on two behaviours measured only in Chromium: the action, method, target and `<base>` resolution are fixed before `formdata` fires, and `window.stop()` cancels a same-frame POST the browser has already planned. FF-02 must run `tests/e2e/credential-resubmit-retarget.spec.ts` (including its `formdata`-time retarget case) against the Firefox build before the port ships.
 
 #### P4-04: Community threat intelligence
 

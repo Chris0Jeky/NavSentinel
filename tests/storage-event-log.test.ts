@@ -99,6 +99,25 @@ describe("event-log malformed append (non-string fields surface at build time)",
     expect(log[0]!.id).not.toBe("123");
   });
 
+  it("omits object-valued string fields instead of storing \"[object Object]\" (#1147)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendEvent, getEventLog } = await import("../extension/src/shared/storage");
+
+    await appendEvent({
+      kind: "nav_click_block",
+      site: { host: "x" } as unknown as string,
+      url: ["https://a.example/"] as unknown as string,
+      destHost: 42 as unknown as string,
+    });
+
+    const [entry] = await getEventLog();
+    expect(entry).toBeDefined();
+    expect(entry!.site).toBeUndefined();
+    expect(entry!.url).toBeUndefined();
+    expect(entry!.destHost).toBe("42"); // primitives still coerce
+  });
+
   it("preserves an existing string ID and repeated malformed-ID events", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
