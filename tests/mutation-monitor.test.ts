@@ -20,6 +20,7 @@ import {
   _flushMutationObserverRecordsForTesting,
   _feedMutationRecordsForTesting,
   truncateUrlForAlertDetails,
+  bypassNextRestoredOverlayAttributeBatch,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
 import { registerExtensionOwnedOverlayElement } from "../extension/src/content/extension_owned_overlay";
@@ -333,6 +334,55 @@ describe("mutation_monitor DOM integration", () => {
 
     outer.remove();
     stopMutationMonitor();
+  });
+
+  it("preserves slotted light DOM inside a shadow ARIA dialog (#564)", () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("custom-modal");
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const slot = dialog.appendChild(document.createElement("slot"));
+    host.attachShadow({ mode: "open" }).appendChild(dialog);
+    const panel = makeForegroundLayer();
+    // happy-dom does not compute slot assignment; Chromium reports this slot.
+    Object.defineProperty(panel, "assignedSlot", { value: slot });
+    host.appendChild(panel);
+    const tree = nestInStaticWrappers(host, 4);
+    document.body.appendChild(tree);
+
+    try {
+      startMutationMonitor(document, (alert) => alerts.push(alert));
+      expect(scanExistingForegroundOverlay(document)).toBe(false);
+      expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+    } finally {
+      tree.remove();
+      stopMutationMonitor();
+    }
+  });
+
+  it("keeps a restored overlay's deep descendants restored on rescan (#564)", () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    const outer = makeForegroundLayer();
+    const inner = makeForegroundLayer();
+    outer.appendChild(nestInStaticWrappers(inner, 4));
+    document.body.appendChild(outer);
+
+    try {
+      startMutationMonitor(document, () => {}, {
+        onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+        isOverlayCleanupActive: () => true,
+      });
+      scanExistingForegroundOverlay(document);
+      expect(cleanupCandidates.map((alert) => alert.elements)).toEqual([[outer]]);
+
+      bypassNextRestoredOverlayAttributeBatch(outer);
+      scanExistingForegroundOverlay(document);
+      expect(cleanupCandidates).toHaveLength(1);
+    } finally {
+      outer.remove();
+      stopMutationMonitor();
+    }
   });
 
   it("does not report a pre-existing native dialog as a risky foreground overlay", () => {

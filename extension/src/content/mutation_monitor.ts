@@ -26,6 +26,7 @@ import { matchProviderHostSrc, type ProviderHostEntry } from "../shared/iframe_p
 import { findClickFixOverlay } from "./clickfix_detector";
 import { queryPasswordInputs } from "./password_field";
 import { isExtensionOwnedOverlayElement } from "./extension_owned_overlay";
+import { composedParentElement } from "./dom_builder";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -473,10 +474,10 @@ function checkAndObserveShadowRoot(el: Element): void {
  * Check if an element or its ancestors match any patterns in a list.
  * Tests against the concatenation of `id` and `className`.
  */
-function matchesPatterns(el: Element, patterns: RegExp[]): boolean {
+function matchesPatterns(el: Element, patterns: RegExp[], levels = 5): boolean {
   let current: Element | null = el;
   // Walk up to 5 ancestors to check for wrapper elements
-  for (let depth = 0; current && depth < 5; depth++) {
+  for (let depth = 0; current && depth < levels; depth++) {
     const id = current.id ?? "";
     const cls = typeof current.className === "string" ? current.className : "";
     const haystack = id + " " + cls;
@@ -616,73 +617,59 @@ function collectForegroundOverlays(
   return { elements, details };
 }
 
-function parentOrShadowHost(el: Element): Element | null {
-  return el.parentElement ?? (el.getRootNode() as Partial<ShadowRoot>).host ?? null;
-}
-
 /**
  * Deep candidates sit below wrappers the 5-level benign check may not reach,
  * and shadow content has no parentElement path to a cookie/chat/dialog host.
- * Walk the composed ancestor chain (only for high-severity candidates) so a
- * layer inside a preserved container or an already-claimed overlay is skipped.
+ * Walk the composed ancestor chain (assigned slot first, so slotted light DOM
+ * inherits the shadow dialog around its slot; only for high-severity
+ * candidates) so a layer inside a preserved container, an already-claimed
+ * overlay, or an overlay the user restored with Undo is skipped.
  */
 function isInsideBenignOrClaimedLayer(el: Element, claimed: readonly Element[]): boolean {
-  for (let node = parentOrShadowHost(el); node; node = parentOrShadowHost(node)) {
-    if (claimed.includes(node) || node.matches(DIALOG_SELECTOR)) return true;
-    const haystack = `${node.id ?? ""} ${typeof node.className === "string" ? node.className : ""}`;
-    if (COOKIE_CONSENT_PATTERNS.some((pattern) => pattern.test(haystack))) return true;
-    if (CHAT_WIDGET_PATTERNS.some((pattern) => pattern.test(haystack))) return true;
+  for (let node = composedParentElement(el); node; node = composedParentElement(node)) {
+    if (
+      claimed.includes(node) ||
+      restoredOverlayCleanupExclusions.has(node) ||
+      node.matches(DIALOG_SELECTOR) ||
+      matchesPatterns(node, [...COOKIE_CONSENT_PATTERNS, ...CHAT_WIDGET_PATTERNS], 1)
+    ) return true;
   }
   return false;
 }
 
-/** Reverse document order (newest/frontmost-looking first), lazily. */
-function reverseElementWalk(doc: Document, root: Node): () => Node | null {
-  const walker = doc.createTreeWalker(root, 1); // NodeFilter.SHOW_ELEMENT
-  while (walker.lastChild()) { /* descend to the last descendant */ }
-  let started = false;
-  return () => {
-    if (started) return walker.previousNode();
-    started = true;
-    return walker.currentNode;
-  };
-}
-
 /**
  * Bounded worklist over deep static descendants and pre-existing shadow trees
- * that the shallow ClickFix walk skips. Shadow trees are walked as soon as
- * their host is reached so the node budget covers them in composed order.
+ * that the shallow ClickFix walk skips, in reverse document order (newest /
+ * frontmost-looking first). A shadow tree is walked as soon as its host is
+ * reached so the node budget covers it in composed order.
  */
 function collectDeepForegroundOverlays(
   doc: Document,
   elements: Element[],
   limit: number,
 ): string {
-  const root = doc.body ?? doc.documentElement;
-  if (!root) return "";
   let details = "";
   let visits = OVERLAY_DEEP_SCAN_NODE_LIMIT;
-  const walks = [reverseElementWalk(doc, root)];
-  while (walks.length > 0 && visits > 0 && elements.length < limit) {
-    const node = walks[walks.length - 1]!();
-    if (!node) {
-      walks.pop();
-      continue;
-    }
-    if (node.nodeType !== 1) continue;
-    visits -= 1;
-    const el = node as Element;
+  const walks: TreeWalker[] = [];
+  const walk = (root: Node): void => {
+    const walker = doc.createTreeWalker(root, 1); // NodeFilter.SHOW_ELEMENT
+    while (walker.lastChild()) { /* start at the last descendant */ }
+    walks.push(walker);
+  };
+  walk(doc.body ?? doc.documentElement ?? doc);
+  while (walks.length > 0 && visits-- > 0 && elements.length < limit) {
+    const walker = walks[walks.length - 1]!;
+    const el = walker.currentNode as Element;
+    if (!walker.previousNode()) walks.pop();
+    if (el.nodeType !== 1) continue;
     try {
       const shadow = tryGetShadowRoot(el);
-      if (shadow && !isNavSentinelHost(el) && !isExtensionOwnedOverlayElement(el)) {
-        walks.push(reverseElementWalk(doc, shadow));
-      }
+      if (shadow && !isNavSentinelHost(el) && !isExtensionOwnedOverlayElement(el)) walk(shadow);
       if (elements.includes(el) || restoredOverlayCleanupExclusions.has(el)) continue;
       const classification = classifyOverlayElement(el);
-      if (classification?.severity !== "high") continue;
-      if (isInsideBenignOrClaimedLayer(el, elements)) continue;
+      if (classification?.severity !== "high" || isInsideBenignOrClaimedLayer(el, elements)) continue;
       elements.push(el);
-      if (!details) details = classification.details;
+      details ||= classification.details;
     } catch {
       // A hostile/custom element must not abort the rest of the bounded walk.
     }
