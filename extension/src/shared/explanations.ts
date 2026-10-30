@@ -41,6 +41,7 @@ const EXPLANATIONS: Record<string, string> = {
   // ClickFix detector reason codes (clickfix_detector.ts)
   clipboard_command_with_overlay: "Clipboard was overwritten with a command while a dialog was active",
   clipboard_write_with_overlay: "Clipboard was overwritten while a dialog was active",
+  clipboard_command_with_lure_text: "Clipboard was overwritten with a command beside fake verify or Run steps",
   clickfix_instruction_pattern: "Page contains fake verification with paste instructions",
   clickfix_paste_instruction: "Page instructs you to paste clipboard contents",
   clickfix_captcha_text_with_overlay: "Fake CAPTCHA text detected alongside a dialog overlay",

@@ -68,7 +68,8 @@ after v0.5.0). The v0.5.0 pre-release still stored them.
 
 Detection also transiently processes bounded page text/HTML, title/form/image
 signals, structural click/element properties, and clipboard text/selection in
-the page's MAIN world to derive command metadata. That raw page/clipboard
+the page's MAIN world, plus a page-rewritten copy-event payload in the isolated
+content script during a `copy` event, to derive command metadata. That raw page/clipboard
 content is not stored, exported, or transmitted, but it still belongs in the
 #455 pre-collection disclosure and consent boundary.
 
@@ -115,7 +116,11 @@ These are read-only. They are never updated at runtime and require no network ca
 - no remote allowlist or reputation lookups
 - no clipboard content bridging, storage, or transmission. ClickFix logic
   transiently inspects clipboard text/selection in the page's MAIN world to
-  derive length and a command-like boolean, then sends only that metadata.
+  derive length and a command-like boolean, then sends only that metadata. The
+  isolated content script also reads a page-rewritten copy-event payload
+  during a `copy` event to detect pastejacking; it keeps only the same length
+  and boolean and drops the text immediately. Ordinary copies, where the page
+  does not replace what you selected, are not read at all.
 
 ## Import And Export
 
