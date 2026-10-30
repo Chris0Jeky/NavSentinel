@@ -27,6 +27,12 @@ export interface ContentAnalysisResult {
   suspiciousFormAction: boolean;
   score: number; // 0-100
   reasons: string[];
+  /**
+   * Reason text for a pending meta refresh to another registrable domain
+   * (#1144). Counted in `score` but kept out of `reasons` so the credential
+   * guard can record it under its own reason code.
+   */
+  offsiteRefresh?: string;
 }
 
 /**
@@ -60,6 +66,13 @@ export interface PageSnapshot {
    * whenever a base element is present, same class as #650/#778). (#785)
    */
   baseUrl?: string;
+  /**
+   * `content` of each `<meta http-equiv="refresh">` in document order, at most
+   * MAX_REFRESH_METAS + 1 (one past the cap marks unread ones), each sliced to MAX_REFRESH_CONTENT + 1 chars so a longer
+   * value is known to be cut. Kept apart from `metaTags`, where name="refresh"
+   * (inert metadata) and real directives share one key (#1131).
+   */
+  refreshContents?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +278,16 @@ export const SCRIPT_TEXT_MAX = 30000;
  * (#786)
  */
 export const MAX_METAS = 100;
+
+/**
+ * Refresh directives inspected (#1144). Only `http-equiv="refresh"` metas are
+ * selected, so inert metas never spend this budget. A later declaration can
+ * replace the scheduled one, so a page with more than this many gives no signal.
+ */
+export const MAX_REFRESH_METAS = 32;
+
+/** Chars of a refresh `content` value parsed (#1144). */
+export const MAX_REFRESH_CONTENT = 2048;
 
 /**
  * Max chars of body text scanned for brand signals. Sampled by `sampleBodyText`
@@ -787,6 +810,17 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     if (name) metaTags.push({ name, content });
   }
 
+  // Refresh directives -- their own channel. The selector matches the
+  // http-equiv keyword exactly and ASCII case-insensitively, as the browser
+  // does, so name="refresh" and inert metas never reach the cap.
+  const refreshContents: string[] = [];
+  const refreshMetas = doc.querySelectorAll('meta[http-equiv="refresh" i][content]');
+  // One past the cap, so the analysis knows unread declarations exist.
+  const refreshLimit = Math.min(refreshMetas.length, MAX_REFRESH_METAS + 1);
+  for (let i = 0; i < refreshLimit; i++) {
+    refreshContents.push((refreshMetas[i]!.getAttribute("content") || "").slice(0, MAX_REFRESH_CONTENT + 1));
+  }
+
   // Matched selectors (check all kit selectors)
   const matchedSelectors: string[] = [];
   const allSelectors = new Set<string>();
@@ -817,6 +851,7 @@ export function buildPageSnapshot(doc: Document): PageSnapshot {
     metaTags,
     matchedSelectors,
     baseUrl: doc.baseURI,
+    refreshContents,
   };
 }
 
@@ -1028,6 +1063,107 @@ function checkFormActions(snapshot: PageSnapshot, currentDomain: string): Suspic
 }
 
 // ---------------------------------------------------------------------------
+// Off-site meta refresh (#1144) (pure -- operates on snapshot)
+// ---------------------------------------------------------------------------
+
+const isAsciiSpace = (c: string | undefined): boolean =>
+  c === " " || c === "\t" || c === "\n" || c === "\f" || c === "\r";
+const isDigit = (c: string | undefined): boolean => c !== undefined && c >= "0" && c <= "9";
+
+/**
+ * Lexical part of the HTML "shared declarative refresh steps"
+ * (https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps).
+ * Returns undefined when the steps return early (no refresh is scheduled).
+ * Otherwise `delay` is the whole seconds (the fraction is ignored) and `url` is
+ * null for a refresh of the document's own URL, else the URL string as written.
+ * One linear pass, no regex over page text.
+ */
+export function parseRefreshContent(input: string): { delay: number; url: string | null } | undefined {
+  const n = input.length;
+  let p = 0;
+  while (isAsciiSpace(input[p])) p++;
+  const digits = p;
+  while (isDigit(input[p])) p++;
+  if (p === digits && input[p] !== ".") return undefined;
+  const delay = p === digits ? 0 : Number(input.slice(digits, p));
+  const r = (url: string | null) => ({ delay, url });
+  while (isDigit(input[p]) || input[p] === ".") p++;
+  if (p < n) {
+    if (input[p] !== ";" && input[p] !== "," && !isAsciiSpace(input[p])) return undefined;
+    while (isAsciiSpace(input[p])) p++;
+    if (input[p] === ";" || input[p] === ",") p++;
+    while (isAsciiSpace(input[p])) p++;
+  }
+  if (p >= n) return r(null);
+  const start = p;
+  if (input[p] === "U" || input[p] === "u") {
+    p++;
+    if (input[p] !== "R" && input[p] !== "r") return r(input.slice(start));
+    p++;
+    if (input[p] !== "L" && input[p] !== "l") return r(input.slice(start));
+    p++;
+    while (isAsciiSpace(input[p])) p++;
+    if (input[p] !== "=") return r(input.slice(start));
+    p++;
+    while (isAsciiSpace(input[p])) p++;
+  }
+  const quote = input[p] === "'" || input[p] === '"' ? input[p++]! : "";
+  const end = quote ? input.indexOf(quote, p) : -1;
+  return r(end < 0 ? input.slice(p) : input.slice(p, end));
+}
+
+/** Chromium's HttpRefreshScheduler ignores delays above INT_MAX seconds. */
+const MAX_REFRESH_DELAY = 2147483647;
+
+/**
+ * Registrable domain of the pending refresh target when it leaves the page's
+ * site, else null. Selects the refresh Chromium keeps scheduled: in document
+ * order, a declaration replaces the scheduled one unless that one is sooner
+ * (HttpRefreshScheduler::Schedule); an empty target reloads the document URL,
+ * ignoring <base>, and a javascript: target is refused without replacing
+ * (Document::MaybeHandleHttpRefresh). Reads only the current DOM: a refresh
+ * from an HTTP header or a meta removed after insertion is not seen.
+ */
+function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): string | null {
+  const contents = snapshot.refreshContents;
+  const currentReg = getRegistrableDomain(normalizeHost(currentDomain));
+  // More declarations than the bound: an unread later one could replace any choice.
+  if (!snapshot.hasPasswordField || !contents || !currentReg || contents.length > MAX_REFRESH_METAS) return null;
+  const base = snapshot.baseUrl || "https://" + hostForUrl(currentDomain) + "/";
+  let scheduledDelay = Infinity;
+  let offsite: string | null = null;
+  for (let i = 0; i < contents.length; i++) {
+    const cut = contents[i]!.length > MAX_REFRESH_CONTENT;
+    const parsed = parseRefreshContent(contents[i]!.slice(0, MAX_REFRESH_CONTENT));
+    // A cut value without a complete target could still be the one scheduled.
+    if (cut && !parsed?.url) return null;
+    if (!parsed || parsed.delay > MAX_REFRESH_DELAY || parsed.delay > scheduledDelay) continue;
+    if (!parsed.url) {
+      scheduledDelay = parsed.delay;
+      offsite = null;
+      continue;
+    }
+    let target: URL;
+    try {
+      target = new URL(parsed.url, base);
+      // Slicing can manufacture a different host ("https://evil.ex|ample.test").
+      // The host is settled only if one more host character cannot change it.
+      if (cut && new URL(parsed.url + "a", base).host !== target.host) return null;
+    } catch {
+      if (cut) return null;
+      continue; // an unparseable URL schedules nothing
+    }
+    if (target.protocol === "javascript:") continue;
+    scheduledDelay = parsed.delay;
+    const targetReg = target.protocol === "http:" || target.protocol === "https:"
+      ? getRegistrableDomain(normalizeHost(target.hostname))
+      : "";
+    offsite = targetReg && targetReg !== currentReg ? targetReg : null;
+  }
+  return offsite;
+}
+
+// ---------------------------------------------------------------------------
 // Main analysis function (pure -- operates on PageSnapshot)
 // ---------------------------------------------------------------------------
 
@@ -1074,6 +1210,14 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
     for (let i = 0; i < formCheck.reasons.length; i++) {
       result.reasons.push(formCheck.reasons[i]!);
     }
+  }
+
+  // Credential page with a pending refresh to another site (#1144). Read at
+  // submit time: a zero-delay refresh leaves before any submit can happen.
+  const refreshTarget = offsiteRefreshTarget(snapshot, currentDomain);
+  if (refreshTarget) {
+    result.score += 25;
+    result.offsiteRefresh = `Page is set to send you to a different site: ${refreshTarget}`;
   }
 
   // 4. Login form on unrecognizable domain mimicking branded flow

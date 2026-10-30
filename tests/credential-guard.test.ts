@@ -1061,6 +1061,20 @@ describe("credential_guard", () => {
       expect(contentReasons[2]!.label).toBe("Hidden iframe");
     });
 
+    it("records an off-site meta refresh under its own reason code (#1144)", async () => {
+      const risk = defaultRisk();
+      risk.page.isTrusted = false;
+      risk.score = 20;
+      mockComputeRisk.mockReturnValue(risk);
+      mockAnalyzeContent.mockReturnValue({ ...CONTENT_BASE, score: 25, reasons: [], offsiteRefresh: "Refresh to other.example" });
+
+      await dispatchSubmit(createPasswordForm());
+
+      expect(risk.score).toBe(45);
+      expect(risk.reasons).toContainEqual({ code: "META_REFRESH_OFFSITE", label: "Refresh to other.example" });
+      expect(risk.reasons.some((r) => r.code === "CONTENT_FP")).toBe(false);
+    });
+
     it("modal spec includes kv entries, subtitle, and reason lines", async () => {
       const risk = defaultRisk();
       risk.page.registrableDomain = "example.com";
