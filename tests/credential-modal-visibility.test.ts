@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubVisibleUi } from "./helpers/visible-ui";
+import { shadowOf } from "./helpers/shadow-roots";
 
 describe("credential and toast visible approval (#1139)", () => {
   stubVisibleUi();
@@ -223,7 +224,7 @@ describe("credential and toast visible approval (#1139)", () => {
     const undo = vi.fn();
     toast.showToast({ message: "Blocked", timeoutMs: 0, actions: [{ label: "Undo", onClick: undo }] });
     const host = document.getElementById("__navsentinel_toast_host")!;
-    const button = host.shadowRoot!.querySelector("button")!;
+    const button = shadowOf(host)!.querySelector("button")!;
     button.focus();
     vi.advanceTimersByTime(1000);
     host.style.opacity = "0";

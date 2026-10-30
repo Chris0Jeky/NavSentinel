@@ -47,6 +47,18 @@ describe("portable evidence hostname and ordering boundaries (#691, #689)", () =
     expect(JSON.stringify(payload)).not.toMatch(/private|secret/);
   });
 
+  it("keeps a journal-only kind out of the Lab file but in the journal projection (#1171)", () => {
+    const journal = projectEvidence([
+      { ...event(1000, "locker.test"), kind: "fullscreen_locker_exit", reasons: ["fullscreen_scare_text", "fullscreen_phone_number"] },
+      event(2000, "block.test"),
+    ]);
+    expect(journal.map(row => row.kind)).toEqual(["fullscreen_locker_exit", "nav_click_block"]);
+    expect(journal[0]!.reasons).toEqual(["fullscreen_scare_text", "fullscreen_phone_number"]);
+    const payload = createEvidenceExport(journal, new Date(0));
+    expect(payload.events.map(row => row.kind)).toEqual(["nav_click_block"]);
+    expect(consumer.parse(JSON.stringify(payload))).toEqual(payload);
+  });
+
   it("sorts retained imported timestamps, keeps stable ties, and rejects invalid dates", () => {
     const rows = [event(3000, "late.test"), event(1000, "first.test"), event(NaN, "invalid.test"),
       event(2000, "middle.test"), event(1000, "tie.test"), event(1e30, "invalid.test")];

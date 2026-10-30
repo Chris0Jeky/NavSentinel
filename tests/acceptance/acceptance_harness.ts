@@ -19,7 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, expect, test, type BrowserContext, type Page, type TestInfo, type Worker } from "@playwright/test";
 import { hashDirectory } from "../maintainer-headed/receipt";
-import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
+import { evaluateInToast, readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
 import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
 import { readToastState } from "./toast_state_reader";
 import { pressureLoadGymPath } from "./pressure_load_attribution";
@@ -702,10 +702,10 @@ export async function trustedClick(page: Page, selector: string): Promise<void> 
 
 /** Centre of a button inside NavSentinel's toast shadow root, by visible label. */
 export async function toastButtonPoint(page: Page, label: string): Promise<{ x: number; y: number } | null> {
-  return page.evaluate((expected) => {
-    const hosts = Array.from(document.querySelectorAll("#__navsentinel_toast_host"));
-    for (const host of hosts) {
-      const button = Array.from(host.shadowRoot?.querySelectorAll("button") ?? []).find((candidate) => candidate.textContent?.trim() === expected);
+  // The toast root is closed (#1142); read it through CDP.
+  return evaluateInToast(page, (roots, expected) => {
+    for (const root of roots) {
+      const button = Array.from(root.querySelectorAll("button")).find((candidate) => candidate.textContent?.trim() === expected);
       if (button) {
         const rect = button.getBoundingClientRect();
         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
@@ -717,7 +717,7 @@ export async function toastButtonPoint(page: Page, label: string): Promise<{ x: 
 
 /** Full-card body text, otherwise a coalesced pill, from any toast shadow host. */
 export async function toastState(page: Page): Promise<{ text: string | null; buttons: string[] }> {
-  return page.evaluate(readToastState);
+  return evaluateInToast(page, readToastState);
 }
 
 /** Proves a real back/forward-cache restore rather than a reload. */

@@ -17,7 +17,7 @@ import {
   exerciseFirstEligibleControl,
   type NativeExerciseResult,
 } from "./corpus_replay_harness";
-import { getServiceWorker, readCredentialModal } from "./extension_test_utils";
+import { getServiceWorker, readCredentialModal, readToastText } from "./extension_test_utils";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = process.env.EXTENSION_PATH
@@ -187,22 +187,14 @@ async function readSignals(
         kind: entry.kind,
         ...(typeof entry.score === "number" ? { score: entry.score } : {}),
       }));
-    // The credential prompt's root is closed (#894); read it through CDP.
+    // The credential prompt's and toast's roots are closed (#894, #1142); read them through CDP.
     const hadCredentialModal = (await readCredentialModal(page)) !== null;
-    const ui = await page.evaluate(() => {
-      const toastHost = document.querySelector("#__navsentinel_toast_host");
-      const toastText = toastHost?.shadowRoot
-        ?.querySelector(".body")
-        ?.textContent?.trim();
-      return {
-        hadToast: Boolean(toastText),
-      };
-    });
+    const hadToast = (await readToastText(page)) !== null;
 
     return {
       detectionKinds: events.map((entry) => entry.kind),
       hadCredentialModal,
-      hadToast: ui.hadToast,
+      hadToast,
       events,
     };
   } catch (error) {

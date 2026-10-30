@@ -13,6 +13,7 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import {
+  assertNoToastFor,
   getGymBaseUrl,
   getServiceWorker,
   readBuiltUiGuardRevision,
@@ -214,29 +215,7 @@ async function locatorScreenPoint(frame: Frame, selector: string): Promise<{
 }
 
 async function assertNoProductSignalFor(frame: Frame, durationMs: number): Promise<void> {
-  await frame.evaluate(async (duration) => {
-    const signalText = (): string | null => {
-      const host = document.querySelector("#__navsentinel_toast_host");
-      const text = host?.shadowRoot?.querySelector(".body")?.textContent?.trim();
-      return text || null;
-    };
-    await new Promise<void>((resolve, reject) => {
-      const started = performance.now();
-      const check = () => {
-        const signal = signalText();
-        if (signal) {
-          reject(new Error(`Unexpected NavSentinel signal: ${signal}`));
-          return;
-        }
-        if (performance.now() - started >= duration) {
-          resolve();
-          return;
-        }
-        window.setTimeout(check, 50);
-      };
-      check();
-    });
-  }, durationMs);
+  await assertNoToastFor(frame, durationMs);
 }
 
 async function setupScenario(

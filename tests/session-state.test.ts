@@ -833,6 +833,7 @@ describe("SW integration: state persistence through session storage", () => {
           onCreated: tabCreated,
           onRemoved: tabRemoved,
           onUpdated: tabUpdated,
+          onActivated: createEvent(),
           get: tabsGet,
           sendMessage: vi.fn(
             (

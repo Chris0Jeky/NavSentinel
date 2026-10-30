@@ -8,7 +8,7 @@ import { chromium, expect, test, type BrowserContext, type Frame, type Page } fr
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getServiceWorker, waitForNavSentinelBridge } from "./extension_test_utils";
+import { getServiceWorker, waitForNavSentinelBridge, waitForToastText } from "./extension_test_utils";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const extensionPath = process.env.EXTENSION_PATH
@@ -93,12 +93,7 @@ for (const kind of ["about:blank", "srcdoc", "blob", "same-origin"] as const) {
         document.body.appendChild(form);
         form.submit();
       });
-      await frame.waitForFunction(
-        () => !!document.querySelector("#__navsentinel_toast_host")?.shadowRoot
-          ?.querySelector(".body")?.textContent?.includes("Blocked form submit"),
-        undefined,
-        { timeout: 5_000 },
-      );
+      await waitForToastText(frame, "Blocked form submit", 5_000);
       // Give a wrongly-allowed native submission time to commit.
       await page.waitForTimeout(1_000);
       expect(hits, "no request reached the attacker").toEqual([]);
