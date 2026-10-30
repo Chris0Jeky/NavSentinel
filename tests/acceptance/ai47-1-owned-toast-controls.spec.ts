@@ -8,6 +8,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
 import { AcceptanceSession, repoRoot, trustedClick } from "./acceptance_harness";
 import {
   briefCardCount,
@@ -186,12 +187,17 @@ test("AI-47.1 / former AI-38: cleanup Undo by mouse and keyboard; cleanup prompt
         // Human fallback timer (10 s); the E2E-only trigger event is not used.
         await expectEventuallyHidden(page, "#malicious-overlay", 16_000, "overlay is hidden automatically");
         await expect.poll(() => briefCardCount(page), { timeout: 1500, intervals: [25] }).toBe(1);
+        const cardSeenAt = Date.now();
         if (input === "mouse") {
           await clickToastButton(page, page, "Undo", "brief");
         } else {
           const presses = await tabToToastButton(page, page, "Undo");
           expect(presses, "Undo is reachable with Tab inside its brief window").toBeGreaterThan(0);
           await installPageInputCounter(page);
+          // Owned actions arm only after the 0.2 s entrance animation plus a continuous
+          // 800 ms visible exposure (#1139), and a refused Enter resets arming. Time the
+          // single press from when the card appeared, not from the end of the Tab walk.
+          await page.waitForTimeout(Math.max(0, DBLCLICK_WINDOW_MS + 500 - (Date.now() - cardSeenAt)));
           await page.keyboard.press("Enter");
         }
         await expect.poll(async () => (await elementVisibility(page, "#malicious-overlay")).visible, { timeout: 1500, intervals: [50] }).toBe(true);
