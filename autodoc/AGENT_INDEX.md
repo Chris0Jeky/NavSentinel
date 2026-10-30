@@ -30,7 +30,7 @@ This is a fast orientation layer for coding agents. It should point to interface
 - `HistoryDump.txt`
 - `NavSentinel_ Enhancing Navigation Intent Filtering.pdf`
 - `extension/public/reputation_data.bin`
-- `extension/src/shared/psl_data.json` unless updating PSL behavior.
+- `extension/src/shared/psl_trie.ts` unless updating PSL behavior.
 - archived docs under `docs/archive/` unless provenance is required.
 
 ## Product Seams
