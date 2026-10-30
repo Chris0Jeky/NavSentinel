@@ -3,15 +3,21 @@
 // a coalesced pill remains, so this reader has to see that pill.
 import { beforeEach, describe, expect, it } from "vitest";
 import { readToastState } from "./acceptance/toast_state_reader";
+import { shadowOf } from "./helpers/shadow-roots";
 
 beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+/** Every toast host's root in host order, as the CDP read hands them over. */
+function toastRoots(): ShadowRoot[] {
+  return Array.from(document.querySelectorAll("#__navsentinel_toast_host"))
+    .flatMap((host) => shadowOf(host) ?? []);
+}
+
 /** Pre-fix acceptance read: the first host's first `.body` only. */
 function legacyFirstHostBody(): string | null {
-  const host = document.querySelector("#__navsentinel_toast_host");
-  const root = host?.shadowRoot;
+  const root = toastRoots()[0];
   const text = root?.querySelector(".body")?.textContent?.trim() || null;
   return text;
 }
@@ -20,7 +26,8 @@ function mountHost(): ShadowRoot {
   const host = document.createElement("div");
   host.id = "__navsentinel_toast_host";
   document.body.appendChild(host);
-  return host.attachShadow({ mode: "open" });
+  // Closed, as the product's toast root is (#1142).
+  return host.attachShadow({ mode: "closed" });
 }
 
 function append(parent: ParentNode, tag: string, className: string, text: string): HTMLElement {
@@ -43,19 +50,19 @@ function setOffsetParent(button: HTMLElement, parent: Element | null): void {
 
 describe("acceptance toast state reader", () => {
   it("returns { text: null, buttons: [] } when hosts are missing, shadowless, or blank", () => {
-    expect(readToastState()).toEqual({ text: null, buttons: [] });
-    expect(readToastState().text ?? "").not.toMatch(/block/i);
+    expect(readToastState(toastRoots())).toEqual({ text: null, buttons: [] });
+    expect(readToastState(toastRoots()).text ?? "").not.toMatch(/block/i);
 
     const bare = document.createElement("div");
     bare.id = "__navsentinel_toast_host";
     document.body.appendChild(bare);
-    expect(readToastState()).toEqual({ text: null, buttons: [] });
+    expect(readToastState(toastRoots())).toEqual({ text: null, buttons: [] });
 
     const root = bare.attachShadow({ mode: "open" });
     append(root, "div", "body", "   ");
     append(root, "div", "pill idle", " \n ");
     append(root, "button", "", "Allow once");
-    const state = readToastState();
+    const state = readToastState(toastRoots());
     expect(state).toEqual({ text: null, buttons: [] });
     expect(state.text ?? "").not.toMatch(/block/i);
   });
@@ -69,7 +76,7 @@ describe("acceptance toast state reader", () => {
     append(card, "div", "body", "Heedline blocked a deceptive click");
     append(card, "button", "", "Allow once");
 
-    expect(readToastState()).toEqual({
+    expect(readToastState(toastRoots())).toEqual({
       text: "Heedline blocked a deceptive click",
       buttons: ["Allow once"],
     });
@@ -81,7 +88,7 @@ describe("acceptance toast state reader", () => {
     append(root, "div", "pill idle", "Heedline blocked 4 navigations");
 
     expect(legacyFirstHostBody()).toBeNull();
-    const state = readToastState();
+    const state = readToastState(toastRoots());
     expect(state).toEqual({ text: "Heedline blocked 4 navigations", buttons: [] });
     expect(state.text ?? "").toMatch(/block/i);
   });
@@ -94,7 +101,7 @@ describe("acceptance toast state reader", () => {
     append(second, "div", "pill", "Heedline blocked 2 navigations");
 
     expect(legacyFirstHostBody()).toBeNull();
-    const state = readToastState();
+    const state = readToastState(toastRoots());
     expect(state).toEqual({ text: "Heedline blocked 2 navigations", buttons: [] });
     expect(state.buttons).not.toContain("Stale");
     expect(state.text ?? "").toMatch(/block/i);
@@ -110,7 +117,7 @@ describe("acceptance toast state reader", () => {
     hidden.style.display = "none";
     setOffsetParent(hidden, null);
 
-    const state = readToastState();
+    const state = readToastState(toastRoots());
     expect(state).toEqual({ text: "Overlay hidden; still watching.", buttons: ["Undo"] });
     expect(state.text ?? "").not.toMatch(/block/i);
   });
