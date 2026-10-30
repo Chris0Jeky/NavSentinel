@@ -348,7 +348,7 @@ export async function focusToastButton(target: Page | Frame, label: string): Pro
 /** Wait for a toast button to render, then (except Dismiss) for its entrance animation and visible-exposure arming window. */
 async function waitForArmedToastButton(target: Page | Frame, label: string): Promise<void> {
   await toastButtonPoint(target, label, 10_000);
-  if (label !== "Dismiss") await new Promise((resolve) => setTimeout(resolve, DBLCLICK_WINDOW_MS + 300));
+  if (label !== "Dismiss") await new Promise((resolve) => setTimeout(resolve, DBLCLICK_WINDOW_MS + 700));
 }
 
 /** Offset of `frame`'s viewport within the top page's viewport. */
@@ -422,7 +422,7 @@ export const CREDENTIAL_MODAL_HOST_ID = "__sentinelsuite_cred_modal_host__";
  * see evaluateWithShadowRoots.
  */
 export async function evaluateInCredentialModal<T, A = undefined>(
-  page: Page,
+  page: Page | Frame,
   fn: (this: ShadowRoot, arg: A) => T,
   arg?: A
 ): Promise<T | null> {
@@ -487,7 +487,9 @@ export async function waitForCredentialModal(
 export async function clickModalButton(page: Page, label: string): Promise<void> {
   // waitForCredentialModal already proved the host. A locator wait would also wait
   // on the held submit's pending navigation, so only allow the arming window here.
-  if (label !== "Cancel") await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+  // Arming starts once the prompt is painted still: its open animation and the
+  // IntersectionObserver v2 report delay add about 300 ms to the 800 ms window (#1142).
+  if (label !== "Cancel") await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
   // Trusted activation only (#783): see clickToastButton.
   const point = await evaluateInCredentialModal(
     page,
