@@ -2,6 +2,106 @@ import { expect, test } from "@playwright/test";
 import { AcceptanceSession, EVENT_LOG_KEY, trustedClick } from "./acceptance_harness";
 import { EVIDENCE_PAGE, OPTIONS_PAGE, contrastRatio, parseCssColor, readDownload } from "./extension_ui_helpers";
 
+test("Journal continuity: arrivals preserve reading; replacement, eviction and clear forget it", async ({}, testInfo) => {
+  const session = await AcceptanceSession.open(testInfo, "journal-continuity-1162");
+  try {
+    const now = Date.now();
+    const records = Array.from({ length: 57 }, (_, i) => ({
+      id: `private-entry-${i}`, ts: now - (100 - i) * 1000, kind: "nav_click_block",
+      site: `record-${i}.test`, url: `https://record-${i}.test/private?token=fictional`,
+    }));
+    await session.setStorageLocal({ [EVENT_LOG_KEY]: records.slice(0, 25) });
+    const center = await session.openExtensionPage(EVIDENCE_PAGE);
+    const errors: string[] = [];
+    center.on("pageerror", error => errors.push(error.message));
+    const row = (site: string) => center.locator("details.event").filter({ has: center.locator(".event-route", { hasText: site }) });
+    await center.setViewportSize({ width: 1280, height: 900 });
+    await expect(center.locator("#total")).toHaveText("25");
+    const reading = row("record-0.test");
+    const original = await reading.elementHandle();
+
+    await session.step("append and prepend retain the actual row, keyboard focus and viewport across the page boundary", async () => {
+      await reading.locator("summary").focus();
+      await center.keyboard.press("Enter");
+      await reading.locator("summary").evaluate(node => node.scrollIntoView({ block: "center", behavior: "instant" }));
+      const top = (await reading.locator("summary").boundingBox())!.y;
+      for (const entries of [records.slice(0, 55), [records[55], ...records.slice(0, 55)]]) {
+        await session.setStorageLocal({ [EVENT_LOG_KEY]: entries });
+        await expect(center.locator("#total")).toHaveText(String(entries.length));
+        await expect(center.locator("#refresh")).toBeEnabled();
+        expect(await original!.evaluate(node => node.isConnected && (node as HTMLDetailsElement).open)).toBe(true);
+        await expect(reading.locator("summary")).toBeFocused();
+        expect(Math.abs((await reading.locator("summary").boundingBox())!.y - top)).toBeLessThanOrEqual(2);
+        await expect(center.locator("details.event")).toHaveCount(25);
+        await expect(center.locator("#showLatest")).toBeVisible();
+        await expect(row("record-54.test")).toHaveCount(0);
+      }
+      await session.screenshot(center, "journal-reading-desktop");
+      await center.setViewportSize({ width: 390, height: 900 });
+      await center.locator("#showLatest").scrollIntoViewIfNeeded();
+      expect(await center.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await session.screenshot(center, "journal-reading-narrow");
+    });
+
+    await session.step("export uses every matching record and freezes reviewed bytes while newer arrivals wait", async () => {
+      await center.locator("#export").click();
+      const preview = await center.locator("#exportPreview").inputValue();
+      const payload = JSON.parse(preview);
+      expect(payload.events).toHaveLength(56);
+      expect(payload.events[0].id).toBe("event-1");
+      expect(Object.keys(payload.events[0]).sort()).toEqual(["destinationSite", "id", "kind", "outcome", "reasons", "sourceSite", "timestamp"]);
+      expect(preview).not.toMatch(/private-entry|private\?token/);
+      await session.setStorageLocal({ [EVENT_LOG_KEY]: records });
+      await expect(center.locator("#total")).toHaveText("57");
+      await expect(center.locator("#exportPreview")).toHaveValue(preview);
+      const downloaded = center.waitForEvent("download");
+      await center.locator("#downloadExport").click();
+      expect((await readDownload(await downloaded)).toString("utf8")).toBe(preview);
+      await expect(center.locator("#export")).toBeFocused();
+      await center.locator("#showLatest").click();
+      await expect(center.locator("#journal")).toBeFocused();
+      expect(await original!.evaluate(node => node.isConnected)).toBe(false);
+      await expect(row("record-56.test")).toBeVisible();
+      await center.locator("#search").fill("record-0.test");
+      await expect(reading).toHaveCount(1);
+      await expect(reading).not.toHaveAttribute("open");
+      await expect(center.locator("#search")).toBeFocused();
+      await center.locator("#resetFilters").click();
+      await center.locator("#next").click();
+      await expect(center.locator("#pageLabel")).toHaveText("Page 2 of 3");
+    });
+
+    await session.step("reused IDs, eviction and clear remove old details and restore journal focus", async () => {
+      const entry = records[0]!;
+      for (const change of ["replacement", "eviction", "clear"] as const) {
+        await session.setStorageLocal({ [EVENT_LOG_KEY]: [entry] });
+        await expect(center.locator("#total")).toHaveText("1");
+        await reading.locator("summary").focus();
+        await center.keyboard.press("Enter");
+        const removed = await reading.elementHandle();
+        const replacement = { ...entry, url: "https://record-0.test/replaced?token=other" };
+        await session.setStorageLocal({ [EVENT_LOG_KEY]: change === "replacement" ? [entry, replacement]
+          : change === "eviction" ? [records[1]] : [] });
+        await expect.poll(() => removed!.evaluate(node => node.isConnected)).toBe(false);
+        await expect(center.locator("#journal")).toBeFocused();
+        await expect(center.locator("#status")).toContainText("no longer");
+        if (change === "replacement") await expect(reading).not.toHaveAttribute("open");
+        else await expect(reading).toHaveCount(0);
+      }
+      await session.screenshot(center, "journal-cleared");
+      await session.setStorageLocal({ [EVENT_LOG_KEY]: [records[0]] });
+      await expect(reading).not.toHaveAttribute("open");
+      expect(errors).toEqual([]);
+      expect(session.consoleErrors([/favicon\.ico/, /net::ERR_/])).toEqual([]);
+    });
+  } catch (error) {
+    session.markFailed(error);
+    throw error;
+  } finally {
+    await session.close();
+  }
+});
+
 test("Protection activity: categories, recovery, import/reset and accessible layouts", async ({}, testInfo) => {
   const session = await AcceptanceSession.open(testInfo, "protection-activity-592");
   try {
