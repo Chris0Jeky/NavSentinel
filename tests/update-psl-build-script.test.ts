@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 // to run only when the script is invoked directly. (#322 / disc#15)
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildTrie, encodeTrie, parsePSL, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
+import { buildTrie, encodeTrie, parsePSL, renderTrieModule, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
 import { decodePslTrie } from "../extension/src/shared/domain";
+import { PSL_TRIE } from "../extension/src/shared/psl_trie";
 
 describe("update-psl build script: fail-closed on short rule sets (#322 / disc#15)", () => {
   it("parsePSL('') yields an empty rule set (the truncated-/empty-body case)", () => {
@@ -19,7 +20,7 @@ describe("update-psl build script: fail-closed on short rule sets (#322 / disc#1
     const rules = parsePSL("// comment\ncom\norg\nnet\n");
     expect(rules.length).toBeLessThan(MIN_PSL_RULES);
     // Pre-fix: main() had no such guard and would buildTrie([])/short -> overwrite
-    // psl_trie.txt with a near-empty trie. Now it fails closed before writing.
+    // psl_trie.ts with a near-empty trie. Now it fails closed before writing.
     expect(() => assertEnoughRules(rules)).toThrow(/too short/i);
   });
 
@@ -130,10 +131,11 @@ describe("update-psl build script: compact text trie round-trips", () => {
     expect(decodePslTrie(text)).toEqual(trie);
   });
 
-  it("the committed psl_trie.txt is canonical and decodes to a full-size trie", () => {
-    const text = readFileSync(resolve(__dirname, "../extension/src/shared/psl_trie.txt"), "utf-8").trim();
-    const trie = decodePslTrie(text);
-    expect(encodeTrie(trie)).toBe(text);
+  it("the committed psl_trie.ts is canonical and decodes to a full-size trie", () => {
+    const trie = decodePslTrie(PSL_TRIE);
+    expect(encodeTrie(trie)).toBe(PSL_TRIE);
+    const moduleText = readFileSync(resolve(__dirname, "../extension/src/shared/psl_trie.ts"), "utf-8");
+    expect(moduleText).toBe(renderTrieModule(PSL_TRIE));
     expect(Object.keys(trie).length).toBeGreaterThan(1000);
     expect(Object.getPrototypeOf(trie)).toBeNull();
   });

@@ -11,3 +11,4 @@ export function parsePSL(text: string): PslRule[];
 export function assertEnoughRules(rules: unknown): void;
 export function buildTrie(rules: PslRule[]): object;
 export function encodeTrie(node: object): string;
+export function renderTrieModule(encoded: string): string;

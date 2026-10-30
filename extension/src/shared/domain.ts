@@ -1,6 +1,5 @@
-/// <reference types="vite/client" />
 import type { CredentialSettings } from "./storage";
-import pslText from "./psl_trie.txt?raw";
+import { PSL_TRIE } from "./psl_trie";
 
 type TrieNode = { [label: string]: TrieNode | 1 };
 
@@ -155,7 +154,7 @@ function splitLabels(host: string): string[] {
  *     4. Else stop — the trie has no deeper rule.
  */
 function pslSuffixLength(labels: string[]): number {
-  let node: TrieNode = (pslRoot ??= decodePslTrie(pslText.trim()));
+  let node: TrieNode = (pslRoot ??= decodePslTrie(PSL_TRIE));
   let depth = 0;
   let confirmedSuffix = 0;
 
