@@ -39,6 +39,7 @@ function install(options: { reason?: string; debug?: boolean; nativeError?: Erro
     return returned;
   };
   const sandbox = vm.createContext({
+    nativeApply: Reflect.apply,
     History: ModelHistory,
     nativePushState: native("pushState"),
     nativeReplaceState: native("replaceState"),

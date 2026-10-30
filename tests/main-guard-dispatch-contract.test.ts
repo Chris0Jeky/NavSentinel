@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { installMainWorldNatives } from "./helpers/main-world-natives";
 
 /**
  * Real guard/bridge dispatch, with only the native navigation sinks replaced.
@@ -37,8 +38,11 @@ function form(): HTMLFormElement {
 }
 
 beforeAll(async () => {
+  await installMainWorldNatives();
   // The real loader installs this invoker before importing the guard.
   vi.stubGlobal("__navsentinelMainGetAttribute", Function.prototype.call.bind(Element.prototype.getAttribute));
+  vi.stubGlobal("__navsentinelMainFormTarget", Function.prototype.call.bind(
+    Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "target")!.get!));
   Object.defineProperty(MessagePort, Symbol.hasInstance, {
     configurable: true,
     value: (value: unknown) => nativeHasInstance.call(MessagePort, value) ||
@@ -84,6 +88,26 @@ afterAll(() => {
 });
 
 describe("native navigation dispatch through real main_guard", () => {
+  it("does not turn a child-to-top form submit into a self exemption after lowercase tampering", async () => {
+    const element = form();
+    element.target = "_top";
+    const top = vi.spyOn(window, "top", "get").mockReturnValue({} as Window);
+    const lower = String.prototype.toLowerCase;
+    try {
+      String.prototype.toLowerCase = function () {
+        return `${this}` === "_top" ? "_self" : Reflect.apply(lower, this, []);
+      };
+      element.submit();
+    } finally {
+      String.prototype.toLowerCase = lower;
+      top.mockRestore();
+    }
+    await send("ns-config", { mode: "smart" });
+    expect(submit).not.toHaveBeenCalled();
+    expect(messages.some((message) => message.type === "ns-nav-blocked" && message.kind === "form_submit"))
+      .toBe(true);
+  });
+
   it("allows one granted popup and does not duplicate native dispatch", async () => {
     await send("ns-allow", { allowOpen: true, allowRedirect: false });
     const start = messages.length;

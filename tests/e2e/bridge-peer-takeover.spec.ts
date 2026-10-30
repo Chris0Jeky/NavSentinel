@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import {
   chromium,
@@ -13,6 +12,7 @@ import {
   getGymBaseUrl,
   readBuiltUiGuardRevision,
   waitForNavSentinelBridge,
+  updateNavigationSettings,
 } from "./extension_test_utils";
 import {
   startProvingGroundEgressFence,
@@ -66,7 +66,9 @@ async function openFixture(fixtureCase: FixtureCase): Promise<FixtureHarness> {
   const allowedOrigins = new Set([new URL(baseUrl).origin]);
   const networkViolations: ProvingGroundEgressAttempt[] = [];
   const blockedExternalAttempts: ProvingGroundEgressAttempt[] = [];
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), `navsentinel-186-${fixtureCase}-`));
+  const profilesDir = path.resolve("test-results", "bridge-profiles");
+  fs.mkdirSync(profilesDir, { recursive: true });
+  const userDataDir = fs.mkdtempSync(path.join(profilesDir, `navsentinel-186-${fixtureCase}-`));
   let context: BrowserContext | undefined;
   let egressFence: Awaited<ReturnType<typeof startProvingGroundEgressFence>> | undefined;
   try {
@@ -278,4 +280,82 @@ test("issue #186 mixed journey rejects a page peer after verified readiness @reg
   }
   expect(harness.networkViolations).toEqual([]);
   await attachNetworkDiagnostics(testInfo, "mixed", harness);
+});
+
+test("prototype postMessage interception cannot steal the genuine bridge port @regression", async () => {
+  const harness = await openFixture("benign");
+  try {
+    await updateNavigationSettings(harness.context, { defaultMode: "strict" });
+    await harness.page.reload();
+    await waitForNavSentinelBridge(harness.page);
+    const intercepted = await harness.page.evaluate(async () => {
+      const post = MessagePort.prototype.postMessage;
+      let stolen = 0;
+      MessagePort.prototype.postMessage = function (message: Record<string, unknown>) {
+        if (message?.source === "__navsentinel__" && message.session) {
+          stolen++;
+          const base = { source: message.source, v: 1, session: message.session };
+          const url = new URL("/form-submit-landing.html", location.href).href;
+          Reflect.apply(post, this, [{ ...base, type: "ns-allow-target-nav", url, ttlMs: 10000 }]);
+          Reflect.apply(post, this, [{ ...base, type: "ns-pushstate-suspicious", url, reason: "attacker-chosen" }]);
+        }
+        Reflect.apply(post, this, [message]);
+      };
+      try {
+        for (let i = 0; i < 4; i++) history.replaceState(null, "", location.href);
+        window.open("/form-submit-landing.html", "_blank");
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return stolen;
+      } finally { MessagePort.prototype.postMessage = post; }
+    });
+    expect(intercepted).toBe(0);
+    await expect(harness.page.locator("#__navsentinel_toast_host")).toBeAttached();
+    expect(harness.context.pages().filter((page) => page.url().includes("/form-submit-landing.html"))).toHaveLength(0);
+  } finally { await harness.cleanup(); }
+  expect(harness.networkViolations).toEqual([]);
+});
+
+test("lowercase tampering cannot exempt a child-to-top native form submit @regression", async () => {
+  const harness = await openFixture("benign");
+  let sinkRequests = 0;
+  try {
+    await updateNavigationSettings(harness.context, { defaultMode: "strict" });
+    await harness.page.reload();
+    await waitForNavSentinelBridge(harness.page);
+    await harness.context.route("**/form-submit-landing.html", async (route) => {
+      sinkRequests++;
+      await route.fulfill({ contentType: "text/html", body: "Local dummy credential sink" });
+    });
+    await harness.page.evaluate(() => {
+      const frame = document.createElement("iframe");
+      frame.id = "lowercase-child";
+      frame.src = `${location.pathname}?case=benign&child=1`;
+      document.body.append(frame);
+    });
+    const child = await harness.page.locator("#lowercase-child").contentFrame().locator("html").elementHandle();
+    const frame = await child?.ownerFrame();
+    if (!frame) throw new Error("Local child fixture did not load");
+    await frame.waitForFunction(() => document.documentElement.getAttribute("data-navsentinel-bridge-ready") === "1");
+    await frame.evaluate(() => {
+      const form = document.createElement("form");
+      form.method = "post";
+      form.target = "_top";
+      form.action = "/form-submit-landing.html";
+      form.innerHTML = '<input type="password" name="password" value="audit-canary">';
+      document.body.append(form);
+      const lower = String.prototype.toLowerCase;
+      try {
+        String.prototype.toLowerCase = function () {
+          return `${this}` === "_top" ? "_self" : Reflect.apply(lower, this, []);
+        };
+        HTMLFormElement.prototype.submit.call(form);
+      } finally { String.prototype.toLowerCase = lower; }
+    });
+    await harness.page.waitForTimeout(300);
+    expect(sinkRequests).toBe(0);
+    await expect(harness.page.locator("#lowercase-child").contentFrame().locator("#__navsentinel_toast_host"))
+      .toBeAttached();
+    expect(new URL(harness.page.url()).pathname).toBe("/issue186-bridge-peer.html");
+  } finally { await harness.cleanup(); }
+  expect(harness.networkViolations).toEqual([]);
 });

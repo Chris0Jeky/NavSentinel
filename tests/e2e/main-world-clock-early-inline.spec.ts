@@ -21,6 +21,19 @@ test("MAIN clock survives an early inline Date.now replacement (#877) @regressio
       timeout: 60_000,
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
+    // Test instrument, not the attacker: the bridge posts through natives captured
+    // at document_start (#1141), so only a script that runs before that prelude
+    // can observe its messages. The fixture's inline script is the attack.
+    await context.addInitScript(() => {
+      const probe = window as Window & { clockProbeMessages?: unknown[] };
+      probe.clockProbeMessages = [];
+      const nativePostMessage = MessagePort.prototype.postMessage;
+      MessagePort.prototype.postMessage = function (this: MessagePort, message: unknown, ...rest: unknown[]) {
+        const data = message as { source?: string; type?: string } | null;
+        if (data?.source === "__navsentinel__" && data.type === "ns-nav-blocked") probe.clockProbeMessages?.push(data);
+        return Reflect.apply(nativePostMessage, this, [message, ...rest]);
+      } as typeof MessagePort.prototype.postMessage;
+    });
     const page = await context.newPage();
     await page.goto(`${baseUrl}/main-world-clock-early-inline.html`, { waitUntil: "domcontentloaded" });
     await waitForNavSentinelBridge(page);
