@@ -95,7 +95,10 @@ describe("document_start focus/PiP fence", () => {
   it("reports a Document PiP window until it really closes, ignoring a forged pagehide", () => {
     sent.length = 0;
     const pipWindow = new EventTarget();
+    // A forged enter (page-dispatched, untrusted) reports nothing.
     documentPip.dispatchEvent(Object.assign(new Event("enter"), { window: pipWindow }));
+    expect(sent).toEqual([]);
+    documentPip.dispatchEvent(trusted(Object.assign(new Event("enter"), { window: pipWindow })));
     expect(sent).toEqual([{ type: "ns-pip", open: true }]);
     // Page script can dispatch pagehide on the PiP window or its own window while PiP stays open.
     pipWindow.dispatchEvent(new Event("pagehide"));

@@ -46,17 +46,19 @@ export const UI_FENCE_STATE = "__navsentinelUiFence";
 // (near its cap) does not grow by another entry export, which the minified
 // shared chunk would otherwise need. ui_action_visibility reads it; its own window state is
 // a fallback for frames without this loader. A frame's PiP state is sent from
-// ground truth (pictureInPictureElement, the Document PiP window), so a forged
-// event changes nothing; the service worker relays it, with Chrome's frame id,
+// ground truth (pictureInPictureElement, the Document PiP window), and only
+// trusted enter/pagehide events change it; the service worker relays it, with Chrome's frame id,
 // to every frame of the tab. A lost close only keeps approvals refused. Only a
 // trusted pagehide clears the state: page script can dispatch a synthetic one
-// while its PiP window stays open (#1243 review).
+// while its PiP window stays open (#1243 review). The relay covers a benign PiP
+// in another frame; a hostile frame that opens PiP after document.open() erased
+// these listeners, or on a detached video, never reports it (tracked in #1242).
 export const UI_FOCUS_FENCE =
   `const S={h:top===window||document.hasFocus(),u:-1/0,a:false,r:new Set};try{Object.defineProperty(globalThis,'${UI_FENCE_STATE}',{value:S})}catch(_){}` +
   "const fc=e=>{const t=e.type;if(t==='visibilitychange'){if(document.hidden)S.u=performance.now();return}if(e.target instanceof Node)return;S.h=true;if(t==='blur')S.a=!document.hasFocus();if(S.a)S.u=performance.now();if(t==='focus')S.a=false};for(const t of ['blur','focus','visibilitychange'])addEventListener(t,fc,true);" +
   "let sent=false,dp=false;const pip=o=>{if(o!==sent){sent=o;try{chrome.runtime.sendMessage({type:'ns-pip',open:o}).catch(()=>{})}catch(_){}}};" +
   "const pv=e=>{if(e.type==='enterpictureinpicture')e.target.addEventListener('leavepictureinpicture',pv);pip(dp||!!document.pictureInPictureElement)};addEventListener('enterpictureinpicture',pv,true);addEventListener('leavepictureinpicture',pv,true);addEventListener('pagehide',e=>{if(e.isTrusted){dp=false;pip(false)}},true);" +
-  "try{documentPictureInPicture.addEventListener('enter',e=>{dp=true;pip(true);e.window.addEventListener('pagehide',x=>{if(x.isTrusted){dp=false;pip(!!document.pictureInPictureElement)}})})}catch(_){}" +
+  "try{documentPictureInPicture.addEventListener('enter',e=>{if(!e.isTrusted)return;dp=true;pip(true);e.window.addEventListener('pagehide',x=>{if(x.isTrusted){dp=false;pip(!!document.pictureInPictureElement)}})})}catch(_){}" +
   "chrome.runtime.onMessage.addListener(m=>{if(m?.type==='ns-pip'&&typeof m.frame==='number')m.open===true?S.r.add(m.frame):S.r.delete(m.frame)});";
 
 /**

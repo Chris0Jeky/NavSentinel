@@ -225,7 +225,7 @@ describe("visible approval painted-visibility signal (#1142)", () => {
   it("refuses after a blur only the document_start loader saw (#1242)", async () => {
     FakeVisibilityObserver.supported = false;
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
-    const record = { h: true, u: -Infinity, a: false };
+    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
     vi.stubGlobal("__navsentinelUiFence", record);
     const p = await prompt();
     vi.advanceTimersByTime(1000);
