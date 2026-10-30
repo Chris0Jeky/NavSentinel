@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW - Fullscreen Browser Locker (inert)</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto; padding: 34px 18px; background: #f4f4f4; color: #222; }
+      #locker { display: none; background: #b00020; color: #fff; padding: 48px; box-sizing: border-box; min-height: 100vh; text-align: center; }
+      #locker.armed { display: block; }
+      #locker h1 { font-size: 40px; }
+      #locker .phone { font-size: 32px; font-weight: 700; }
+      #status { margin-top: 18px; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <h1>RW - Fullscreen browser locker</h1>
+    <p>
+      Inert Gym fixture. It models a tech-support-scam "browser locker": one click puts a page of fake
+      scare text and a fictional phone number into fullscreen. The text is made up and the number is
+      a 555 placeholder. Nothing here is dialled, sent, or loaded from outside this file.
+    </p>
+    <button id="enter" type="button">Enter fullscreen warning</button>
+    <p id="status" data-fullscreen="no">Fullscreen: no</p>
+
+    <div id="locker" data-gym="fullscreen-locker">
+      <h1>WARNING: Your computer has been locked</h1>
+      <p>Virus detected. Error code 0x0000FAKE. Your personal data is at risk.</p>
+      <p>Do not close this window or restart your computer.</p>
+      <p>Call Windows Support now:</p>
+      <p class="phone">1-800-555-0142</p>
+    </div>
+
+    <script>
+      const locker = document.getElementById('locker');
+      const status = document.getElementById('status');
+      const update = () => {
+        const on = document.fullscreenElement === locker;
+        status.textContent = 'Fullscreen: ' + (on ? 'yes' : 'no');
+        status.dataset.fullscreen = on ? 'yes' : 'no';
+        locker.classList.toggle('armed', on);
+      };
+      document.addEventListener('fullscreenchange', update);
+      document.getElementById('enter').addEventListener('click', () => {
+        locker.classList.add('armed');
+        locker.requestFullscreen().catch(() => { locker.classList.remove('armed'); });
+      });
+    </script>
+  </body>
+</html>

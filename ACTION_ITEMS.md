@@ -244,6 +244,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 | AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
 | AI-67 | #1184 Options recorded-choices labels and export omission notice | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1184) (candidate until merged) | OPEN — not run |
+| AI-66 | #1183 tech-support-scam fullscreen locker exit | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1183) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -251,6 +252,11 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
   Export shows "... include explanations that are not part of the portable export." and the downloaded file
   matches the preview. A failure gets a revert PR for the merge commit.
+
+- **AI-66 (#1183):** with the Gym served (`npm run gym:serve`): (1) open `gym/rw-fullscreen-locker.html`, press its
+  button: fullscreen exits almost at once and the toast "Heedline closed a full-screen warning page..." appears;
+  (2) on `gym/rw-fullscreen-benign.html` and a real fullscreen video (any video site, `f` key) or a slide deck in
+  present mode, fullscreen stays. A failure gets a revert PR for the merge commit.
 
 - **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
   (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
@@ -327,6 +333,13 @@ contains `<input name="querySelectorAll">`; the prompt must appear and Cancel mu
 zero POSTs. Remove a toast host, trigger another warning, and confirm it is visible.
 Remove an open credential-modal host; the same pending decision must reappear and remain
 usable. Automated Vitest/Playwright evidence does not complete this human check.
+
+- **Issue #1139 — visible approval gate, branch `fix/1139-prompt-visible-clicks`:**
+  Human Chrome result **NOT RUN**. Credential and toast approvals now require
+  visible, unobscured controls and 800 ms of arming. Automated pointer/Enter/Space
+  regressions pass; they do not complete Gate-3. Exact artifact, byte counts,
+  commands, and the remaining manual scope are recorded in
+  [`ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md`](docs/testing/ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md).
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and the procedure named in its entry; `main` carries no procedure for them, so

@@ -40,6 +40,10 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
   rapid_pushstate: "The page rewrote its address many times in quick succession",
   domain_like_path_after_gesture: "After your click, the page changed its address to look like another site",
 
+  // Fullscreen locker guard (content/fullscreen_guard.ts)
+  fullscreen_scare_text: "A full-screen page showed scare wording like a virus or locked-computer warning",
+  fullscreen_phone_number: "A full-screen page showed a phone number to call",
+
   // Overlay cleanup lifecycle (content/capture_isolated.ts)
   overlay_cleanup_setting_off: "Hidden overlays were restored because overlay cleanup was turned off",
   overlay_cleanup_undo: "You restored an overlay that Heedline had hidden",

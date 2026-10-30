@@ -44,14 +44,11 @@ const NRS = captures(read("shared/nrs.ts"), /nrsFactors\.push\("([^"]+)"\)/g);
 const VOCABULARY = {
   // nav_click_block, nav_silent_allow and nav_blank_prompt store computeNRS reasonCodes.
   navigation: [...CDS, ...NRS],
-  clickfix: [
-    ...captures(read("content/clickfix_detector.ts"), /reasons\.push\("([^"]+)"\)/g),
-    // capture_isolated appends its own outcome code to the detector's reasons (#1169).
-    ...captures(read("content/capture_isolated.ts"), /\[\.\.\.result\.reasons, "([^"]+)"\]/g),
-  ],
+  clickfix: captures(read("content/clickfix_detector.ts"), /reasons\.push\("([^"]+)"\)/g),
   mutation: captures(between(read("content/mutation_monitor.ts"), "export type MutationAlertType =", ";"), /"([^"]+)"/g),
   // The bridge fallback "unknown" is deliberately unexplained: it is not a finding.
   pushstate: captures(between(read("content/main_guard.ts"), "function checkPushStateSuspicious(", "\n}\n"), /"([a-z]+(?:_[a-z]+)+)"/g),
+  fullscreen: captures(read("content/fullscreen_guard.ts"), /reasons\.push\("([^"]+)"\)/g),
   credential: [
     ...captures(read("shared/domain.ts"), /\bcode: "([A-Z0-9_]+)"/g),
     ...captures(read("content/credential_guard.ts"), /"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g),
@@ -87,7 +84,7 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   "params.reasonCodes": "navigation",
   "outcomeFeatures.reasons": "navigation",
   "result.reasons": "clickfix",
-  'replaced ? [...result.reasons, "clipboard_neutralized"] : result.reasons': "clickfix",
+  "verdict.reasons": "fullscreen",
   "[alert.type]": "mutation",
   '[typeof data.reason === "string" ? data.reason : "unknown"]': "pushstate",
   "risk.reasons.map((r) => r.code)": "credential",
@@ -108,9 +105,10 @@ const storedCodes = (): string[] => [...new Set([...Object.values(VOCABULARY).fl
 describe("stored reason vocabulary (#867)", () => {
   it("reads every producer from source (guards against pattern rot)", () => {
     expect(VOCABULARY.navigation).toEqual(expect.arrayContaining(["no_accessible_name", "near_invisible_opacity", "nrs_new_tab_window", "nrs_js_behavior_suspicious"]));
-    expect(VOCABULARY.clickfix).toEqual(expect.arrayContaining(["clipboard_command_with_overlay", "legit_captcha_present", "clipboard_neutralized"]));
+    expect(VOCABULARY.clickfix).toEqual(expect.arrayContaining(["clipboard_command_with_overlay", "legit_captcha_present"]));
     expect(VOCABULARY.mutation).toEqual(["overlay_detected", "overlay_injected", "form_action_changed", "password_injected", "suspicious_iframe"]);
     expect(VOCABULARY.pushstate).toEqual(["rapid_pushstate", "domain_like_path_after_gesture"]);
+    expect(VOCABULARY.fullscreen).toEqual(["fullscreen_scare_text", "fullscreen_phone_number"]);
     expect(VOCABULARY.credential).toEqual(expect.arrayContaining(["NON_HTTPS_PAGE", "IP_HOST", "UNTRUSTED_DOMAIN", "CONTENT_FP", "SRI_MISSING_ON_CREDENTIAL_PAGE"]));
     expect(literalCodes()).toEqual(expect.arrayContaining(["overlay_cleanup_setting_off", "overlay_cleanup_undo", "late_async_child_frame", "nrs_double_click_hijack"]));
     expect(EVENT_WRITERS.map((path) => relative(SRC, path).replaceAll("\\", "/")).sort()).toEqual(expect.arrayContaining([

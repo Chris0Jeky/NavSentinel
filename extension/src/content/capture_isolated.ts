@@ -975,37 +975,23 @@ function handleClickFixScan(): void {
 
   if (!result.detected) return;
 
-  // #1169: overwrite a hijacked clipboard once per page write receipt, even
-  // while the toast is rate-limited. The chunk loads only on a detection; the
-  // promise callback keeps Vite's preload helper from throwing synchronously.
-  const mode = settings.defaultMode;
-  // Resolves to the replaced-clipboard toast text, or "" when nothing was written.
-  const neutralized = Promise.resolve()
-    .then(() => import("./clipboard_neutralizer"))
-    .then(async (m) => (await m.maybeNeutralizeClipboard({ ...result, mode })) ? m.CLIPBOARD_REPLACED_TOAST : "")
-    .catch(() => "");
-
   // Rate-limit standalone toast: at most one alert per 10 seconds
   if (now - clickFixAlertedAt < 10_000) return;
 
   clickFixAlertedAt = now;
   sendIconUpdate("red");
-  void neutralized.then((replaced) => showClickFixAlert(result, replaced));
-}
-
-function showClickFixAlert(result: ReturnType<typeof scanForClickFix>, replaced: string): void {
   appendEventSafely({
     kind: "clickfix_detected",
     site: siteKeyFromLocation(),
     url: location.href,
     score: result.score,
-    reasons: replaced ? [...result.reasons, "clipboard_neutralized"] : result.reasons,
+    reasons: result.reasons,
   });
 
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage(replaced || "Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
@@ -1018,6 +1004,38 @@ function showClickFixAlert(result: ReturnType<typeof scanForClickFix>, replaced:
     timeoutMs: 0,
   });
 }
+
+// --- Tech-support-scam fullscreen locker (#1171) ---
+// Loaded lazily on the first fullscreenchange: the classifier is large relative
+// to the capture chunk's perf headroom and almost every page never needs it.
+let fullscreenGuard: Promise<typeof import("./fullscreen_guard")> | null = null;
+
+function handleFullscreenChange(): void {
+  if (settings.defaultMode === "off" || !document.fullscreenElement) return;
+  fullscreenGuard ??= Promise.resolve().then(() => import("./fullscreen_guard"));
+  const loading = fullscreenGuard;
+  void loading.then((guard) => {
+    const verdict = guard.guardFullscreen();
+    if (!verdict?.notify) return;
+    sendIconUpdate("red");
+    appendEventSafely({
+      kind: "fullscreen_locker_exit",
+      site: siteKeyFromLocation(),
+      url: location.href,
+      reasons: verdict.reasons,
+    });
+    showToast({
+      message: "Heedline closed a full-screen warning page. Real security companies do not lock your browser or ask you to call them.",
+      timeoutMs: 0,
+    });
+  }).catch((err) => {
+    // Do not cache a failed import forever: the next fullscreenchange retries.
+    if (fullscreenGuard === loading) fullscreenGuard = null;
+    if (debugEnabled) console.warn("[NavSentinel] fullscreen guard failed to load:", err);
+  });
+}
+
+document.addEventListener("fullscreenchange", handleFullscreenChange, true);
 
 // --- Mutation monitor ---
 

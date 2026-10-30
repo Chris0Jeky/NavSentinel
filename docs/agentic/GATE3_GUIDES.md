@@ -65,8 +65,8 @@ active action and must not be rerun or inferred from automation alone.
    for this manual check), confirm the pink high-severity trap disappears
    automatically, the visible **Real Link** is exposed, no popup/navigation
    occurs, and the small card contains **Overlay hidden; still watching** with
-   no separate Dismiss button. Click **Undo** within its 2-second recovery
-   window and confirm the trap returns without any click being
+   no separate Dismiss button. Undo arms after 0.8 seconds and the card stays
+   about 2.8 seconds; click **Undo** inside that recovery window and confirm the trap returns without any click being
    synthesized or replayed. Then click the restored trap once to exercise the
    fallback: the new tab must stay blocked, the trap must hide again, and the
    card must contain **(overlay hidden)** with Undo. A trap that stays until this
@@ -81,12 +81,12 @@ active action and must not be rerun or inferred from automation alone.
    `mutation-05-sequential-overlays.html`, wait for its 10-second human fallback
    and the second delayed layer, and confirm both layers stay hidden. Use the
    brief Undo notice created by the delayed cleanup (reload and repeat if its
-   2-second window expires) and confirm one Undo restores the grouped layers and
+   brief window expires) and confirm one Undo restores the grouped layers and
    they remain restored.
 7. Open `overlay-nesting-lab.html?case=exact` without interacting. Confirm the
    outer synthetic media frame remains present but its nested advertisement
    disappears, **Nested frame content exposed** becomes visible, and the small
-   Undo card appears inside that media frame. Click **Undo** within 2 seconds and
+   Undo card appears inside that media frame. Click **Undo** while the card shows and
    confirm the nested
    advertisement returns without opening a tab or replaying a click.
 8. Open `overlay-nesting-lab.html?case=hostile`. Click the brief **Undo** once
