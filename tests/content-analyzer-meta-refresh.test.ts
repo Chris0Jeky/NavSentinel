@@ -43,7 +43,17 @@ describe("parseRefreshContent (shared declarative refresh steps)", () => {
     ["-1;url=https://other.test/", undefined],
     ["5:url=https://other.test/", undefined],
   ])("%j -> %j", (content, expected) => {
-    expect(parseRefreshContent(content)).toBe(expected);
+    expect(parseRefreshContent(content)?.url).toBe(expected);
+    if (expected === undefined) expect(parseRefreshContent(content)).toBeUndefined();
+  });
+
+  it.each([
+    ["5", 5],
+    [".5;url=x", 0],
+    ["1.9;url=x", 1],
+    ["007, x", 7],
+  ])("%j has a delay of %d whole seconds", (content, delay) => {
+    expect(parseRefreshContent(content)?.delay).toBe(delay);
   });
 });
 
@@ -92,20 +102,39 @@ describe("off-site refresh signal", () => {
     expect(flagged(["30;url=https://account-check.example/"], { hasPasswordField: false }).offsiteRefresh).toBeUndefined();
   });
 
-  it("resolves an empty url= against the document base, like the browser", () => {
-    expect(flagged(["30;url="], { baseUrl: "https://collector.example/x" }).offsiteRefresh).toContain("collector.example");
+  it("treats an empty url= as a reload of the document, ignoring <base>, like Chrome", () => {
+    // Document::MaybeHandleHttpRefresh uses the document URL for an empty target.
+    const offBase = { baseUrl: "https://collector.example/x" };
+    expect(flagged(["30;url="], offBase).offsiteRefresh).toBeUndefined();
+    expect(flagged(['30;url=""'], offBase).offsiteRefresh).toBeUndefined();
     expect(flagged(["30;url="]).offsiteRefresh).toBeUndefined();
+    // A non-empty relative target still resolves against the base.
+    expect(flagged(["30;url=next"], offBase).offsiteRefresh).toContain("collector.example");
   });
 
-  it("only the first declaration that schedules a refresh operates", () => {
+  it("selects the refresh Chrome schedules: a later one with an equal or shorter delay replaces it", () => {
     const offsite = "30;url=https://account-check.example/";
-    // Malformed delays and unparseable URLs schedule nothing, so a later one operates.
+    // Malformed delays and unparseable URLs schedule nothing.
     expect(flagged(["soon;url=/a", offsite]).offsiteRefresh).toBeDefined();
     expect(flagged(["30;url=https://exa mple.test/", offsite]).offsiteRefresh).toBeDefined();
     expect(flagged(["", offsite]).offsiteRefresh).toBeDefined();
-    // A valid earlier declaration wins, so the later off-site one never runs.
-    expect(flagged(["30;url=/account", offsite]).offsiteRefresh).toBeUndefined();
-    expect(flagged(["30", offsite]).offsiteRefresh).toBeUndefined();
+    // HttpRefreshScheduler::Schedule keeps the current refresh only if it is sooner.
+    expect(flagged(["300;url=/account", offsite]).offsiteRefresh).toBeDefined();
+    expect(flagged(["30;url=/account", offsite]).offsiteRefresh).toBeDefined();
+    expect(flagged(["300", offsite]).offsiteRefresh).toBeDefined();
+    expect(flagged(["10;url=/account", offsite]).offsiteRefresh).toBeUndefined();
+    expect(flagged([offsite, "5;url=/account"]).offsiteRefresh).toBeUndefined();
+    expect(flagged([offsite, "30"]).offsiteRefresh).toBeUndefined();
+    // A refused javascript: refresh never replaces the scheduled one.
+    expect(flagged([offsite, "1;url=javascript:void(0)"]).offsiteRefresh).toBeDefined();
+    // A delay past INT_MAX seconds is not scheduled.
+    expect(flagged([offsite, "99999999999;url=/account"]).offsiteRefresh).toBeDefined();
+  });
+
+  it("gives no signal when more refresh declarations exist than the bound inspects", () => {
+    const offsite = "30;url=https://account-check.example/";
+    expect(flagged(Array(MAX_REFRESH_METAS).fill(offsite)).offsiteRefresh).toBeDefined();
+    expect(flagged(Array(MAX_REFRESH_METAS + 1).fill(offsite)).offsiteRefresh).toBeUndefined();
   });
 
   it("keeps a host decided inside the bound and refuses one the bound cuts", () => {
@@ -157,7 +186,7 @@ describe("buildPageSnapshot refresh channel", () => {
 
   it("bounds refresh candidates and content length", () => {
     const many = '<meta http-equiv="refresh" content="x">'.repeat(MAX_REFRESH_METAS + 20);
-    expect(build(many).refreshContents).toHaveLength(MAX_REFRESH_METAS);
+    expect(build(many).refreshContents).toHaveLength(MAX_REFRESH_METAS + 1);
     const huge = build(`<meta http-equiv="refresh" content="30;url=https://a.example/${"p".repeat(100_000)}">`);
     expect(huge.refreshContents![0]).toHaveLength(MAX_REFRESH_CONTENT + 1);
   });
