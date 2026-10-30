@@ -130,7 +130,11 @@ let notifiedAt = -Infinity;
 export function guardFullscreen(now = Date.now()): { reasons: string[]; notify: boolean } | null {
   const el = document.fullscreenElement;
   if (!el || exits >= MAX_EXITS_PER_PAGE) return null;
-  const verdict = isScarewareFullscreen(el);
+  // A same-origin (e.g. srcdoc) iframe made fullscreen is classified by its own page; a
+  // cross-origin embed (video players) has no readable document and stays exempt.
+  const shown = el.tagName === "IFRAME" ? (el as HTMLIFrameElement).contentDocument?.body : el;
+  if (!shown) return null;
+  const verdict = isScarewareFullscreen(shown);
   if (!verdict.scare) return null;
   exits++;
   try {
@@ -147,8 +151,12 @@ export function guardFullscreen(now = Date.now()): { reasons: string[]; notify: 
  * capture_isolated's fullscreenchange entry point. `markRed` raises the tab icon
  * through capture_isolated's own risk state so it is never downgraded later.
  */
-export function onFullscreenChange(markRed: () => void): void {
+export function onFullscreenChange(markRed: () => void, recheck = true): void {
   const verdict = guardFullscreen();
+  // Scare text written just after entering fullscreen: look once more while it persists.
+  if (!verdict && recheck && document.fullscreenElement) {
+    setTimeout(() => onFullscreenChange(markRed, false), 1500);
+  }
   if (!verdict?.notify) return;
   markRed();
   void appendEvent({

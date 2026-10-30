@@ -240,6 +240,34 @@ describe("guardFullscreen", () => {
     expect(exit).toHaveBeenCalledTimes(3);
   });
 
+  it("classifies a same-origin iframe made fullscreen by its own page (bypass review)", () => {
+    const frame = document.createElement("iframe");
+    document.body.appendChild(frame);
+    frame.contentDocument!.body.innerHTML = `<p>${SCARE_TEXT}</p>`;
+    const exit = fullscreen(frame);
+    expect(guardFullscreen(1000)?.reasons).toEqual(["fullscreen_scare_text", "fullscreen_phone_number"]);
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
+
+  it("rechecks once when scare text arrives after entering fullscreen", () => {
+    vi.useFakeTimers();
+    try {
+      const el = div("<h1>Loading</h1>");
+      const exit = fullscreen(el);
+      const markRed = vi.fn();
+      onFullscreenChange(markRed);
+      expect(exit).not.toHaveBeenCalled();
+      el.innerHTML = `<p>${SCARE_TEXT}</p>`;
+      vi.advanceTimersByTime(1500);
+      expect(exit).toHaveBeenCalledTimes(1);
+      expect(markRed).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(5000);
+      expect(exit).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("stops after 20 exits per page load", () => {
     const exit = fullscreen(div(`<p>${SCARE_TEXT}</p>`));
     for (let i = 0; i < 25; i++) guardFullscreen(i);
