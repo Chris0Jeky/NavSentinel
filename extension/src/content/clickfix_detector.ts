@@ -64,9 +64,9 @@ export function _resetClipboardEvents(): void {
 
 // Shell/command keyword matching lives in ./command_keywords, shared with the
 // main-world guard (whose former copy was live but untested) and the tests.
-// Re-exported here so existing test imports keep working; the isolated world
-// itself receives only the match boolean over the ns-clipboard-write bridge
-// and never calls this directly. (#810)
+// Re-exported here so existing test imports keep working. The bridge carries
+// only the match boolean (ns-clipboard-write); the isolated world classifies
+// text itself only for the copy-event read in copy_listener.ts. (#810, #1168)
 export { looksLikeCommand } from "./command_keywords";
 
 // --- ClickFix instruction text pattern matching ---

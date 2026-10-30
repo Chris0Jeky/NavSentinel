@@ -55,6 +55,7 @@ import {
 import type { DebugInfo } from "./debug_overlay";
 import { scanForClickFix } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
+import { installCopyListener } from "./copy_listener";
 import { OutboundQueue } from "./bridge_outbound";
 import {
   handleDblclickBridgeMessage,
@@ -953,6 +954,9 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
 
   _jsBehaviorState.score = computeJsBehaviorScore(_jsBehaviorState);
 }
+
+// Pastejacking: read the page-rewritten copy payload in this world (#1168).
+installCopyListener(() => settings.defaultMode !== "off", handleClickFixScan);
 
 function handleClickFixScan(): void {
   if (settings.defaultMode === "off") return;
