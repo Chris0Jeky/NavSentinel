@@ -1,6 +1,6 @@
 /**
- * Fetches the Public Suffix List and compiles it into a JSON trie
- * stored at extension/src/shared/psl_data.json.
+ * Fetches the Public Suffix List and compiles it into a trie stored as compact
+ * text at extension/src/shared/psl_trie.txt (decoded by domain.ts).
  *
  * Trie encoding:
  *   Each node is { [label]: childNode }.
@@ -9,6 +9,10 @@
  *   A child key of "*" means "any label matches here" (wildcard rule).
  *   A child key of "!" means "exception — this label is NOT a public suffix despite a
  *     wildcard at the same level".  Exception nodes store their concrete labels as keys.
+ *
+ * Text form (encodeTrie): entries are comma-separated; a leaf is its bare label; a node
+ * is label{children}, prefixed with "+" when the node itself is a public suffix ("":1).
+ * It carries the same trie as the former JSON in about half the bundle bytes.
  *
  * Usage:  node scripts/update-psl.mjs
  */
@@ -19,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PSL_URL = "https://publicsuffix.org/list/public_suffix_list.dat";
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT_PATH = resolve(__dirname, "..", "extension", "src", "shared", "psl_data.json");
+const OUT_PATH = resolve(__dirname, "..", "extension", "src", "shared", "psl_trie.txt");
 
 // The real PSL has ~9,000+ rules. A successful HTTP 200 can still return an empty
 // or truncated body (CDN hiccup, partial transfer); parsePSL("") yields [] and
@@ -37,7 +41,7 @@ export function assertEnoughRules(rules) {
   if (!Array.isArray(rules) || rules.length < MIN_PSL_RULES) {
     throw new Error(
       `PSL too short: ${Array.isArray(rules) ? rules.length : "non-array"} rules ` +
-        `(< ${MIN_PSL_RULES}) — refusing to overwrite psl_data.json (possible truncated download)`,
+        `(< ${MIN_PSL_RULES}) — refusing to overwrite psl_trie.txt (possible truncated download)`,
     );
   }
 }
@@ -146,6 +150,20 @@ function compactTrie(node) {
     if (child && typeof child === "object") node[label] = compactTrie(child);
   }
   return Object.keys(node).length === 1 && node[""] === 1 ? 1 : node;
+}
+
+/** Serialise a compacted trie to the text form decodePslTrie (domain.ts) reads. */
+export function encodeTrie(node) {
+  return Object.entries(node)
+    .filter(([label]) => label !== "")
+    .map(([label, child]) => {
+      if (!/^[^,{}+\s]+$/.test(label)) {
+        throw new Error(`PSL label cannot be encoded: ${JSON.stringify(label)}`);
+      }
+      if (child === 1) return label;
+      return `${child[""] === 1 ? "+" : ""}${label}{${encodeTrie(child)}}`;
+    })
+    .join(",");
 }
 
 async function main() {

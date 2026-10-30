@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 // Importing the build script must NOT trigger its network fetch — main() is guarded
 // to run only when the script is invoked directly. (#322 / disc#15)
-import { buildTrie, parsePSL, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { buildTrie, encodeTrie, parsePSL, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
+import { decodePslTrie } from "../extension/src/shared/domain";
 
 describe("update-psl build script: fail-closed on short rule sets (#322 / disc#15)", () => {
   it("parsePSL('') yields an empty rule set (the truncated-/empty-body case)", () => {
@@ -116,5 +119,27 @@ describe("update-psl build script: fail-closed on malformed rules (#322 / #18)",
       { type: "exact", labels: ["みんな"] },
       { type: "exact", labels: ["امارات"] },
     ]);
+  });
+});
+
+describe("update-psl build script: compact text trie round-trips", () => {
+  it("decodes encodeTrie output to the same trie, including suffix nodes, wildcards and exceptions", () => {
+    const trie = buildTrie(parsePSL("uk\nco.uk\nac.uk\njp\n*.kawasaki.jp\n!city.kawasaki.jp\n*.ck\n!www.ck\ncom\n"));
+    const text = encodeTrie(trie);
+    expect(text).toBe("+uk{co,ac},+jp{kawasaki{*,city{!}}},ck{*,www{!}},com");
+    expect(decodePslTrie(text)).toEqual(trie);
+  });
+
+  it("the committed psl_trie.txt is canonical and decodes to a full-size trie", () => {
+    const text = readFileSync(resolve(__dirname, "../extension/src/shared/psl_trie.txt"), "utf-8").trim();
+    const trie = decodePslTrie(text);
+    expect(encodeTrie(trie)).toBe(text);
+    expect(Object.keys(trie).length).toBeGreaterThan(1000);
+    expect(Object.getPrototypeOf(trie)).toBeNull();
+  });
+
+  it("refuses labels the text form cannot carry", () => {
+    expect(() => encodeTrie({ "a,b": 1 })).toThrow(/cannot be encoded/);
+    expect(() => encodeTrie({ "+a": 1 })).toThrow(/cannot be encoded/);
   });
 });
