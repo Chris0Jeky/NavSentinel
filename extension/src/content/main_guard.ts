@@ -43,6 +43,11 @@ import {
   RESERVED_SCARCE_OUTBOUND_SLOTS,
 } from "./main_guard_constants";
 import { mainWorldNowMs as nowMs } from "./main_world_clock";
+import type {} from "./main_world_natives";
+
+const natives = globalThis.__navsentinelMainNatives!;
+// No async/module-time fallback: page code may already have replaced the APIs.
+if (!natives) throw new Error("Missing MAIN document-start natives");
 
 const NS_SOURCE = "__navsentinel__";
 const BRIDGE_INIT_TYPE = "ns-port-init";
@@ -97,20 +102,20 @@ let bridgeHandshakeTimer = 0;
 // Buffers messages produced before the bridge is verified. On overflow it keeps
 // security-relevant alerts (never evicted by routine traffic) and the earliest
 // of equal-priority messages — see bridge_outbound.ts for the rationale.
-const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS);
+const pendingOutbound = new OutboundQueue(MAX_PENDING_OUTBOUND, RESERVED_SCARCE_OUTBOUND_SLOTS, natives.define);
 
 function postToIsolated(type: string, payload?: Record<string, unknown>): void {
   if (!bridgePort || !bridgeSession || !bridgeVerified) {
     const message = { type, ...(payload !== undefined ? { payload } : {}) };
     pendingOutbound.enqueue(
       message,
-      isMainGuardAlertType(type),
-      isFloodableAlertType(type),
+      isMainGuardAlertType(type, natives),
+      isFloodableAlertType(type, natives),
       coalesceKeyForMainGuardMessage(message),
     );
     return;
   }
-  bridgePort.postMessage({
+  natives.post(bridgePort, {
     source: NS_SOURCE,
     type,
     v: PROTOCOL_VERSION,
@@ -121,7 +126,8 @@ function postToIsolated(type: string, payload?: Record<string, unknown>): void {
 
 function flushPendingOutbound(): void {
   const { items, dropped } = pendingOutbound.drain();
-  for (const msg of items) {
+  for (let index = 0; index < items.length; index++) {
+    const msg = items[index]!;
     postToIsolated(msg.type, msg.payload);
   }
   // Surface any drop through the (now-verified) bridge so the isolated side can
@@ -154,7 +160,7 @@ function failBridgeHandshake(): void {
   bridgeHandshakeTimer = 0;
   if (bridgeVerified) return;
   try {
-    bridgePort?.close();
+    if (bridgePort) natives.close(bridgePort);
   } catch {
     /* port may already be closed */
   }
@@ -213,7 +219,7 @@ let lastRapidPushStateEmitAt = 0;
 
 const allocateBlockedActionId = createBlockedActionIdAllocator();
 
-const blockedActions = new Map<
+const blockedActions = natives.map<
   string,
   {
     action: () => void;
@@ -281,7 +287,7 @@ function textLength(el: Element): number {
     if (node.nodeType !== Node.TEXT_NODE) continue;
     const text = (node as Text).substringData(0, charsLeft); // never materialize an attacker-sized node
     for (let i = 0; i < text.length && charsLeft > 0; i++, charsLeft--) {
-      if (!/\s/.test(text[i]!) && ++length === 80) return length;
+      if (!natives.test(/\s/, text[i]!) && ++length === 80) return length;
     }
   }
   // shortcut: names beyond the scan budgets may be missed; use explicit metadata for such controls.
@@ -291,7 +297,7 @@ function textLength(el: Element): number {
 function attrLength(el: Element, name: string): number {
   const value = readCapturedAttribute(el, name, nativeGetAttribute);
   if (!value) return 0;
-  return Math.min(value.length, 80);
+  return natives.min(value.length, 80);
 }
 
 function hasVisibleBox(el: Element): boolean {
@@ -301,15 +307,15 @@ function hasVisibleBox(el: Element): boolean {
   if (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse") {
     return false;
   }
-  const opacity = Number.parseFloat(cs.opacity);
-  if (Number.isFinite(opacity) && opacity < 0.2) return false;
+  const opacity = natives.parseFloat(cs.opacity);
+  if (natives.finite(opacity) && opacity < 0.2) return false;
   return true;
 }
 
 function looksLikeLargeOverlay(el: Element): boolean {
   const rect = (el as HTMLElement).getBoundingClientRect?.();
   if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-  const viewportArea = Math.max(window.innerWidth, 1) * Math.max(window.innerHeight, 1);
+  const viewportArea = natives.max(window.innerWidth, 1) * natives.max(window.innerHeight, 1);
   const elementArea = rect.width * rect.height;
   return elementArea / viewportArea >= MAX_POPUP_INTENT_VIEWPORT_SHARE;
 }
@@ -328,10 +334,10 @@ function findPopupIntentSource(target: EventTarget | null): Element | null {
   while (current) {
     const candidate = readCapturedClosest(current, "button, input", nativeClosest);
     if (!candidate) return null;
-    if (candidate.tagName.toLowerCase() === "button") return candidate;
+    if (natives.lower(candidate.tagName) === "button") return candidate;
     const typeAttr = readCapturedAttribute(candidate, "type", nativeGetAttribute);
     if (typeAttr === undefined) return null;
-    const type = (typeAttr ?? "").toLowerCase();
+    const type = natives.lower(typeAttr ?? "");
     if (type === "button" || type === "submit") return candidate;
     current = candidate.parentElement;
   }
@@ -349,8 +355,8 @@ function hasMeaningfulName(el: Element): boolean {
 }
 
 function looksLikePopupOpen(target?: string, features?: string): boolean {
-  const normalizedTarget = (target ?? "").trim().toLowerCase();
-  const normalizedFeatures = (features ?? "").toLowerCase();
+  const normalizedTarget = natives.lower(natives.trim(target ?? ""));
+  const normalizedFeatures = natives.lower(features ?? "");
   if (
     normalizedTarget === "" ||
     (normalizedTarget !== "_self" &&
@@ -360,9 +366,9 @@ function looksLikePopupOpen(target?: string, features?: string): boolean {
     return true;
   }
   return (
-    normalizedFeatures.includes("popup") ||
-    normalizedFeatures.includes("width=") ||
-    normalizedFeatures.includes("height=")
+    natives.includes(normalizedFeatures, "popup") ||
+    natives.includes(normalizedFeatures, "width=") ||
+    natives.includes(normalizedFeatures, "height=")
   );
 }
 
@@ -378,7 +384,7 @@ function consumeOpenAllowance(url?: string | URL): "allow_once" | "allowed" | "n
     // Strict match on the authorized URL (same fail-closed shape as the
     // redirect-target binding). A mismatch neither consumes nor burns the
     // allowance, so a racing open can't steal or void the user's grant (#851).
-    if (allowOnceUrl !== "" && url !== undefined && String(url) === allowOnceUrl) {
+    if (allowOnceUrl !== "" && url !== undefined && `${url}` === allowOnceUrl) {
       allowOnceRemaining -= 1;
       return "allow_once";
     }
@@ -425,18 +431,18 @@ function consumeAnchorOpenIntent(url: string | undefined, target: string | undef
   // Resolve first: the match then compares absolute URLs, and an unresolvable
   // URL never matches.
   // An empty URL (about:blank) never matched a link's destination; keep it so.
-  const resolved = url === undefined || url.trim() === "" ? null : resolveAgainstBase(url);
+  const resolved = url === undefined || natives.trim(url) === "" ? null : resolveAgainstBase(url);
   if (!event || resolved === null) return false;
-  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved)) return false;
+  if (!matchesAnchorOpenIntent(anchorOpenIntent, nowMs(), resolved, target, resolved, natives)) return false;
   try {
     // isTrusted is an unforgeable own property, and re-dispatching the saved
     // event with dispatchEvent() makes it false: a later replay cannot pose as
     // the original click.
     if (!event.isTrusted) return false;
-    if (nativeEventPhase.call(event) !== 0) nativePreventDefault.call(event);
+    if (nativeApply(nativeEventPhase, event, []) !== 0) nativeApply(nativePreventDefault, event, []);
     // Whatever the phase, allow the open only once the link's own navigation is
     // really cancelled. A passive listener silently ignores preventDefault().
-    if (!nativeDefaultPrevented.call(event)) return false;
+    if (!nativeApply(nativeDefaultPrevented, event, [])) return false;
   } catch {
     return false;
   }
@@ -482,11 +488,11 @@ function consumeRedirectAllowance(actionUrl: string | undefined): "allowed" | "n
 
 function pruneBlockedActions(): void {
   const now = nowMs();
-  for (const [id, entry] of blockedActions) {
+  natives.mapEach(blockedActions, (entry, id) => {
     if (entry.expiresAt <= now) {
-      blockedActions.delete(id);
+      natives.mapDelete(blockedActions, id);
     }
-  }
+  });
 }
 
 function postBlocked(params: {
@@ -515,11 +521,11 @@ function postAllowed(kind: string, url?: string, target?: string): void {
 }
 
 function notifyAllowedTarget(url: string | URL | undefined, options?: { matchQueryPrefix?: boolean }): void {
-  if (url === undefined || String(url) === "") return;
+  if (url === undefined || `${url}` === "") return;
   try {
     // An unresolvable URL grants nothing.
-    const href = resolveAgainstBase(String(url));
-    if (href === null || (!href.startsWith("http:") && !href.startsWith("https:"))) return;
+    const href = resolveAgainstBase(`${url}`);
+    if (href === null || (!natives.starts(href, "http:") && !natives.starts(href, "https:"))) return;
     postToIsolated("ns-allow-target-nav", {
       url: href,
       ttlMs: TARGET_NAV_TTL_MS,
@@ -535,14 +541,14 @@ function isGetForm(form: HTMLFormElement, submitter?: HTMLElement | null): boole
     ? readCapturedAttribute(submitter, "formmethod", nativeGetAttribute)
     : null;
   if (submitterMethod === undefined) return false;
-  if (submitterMethod) return submitterMethod.toLowerCase() === "get";
+  if (submitterMethod) return natives.lower(submitterMethod) === "get";
   const formMethod = readCapturedAttribute(form, "method", nativeGetAttribute);
   if (formMethod === undefined) return false;
-  if (formMethod) return formMethod.toLowerCase() === "get";
+  if (formMethod) return natives.lower(formMethod) === "get";
   if (!nativeFormMethodGetter) return false;
   try {
-    const idl = nativeFormMethodGetter.call(form);
-    return typeof idl === "string" && idl.toLowerCase() === "get";
+    const idl = nativeApply(nativeFormMethodGetter, form, []);
+    return typeof idl === "string" && natives.lower(idl) === "get";
   } catch {
     return false;
   }
@@ -560,9 +566,9 @@ function registerBlockedAction(params: {
   // Every caller constructs this record locally. Keep the executable closure
   // private and forward only the same already-minimized description.
   const { action, ...description } = params;
-  blockedActions.set(id, { action, expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS, ...description });
+  natives.mapSet(blockedActions, id, { action, expiresAt: nowMs() + BLOCKED_ACTION_TTL_MS, ...description });
   // Bound the Map against a synchronous flood the TTL prune can't catch (#301).
-  enforceMapSizeCap(blockedActions, MAX_BLOCKED_ACTIONS);
+  enforceMapSizeCap(blockedActions, MAX_BLOCKED_ACTIONS, natives);
   postBlocked({ id, ...description });
 }
 
@@ -593,7 +599,6 @@ const nativeDefaultPrevented = capturedGetter<boolean>(eventPrototype, "defaultP
 const nativePreventDefault = eventPrototype.preventDefault;
 const nativeFormRequestSubmit = formPrototype.requestSubmit as typeof formPrototype.requestSubmit | undefined;
 const NativeFormData = FormData;
-const NativeURL = URL;
 const formDataPrototype = FormData.prototype;
 const nativeFormDataForEach = formDataPrototype.forEach;
 const nativeFormDataDelete = formDataPrototype.delete;
@@ -604,9 +609,7 @@ const nativeFormDataAppend = formDataPrototype.append as unknown as (
   filename?: string,
 ) => void;
 const nativeGetPrototypeOf = Object.getPrototypeOf;
-const nativeApply = Reflect.apply;
-const nativeArrayPush = Array.prototype.push;
-const nativeStringToLowerCase = String.prototype.toLowerCase;
+const nativeApply = natives.apply;
 const elementPrototype = Element.prototype;
 const nativeElementGetAttribute = elementPrototype.getAttribute;
 // #1061: the loader captures a tamper-safe getAttribute invoker before the async
@@ -705,14 +708,14 @@ function documentBaseUrl(): string | null {
 /** The absolute URL the browser would use now, or null when it cannot be resolved. */
 function resolveAgainstBase(url: string): string | null {
   try {
-    return new URL(url).toString();
+    return natives.url(url).href;
   } catch {
     // Relative: needs the captured base URL.
   }
   const base = documentBaseUrl();
   if (base === null) return null;
   try {
-    return new URL(url, base).toString();
+    return natives.url(url, base).href;
   } catch {
     return null;
   }
@@ -790,10 +793,9 @@ function callNativeOpen(
 ): Window | null {
   // Named DOM properties can make the prototype capture a non-function.
   const native = typeof nativeProtoOpen === "function" ? nativeProtoOpen : nativeOpen;
-  return native.call(thisArg, url, target, features);
+  return nativeApply(native, thisArg, [url, target, features]);
 }
 
-const RESERVED_TARGETS = new Set(["_top", "_parent", "_blank"]);
 
 // Subframes skip guards only for self-navigations; top-level nav is caught by the SW's onCommitted.
 function isSubframe(): boolean {
@@ -811,9 +813,9 @@ function isSubframeSelfTarget(target: string | undefined): boolean {
 
 function isFormSelfTarget(formTarget: string): boolean {
   if (!formTarget) return true; // empty/missing form target = submit to self
-  const t = formTarget.toLowerCase();
+  const t = natives.lower(formTarget);
   if (t === "_self") return true;
-  if (RESERVED_TARGETS.has(t)) return false;
+  if (t === "_top" || t === "_parent" || t === "_blank") return false;
   return formTarget === window.name;
 }
 
@@ -854,7 +856,7 @@ type LegacyChildReplayResult =
   | { status: "blocked"; actionUrl: string | undefined }
   | { status: "replayed"; actionUrl: string };
 
-const childReplayInProgress = new WeakSet<HTMLFormElement>();
+const childReplayInProgress = natives.weak<HTMLFormElement>();
 
 function childNavigableView(): ChildNavigableView | null {
   try {
@@ -862,7 +864,7 @@ function childNavigableView(): ChildNavigableView | null {
     if (!named || !nativeWindowNameGetter || !nativeWindowLengthGetter) return null;
     return {
       selfName: nativeApply(nativeWindowNameGetter, window, []) as string,
-      lowercaseTarget: (target) => nativeApply(nativeStringToLowerCase, target, []) as string,
+      lowercaseTarget: natives.lower,
       namedObject: (name) => nativeGetOwnPropertyDescriptor(named, name)?.value,
       childCount: nativeApply(nativeWindowLengthGetter, window, []) as number,
       child: (index) => (window as unknown as Record<number, unknown>)[index],
@@ -902,7 +904,7 @@ function readReplayableFormState(form: HTMLFormElement): ReplayableFormState | n
   try {
     if (!nativeFormActionGetter || !nativeFormMethodGetter || !nativeFormEnctypeGetter) return null;
     const actionUrl = nativeApply(nativeFormActionGetter, form, []) as string;
-    const protocol = new NativeURL(actionUrl).protocol;
+    const protocol = natives.url(actionUrl).protocol;
     // Keep the exemption to ordinary network form submissions. External-handler
     // and script/data schemes do not have the same "stays in this child" safety
     // property and retain the existing prompt.
@@ -929,7 +931,7 @@ function snapshotFormData(form: HTMLFormElement): Array<readonly [string, FormDa
   const entries: Array<readonly [string, FormDataEntryValue]> = [];
   nativeApply(nativeFormDataForEach, data, [
     (value: FormDataEntryValue, name: string) => {
-      nativeApply(nativeArrayPush, entries, [[name, value]]);
+      natives.push(entries, [name, value]);
     },
   ]);
   return entries;
@@ -942,7 +944,7 @@ function replaceFormData(
   const names: string[] = [];
   nativeApply(nativeFormDataForEach, data, [
     (_value: FormDataEntryValue, name: string) => {
-      nativeApply(nativeArrayPush, names, [name]);
+      natives.push(names, name);
     },
   ]);
   for (let index = 0; index < names.length; index += 1) {
@@ -1057,7 +1059,7 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
   if (!initialTarget) return { status: "not-child" };
 
   const initialState = readReplayableFormState(form);
-  if (!initialState || childReplayInProgress.has(form)) {
+  if (!initialState || natives.weakHas(childReplayInProgress, form)) {
     return { status: "blocked", actionUrl: initialState?.actionUrl ?? resolveFormAction(form) };
   }
 
@@ -1073,13 +1075,13 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
   let retiredThrough: number;
   try {
     retiredThrough = nativeApply(nativeEventTimestamp, new NativeEvent(""), []) as number;
-    if (!Number.isFinite(retiredThrough)) return blocked;
+    if (!natives.finite(retiredThrough)) return blocked;
   } catch {
     return blocked;
   }
   exhaustRedirectAllowance(redirectAllowance, REDIRECT_LIMITS, retiredThrough);
 
-  childReplayInProgress.add(form);
+  natives.weakAdd(childReplayInProgress, form);
   try {
     const entries = snapshotFormData(form); // dispatches the page's one original formdata event
     const finalTarget = resolveDirectChildFormTarget(form);
@@ -1098,7 +1100,7 @@ function tryReplayLegacySubmitToChild(form: HTMLFormElement): LegacyChildReplayR
   } catch {
     return blocked;
   } finally {
-    childReplayInProgress.delete(form);
+    natives.weakDelete(childReplayInProgress, form);
   }
 }
 
@@ -1178,7 +1180,7 @@ function resolveFormAction(form: HTMLFormElement, submitter?: HTMLElement | null
     ? submitterAction
     : readCapturedAttribute(form, "action", nativeGetAttribute);
   if (raw === undefined) return undefined;
-  return resolveFormActionUrl(raw, location.href, documentBaseUrl()) ?? undefined;
+  return resolveFormActionUrl(raw, location.href, documentBaseUrl(), natives) ?? undefined;
 }
 
 /**
@@ -1241,8 +1243,8 @@ function dispatchFormSubmit(
   const actionUrl = resolveFormAction(form, submitter);
   const invokeNative = (): void => {
     // Preserve native receiver, argument count and exception behavior.
-    if (request) nativeFormRequestSubmit!.call(form, submitter);
-    else nativeFormSubmit.call(form);
+    if (request) nativeApply(nativeFormRequestSubmit!, form, [submitter]);
+    else nativeApply(nativeFormSubmit, form, []);
   };
   const allow = (notifyTab = true): void => {
     postAllowed(kind, actionUrl);
@@ -1312,7 +1314,7 @@ function patchOpen(): void {
       target?: string,
       features?: string
     ): Window | null {
-      return patchedOpen.call(this, url, target, features);
+      return nativeApply(patchedOpen, this, [url, target, features]);
     };
     softPatchProto(Window.prototype, "open", protoWrapper, "Window.prototype.open");
   }
@@ -1369,7 +1371,7 @@ function handleBridgeMessage(message: unknown): void {
       restrictRedirectTarget: data.restrictRedirectTarget === true,
       ...(typeof data.redirectTarget === "string" ? { redirectTarget: data.redirectTarget } : {}),
       // Identifies the click this grant follows up (#864); anything else is ignored.
-      ...(typeof data.gestureTs === "number" && Number.isFinite(data.gestureTs)
+      ...(typeof data.gestureTs === "number" && natives.finite(data.gestureTs)
         ? { gestureTs: data.gestureTs }
         : {})
     });
@@ -1385,13 +1387,13 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-allow-action" && data.id) {
-    const entry = blockedActions.get(data.id);
+    const entry = natives.mapGet(blockedActions, data.id);
     if (!entry) return;
     if (entry.expiresAt <= nowMs()) {
-      blockedActions.delete(data.id);
+      natives.mapDelete(blockedActions, data.id);
       return;
     }
-    blockedActions.delete(data.id);
+    natives.mapDelete(blockedActions, data.id);
     entry.action();
   }
 }
@@ -1409,7 +1411,7 @@ function findSuspiciousShadowAnchor(e: MouseEvent): HTMLAnchorElement | null {
   const path = e.composedPath();
   for (const node of path) {
     if (!(node instanceof HTMLAnchorElement)) continue;
-    if (node.target.toLowerCase() !== "_blank") continue;
+    if (natives.lower(node.target) !== "_blank") continue;
     if (!(node.getRootNode() instanceof ShadowRoot)) continue;
     const named = attrLength(node, "aria-label") + attrLength(node, "title") > 0 || textLength(node) > 0;
     if (named && hasVisibleBox(node)) continue;
@@ -1468,7 +1470,7 @@ document.addEventListener(
   "click",
   (event) => {
     if (!(event instanceof MouseEvent) || !event.isTrusted || isOff() || isSubframe()) return;
-    armSameTaskRedirect(redirectAllowance, nowMs(), nativeEventTimestamp.call(event), { restrict: false, target: "" }, REDIRECT_LIMITS);
+    armSameTaskRedirect(redirectAllowance, nowMs(), nativeApply(nativeEventTimestamp, event, []), { restrict: false, target: "" }, REDIRECT_LIMITS, natives);
     if (!sameTaskRedirectTimer) {
       sameTaskRedirectTimer = nativeSetTimeout(() => {
         sameTaskRedirectTimer = 0;
@@ -1499,11 +1501,11 @@ document.addEventListener(
     if (!anchor || !isSafePopupIntentSource(anchor)) return;
     let href: string;
     try {
-      href = nativeAnchorHref.call(anchor);
+      href = nativeApply(nativeAnchorHref, anchor, []);
     } catch {
       return;
     }
-    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS);
+    anchorOpenIntent = anchorOpenIntentFor(href, nowMs(), ANCHOR_OPEN_INTENT_TTL_MS, natives);
     anchorOpenIntentEvent = anchorOpenIntent ? event : null;
   },
   true
@@ -1515,7 +1517,7 @@ function findDeclaredNewTabAnchor(event: MouseEvent): HTMLAnchorElement | null {
     // The nearest link owns the click; only a declared new-tab link qualifies.
     // Read through the captured getter: an own-property spoof cannot fake it.
     try {
-      return nativeAnchorTarget.call(node).trim().toLowerCase() === "_blank" ? node : null;
+      return natives.lower(natives.trim(nativeApply(nativeAnchorTarget, node, []))) === "_blank" ? node : null;
     } catch {
       return null;
     }
@@ -1528,11 +1530,11 @@ function generateChallenge(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-window.addEventListener(
+natives.on(window,
   "message",
   (event) => {
-    if (event.source !== window) return;
-    const data = event.data as {
+    if (natives.source(event) !== window) return;
+    const data = natives.data(event) as {
       source?: string;
       type?: string;
       v?: number;
@@ -1555,38 +1557,36 @@ window.addEventListener(
     // change replaced; the real fix is SW-vouched init authentication (#186).
     if (bridgeVerified && bridgeSession && data.session !== bridgeSession) return;
 
-    const nextPort = event.ports?.[0];
+    const nextPort = natives.ports(event)?.[0];
     if (!(nextPort instanceof MessagePort)) return;
 
-    event.stopImmediatePropagation();
-    event.stopPropagation();
+    natives.stop(event);
 
     // A new init supersedes any handshake already in progress; drop its timer.
     clearBridgeHandshakeTimer();
-    bridgePort?.close();
+    if (bridgePort) natives.close(bridgePort);
     bridgePort = nextPort;
     bridgeSession = data.session;
     bridgeVerified = false;
     bridgeChallenge = generateChallenge();
 
-    bridgePort.onmessage = (bridgeEvent) => {
-      const msg = bridgeEvent.data as { source?: string; type?: string; challenge?: string };
+    natives.listen(bridgePort, (bridgeEvent) => {
+      const msg = natives.data(bridgeEvent) as { source?: string; type?: string; challenge?: string };
       if (!bridgeVerified) {
         if (msg && msg.source === NS_SOURCE && msg.type === "ns-challenge-response" && msg.challenge === bridgeChallenge) {
           clearBridgeHandshakeTimer();
           bridgeVerified = true;
           bridgeChallenge = null;
-          bridgePort!.onmessage = (e) => handleBridgeMessage(e.data);
           postToIsolated("ns-bridge-ready");
           flushPendingOutbound();
         }
         return;
       }
-      handleBridgeMessage(bridgeEvent.data);
-    };
-    bridgePort.start?.();
+      handleBridgeMessage(msg);
+    });
+    natives.start(bridgePort);
 
-    bridgePort.postMessage({
+    natives.post(bridgePort, {
       source: NS_SOURCE,
       type: "ns-challenge",
       v: PROTOCOL_VERSION,
@@ -1710,20 +1710,21 @@ function patchClipboard(): void {
  */
 function pathLooksCrossOrigin(newUrl: string): boolean {
   try {
-    const parsed = new URL(newUrl, location.href);
+    const parsed = natives.url(newUrl, location.href);
     // Only inspect same-origin pushState (cross-origin would throw)
     if (parsed.origin !== location.origin) return false;
 
-    const segments = parsed.pathname.split("/").filter(Boolean);
-    const currentHost = location.hostname.toLowerCase();
-    for (const rawSeg of segments) {
+    const segments = natives.split(parsed.pathname, "/");
+    const currentHost = natives.lower(location.hostname);
+    for (let index = 0; index < segments.length; index++) {
+      const rawSeg = segments[index]!;
       let seg: string;
-      try { seg = decodeURIComponent(rawSeg); } catch { seg = rawSeg; }
-      const dots = seg.split(".").length - 1;
+      try { seg = natives.decode(rawSeg); } catch { seg = rawSeg; }
+      const dots = natives.split(seg, ".").length - 1;
       // Require 2+ dots to distinguish real domains (accounts.google.com)
       // from file names (style.css), version strings (v1.2.3), etc.
-      if (dots >= 2 && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(seg)) {
-        if (seg.toLowerCase() !== currentHost) {
+      if (dots >= 2 && natives.test(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i, seg)) {
+        if (natives.lower(seg) !== currentHost) {
           return true;
         }
       }
@@ -1750,7 +1751,7 @@ function checkPushStateSuspicious(url: string | null | undefined, _method: strin
 
   // --- Rapid-fire detection ---
   // Track timestamps and prune old entries
-  pushStateTimestamps.push(now);
+  natives.push(pushStateTimestamps, now);
   // Prune to the window AND cap the buffer so a synchronous flood (all timestamps === now,
   // nothing pruned) can't grow it unbounded. (#302)
   pushStateTimestamps = pruneTimestampWindow(
@@ -1758,6 +1759,7 @@ function checkPushStateSuspicious(url: string | null | undefined, _method: strin
     now,
     PUSHSTATE_RAPID_WINDOW_MS,
     PUSHSTATE_RAPID_CAP,
+    natives,
   );
 
   if (pushStateTimestamps.length >= PUSHSTATE_RAPID_THRESHOLD) {
@@ -1790,14 +1792,14 @@ function patchHistory(): void {
     const patchedHistory = function (this: History, _data: unknown, _unused: string): void {
       const args = arguments; // eslint-disable-line prefer-rest-params -- Preserve supplied arity and native function.length.
       // Forward actual arity so the native still rejects missing required arguments.
-      if (args.length < 2) return Reflect.apply(native, this, args);
+      if (args.length < 2) return nativeApply(native, this, args);
       // WebIDL converts the required DOMString `unused` before the optional URL.
       args[1] = `${args[1]}`;
       const rawUrl = args[2] as string | URL | null | undefined;
       // Native and observer share one ToString; Symbol still throws (#891).
       const url = rawUrl === undefined || rawUrl === null ? rawUrl : `${rawUrl}`;
       if (args.length > 2) args[2] = url;
-      const result = Reflect.apply(native, this, args);
+      const result = nativeApply(native, this, args);
       const reason = checkPushStateSuspicious(url, method);
       if (reason) {
         postToIsolated("ns-pushstate-suspicious", { ts: nowMs(), url: url ?? "", method, reason });
@@ -1977,7 +1979,7 @@ try {
     // say "copy" to the browser and something else to this check; and cover
     // "cut". The selection is read first because a cut deletes it (#1166).
     const name = `${command}`;
-    const clipLike = /^c(opy|ut)$/i.test(name);
+    const clipLike = natives.test(/^c(opy|ut)$/i, name);
     let selText = "";
     if (clipLike) {
       try {

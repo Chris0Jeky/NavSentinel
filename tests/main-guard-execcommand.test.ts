@@ -34,6 +34,7 @@ function boot(selection: string) {
   const document = new Document();
   vm.runInNewContext(executable, {
     exports: {}, Document, document, nativeApply: Reflect.apply, debug: false, nowMs: () => 1,
+    natives: { test: (re: RegExp, text: string) => re.exec(text) !== null },
     isOff: () => false, window: { getSelection: () => ({ toString: () => "window-selection" }) },
     postToIsolated: (type: string, payload: Record<string, unknown>) => receipts.push({ type, ...payload }),
   });

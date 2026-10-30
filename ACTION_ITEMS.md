@@ -262,7 +262,19 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-81 | #1222 device-code phishing warning on Microsoft, Google and GitHub device sign-in pages | merge commit `9641f9ef` (merged 2026-10-30) | OPEN — not run |
 | AI-82 | #1224 masked and type-flipped password fields count as password fields for the credential prompt | merge commit `9d3e804e` (merged 2026-10-30) | OPEN — not run |
 | AI-83 | #1233 ClickFix reads lure text in open shadow roots and rescans late instructions | merge commit `f415ae13` (merged 2026-10-30) | OPEN — not run |
-| AI-84 | #1240 device-code phishing, lure side: warning when a page copies a code next to a device sign-in address | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1240) (candidate until merged) | OPEN — not run |
+| AI-84 | #1240 device-code phishing, lure side: warning when a page copies a code next to a device sign-in address | merge commit `51f9a302` (merged 2026-10-30) | OPEN — not run |
+| AI-85 | #1202 protection toast in a closed shadow root (#1142 item 4) | merge commit `737bcdb6` (merged 2026-10-30) | OPEN — not run |
+| AI-86 | #1206 lazy-loaded overlay cleanup and credential content analyzer | merge commit `7f48c229` (merged 2026-10-30) | OPEN — not run |
+| AI-87 | #1195 password-focus warning on high-risk pages (#1170) | merge commit `0d64e7ef` (merged 2026-10-30) | OPEN — not run |
+| AI-88 | #1182 ClickFix without an overlay, Win+X/FileFix variants, pastejacking (#1167, #1168) | merge commit `59398141` (merged 2026-10-30) | OPEN — not run |
+| AI-89 | #1191 hijacked clipboard replaced with a warning on high-confidence ClickFix (#1169) | merge commit `1b6c9421` (merged 2026-10-30) | OPEN — not run |
+| AI-90 | #1065 popup-intent ancestors read through the document-start `closest` (MAIN world) | merge commit `10e1b98a` (merged 2026-10-30) | OPEN — not run |
+| AI-91 | #1214 approvals gated on IntersectionObserver v2 painted visibility (#1142 items 1-3) | merge commit `06a0f45e` (merged 2026-10-30) | OPEN — not run |
+| AI-92 | #1231 approvals require window focus, generic fonts, toast clicks pinned to the press | merge commit `9ab71eb2` (merged 2026-10-30) | OPEN — not run |
+| AI-93 | #1237 pending off-site meta refresh scored on credential pages (#1144) | merge commit `5229650a` (merged 2026-10-30) | OPEN — not run |
+| AI-94 | #1238 approvals refused under PiP and after short blurs; per-load subframe focus latch (#1236) | merge commit `8a866350` (merged 2026-10-30) | OPEN — not run |
+| AI-95 | #1243 loader-level blur/focus fence and tab-wide PiP relay (#1242) | merge commit `a6fff55d` (merged 2026-10-30) | OPEN — not run |
+| AI-96 | #1141 MAIN-world bridge and guards use natives captured at document start | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1141) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -334,6 +346,68 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   `setTimeout(() => navigator.clipboard.writeText("ABCD-1234"), 3000)`, and click the page: a warning says the page
   copied a code for a device sign-in page. On `https://learn.microsoft.com/` the same lines stay quiet. A failure gets
   a revert PR for the merge.
+
+- **AI-85 (#1202):** with the Gym served (`npm run gym:serve`), trigger any protection toast (for example a Gym
+  popup scenario). The toast looks and behaves as before (Trust, Allow once, Dismiss by mouse and keyboard), and in
+  the page's DevTools the toast host's `shadowRoot` reads `null`. Automated: `toast-button-click-contract.spec.ts`,
+  `toast-state-reader.spec.ts`. A failure gets a revert PR for `737bcdb6`.
+
+- **AI-86 (#1206):** (1) with automatic overlay cleanup on in Options, a Gym overlay-trap page still gets its
+  cleanup chip and the trap is removed; (2) a credential prompt on a risky Gym login page still shows its content
+  reasons. The service-worker console shows no failed `import()` of `overlay_cleanup` or `content_analyzer`.
+  Automated: `phase2-detections.spec.ts`. A failure gets a revert PR for `7f48c229`.
+
+- **AI-87 (#1195):** dummy credentials only. On the Gym's `fetch-login-phish.html`, focusing the password field
+  shows the warning before anything is typed; `fetch-login-benign.html` stays quiet. Automated:
+  `credential-focus-warning.spec.ts`. A failure gets a revert PR for `0d64e7ef`.
+
+- **AI-88 (#1182):** on `http://localhost:5173/rw-fullscreen-benign.html`, appending a "press Win + X, then paste"
+  instruction with no overlay shows the ClickFix warning; a page whose copy listener swaps a copied selection for a
+  command (pastejacking) is flagged when you copy. A docs page's ordinary copy button stays quiet. Automated:
+  `pastejacking-copy-listener.spec.ts`. A failure gets a revert PR for `59398141`.
+
+- **AI-89 (#1191):** in Smart or Strict mode, a high-confidence ClickFix lure that writes a command to the clipboard
+  shows the ClickFix warning and then a second toast saying the command was replaced; pasting into Notepad gives
+  Heedline's warning sentence, not the command. If the write is rejected, only the first warning shows. Automated:
+  `phase2-detections.spec.ts`. A failure gets a revert PR for `1b6c9421`.
+
+- **AI-90 (#1065, MAIN world):** popup-intent detection still treats a click inside a link or button as the user's
+  intent: a Gym popup scenario opened by a real click is allowed, and the deceptive one is still caught. Automated:
+  `main-native-call-capture.spec.ts`. A failure gets a revert PR for `10e1b98a`.
+
+- **AI-91 (#1214):** a normal credential prompt and toast arm and accept clicks as before, including while hovered.
+  In DevTools, paint a click-through cover over Proceed once:
+  `const c = document.createElement("div"); c.popover = "manual"; c.style.cssText = "position:fixed;inset:0;margin:0;pointer-events:none;background:#fff"; document.body.append(c); c.showPopover()`.
+  A click where Proceed once sits (under the white cover) then does nothing (the decision stays pending); after `c.remove()` it arms again. A prompt inside a cross-site iframe still works.
+  Automated: `credential-modal-visibility.spec.ts`, `credential-modal-hover.spec.ts`,
+  `credential-modal-iframe.spec.ts`. A failure gets a revert PR for `06a0f45e`.
+
+- **AI-92 (#1231):** the credential prompt and toast render in the system sans-serif font even on a page whose CSS
+  restyles `font-family` broadly; approvals do nothing while another window has focus and work once the page window
+  is focused again; on a toast, pressing on one button and releasing on another does not activate the second.
+  Automated: `approval-surface-fonts.spec.ts`, `credential-modal-focus.spec.ts`, `toast-press-pin.spec.ts`. A
+  failure gets a revert PR for `9ab71eb2`.
+
+- **AI-93 (#1237):** dummy credentials only. On the Gym's `meta-refresh-offsite.html`, submitting the login form
+  while an off-site meta refresh is pending shows the credential prompt with the refresh reason;
+  `meta-refresh-samesite.html` does not. Automated: `meta-refresh-credential.spec.ts`. A failure gets a revert PR
+  for `5229650a`.
+
+- **AI-94 (#1238):** while a video on the page is in picture-in-picture, the credential prompt's Proceed once does
+  nothing; once PiP closes it arms again after the usual short delay. Switching away from the window and straight back makes
+  approvals wait briefly before arming. Automated: `credential-modal-covers.spec.ts`. A failure gets a revert PR for
+  `8a866350`.
+
+- **AI-95 (#1243):** as AI-94, but put a video inside a same-site iframe into picture-in-picture: Proceed once in the
+  top-frame prompt does nothing until that PiP window closes. Running `window.dispatchEvent(new Event("pagehide"))`
+  in DevTools while PiP is open does not re-arm it. Automated: `credential-modal-covers.spec.ts`. A failure gets a
+  revert PR for the merge.
+
+- **AI-96 (#1141, MAIN world):** automated evidence covers the hostile cases (`main-world-clock-early-inline.spec.ts`,
+  `bridge-peer-takeover.spec.ts`, `blocked-action-id-authority.spec.ts`, the `form-submit-*` specs). By hand, a
+  regression smoke only: with the Gym served, the deceptive-popup and credential-submit scenarios still warn as before,
+  a real-click popup still opens, and the page console shows no `[NavSentinel]` errors. A failure gets a revert PR
+  for the merge.
 
 - **AI-80 (#1216):** nothing typed or pasted here is real. On a public page with a plain text box (for example
   the search box on `https://www.wikipedia.org/`, without pressing Enter) paste

@@ -4,6 +4,7 @@
  * so it is not unit-importable). The MAIN-world wiring that calls these is
  * covered by the Gym/E2E pushstate fixtures. (#301, #302)
  */
+import type { MainWorldNatives } from "./main_world_natives";
 
 /**
  * Create a guard-local blocked-action ID allocator (#933). The returned closure
@@ -34,13 +35,14 @@ export function createBlockedActionIdAllocator(initialSequence = 0n): () => stri
  * once; an evicted entry's allow-closure is gone, but the ns-allow-action
  * handler degrades gracefully (missing id → no-op).
  */
-export function enforceMapSizeCap<K, V>(map: Map<K, V>, maxSize: number): number {
+export function enforceMapSizeCap<K, V>(map: Map<K, V>, maxSize: number, natives?: MainWorldNatives): number {
   if (maxSize < 0) maxSize = 0;
   let evicted = 0;
-  while (map.size > maxSize) {
-    const oldest = map.keys().next();
+  while ((natives ? natives.mapSize(map) : map.size) > maxSize) {
+    const oldest = natives ? natives.oldest(map) : map.keys().next();
     if (oldest.done) break;
-    map.delete(oldest.value);
+    if (natives) natives.mapDelete(map, oldest.value);
+    else map.delete(oldest.value);
     evicted++;
   }
   return evicted;
@@ -59,16 +61,28 @@ export function pruneTimestampWindow(
   now: number,
   windowMs: number,
   cap: number,
+  natives?: MainWorldNatives,
 ): number[] {
   const cutoff = now - windowMs;
-  const pruned = timestamps.filter((ts) => ts >= cutoff);
+  const pruned: number[] = [];
+  for (let index = 0; index < timestamps.length; index++) {
+    const ts = timestamps[index]!;
+    if (ts >= cutoff) {
+      if (natives) natives.push(pruned, ts);
+      else pruned.push(ts);
+    }
+  }
   // A non-positive cap means "keep nothing". Guard it explicitly: slice(-cap) with
   // cap === 0 is slice(-0), and -0 normalizes to +0 under ToIntegerOrInfinity, so
   // slice(0) would return the WHOLE array — the opposite of a zero cap. A negative
   // cap would also mis-slice from the front. Dormant today (the only caller passes
   // PUSHSTATE_RAPID_CAP = 8) but a latent footgun in a DoS-cap helper. (#401)
   if (cap <= 0) return [];
-  if (pruned.length > cap) return pruned.slice(-cap);
+  if (pruned.length > cap) {
+    const offset = pruned.length - cap;
+    for (let index = 0; index < cap; index++) pruned[index] = pruned[index + offset]!;
+    pruned.length = cap;
+  }
   return pruned;
 }
 
@@ -262,6 +276,7 @@ export function armSameTaskRedirect(
   gestureTs: number,
   scope: RedirectAllowanceScope,
   limits: RedirectAllowanceLimits,
+  natives?: MainWorldNatives,
 ): void {
   if (gestureTs <= state.retiredThrough) return;
   state.count = 0;
@@ -269,8 +284,14 @@ export function armSameTaskRedirect(
   state.sameTaskArmedAt = now;
   state.sameTaskRestrict = scope.restrict;
   state.sameTaskTarget = scope.target;
-  state.pendingFollowUps.push(gestureTs);
-  if (state.pendingFollowUps.length > limits.maxPendingFollowUps) state.pendingFollowUps.shift();
+  if (natives) natives.push(state.pendingFollowUps, gestureTs);
+  else state.pendingFollowUps.push(gestureTs);
+  if (state.pendingFollowUps.length > limits.maxPendingFollowUps) dropFollowUps(state.pendingFollowUps, 1);
+}
+
+function dropFollowUps(pending: number[], count: number): void {
+  for (let index = count; index < pending.length; index++) pending[index - count] = pending[index]!;
+  pending.length -= count;
 }
 
 /** End the same-task arm; called from the next task. */
@@ -296,9 +317,14 @@ export function applyIsolatedRedirectAllowance(
   // Ignore its old grant completely: it must not renew or widen newer authority.
   if (grant.gestureTs !== undefined && grant.gestureTs <= state.retiredThrough) return;
   const pending = state.pendingFollowUps;
-  const match = grant.gestureTs === undefined ? -1 : pending.indexOf(grant.gestureTs);
+  let match = -1;
+  if (grant.gestureTs !== undefined) {
+    for (let index = 0; index < pending.length; index++) {
+      if (pending[index] === grant.gestureTs) { match = index; break; }
+    }
+  }
   if (match >= 0) {
-    pending.splice(0, match + 1);
+    dropFollowUps(pending, match + 1);
   } else {
     state.count = 0;
   }
@@ -366,10 +392,10 @@ export interface AnchorOpenIntent {
   until: number;
 }
 
-export function anchorOpenIntentFor(href: string, now: number, ttlMs: number): AnchorOpenIntent | null {
-  let parsed: URL;
+export function anchorOpenIntentFor(href: string, now: number, ttlMs: number, natives?: MainWorldNatives): AnchorOpenIntent | null {
+  let parsed: Pick<URL, "protocol" | "origin" | "pathname">;
   try {
-    parsed = new URL(href);
+    parsed = natives ? natives.url(href) : new URL(href);
   } catch {
     return null;
   }
@@ -383,14 +409,15 @@ export function matchesAnchorOpenIntent(
   url: string | undefined,
   target: string | undefined,
   baseHref: string,
+  natives?: MainWorldNatives,
 ): boolean {
   if (!intent || now > intent.until) return false;
-  const normalizedTarget = (target ?? "").trim().toLowerCase();
+  const normalizedTarget = natives ? natives.lower(natives.trim(target ?? "")) : (target ?? "").trim().toLowerCase();
   if (normalizedTarget !== "" && normalizedTarget !== "_blank") return false;
-  if (url === undefined || url.trim() === "") return false;
-  let parsed: URL;
+  if (url === undefined || (natives ? natives.trim(url) : url.trim()) === "") return false;
+  let parsed: Pick<URL, "origin" | "pathname">;
   try {
-    parsed = new URL(url, baseHref);
+    parsed = natives?.url(url, baseHref) ?? new URL(url, baseHref);
   } catch {
     return false;
   }
@@ -456,7 +483,17 @@ export function readCapturedFormTarget(
   }
 }
 
-const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
+// HTML whitespace only; avoid RegExp @@replace/exec and String prototype hooks.
+function trimHtmlWhitespace(value: string): string {
+  let start = 0;
+  let end = value.length;
+  const whitespace = (c: string | undefined) => c === "\t" || c === "\n" || c === "\f" || c === "\r" || c === " ";
+  while (start < end && whitespace(value[start])) start++;
+  while (end > start && whitespace(value[end - 1])) end--;
+  let result = "";
+  for (let index = start; index < end; index++) result += value[index];
+  return result;
+}
 
 /**
  * The URL a form submission goes to, as Chromium computes it (#900). An action
@@ -472,10 +509,12 @@ const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
 export function resolveFormActionUrl(
   rawAction: string | null | undefined,
   documentUrl: string,
-  baseUrl: string | null
+  baseUrl: string | null,
+  natives?: MainWorldNatives,
 ): string | null {
-  const action = (rawAction ?? "").replace(HTML_WHITESPACE_EDGES, "");
+  const action = trimHtmlWhitespace(rawAction ?? "");
   try {
+    if (natives) return !action ? natives.url(documentUrl).href : natives.url(action, baseUrl ?? undefined).href;
     if (!action) return new URL(documentUrl).toString();
     if (baseUrl === null) return new URL(action).toString();
     return new URL(action, baseUrl).toString();
