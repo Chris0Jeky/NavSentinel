@@ -38,6 +38,10 @@ const ENDPOINTS = [
   "https://login.microsoftonline.com/common/oauth2/deviceauth",
   "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/deviceauth?user_code=X",
   "https://login.live.com/oauth20_remoteconnect.srf",
+  // Gov and China clouds, where microsoft.com/deviceloginus and /deviceloginchina land.
+  "https://login.microsoftonline.us/common/oauth2/deviceauth",
+  "https://login.partner.microsoftonline.cn/common/oauth2/deviceauth",
+  "https://login.chinacloudapi.cn/common/oauth2/deviceauth",
   "https://www.google.com/device",
   // What Chrome commits after google.com/device's server redirect (curl -IL, 2026-10-30).
   "https://accounts.google.com/o/oauth2/device/usercode",

@@ -430,8 +430,10 @@ function addTabnabPending(tabId: number, entry: TabnabPendingEntry): void {
 // with the only sources that may send users there without a warning: that provider's own
 // sign-in, account and docs pages. Its mail, documents, sites and any other provider warn.
 const DEVICE_PAGES: ReadonlyArray<readonly [RegExp, RegExp]> = [
-  [/^(?:(?:www\.)?microsoft\.com\/devicelogin|login\.microsoft(?:online)?\.com\/[^/]+\/oauth2\/(?:v2\.0\/)?deviceauth|login\.live\.com\/oauth20_remoteconnect\.srf)(?:[/?#]|$)/i,
-    /^(?:(?:www\.)?microsoft\.com|login\.microsoft(?:online)?\.com|login\.live\.com|account\.live\.com|learn\.microsoft\.com|portal\.azure\.com)\//i],
+  // Gov and China clouds: microsoft.com/deviceloginus and /deviceloginchina redirect to
+  // login.microsoftonline.us and login.partner.microsoftonline.cn (curl -IL, 2026-10-30).
+  [/^(?:(?:www\.)?microsoft\.com\/devicelogin|login\.(?:microsoft(?:online)?\.(?:com|us)|partner\.microsoftonline\.cn|chinacloudapi\.cn)\/[^/]+\/oauth2\/(?:v2\.0\/)?deviceauth|login\.live\.com\/oauth20_remoteconnect\.srf)(?:[/?#]|$)/i,
+    /^(?:(?:www\.)?microsoft\.com|login\.(?:microsoft(?:online)?\.(?:com|us)|partner\.microsoftonline\.cn|chinacloudapi\.cn)|login\.live\.com|account\.live\.com|learn\.microsoft\.com|portal\.azure\.com)\//i],
   // google.com/device server-redirects to accounts.google.com/o/oauth2/device/usercode.
   [/^(?:accounts\.google\.com\/(?:o\/oauth2\/device\/usercode|device)|(?:www\.)?google\.com\/device)(?:[/?#]|$)/i,
     /^(?:accounts|myaccount)\.google\.com\//i],
