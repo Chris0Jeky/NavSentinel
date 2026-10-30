@@ -18,7 +18,7 @@ import {
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
 import { checkSRI } from "./sri_checker";
-import { queryPasswordInputs } from "./password_field";
+import { isPasswordTypeInput, queryPasswordInputs, rememberPasswordInput } from "./password_field";
 import { addPersistentListener, documentRewritten } from "./persistent_listener";
 import { domAttribute, domProperty } from "./dom_access";
 
@@ -100,7 +100,7 @@ function isPasswordForm(form: HTMLFormElement): boolean {
     queryPasswordInputs(form).forEach((el) => seen.add(el));
     return Array.from(seen).some(
       (el) => el instanceof HTMLInputElement &&
-        domProperty(HTMLInputElement.prototype, el, "type") === "password" &&
+        isPasswordTypeInput(el) &&
         !domProperty(HTMLInputElement.prototype, el, "disabled")
     );
   } catch {
@@ -731,7 +731,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 
     const t = evt.target;
     if (!(t instanceof HTMLInputElement)) return;
-    if ((domAttribute(t, "type") || "").toLowerCase() !== "password") return;
+    if (!isPasswordTypeInput(t)) return;
 
     const trusted = await getTrustedDomains();
     const host = normalizeHost(pageIdentity().hostname);
@@ -776,6 +776,9 @@ addPersistentListener(window, "submit", (e) => {
     if (submitter) submitSeen.add(submitter);
   }
 });
+// #1220: remember password fields while they still look like one, so a later type flip is caught.
+addPersistentListener(window, "focusin", rememberPasswordInput);
+addPersistentListener(window, "input", rememberPasswordInput);
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
 addPersistentListener(window, "formdata", handleFormData);
 

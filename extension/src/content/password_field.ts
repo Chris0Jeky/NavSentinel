@@ -45,8 +45,30 @@ import { domAttribute, domProperty } from "./dom_access";
  * claims; broadening the model (with FP/TP measurement) is tracked in #199.
  */
 
+// Inputs ever seen as a password field (#1220). A page can flip `type` to text
+// just before submit (e.g. on pointerdown of a "show password" lookalike), so
+// the submit-time check must remember what the user typed a password into.
+const seenAsPassword = new WeakSet<Element>();
+
+// Types that never render typed text; everything else (including unknown types,
+// which the browser treats as text) can be masked with `-webkit-text-security`.
+const UNMASKABLE = new Set([
+  "hidden", "checkbox", "radio", "file", "submit", "reset", "button", "image",
+  "range", "color", "date", "datetime-local", "month", "week", "time",
+]);
+
+function isCssMasked(el: Element, type: string): boolean {
+  if (UNMASKABLE.has(type)) return false;
+  try {
+    const v = getComputedStyle(el).getPropertyValue("-webkit-text-security").trim();
+    return v !== "" && v !== "none";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * ASCII case-insensitive `type=password` match for an element. (#820)
+ * True for an input the user types a secret into. (#820, #1220)
  *
  * The `type` attribute is an enumerated keyword: per spec the browser matches
  * it ASCII case-insensitively (`type="PASSWORD"` renders a native masked
@@ -56,12 +78,26 @@ import { domAttribute, domProperty } from "./dom_access";
  * attribute verbatim in every engine and lowercasing in JS reproduces the
  * spec semantics exactly (no whitespace trimming on either side: like the
  * browser, `type="password "` does NOT match).
+ *
+ * Also true for a text input that renders as dots via `-webkit-text-security`
+ * (a phishing kit's lookalike), and for an input that was ever seen as a
+ * password field (a later flip to text/hidden does not change what it holds).
+ * The only side effect is remembering such an input in a WeakSet.
  */
 export function isPasswordTypeInput(el: Element): boolean {
-  return (
-    domProperty(Element.prototype, el, "tagName").toLowerCase() === "input" &&
-    (domAttribute(el, "type") ?? "").toLowerCase() === "password"
-  );
+  if (domProperty(Element.prototype, el, "tagName").toLowerCase() !== "input") return false;
+  const type = (domAttribute(el, "type") ?? "").toLowerCase();
+  if (type === "password" || seenAsPassword.has(el) || isCssMasked(el, type)) {
+    seenAsPassword.add(el);
+    return true;
+  }
+  return false;
+}
+
+/** Event listener: remember the focused or edited input if it is a password field. */
+export function rememberPasswordInput(e: Event): void {
+  const t = e.composedPath()[0];
+  if (t instanceof Element) isPasswordTypeInput(t);
 }
 
 /**
