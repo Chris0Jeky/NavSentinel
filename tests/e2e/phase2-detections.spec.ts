@@ -835,7 +835,7 @@ test.describe("DOM Mutation Monitor", () => {
 
       await expect.poll(() => evaluateInToast(page, (roots) =>
         roots.reduce((count, root) => count + root.querySelectorAll(".brief-recovery").length, 0),
-      ), { timeout: 3000 }).toBe(0);
+      ), { timeout: 3000, intervals: [100] }).toBe(0);
       await page.evaluate(() => {
         const api = (window as typeof window & {
           __navsentinelMutation05?: { injectNext: (source?: string) => string | null };

@@ -31,6 +31,10 @@ const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
 
+// The 2.8 s cleanup chip must be seen leaving within 3 s. expect.poll's default
+// back-off (up to 1 s between reads) can miss that window; locators retried faster.
+const LOCATOR_LIKE_POLL = { timeout: 3000, intervals: [100] };
+
 async function setupNestedTest(pathname: string): Promise<{
   page: Page;
   context: BrowserContext;
@@ -276,7 +280,7 @@ test("cleanup recovery notice is small and leaves after two seconds or an outsid
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "exact");
     await waitForFrameToast(frame, /overlay hidden/i);
-    await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), { timeout: 3000 }).toBe(0);
+    await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), LOCATOR_LIKE_POLL).toBe(0);
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
   } finally {
     await cleanup();
@@ -322,7 +326,7 @@ test("cleanup notice briefly yields to a preserved accessible player-error dialo
       noticeBox.y + noticeBox.height > confirmBox.y,
     ).toBe(true);
 
-    await expect.poll(() => toastCount(frame, notice), { timeout: 3000 }).toBe(0);
+    await expect.poll(() => toastCount(frame, notice), LOCATOR_LIKE_POLL).toBe(0);
     await confirm.click();
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.dialogConfirmCount,
@@ -596,7 +600,7 @@ test("nested cleanup handles a twelve-frame mixed nesting matrix without touchin
     for (const [index, fixtureCase] of cases.entries()) {
       if (fixtureCase === "benign") continue;
       const frame = await childFrame(page, fixtureCase, index);
-      await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), { timeout: 3000 }).toBe(0);
+      await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), LOCATOR_LIKE_POLL).toBe(0);
     }
     expect(context.pages()).toHaveLength(pageCount);
   } finally {
