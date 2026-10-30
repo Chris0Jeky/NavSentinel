@@ -1227,9 +1227,9 @@ function dispatchFormSubmit(
     if (request) nativeFormRequestSubmit!.call(form, submitter);
     else nativeFormSubmit.call(form);
   };
-  const allow = (): void => {
+  const allow = (notifyTab = true): void => {
     postAllowed(kind, actionUrl);
-    notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(form, submitter) });
+    if (notifyTab) notifyAllowedTarget(actionUrl, { matchQueryPrefix: isGetForm(form, submitter) });
     invokeNative();
   };
   if (isOff()) {
@@ -1248,10 +1248,11 @@ function dispatchFormSubmit(
     return;
   }
   const capturedFormTarget = readCapturedFormTarget(form, nativeFormTargetGetter);
+  const childSelf = isSubframe() && capturedFormTarget !== null && isFormSelfTarget(capturedFormTarget);
   if (childReplay.status === "not-child" &&
-      ((isSubframe() && capturedFormTarget !== null && isFormSelfTarget(capturedFormTarget)) ||
-        consumeRedirectAllowance(actionUrl) !== "none")) {
-    allow();
+      (childSelf || consumeRedirectAllowance(actionUrl) !== "none")) {
+    // A child self-submit authorizes only that child, never a later top-tab navigation.
+    allow(!childSelf);
     return;
   }
 

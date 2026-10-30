@@ -1,0 +1,73 @@
+name: Clipboard Pressure Diagnostic Pair
+
+# Explicitly instrumented copies only. Ordinary CI/acceptance remain unchanged.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clipboard-pressure-pair-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnostic-pair:
+    name: Fixed/regressed clipboard diagnostic
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'gate:browser'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      EXPECTED_CHECKOUT_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact head with full history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify clean exact head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_CHECKOUT_HEAD"
+          test "$(git rev-parse --is-shallow-repository)" = "false"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install and build the exact source
+        run: |
+          npm ci
+          rm -rf extension/dist
+          npm run build
+
+      - name: Install browser system dependencies
+        run: npx playwright install-deps chromium
+
+      - name: Run and strictly qualify the native pair
+        run: |
+          test -x /opt/google/chrome/chrome
+          xvfb-run -a node scripts/clipboard-pressure-pair.mjs run test-results/clipboard-pressure-pair "$EXPECTED_CHECKOUT_HEAD"
+
+      - name: Preserve both native logs, reports and receipts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: clipboard-pressure-pair-${{ github.run_id }}-${{ github.run_attempt }}
+          # The regressed copy is a loadable build with #599's protection removed; keep it off the artifact.
+          path: |
+            test-results/clipboard-pressure-pair/
+            !test-results/clipboard-pressure-pair/regressed-source/
+            artifacts/acceptance/pressure-pair-*/
+          if-no-files-found: warn
+          retention-days: 14

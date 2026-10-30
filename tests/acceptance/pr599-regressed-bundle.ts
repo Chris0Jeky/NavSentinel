@@ -8,13 +8,17 @@
  *
  *   node tests/acceptance/pr599-regressed-bundle.ts [output directory]
  *
- * Prints the regressed extension directory. Point the acceptance lane at it:
+ * Prints the regressed source directory. The row-8 spec automatically creates
+ * and cleans up an observed copy for its own session, just as for the fixed
+ * source build. Pass this source directory, not a pre-observed copy:
  *
  *   EXTENSION_PATH=<printed path> npx playwright test -c playwright.acceptance.config.ts \
  *     tests/acceptance/ai47-8-clipboard-pressure.spec.ts
  *
- * ai47-8-clipboard-pressure.spec.ts must FAIL on this copy and PASS on the real
- * build. The copy carries `navsentinel-pr599-regressed.json` so the spec's
+ * With valid direct queue evidence, ai47-8-clipboard-pressure.spec.ts must FAIL
+ * on this copy and PASS on an equally observed fixed-policy copy. These are
+ * diagnostic artifacts, not unchanged release-bundle proof. This copy carries
+ * `navsentinel-pr599-regressed.json` so the spec's
  * receipt says which bundle it ran on. Test tooling only: never package or load
  * the copy for anything else, and delete it after the proof run.
  */

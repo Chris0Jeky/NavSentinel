@@ -1,11 +1,26 @@
-import {
-  bypassNextRestoredOverlayAttributeBatch,
-  classifyOverlayElement,
-  isOverlayCleanupCandidateEligible,
-  isHtmlElementLike,
-  resumeOverlayCleanupForElement,
-  type MutationAlert,
-} from "./mutation_monitor";
+import type * as MutationMonitor from "./mutation_monitor";
+import type { MutationAlert } from "./mutation_monitor";
+
+/**
+ * The mutation-monitor seams cleanup uses. The caller binds them instead of
+ * this module importing them: a static import would make the bundler split the
+ * monitor out of the always-on capture chunk into a chunk shared with this
+ * opt-in, lazily loaded module.
+ */
+export type OverlayCleanupMonitor = Pick<
+  typeof MutationMonitor,
+  | "bypassNextRestoredOverlayAttributeBatch"
+  | "classifyOverlayElement"
+  | "isOverlayCleanupCandidateEligible"
+  | "isHtmlElementLike"
+  | "resumeOverlayCleanupForElement"
+>;
+
+let monitor: OverlayCleanupMonitor;
+
+export function bindOverlayCleanupMonitor(hooks: OverlayCleanupMonitor): void {
+  monitor = hooks;
+}
 
 export type OverlaySuppression = () => boolean;
 
@@ -64,7 +79,7 @@ function createElementSuppression(element: HTMLElement): ElementSuppression {
 
     if (!element.isConnected || !isExactSuppressionStamp(element)) return false;
 
-    bypassNextRestoredOverlayAttributeBatch(element);
+    monitor.bypassNextRestoredOverlayAttributeBatch(element);
     if (record.priorDisplay) {
       element.style.setProperty(
         "display",
@@ -86,7 +101,7 @@ function reconcileElement(element: Element): {
   record: ElementSuppression;
   action: Exclude<OverlayCleanupAction, "budget_exhausted">;
 } | null {
-  if (!isHtmlElementLike(element) || !element.isConnected) return null;
+  if (!monitor.isHtmlElementLike(element) || !element.isConnected) return null;
   if (element === document.body || element === document.documentElement) return null;
 
   const existing = suppressionByElement.get(element);
@@ -147,8 +162,8 @@ export function reconcileDetectedOverlay(
   }
 
   const elements = Array.from(new Set(alert.elements ?? [alert.element]))
-    .filter((element) => force || isOverlayCleanupCandidateEligible(element));
-  if (force) elements.forEach(resumeOverlayCleanupForElement);
+    .filter((element) => force || monitor.isOverlayCleanupCandidateEligible(element));
+  if (force) elements.forEach(monitor.resumeOverlayCleanupForElement);
   let group = activeSuppressionGroup?.active ? activeSuppressionGroup : null;
   let reasserted = false;
   let suppressed = false;
@@ -228,8 +243,8 @@ export function suppressHighSeverityOverlayInPath(
   if (!enabled) return null;
 
   for (const target of resolvedTarget ? [resolvedTarget, ...path] : path) {
-    if (!isHtmlElementLike(target)) continue;
-    const classification = classifyOverlayElement(target);
+    if (!monitor.isHtmlElementLike(target)) continue;
+    const classification = monitor.classifyOverlayElement(target);
     if (classification?.severity !== "high") continue;
     return reconcileDetectedOverlay({
       type: "overlay_injected",

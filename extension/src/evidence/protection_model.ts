@@ -34,7 +34,7 @@ function classify(entry: EventLogEntry): Pick<ProtectionEvent, "activity" | "act
   if (entry.kind === "nav_blank_prompt" || entry.kind === "nav_rollback") {
     return { activity: "redirects", activityDetail: entry.kind === "nav_rollback" ? "A navigation rollback was recorded." : "New-tab or popup navigation held for a decision." };
   }
-  if (["cred_paste_warn", "clickfix_detected", "fullscreen_locker_exit", "nav_reputation_late_warn"].includes(entry.kind) ||
+  if (["cred_paste_warn", "clickfix_detected", "nav_reputation_late_warn"].includes(entry.kind) ||
     (entry.kind === "mutation_alert" && (extra?.overlayCleanupOutcome === "budget_exhausted" ||
       (extra?.overlayAutoDismissed !== true && extra?.severity === "high" && reasons.some(reason => reason === "overlay_detected" || reason === "overlay_injected"))))) {
     return { activity: "warnings", activityDetail: "Warning recorded without a block in this record." };
