@@ -19,9 +19,13 @@ const executable = ts.transpileModule(`${classifier}\n${patch.getText(ast)}\npat
 type Item = { types: string[]; getType(type: string): Promise<{ text(): Promise<string> }> };
 function boot(nativeWrite: () => Promise<void> = () => Promise.resolve()) {
   const rows: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  const clipboard = { write: (_items: Item[]) => nativeWrite(), writeText: (_text: string) => Promise.resolve() };
+  // Inherited, like the browser's Clipboard.prototype methods the guard wraps (#1166).
+  const clipboard = Object.create({
+    write: (_items: Item[]) => nativeWrite(), writeText: (_text: string) => Promise.resolve(),
+  }) as { write(items: Item[]): Promise<void>; writeText(text: string): Promise<void> };
   vm.runInNewContext(executable, {
-    exports: {}, navigator: { clipboard }, nativeClipboardWrite: clipboard.write,
+    exports: {}, navigator: { clipboard }, Clipboard: { prototype: Object.getPrototypeOf(clipboard) },
+    nativeClipboardWrite: clipboard.write,
     nativeClipboardWriteText: clipboard.writeText, nativeApply: Reflect.apply,
     debug: false, nowMs: () => 123,
     postToIsolated: (type: string, payload: Record<string, unknown>) => rows.push({ type, payload }),
@@ -58,6 +62,17 @@ describe("clipboard successful-write metadata equivalence", () => {
     await h.clipboard.write([item("benign"), { types: ["text/plain"], getType: async () => { throw new Error("second item read"); } }]);
     await settle();
     assert.deepEqual(h.snapshot(), expected(6, false));
+  });
+  it("classifies the items written, not ones swapped into the array afterwards (#1166)", async () => {
+    let finish!: () => void;
+    const h = boot(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const items = [item("NS_INERT base64")];
+    const pending = h.clipboard.write(items);
+    items[0] = item("benign");
+    finish();
+    await pending;
+    await settle();
+    assert.deepEqual(h.snapshot(), expected(15, true));
   });
   it("emits nothing before native settlement", async () => {
     let finish!: () => void;
