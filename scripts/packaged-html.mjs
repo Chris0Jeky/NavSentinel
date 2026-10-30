@@ -5,9 +5,9 @@ const PACKAGED_STYLESHEET_HREF = /^\/assets\/[A-Za-z0-9._~-]+\.css$/;
 // This is deliberately broader than today's Options markup. If a future page
 // gains a raw-text, preformatted, embedded-document, or template surface, keep
 // its original whitespace and let the aggregate size gate report the growth.
-const WHITESPACE_SENSITIVE_HTML =
+export const WHITESPACE_SENSITIVE_HTML =
   /<\s*\/?\s*(?:pre|textarea|style|template|xmp|listing|plaintext|iframe|noembed|noframes|svg|math)\b/i;
-const INLINE_STYLE_OR_XML_SPACE = /\s(?:style|xml:space)\s*=/i;
+export const INLINE_STYLE_OR_XML_SPACE = /\s(?:style|xml:space)\s*=/i;
 
 function parseStrictAttributes(raw) {
   const attributes = new Map();

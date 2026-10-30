@@ -36,6 +36,62 @@ export function assertContentAddressedLoader(loaderPath, content) {
   return contentLoaderDigest(content);
 }
 
+/** Isolated-world global the focus fence publishes its record under (#1242). */
+export const UI_FENCE_STATE = "__navsentinelUiFence";
+
+// #1242: window blur/focus/visibility and this tab's Picture-in-Picture state,
+// recorded at document_start before any page script can register a capture
+// listener that stops those events. The record lives in an isolated-world
+// global: the page's JS realm cannot read or write it, and capture_isolated
+// (near its cap) does not grow by another entry export, which the minified
+// shared chunk would otherwise need. ui_action_visibility reads it; its own window state is
+// a fallback for frames without this loader. A frame's PiP state is sent from
+// ground truth (pictureInPictureElement, the Document PiP window), and only
+// trusted enter/pagehide events change it; the service worker relays it, with Chrome's frame id,
+// to every frame of the tab. A lost close only keeps approvals refused. Only a
+// trusted pagehide clears the state: page script can dispatch a synthetic one
+// while its PiP window stays open (#1243 review). The relay covers a benign PiP
+// in another frame; a hostile frame that opens PiP after document.open() erased
+// these listeners, or on a detached video, never reports it (tracked in #1242).
+export const UI_FOCUS_FENCE =
+  `const S={h:top===window||document.hasFocus(),u:-1/0,a:false,r:new Set};try{Object.defineProperty(globalThis,'${UI_FENCE_STATE}',{value:S})}catch(_){}` +
+  "const fc=e=>{const t=e.type;if(t==='visibilitychange'){if(document.hidden)S.u=performance.now();return}if(e.target instanceof Node)return;S.h=true;if(t==='blur')S.a=!document.hasFocus();if(S.a)S.u=performance.now();if(t==='focus')S.a=false};for(const t of ['blur','focus','visibilitychange'])addEventListener(t,fc,true);" +
+  "let sent=false,dp=false;const pip=o=>{if(o!==sent){sent=o;try{chrome.runtime.sendMessage({type:'ns-pip',open:o}).catch(()=>{})}catch(_){}}};" +
+  "const pv=e=>{if(e.type==='enterpictureinpicture')e.target.addEventListener('leavepictureinpicture',pv);pip(dp||!!document.pictureInPictureElement)};addEventListener('enterpictureinpicture',pv,true);addEventListener('leavepictureinpicture',pv,true);addEventListener('pagehide',e=>{if(e.isTrusted){dp=false;pip(false)}},true);" +
+  "try{documentPictureInPicture.addEventListener('enter',e=>{if(!e.isTrusted)return;dp=true;pip(true);e.window.addEventListener('pagehide',x=>{if(x.isTrusted){dp=false;pip(!!document.pictureInPictureElement)}})})}catch(_){}" +
+  "chrome.runtime.onMessage.addListener(m=>{if(m?.type==='ns-pip'&&typeof m.frame==='number')m.open===true?S.r.add(m.frame):S.r.delete(m.frame)});";
+
+/**
+ * The synchronous document_start loader for capture_isolated. CRXJS loads the
+ * bundled isolated entry through an async import, and the page can register
+ * capture listeners during that gap. This loader runs in the extension's
+ * isolated world, whose DOM prototypes are unreachable from page script, so it
+ * needs no captured accessors. It fences trusted pointer, mouse, touch, click,
+ * and keyboard input whose composed path includes the extension-owned toast
+ * host before any page listener can observe it, then hands a press, click or
+ * keyboard activation to the module in the same world (the press pins the
+ * click to the pressed control, #1203). The module accepts the host only by
+ * identity and resolves the control from its own WeakMap, so a page-forged host
+ * or attribute never activates a real control.
+ */
+export function uiGuardLoaderTemplate(chunkPath) {
+  return `(function(){'use strict';document.documentElement?.setAttribute('data-navsentinel-ui-guard','${UI_GUARD_REVISION_PLACEHOLDER}');let sink=null;const guard=e=>{if(!e.isTrusted)return;const path=e.composedPath();let host=null;for(let i=0;i<path.length;i++){const n=path[i];if(n instanceof Element&&n.id==='__navsentinel_toast_host'){host=n;break}}if(!host)return;const type=e.type,key=(type==='keydown'||type==='keyup')&&(e.key==='Enter'||e.key===' ');if(type==='click'||type==='auxclick'||type==='contextmenu'||key)e.preventDefault();e.stopImmediatePropagation();if(sink&&(type==='click'||type==='pointerdown'||type==='keyup'&&key))sink(host,path,e)};for(const type of ['pointerdown','pointerup','pointercancel','mousedown','mouseup','touchstart','touchend','touchcancel','click','dblclick','auxclick','contextmenu','keydown','keyup'])window.addEventListener(type,guard,{capture:true,passive:false});${UI_FOCUS_FENCE}const injectTime=performance.now();(async()=>{const m=await import(chrome.runtime.getURL(${JSON.stringify(chunkPath)}));sink=m.activateUiControl??null;m.onExecute?.({perf:{injectTime,loadTime:performance.now()-injectTime}})})().catch(console.error)})();\n`;
+}
+
+/** The focus fence must appear exactly once and run before the async module import. */
+export function assertUiFocusFence(loader) {
+  const text = String(loader);
+  const first = text.indexOf(UI_FOCUS_FENCE);
+  if (first < 0) throw new Error("UI-guard loader is missing the focus/PiP fence");
+  if (text.indexOf(UI_FOCUS_FENCE, first + UI_FOCUS_FENCE.length) >= 0) {
+    throw new Error("UI-guard loader has more than one focus/PiP fence");
+  }
+  const asyncImport = text.indexOf(ASYNC_IMPORT);
+  if (asyncImport < 0 || first > asyncImport) {
+    throw new Error("UI-guard focus/PiP fence must run before the async module import");
+  }
+}
+
 export function finalizeUiGuardLoader(loaderTemplate) {
   const placeholderMarker = uiGuardMarker(UI_GUARD_REVISION_PLACEHOLDER);
   if (loaderTemplate.split(placeholderMarker).length !== 2) {

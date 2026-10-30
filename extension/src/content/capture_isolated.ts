@@ -53,7 +53,7 @@ import {
   type DownCapture
 } from "./dom_builder";
 import type { DebugInfo } from "./debug_overlay";
-import { clickFixToastPrefix, scanForClickFix } from "./clickfix_detector";
+import { clickFixToastPrefix, hasRecentCommandClipboardWrite, scanForClickFix, scannableText } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { installCopyListener } from "./copy_listener";
 import { OutboundQueue } from "./bridge_outbound";
@@ -88,7 +88,7 @@ import {
   isPushStateAbuseActive,
 } from "./pushstate_guard";
 import { correlatesShadowGuardPrompt } from "./shadow_guard_correlation";
-import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
+import type { CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 import { isRiskReducingReason } from "../shared/reason_codes";
@@ -636,6 +636,7 @@ function handleBridgeMessage(message: unknown): void {
     }, receivedAtMs);
     if (settings.defaultMode !== "off") {
       handleClickFixScan(data.looksLikeCommand === true);
+      if (!data.looksLikeCommand) checkDeviceCodeLure(data.contentLength ?? 0);
     }
     return;
   }
@@ -957,10 +958,30 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
 
 // Pastejacking: read the page-rewritten copy payload in this world (#1168).
 // The copy path passes no receipt, so `command` stays false and it never overwrites (#1169).
-installCopyListener(() => settings.defaultMode !== "off", () => handleClickFixScan());
+installCopyListener(() => settings.defaultMode !== "off", (length) => {
+  handleClickFixScan();
+  checkDeviceCodeLure(length);
+});
 
-function handleClickFixScan(command = false): void {
-  if (settings.defaultMode === "off") return;
+// A short non-command copy may be a device code a lure hands out (#1223); the
+// window absorbs a little padding around 8-11 character codes.
+function checkDeviceCodeLure(length: number): void {
+  if (length >= 8 && length <= 16) import("./devicecode_lure").then((m) => m.checkDeviceCodeLure(scannableText), () => {});
+}
+
+// Instructions shown after the copy (#1218): an undetected command write is
+// rescanned at 1.5, 5 and 15 s (inside the 30 s write window), one chain at a time.
+let clickFixRescanPending = false;
+function rescanClickFix(step = 0): void {
+  clickFixRescanPending = true;
+  setTimeout(() => {
+    clickFixRescanPending = false;
+    if (!handleClickFixScan(false, true) && step < 2) rescanClickFix(step + 1);
+  }, [1500, 3500, 10000][step]);
+}
+
+function handleClickFixScan(command = false, rescan = false): boolean {
+  if (settings.defaultMode === "off") return false;
   const now = Date.now();
 
   const result = scanForClickFix();
@@ -987,10 +1008,13 @@ function handleClickFixScan(command = false): void {
       .catch(() => {});
   }
 
-  if (!result.detected) return;
+  if (!result.detected) {
+    if (!rescan && !clickFixRescanPending && hasRecentCommandClipboardWrite()) rescanClickFix();
+    return false;
+  }
 
   // Rate-limit standalone toast: at most one alert per 10 seconds
-  if (now - clickFixAlertedAt < 10_000) return;
+  if (now - clickFixAlertedAt < 10_000) return true;
 
   clickFixAlertedAt = now;
   sendIconUpdate("red");
@@ -1017,6 +1041,7 @@ function handleClickFixScan(command = false): void {
     },
     timeoutMs: 0,
   });
+  return true;
 }
 
 // --- Tech-support-scam fullscreen locker (#1171) ---
@@ -1264,12 +1289,14 @@ scheduleMutationMonitor();
 
 // --- CSP analysis (run once after DOM is ready) ---
 
+// Lazy (#1218): scoring reads it only after DOMContentLoaded, as before, and the
+// capture chunk has no headroom for it.
 function runCSPAnalysis(): void {
   if (cachedCSPAnalysis) return;
-  cachedCSPAnalysis = analyzeCSP(document);
-  if (settings.debug) {
-    console.debug("[NavSentinel] CSP analysis:", cachedCSPAnalysis);
-  }
+  import("./csp_analyzer").then((m) => {
+    cachedCSPAnalysis ??= m.analyzeCSP(document);
+    if (settings.debug) console.debug("[NavSentinel] CSP analysis:", cachedCSPAnalysis);
+  }, () => {});
 }
 
 if (document.readyState === "loading") {

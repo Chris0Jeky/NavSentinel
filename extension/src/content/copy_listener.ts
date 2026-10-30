@@ -17,19 +17,22 @@ import { looksLikeCommand } from "./command_keywords";
 
 /**
  * Record metadata for a copy event whose page listeners have already run.
- * Returns true only when the page cancelled the copy and set non-empty text.
+ * Records only when the page cancelled the copy and set non-empty text; returns
+ * 0 when nothing was recorded, -1 for a command, else the trimmed text length.
  */
-export function recordCopyEvent(event: ClipboardEvent, now = Date.now()): boolean {
-  if (!event.defaultPrevented) return false;
+export function recordCopyEvent(event: ClipboardEvent, now = Date.now()): number {
+  if (!event.defaultPrevented) return 0;
   let text = "";
   try {
     text = event.clipboardData?.getData("text/plain") ?? "";
   } catch {
     // A detached/disabled DataTransfer must not break the page's copy.
   }
-  if (!text) return false;
-  recordClipboardWrite({ ts: now, contentLength: text.length, looksLikeCommand: looksLikeCommand(text) });
-  return true;
+  if (!text) return 0;
+  const command = looksLikeCommand(text);
+  recordClipboardWrite({ ts: now, contentLength: text.length, looksLikeCommand: command });
+  // -1 for a command, else the trimmed length of the recorded non-command copy.
+  return command ? -1 : text.trim().length;
 }
 
 /**
@@ -46,7 +49,7 @@ export function recordCopyEvent(event: ClipboardEvent, now = Date.now()): boolea
  * - a page window bubble listener added DURING dispatch runs after ours, so
  *   it can setData after our read.
  */
-export function installCopyListener(enabled: () => boolean, onCopy: () => void): void {
+export function installCopyListener(enabled: () => boolean, onCopy: (length: number) => void): void {
   window.addEventListener(
     "copy",
     (armed) => {
@@ -54,7 +57,8 @@ export function installCopyListener(enabled: () => boolean, onCopy: () => void):
       window.addEventListener(
         "copy",
         (event) => {
-          if (event === armed && recordCopyEvent(event as ClipboardEvent)) onCopy();
+          const length = event === armed ? recordCopyEvent(event as ClipboardEvent) : 0;
+          if (length) onCopy(length);
         },
         { once: true },
       );

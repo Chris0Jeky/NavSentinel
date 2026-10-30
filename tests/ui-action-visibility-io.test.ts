@@ -110,6 +110,132 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(p.settled).not.toHaveBeenCalled();
   });
 
+  it("does not arm while another window has focus, and re-arms after focus returns (#1225)", async () => {
+    FakeVisibilityObserver.supported = false;
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    expect(await p.click(0)).toBe(false);
+    focus.mockReturnValue(true);
+    vi.advanceTimersByTime(700);
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("in a subframe, requires focus only once the frame has had it (#1225)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.spyOn(window, "top", "get").mockReturnValue({} as Window);
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    // A never-focused frame (a cleanup chip in an ad frame) still arms.
+    expect(await p.click()).toBe(true);
+    const q = await prompt();
+    focus.mockReturnValue(true);
+    vi.advanceTimersByTime(100);
+    focus.mockReturnValue(false);
+    vi.advanceTimersByTime(1000);
+    expect(await q.click()).toBe(false);
+  });
+
+  it("in a subframe, keeps the focus latch for the frame load, not per prompt (#1236)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.spyOn(window, "top", "get").mockReturnValue({} as Window);
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    await import("../extension/src/content/ui_action_visibility");
+    focus.mockReturnValue(true);
+    window.dispatchEvent(new FocusEvent("focus")); // the user clicks into the frame
+    focus.mockReturnValue(false);
+    window.dispatchEvent(new FocusEvent("blur")); // a covering popup takes focus
+    const p = await prompt(); // raised behind the popup
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    focus.mockReturnValue(true);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+  });
+
+  it("refuses an armed approval right after a blur too short for any sample (#1236)", async () => {
+    FakeVisibilityObserver.supported = false;
+    const focus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    focus.mockReturnValue(false);
+    window.dispatchEvent(new FocusEvent("blur"));
+    focus.mockReturnValue(true);
+    window.dispatchEvent(new FocusEvent("focus"));
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("does not de-arm when focus only moves into a child frame (#1236)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    // Chrome blurs the top window on a click into an iframe while hasFocus() stays true.
+    window.dispatchEvent(new FocusEvent("blur"));
+    window.dispatchEvent(new FocusEvent("focus"));
+    expect(await p.click()).toBe(true);
+  });
+
+  it("does not arm while a video or Document Picture-in-Picture window is open (#1236)", async () => {
+    FakeVisibilityObserver.supported = false;
+    const p = await prompt();
+    Object.defineProperty(document, "pictureInPictureElement", { configurable: true, value: document.createElement("video") });
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    Reflect.deleteProperty(document, "pictureInPictureElement");
+    vi.stubGlobal("documentPictureInPicture", { window: {} });
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    vi.stubGlobal("documentPictureInPicture", { window: null });
+    vi.advanceTimersByTime(700);
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("refuses while another frame of this tab has PiP open, with a hint, until it closes (#1242)", async () => {
+    FakeVisibilityObserver.supported = false;
+    // The document_start loader's record; the service worker relay fills r.
+    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
+    vi.stubGlobal("__navsentinelUiFence", record);
+    const p = await prompt();
+    const modal = await import("../extension/src/content/credential_modal");
+    record.r.add(3);
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    expect(modal.credentialModalRoot()!.textContent).toContain("Close Picture-in-Picture to continue");
+    record.r.delete(3);
+    vi.advanceTimersByTime(700);
+    expect(modal.credentialModalRoot()!.textContent).not.toContain("Picture-in-Picture");
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("refuses after a blur only the document_start loader saw (#1242)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
+    vi.stubGlobal("__navsentinelUiFence", record);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    // A page capture listener stopped the blur before any module listener; the loader ran first.
+    record.u = performance.now();
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+  });
+
   it("refuses a blended host in the fallback path", async () => {
     FakeVisibilityObserver.supported = false;
     const p = await prompt();

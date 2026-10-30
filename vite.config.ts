@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import { crx } from "@crxjs/vite-plugin";
 import manifest from "./extension/manifest.json" with { type: "json" };
+// @ts-expect-error Build helpers are plain ESM and intentionally ship without runtime TypeScript.
+import { INLINE_STYLE_OR_XML_SPACE, WHITESPACE_SENSITIVE_HTML } from "./scripts/packaged-html.mjs";
 import {
   configureManifestForProfile,
   resolveReleaseProfile,
@@ -32,6 +34,25 @@ function profileAssets(selectedProfile: ReleaseProfile): Plugin {
   };
 }
 
+/**
+ * Strip source indentation from built extension pages. Vite does not minify HTML,
+ * and a newline followed by spaces collapses to the same whitespace as a bare
+ * newline in rendering, except in whitespace-sensitive markup, so pages with any
+ * (the packaged Options compactor's guard: pre, textarea, style, svg, inline
+ * style=, ...) are left untouched. CSS `white-space: pre*` on these pages is not
+ * checked here; keep it off them or skip the page. Frees total-dist budget.
+ */
+function stripHtmlIndentation(): Plugin {
+  return {
+    name: "navsentinel-strip-html-indentation",
+    transformIndexHtml: {
+      order: "post",
+      handler: (html) =>
+        WHITESPACE_SENSITIVE_HTML.test(html) || INLINE_STYLE_OR_XML_SPACE.test(html) ? html : html.replace(/\n[ \t]+/g, "\n").replace(/\n{2,}/g, "\n"),
+    },
+  };
+}
+
 export default defineConfig({
   root: "extension",
   resolve: {
@@ -53,7 +74,7 @@ export default defineConfig({
       ),
     },
   },
-  plugins: [profileAssets(profile), crx({ manifest: profiledManifest })],
+  plugins: [profileAssets(profile), crx({ manifest: profiledManifest }), stripHtmlIndentation()],
   build: {
     outDir: "dist",
     emptyOutDir: true,

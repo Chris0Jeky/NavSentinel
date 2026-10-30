@@ -452,6 +452,50 @@ test.describe("ClickFix", () => {
     }
   });
 
+  test("clickfix-07 lure drawn late inside a shadow root after the command copy still alerts (#1218) @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+      await page.click("h1");
+      // An inert command-like write with nothing on screen yet: the first scan finds no lure.
+      await page.evaluate(() => navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64"));
+      await page.waitForTimeout(400);
+      // The instructions arrive afterwards, drawn in a web component's open shadow root.
+      await page.evaluate(() => {
+        const host = document.createElement("div");
+        host.attachShadow({ mode: "open" }).innerHTML =
+          "<p>Verify you are human: press Win + R, paste with Ctrl + V and press Enter.</p>";
+        document.body.appendChild(host);
+      });
+      await waitForToastMatch(page, /Run-box steps|Do NOT paste/i, 6000);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("devicecode-lure-01 a page that copies a device code next to a device sign-in address warns (#1223) @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+      // A benign short copy on a page with no device address stays quiet.
+      await page.click("h1");
+      await page.evaluate(() => navigator.clipboard.writeText("ORDER-1234"));
+      await assertNoToastFor(page, 1500);
+      // The lure: instructions plus a copy-code button.
+      await page.evaluate(() => {
+        const p = document.createElement("p");
+        p.textContent = "Join the call: open microsoft.com/devicelogin and enter the code below.";
+        document.body.appendChild(p);
+      });
+      await page.evaluate(() => navigator.clipboard.writeText("ABCD-1234"));
+      await waitForToastMatch(page, /copied a code for a Microsoft, Google or GitHub device sign-in page/i, 6000);
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("clickfix-02 terminal variant: clipboard write + instructions triggers alert @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
