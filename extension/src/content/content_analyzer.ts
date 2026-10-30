@@ -1076,6 +1076,9 @@ const isDigit = (c: string | undefined): boolean => c !== undefined && c >= "0" 
  * Returns undefined when the steps return early (no refresh is scheduled).
  * Otherwise `delay` is the whole seconds (the fraction is ignored) and `url` is
  * null for a refresh of the document's own URL, else the URL string as written.
+ * Chrome follows this digit-only grammar, not a decimal parser (probed in
+ * Chromium 143, #1241): "1e0", "3e2", "+1", "-1", "0x1" and "Infinity" never
+ * schedule, while "1.5", "1." and "1.5.6" run after 1s and ".5" or "0.9" at once.
  * One linear pass, no regex over page text.
  */
 export function parseRefreshContent(input: string): { delay: number; url: string | null } | undefined {
@@ -1116,27 +1119,60 @@ export function parseRefreshContent(input: string): { delay: number; url: string
 const MAX_REFRESH_DELAY = 2147483647;
 
 /**
+ * Reported when a credential page's refresh declarations cannot be read in full
+ * (more than MAX_REFRESH_METAS, or a value cut at MAX_REFRESH_CONTENT before its
+ * target is settled). No real sign-in page needs either, so it fails closed.
+ */
+const REFRESH_UNREADABLE = "Page refresh tags are too many or too long to check";
+
+/**
+ * True when text appended to a refresh URL cut at the length cap cannot change
+ * which site it targets: a relative reference whose first characters are final,
+ * a non-http(s) scheme, or an http(s) authority already ended by / \ ? or #.
+ * Mirrors the WHATWG URL parser's leading C0/space and tab/newline stripping.
+ */
+function refreshTargetSettled(url: string): boolean {
+  let s = url.replace(/[\t\n\r]/g, "");
+  let i = 0;
+  while (i < s.length && s.charCodeAt(i) <= 32) i++;
+  s = s.slice(i);
+  if (s === "") return false; // only padding so far: anything may follow
+  const ended = (authority: string) => /[/\\?#]/.test(authority);
+  const rest = s.replace(/^[/\\]+/, ""); // the URL parser skips the whole slash run
+  if (rest !== s) return s.length - rest.length === 1 ? rest !== "" : ended(rest);
+  const scheme = /^[A-Za-z][A-Za-z0-9+.-]*/.exec(s)?.[0];
+  if (!scheme) return true;
+  if (scheme.length === s.length) return false; // may still grow into a scheme
+  if (s[scheme.length] !== ":" || !/^https?$/i.test(scheme)) return true;
+  return ended(s.slice(scheme.length + 1).replace(/^[/\\]+/, ""));
+}
+
+/**
  * Registrable domain of the pending refresh target when it leaves the page's
  * site, else null. Selects the refresh Chromium keeps scheduled: in document
  * order, a declaration replaces the scheduled one unless that one is sooner
  * (HttpRefreshScheduler::Schedule); an empty target reloads the document URL,
- * ignoring <base>, and a javascript: target is refused without replacing
+ * ignoring <base> (Chromium's behaviour; the HTML spec would resolve "" against
+ * the base URL), and a javascript: target is refused without replacing
  * (Document::MaybeHandleHttpRefresh). Reads only the current DOM: a refresh
  * from an HTTP header or a meta removed after insertion is not seen.
  */
 function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): string | null {
   const contents = snapshot.refreshContents;
   const currentReg = getRegistrableDomain(normalizeHost(currentDomain));
+  if (!snapshot.hasPasswordField || !contents || !currentReg) return null;
   // More declarations than the bound: an unread later one could replace any choice.
-  if (!snapshot.hasPasswordField || !contents || !currentReg || contents.length > MAX_REFRESH_METAS) return null;
+  if (contents.length > MAX_REFRESH_METAS) return REFRESH_UNREADABLE;
   const base = snapshot.baseUrl || "https://" + hostForUrl(currentDomain) + "/";
   let scheduledDelay = Infinity;
   let offsite: string | null = null;
   for (let i = 0; i < contents.length; i++) {
     const cut = contents[i]!.length > MAX_REFRESH_CONTENT;
     const parsed = parseRefreshContent(contents[i]!.slice(0, MAX_REFRESH_CONTENT));
-    // A cut value without a complete target could still be the one scheduled.
-    if (cut && !parsed?.url) return null;
+    // A cut value that parses as a refresh without a complete target could still
+    // be the one scheduled. A value that is only padding so far is undecided too;
+    // one that already fails to parse is never scheduled, whatever follows.
+    if (cut && (parsed ? !parsed.url : !contents[i]!.trim())) return REFRESH_UNREADABLE;
     if (!parsed || parsed.delay > MAX_REFRESH_DELAY || parsed.delay > scheduledDelay) continue;
     if (!parsed.url) {
       scheduledDelay = parsed.delay;
@@ -1145,12 +1181,12 @@ function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): st
     }
     let target: URL;
     try {
+      // Slicing can manufacture a different destination ("/" for "//evil.test/",
+      // "https://evil.ex" for "https://evil.example/"): trust it only once settled.
+      if (cut && !refreshTargetSettled(parsed.url)) return REFRESH_UNREADABLE;
       target = new URL(parsed.url, base);
-      // Slicing can manufacture a different host ("https://evil.ex|ample.test").
-      // The host is settled only if one more host character cannot change it.
-      if (cut && new URL(parsed.url + "a", base).host !== target.host) return null;
     } catch {
-      if (cut) return null;
+      if (cut) return REFRESH_UNREADABLE;
       continue; // an unparseable URL schedules nothing
     }
     if (target.protocol === "javascript:") continue;
@@ -1217,7 +1253,9 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
   const refreshTarget = offsiteRefreshTarget(snapshot, currentDomain);
   if (refreshTarget) {
     result.score += 25;
-    result.offsiteRefresh = `Page is set to send you to a different site: ${refreshTarget}`;
+    result.offsiteRefresh = refreshTarget === REFRESH_UNREADABLE
+      ? refreshTarget
+      : `Page is set to send you to a different site: ${refreshTarget}`;
   }
 
   // 4. Login form on unrecognizable domain mimicking branded flow
