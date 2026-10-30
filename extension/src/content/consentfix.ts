@@ -8,9 +8,10 @@
  * loopback, has no ordinary reason to exist.
  */
 const LOOPBACK_AUTH_URL = /^\s*https?:\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d{1,5})?\/\S*?[?&#](?:code|access_token|id_token)=/i;
-// The same code with the address trimmed off ("paste only the part after localhost"):
-// a long code followed by the state parameter Microsoft's redirect carries.
-const BARE_AUTH_CODE = /^\s*[?&#]?code=[^\s&]{20,}&(?:\S*&)?(?:session_)?state=/i;
+// The same code with the address trimmed off ("paste only the part after localhost"): a long
+// code followed by Microsoft's session_state. Plain code=...&state= is every OAuth provider's
+// callback (GitHub, Google, Slack) and is left alone.
+const BARE_AUTH_CODE = /^\s*[?&#]?code=[^\s&]{20,}&(?:\S*&)?session_state=/i;
 const LOOPBACK_HOST = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i;
 
 export function isLoopbackAuthCodePaste(text: string, pageHost: string): boolean {

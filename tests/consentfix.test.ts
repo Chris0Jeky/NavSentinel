@@ -19,6 +19,8 @@ describe("isLoopbackAuthCodePaste", () => {
     expect(isLoopbackAuthCodePaste(`?${tail}`, "lure.example")).toBe(true);
     expect(isLoopbackAuthCodePaste("code=short&state=x", "lure.example")).toBe(false);
     expect(isLoopbackAuthCodePaste("code=0.AXoAexampleexampleexample-abc", "lure.example")).toBe(false);
+    // Any provider's ordinary callback query (no Microsoft session_state) is not flagged.
+    expect(isLoopbackAuthCodePaste("code=gho_exampleexampleexample1234&state=xyz", "github.com")).toBe(false);
   });
 
   it("leaves ordinary pastes and loopback pages alone", () => {
