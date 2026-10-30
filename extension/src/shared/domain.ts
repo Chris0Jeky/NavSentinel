@@ -307,9 +307,15 @@ function charScript(cp: number): ScriptClass {
 export function isMixedScript(host: string): boolean {
   const h = normalizeHost(host);
   if (!h) return false;
+  // Punycode labels are ASCII, so also check each decoded xn-- label on its own:
+  // xn--pypal-4ve (Cyrillic a in paypal) is mixed; xn--wgv71a (CJK) is not (#1196).
+  return hasTwoLetterScripts(h) || h.split(".").some((label) =>
+    label.startsWith("xn--") && hasTwoLetterScripts(decodePunycode(label.slice(4)) ?? ""));
+}
 
+function hasTwoLetterScripts(text: string): boolean {
   const scripts = new Set<ScriptClass>();
-  for (const ch of h) {
+  for (const ch of text) {
     const cp = ch.codePointAt(0) ?? 0;
     const script = charScript(cp);
     if (script === "Digit" || script === "Common") continue;

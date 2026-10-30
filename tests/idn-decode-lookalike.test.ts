@@ -125,3 +125,13 @@ describe("plain IDNs gain no lookalike signal", () => {
     expect(lookalike.subdomainStuffing).toBeNull();
   });
 });
+
+describe("isMixedScript on decoded punycode labels (#1196)", () => {
+  it("flags a homograph label and keeps plain IDNs unflagged", async () => {
+    const { isMixedScript } = await import("../extension/src/shared/domain");
+    expect(isMixedScript("xn--pypal-4ve.com")).toBe(true);
+    for (const plain of ["xn--mller-kva.de", "xn--bcher-kva.ch", "xn--wgv71a.jp", "paypal.com"]) {
+      expect(isMixedScript(plain), plain).toBe(false);
+    }
+  });
+});
