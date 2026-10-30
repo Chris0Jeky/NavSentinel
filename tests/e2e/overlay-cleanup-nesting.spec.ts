@@ -445,7 +445,8 @@ for (const { fixtureCase, overlay } of [
       // Undo must hold through the remaining settle rescans.
       await page.waitForTimeout(2500);
       await expect(frame.locator(overlay)).toBeVisible();
-      expect(context.pages()).toHaveLength(pageCount);
+      // No popup opened; a transient browser page may close meanwhile.
+      expect(context.pages().length).toBeLessThanOrEqual(pageCount);
     } finally {
       await cleanup();
     }
@@ -464,6 +465,7 @@ test("initial cleanup preserves deep dialog layers and shadow-hosted chat widget
     await page.waitForTimeout(3000);
     await expect(frame.locator("#deep-dialog-panel")).toBeVisible();
     await expect(frame.locator("#chat-panel")).toBeVisible();
+    await expect(frame.locator("#slotted-dialog-panel")).toBeVisible();
   } finally {
     await cleanup();
   }

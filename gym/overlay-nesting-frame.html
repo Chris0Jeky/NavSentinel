@@ -342,6 +342,19 @@
         chatPanel.textContent = "Shadow chat widget — expected visible";
         shadow.append(style, chatPanel);
         document.body.appendChild(nestStatic(chatHost, 3));
+
+        // Light-DOM content slotted into a shadow ARIA dialog: its composed
+        // ancestor chain runs through the slot, not straight to the host.
+        const modalHost = document.createElement("div");
+        modalHost.id = "slotted-modal-host";
+        modalHost.attachShadow({ mode: "open" }).innerHTML =
+          '<div role="dialog" aria-modal="true" aria-label="Slotted dialog"><slot></slot></div>';
+        const slotted = document.createElement("div");
+        slotted.id = "slotted-dialog-panel";
+        slotted.className = "attack";
+        slotted.textContent = "Slotted dialog content — expected visible";
+        modalHost.appendChild(slotted);
+        document.body.appendChild(nestStatic(modalHost, 4));
       }
 
       if (fixtureCase === "delayed") {
