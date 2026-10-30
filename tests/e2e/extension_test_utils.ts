@@ -1,7 +1,7 @@
 import fs from "fs";
 import * as http from "node:http";
 import path from "path";
-import type { BrowserContext, Frame, Page, Worker } from "@playwright/test";
+import type { BrowserContext, CDPSession, Frame, Page, Worker } from "@playwright/test";
 import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
 import {
   assertContentAddressedLoader,
@@ -152,7 +152,8 @@ async function frameIndexPath(frame: Frame): Promise<number[]> {
  * Extension UI roots are closed (#894, #1142), so neither page script nor
  * Playwright's selectors can reach them; the DevTools protocol can. A click
  * the function makes is untrusted, the same as one from page script.
- * Same-process child frames are supported; an out-of-process one throws.
+ * A same-process child frame is reached through the page's document tree; an
+ * out-of-process one through its own DevTools session.
  */
 async function evaluateWithShadowRoots(
   target: Page | Frame,
@@ -163,7 +164,20 @@ async function evaluateWithShadowRoots(
   const frame = "mainFrame" in target ? target.mainFrame() : target;
   const page = frame.page();
   const indices = await frameIndexPath(frame);
-  const cdp = await page.context().newCDPSession(page);
+  const result = await evaluateInSession(await page.context().newCDPSession(page), indices, hostId, source, arg);
+  if (result !== FRAME_OUT_OF_PROCESS) return result;
+  return evaluateInSession(await page.context().newCDPSession(frame), [], hostId, source, arg);
+}
+
+const FRAME_OUT_OF_PROCESS = Symbol("frame out of process");
+
+async function evaluateInSession(
+  cdp: CDPSession,
+  indices: number[],
+  hostId: string,
+  source: string,
+  arg: unknown
+): Promise<unknown> {
   try {
     const { result: documentRef } = await cdp.send("Runtime.evaluate", { expression: "document" });
     if (!documentRef.objectId) throw new Error("Page document did not resolve");
@@ -178,7 +192,7 @@ async function evaluateWithShadowRoots(
         if (node.nodeName === "IFRAME" || node.nodeName === "FRAME") frames.push(node);
       });
       const next = frames[index]?.contentDocument;
-      if (!next) throw new Error(`Frame ${indices.join(".")} has no same-process document`);
+      if (!next) return FRAME_OUT_OF_PROCESS;
       doc = next;
     }
     const rootIds: number[] = [];
@@ -297,8 +311,8 @@ export async function waitForToastMatch(page: Page, pattern: RegExp, timeout = 4
   );
 }
 
-export async function readToastText(page: Page): Promise<string | null> {
-  return evaluateInToast(page, firstToastBody);
+export async function readToastText(target: Page | Frame): Promise<string | null> {
+  return evaluateInToast(target, firstToastBody);
 }
 
 /** Viewport centre of a rendered toast button, waiting for it to render. */
@@ -331,18 +345,51 @@ export async function focusToastButton(target: Page | Frame, label: string): Pro
   if (!focused) throw new Error(`Toast button not found: ${label}`);
 }
 
-export async function clickToastButton(page: Page, label: string): Promise<void> {
+/** Wait for a toast button to render, then (except Dismiss) for its entrance animation and visible-exposure arming window. */
+async function waitForArmedToastButton(target: Page | Frame, label: string): Promise<void> {
+  await toastButtonPoint(target, label, 10_000);
+  if (label !== "Dismiss") await new Promise((resolve) => setTimeout(resolve, DBLCLICK_WINDOW_MS + 300));
+}
+
+/** Offset of `frame`'s viewport within the top page's viewport. */
+export async function frameViewportOffset(frame: Frame): Promise<{ x: number; y: number }> {
+  let x = 0;
+  let y = 0;
+  for (let current = frame; current.parentFrame(); current = current.parentFrame()!) {
+    const owner = await current.frameElement();
+    const origin = await owner.evaluate((node) => {
+      const element = node as Element;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        x: rect.x + element.clientLeft + parseFloat(style.paddingLeft),
+        y: rect.y + element.clientTop + parseFloat(style.paddingTop)
+      };
+    });
+    x += origin.x;
+    y += origin.y;
+  }
+  return { x, y };
+}
+
+export async function clickToastButton(target: Page | Frame, label: string): Promise<void> {
   // Trusted activation only (#783): extension-owned controls ignore
   // page-synthesized clicks, so resolve the button's viewport coordinates
   // and drive a real (trusted) mouse click at that point — the same pattern
   // as toast-input-fence.spec.ts.
-  await toastButtonPoint(page, label, 10_000);
-  if (label !== "Dismiss") {
-    // Allow the entrance animation and the visible-exposure arming window.
-    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
-  }
-  const point = await toastButtonPoint(page, label);
-  await page.mouse.click(point.x, point.y);
+  await waitForArmedToastButton(target, label);
+  const frame = "mainFrame" in target ? target.mainFrame() : target;
+  const point = await toastButtonPoint(target, label);
+  const offset = await frameViewportOffset(frame);
+  await frame.page().mouse.click(point.x + offset.x, point.y + offset.y);
+}
+
+/** Focus a toast button and activate it with a real key press. */
+export async function pressToastButton(target: Page | Frame, label: string, key = "Enter"): Promise<void> {
+  await waitForArmedToastButton(target, label);
+  await focusToastButton(target, label);
+  const page = "mainFrame" in target ? target : target.page();
+  await page.keyboard.press(key);
 }
 
 /**
@@ -478,10 +525,10 @@ export async function attemptSyntheticModalClick(page: Page, label: string): Pro
   if (!clicked) throw new Error(`Modal button not found: ${label}`);
 }
 
-export async function assertNoToastFor(page: Page, durationMs = 1200): Promise<void> {
+export async function assertNoToastFor(target: Page | Frame, durationMs = 1200): Promise<void> {
   const deadline = Date.now() + durationMs;
   for (;;) {
-    const text = await readToastText(page);
+    const text = await readToastText(target);
     if (text) throw new Error(`Unexpected toast text: ${text}`);
     if (Date.now() >= deadline) return;
     await new Promise((resolve) => setTimeout(resolve, 50));

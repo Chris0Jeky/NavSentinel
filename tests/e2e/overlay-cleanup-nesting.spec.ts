@@ -11,12 +11,15 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 import {
+  clickToastButton,
+  evaluateInToast,
   getGymBaseUrl,
+  pressToastButton,
   readBuiltUiGuardRevision,
   updateNavigationSettings,
   waitForNavSentinelBridge,
+  waitForToast,
 } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -97,25 +100,28 @@ async function childFrame(page: Page, fixtureCase: string, instance?: number): P
 }
 
 async function waitForFrameToast(frame: Frame, pattern: RegExp): Promise<void> {
-  await frame.waitForFunction(({ source, flags }) => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    const text = host?.shadowRoot?.querySelector(".body")?.textContent ?? "";
-    return new RegExp(source, flags).test(text);
-  }, { source: pattern.source, flags: pattern.flags }, { timeout: 5000 });
+  await waitForToast(frame, (roots, { source, flags }) =>
+    new RegExp(source, flags).test(roots[0]?.querySelector(".body")?.textContent ?? ""),
+  { source: pattern.source, flags: pattern.flags }, 5000);
 }
 
-async function clickFrameToastButton(frame: Frame, label: string): Promise<void> {
-  const button = frame.getByRole("button", { name: label, exact: true });
-  await expect(button).toBeVisible();
-  await waitForVisibleAction(button);
-  await button.click();
+const clickFrameToastButton = clickToastButton;
+const pressFrameToastButton = (frame: Frame, label: string) => pressToastButton(frame, label);
+
+/** Frame-viewport box of the first rendered element matching `selector` in the toast root, or null. */
+async function toastBox(frame: Frame, selector: string): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  return evaluateInToast(frame, (roots, sel) => {
+    const rect = roots[0]?.querySelector(sel)?.getBoundingClientRect();
+    return rect && rect.width > 0 && rect.height > 0
+      ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      : null;
+  }, selector);
 }
 
-async function pressFrameToastButton(frame: Frame, label: string): Promise<void> {
-  const button = frame.getByRole("button", { name: label, exact: true });
-  await expect(button).toBeVisible();
-  await waitForVisibleAction(button);
-  await button.press("Enter");
+/** Elements matching `selector` across every toast root (the real host and any forged one). */
+async function toastCount(frame: Frame, selector: string): Promise<number> {
+  return evaluateInToast(frame, (roots, sel) =>
+    roots.reduce((count, root) => count + root.querySelectorAll(sel).length, 0), selector);
 }
 
 type AttackVisibilitySample = {
@@ -247,28 +253,30 @@ test("cleanup recovery notice is small and leaves after two seconds or an outsid
     let frame = await childFrame(page, "exact");
     await waitForFrameToast(frame, /overlay hidden/i);
 
-    const notice = frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']");
-    await expect(notice).toBeVisible();
-    const noticeBox = await notice.boundingBox();
-    expect(noticeBox).not.toBeNull();
-    expect(noticeBox!.width).toBeLessThanOrEqual(300);
-    expect(noticeBox!.height).toBeLessThanOrEqual(72);
-    await expect(notice.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
-    await expect(notice.getByRole("button", { name: "Dismiss", exact: true })).toHaveCount(0);
+    const notice = ".wrap[data-persistent='true']";
+    const noticeBox = await waitForToast(frame, (roots, sel) => {
+      const rect = roots[0]?.querySelector(sel)?.getBoundingClientRect();
+      return rect && rect.width > 0 && rect.height > 0 ? { width: rect.width, height: rect.height } : null;
+    }, notice);
+    expect(noticeBox.width).toBeLessThanOrEqual(300);
+    expect(noticeBox.height).toBeLessThanOrEqual(72);
+    expect(await toastBox(frame, `${notice} button`), "Undo is rendered").not.toBeNull();
+    expect(await evaluateInToast(frame, (roots, sel) =>
+      Array.from(roots[0]?.querySelectorAll(`${sel} button`) ?? [], (button) => button.textContent?.trim()), notice))
+      .toEqual(["Undo"]);
 
     await frame.locator("#outside-toast-target").click();
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.outsideInteractionCount,
     )).toBe("1");
-    await expect(notice).toHaveCount(0);
+    await expect.poll(() => toastCount(frame, notice)).toBe(0);
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
 
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
     frame = await childFrame(page, "exact");
     await waitForFrameToast(frame, /overlay hidden/i);
-    await expect(frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']"))
-      .toHaveCount(0, { timeout: 3000 });
+    await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), { timeout: 3000 }).toBe(0);
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
   } finally {
     await cleanup();
@@ -292,23 +300,29 @@ test("cleanup notice briefly yields to a preserved accessible player-error dialo
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
     const dialog = frame.getByRole("dialog", { name: "Synthetic player error" });
     const confirm = dialog.getByRole("button", { name: "OK", exact: true });
-    const notice = frame.locator("#__navsentinel_toast_host .brief-recovery");
+    const notice = ".brief-recovery";
     await expect(dialog).toBeVisible();
     await expect(confirm).toBeVisible();
-    await expect(notice).toBeVisible();
 
-    const noticeBox = await notice.boundingBox();
-    const confirmBox = await confirm.boundingBox();
-    expect(noticeBox).not.toBeNull();
-    expect(confirmBox).not.toBeNull();
+    // Both boxes in the frame's own viewport coordinates.
+    const noticeBox = await waitForToast(frame, (roots, sel) => {
+      const rect = roots[0]?.querySelector(sel)?.getBoundingClientRect();
+      return rect && rect.width > 0 && rect.height > 0
+        ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        : null;
+    }, notice);
+    const confirmBox = await confirm.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
     expect(
-      noticeBox!.x < confirmBox!.x + confirmBox!.width &&
-      noticeBox!.x + noticeBox!.width > confirmBox!.x &&
-      noticeBox!.y < confirmBox!.y + confirmBox!.height &&
-      noticeBox!.y + noticeBox!.height > confirmBox!.y,
+      noticeBox.x < confirmBox.x + confirmBox.width &&
+      noticeBox.x + noticeBox.width > confirmBox.x &&
+      noticeBox.y < confirmBox.y + confirmBox.height &&
+      noticeBox.y + noticeBox.height > confirmBox.y,
     ).toBe(true);
 
-    await expect(notice).toHaveCount(0, { timeout: 3000 });
+    await expect.poll(() => toastCount(frame, notice), { timeout: 3000 }).toBe(0);
     await confirm.click();
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.dialogConfirmCount,
@@ -359,19 +373,15 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await frame.evaluate(() => {
       window.open("https://relay-target.example/blocked", "_blank");
     });
-    const toastHost = frame.locator("#__navsentinel_toast_host");
-    await expect(toastHost.getByRole("button", { name: "Dismiss", exact: true }))
-      .toHaveCount(1);
-    await toastHost.locator(".wrap:not([data-persistent='true'])")
-      .getByRole("button", { name: "Dismiss", exact: true })
-      .click();
+    // Only the regular block card has a Dismiss; the cleanup chip does not.
+    await expect.poll(() => evaluateInToast(frame, (roots) => roots
+      .flatMap((root) => Array.from(root.querySelectorAll("button")))
+      .filter((button) => button.textContent?.trim() === "Dismiss").length)).toBe(1);
+    await clickToastButton(frame, "Dismiss");
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.pageControlEventCount ?? "0"),
     )).toBe(0);
-    await expect.poll(() => frame.evaluate(() =>
-      !document.querySelector("#__navsentinel_toast_host")?.shadowRoot
-        ?.querySelector(".wrap:not([data-persistent='true'])"),
-    )).toBe(true);
+    await expect.poll(() => toastCount(frame, ".wrap:not([data-persistent='true'])")).toBe(0);
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden();
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.poisonedMouseFieldReads ?? "-1"),
@@ -586,8 +596,7 @@ test("nested cleanup handles a twelve-frame mixed nesting matrix without touchin
     for (const [index, fixtureCase] of cases.entries()) {
       if (fixtureCase === "benign") continue;
       const frame = await childFrame(page, fixtureCase, index);
-      await expect(frame.locator("#__navsentinel_toast_host .wrap[data-persistent='true']"))
-        .toHaveCount(0, { timeout: 3000 });
+      await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), { timeout: 3000 }).toBe(0);
     }
     expect(context.pages()).toHaveLength(pageCount);
   } finally {

@@ -14,8 +14,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   dismissOnboarding,
+  evaluateInToast,
   getGymBaseUrl,
   waitForNavSentinelBridge,
+  waitForToast,
 } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -73,28 +75,24 @@ async function setupBurstPillTest(): Promise<{
 
 /** Full (non-persistent) cards across every element carrying the host id. */
 async function fullCardCount(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll("#__navsentinel_toast_host")).reduce((count, host) =>
-      count + (host.shadowRoot?.querySelectorAll(".wrap:not([data-persistent='true'])").length ?? 0), 0),
+  return evaluateInToast(page, (roots) =>
+    roots.reduce((count, root) => count + root.querySelectorAll(".wrap:not([data-persistent='true'])").length, 0),
   );
 }
 
 async function fullCardBody(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    return host?.shadowRoot?.querySelector(".wrap:not([data-persistent='true']) .body")
-      ?.textContent?.trim() ?? "";
-  });
+  return evaluateInToast(page, (roots) =>
+    roots[0]?.querySelector(".wrap:not([data-persistent='true']) .body")?.textContent?.trim() ?? "",
+  );
 }
 
 async function fullCardButtons(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    return Array.from(
-      host?.shadowRoot?.querySelectorAll(".wrap:not([data-persistent='true']) button") ?? [],
+  return evaluateInToast(page, (roots) =>
+    Array.from(
+      roots[0]?.querySelectorAll(".wrap:not([data-persistent='true']) button") ?? [],
       (button) => button.textContent?.trim() ?? "",
-    );
-  });
+    ),
+  );
 }
 
 /**
@@ -127,14 +125,11 @@ async function waitForBurstPill(page: Page): Promise<void> {
     { timeout: 5000 },
   );
   // Require the real toast .pill: a full-card fallback does not satisfy this.
-  await page.waitForFunction(
-    () => {
-      const pill = document.querySelector("#__navsentinel_toast_host")?.shadowRoot
-        ?.querySelector(".pill");
-      return pill?.querySelector(".pill-count")?.textContent?.includes("4 navigations") ?? false;
-    },
-    null,
-    { timeout: 4000 },
+  await waitForToast(
+    page,
+    (roots) => roots[0]?.querySelector(".pill .pill-count")?.textContent?.includes("4 navigations") ?? false,
+    undefined,
+    4000,
   );
 }
 
@@ -145,9 +140,8 @@ async function readPillAttributes(page: Page): Promise<{
   ariaLabel: string | null;
   countText: string | null;
 }> {
-  return page.evaluate(() => {
-    const pill = document.querySelector("#__navsentinel_toast_host")?.shadowRoot
-      ?.querySelector(".pill") as HTMLElement | null;
+  return evaluateInToast(page, (roots) => {
+    const pill = roots[0]?.querySelector<HTMLElement>(".pill");
     if (!pill) return { role: null, tabIndex: null, ariaLive: null, ariaLabel: null, countText: null };
     return {
       role: pill.getAttribute("role"),
@@ -160,9 +154,17 @@ async function readPillAttributes(page: Page): Promise<{
 }
 
 async function pillPresent(page: Page): Promise<boolean> {
-  return page.evaluate(() =>
-    !!document.querySelector("#__navsentinel_toast_host")?.shadowRoot?.querySelector(".pill"),
-  );
+  return evaluateInToast(page, (roots) => !!roots[0]?.querySelector(".pill"));
+}
+
+/** Focus the real pill behind the closed root (#1142) through CDP. */
+async function focusPill(page: Page): Promise<void> {
+  const focused = await evaluateInToast(page, (roots) => {
+    const pill = roots[0]?.querySelector<HTMLElement>(".pill");
+    pill?.focus();
+    return !!pill && roots[0]?.activeElement === pill;
+  });
+  expect(focused, "the burst pill takes focus").toBe(true);
 }
 
 async function activateBurstPillWithKey(page: Page, context: BrowserContext, key: string, beforePages: number): Promise<void> {
@@ -171,9 +173,9 @@ async function activateBurstPillWithKey(page: Page, context: BrowserContext, key
   const popupPromise = context.waitForEvent("page", { timeout: 1500 }).catch(() => null);
 
   await countPageControlInput(page);
-  // Focus the real pill through the open shadow root, then send real keyboard
+  // Focus the real pill through CDP (its root is closed), then send real keyboard
   // input: no synthetic dispatch, no direct action callback.
-  await page.locator("#__navsentinel_toast_host .pill").focus();
+  await focusPill(page);
   await page.keyboard.press(key);
 
   await expect.poll(() => pillPresent(page), { timeout: 3000 }).toBe(false);

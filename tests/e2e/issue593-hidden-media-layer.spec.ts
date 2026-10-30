@@ -47,6 +47,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  evaluateInToast,
   getGymBaseUrl,
   readBuiltUiGuardRevision,
   readToastText,
@@ -517,11 +518,11 @@ async function runArm(
     workerEvidence = await workerEvidencePromise;
 
     toastText = await readToastText(page).catch(() => null);
-    reasonCode = await page.evaluate(() => {
-      const host = document.querySelector("#__navsentinel_toast_host");
-      return host?.getAttribute("data-reason") ?? host?.shadowRoot
-        ?.querySelector<HTMLElement>("[data-reason]")?.dataset.reason ?? null;
-    }).catch(() => null);
+    reasonCode = await page.evaluate(() =>
+      document.querySelector("#__navsentinel_toast_host")?.getAttribute("data-reason") ?? null,
+    ).catch(() => null) ?? await evaluateInToast(page, (roots) =>
+      roots[0]?.querySelector<HTMLElement>("[data-reason]")?.dataset.reason ?? null,
+    ).catch(() => null);
     if (mode === "protected") {
       reasonCodeAvailability = reasonCode
         ? "available: product toast DOM exposed data-reason"
