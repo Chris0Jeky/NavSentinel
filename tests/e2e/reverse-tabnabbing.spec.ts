@@ -1,12 +1,14 @@
-import { test, expect, chromium, type BrowserContext, type Page } from "@playwright/test";
+import { test, chromium, type BrowserContext, type Page } from "@playwright/test";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import {
+  assertNoToastFor,
   getServiceWorker,
   updateNavigationSettings,
   waitForNavSentinelBridge,
+  waitForToastMatch,
 } from "./extension_test_utils";
 
 // Reverse tabnabbing (#1172), content delivery: the service worker's ns-tabnab-warning reaches
@@ -54,14 +56,14 @@ test("tabnab warning message shows a toast unless protection is off @regression"
     await page.goto(`${origin}/`);
     await waitForNavSentinelBridge(page);
     await sendWarning(context, page);
-    await expect(page.getByText(WARNING)).toBeVisible({ timeout: 10_000 });
+    // The toast's shadow root is closed (#1202): read it through the CDP helper.
+    await waitForToastMatch(page, WARNING, 10_000);
 
     await updateNavigationSettings(context, { defaultMode: "off" });
     await page.reload();
     await waitForNavSentinelBridge(page);
     await sendWarning(context, page);
-    await page.waitForTimeout(1_000);
-    await expect(page.getByText(WARNING)).toHaveCount(0);
+    await assertNoToastFor(page, 1_000);
   } finally {
     await context?.close();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
