@@ -20,6 +20,7 @@ import {
   _flushMutationObserverRecordsForTesting,
   _feedMutationRecordsForTesting,
   truncateUrlForAlertDetails,
+  bypassNextRestoredOverlayAttributeBatch,
   type MutationAlert,
 } from "../extension/src/content/mutation_monitor";
 import { registerExtensionOwnedOverlayElement } from "../extension/src/content/extension_owned_overlay";
@@ -206,7 +207,7 @@ describe("mutation_monitor DOM integration", () => {
   });
 
   it("caps a pathological initial candidate walk", () => {
-    const candidates = Array.from({ length: 160 }, (_, index) => {
+    const candidates = Array.from({ length: 3000 }, (_, index) => {
       const candidate = document.createElement("div");
       candidate.id = `static-candidate-${index}`;
       document.body.appendChild(candidate);
@@ -216,10 +217,172 @@ describe("mutation_monitor DOM integration", () => {
 
     startMutationMonitor(document, () => {});
     expect(scanExistingForegroundOverlay(document)).toBe(false);
-    expect(styleSpy).toHaveBeenCalledTimes(128);
+    // 128 shallow ClickFix candidates plus the 2000-visit deep budget (#564).
+    expect(styleSpy).toHaveBeenCalledTimes(128 + 2000);
 
     candidates.forEach((candidate) => candidate.remove());
     stopMutationMonitor();
+  });
+
+  function makeForegroundLayer(tag = "div"): HTMLElement {
+    const layer = document.createElement(tag);
+    layer.style.position = "fixed";
+    layer.style.zIndex = "2147483647";
+    layer.style.display = "block";
+    vi.spyOn(layer, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
+    return layer;
+  }
+
+  function nestInStaticWrappers(child: Element, depth: number): HTMLElement {
+    const outer = document.createElement("div");
+    let current = outer;
+    for (let level = 1; level < depth; level += 1) {
+      const next = document.createElement("div");
+      current.appendChild(next);
+      current = next;
+    }
+    current.appendChild(child);
+    return outer;
+  }
+
+  it("reports a deeply nested static foreground overlay beyond the wrapper level (#564)", () => {
+    const alerts: MutationAlert[] = [];
+    const overlay = makeForegroundLayer("a");
+    const tree = nestInStaticWrappers(overlay, 8);
+    document.body.appendChild(tree);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(alerts.find((alert) => alert.type === "overlay_detected")?.elements).toEqual([overlay]);
+
+    tree.remove();
+    stopMutationMonitor();
+  });
+
+  it("reports a foreground overlay inside a pre-existing open shadow root (#564)", () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    const host = document.createElement("div");
+    const shadow = host.attachShadow({ mode: "open" });
+    const overlay = makeForegroundLayer();
+    shadow.appendChild(nestInStaticWrappers(overlay, 3));
+    document.body.appendChild(host);
+
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => true,
+    });
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(cleanupCandidates).toEqual([
+      expect.objectContaining({ type: "overlay_detected", element: overlay, elements: [overlay] }),
+    ]);
+
+    host.remove();
+    stopMutationMonitor();
+  });
+
+  it("keeps deep and shadow overlays inert while cleanup is opted out (#564)", () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    const host = document.createElement("div");
+    host.attachShadow({ mode: "open" }).appendChild(makeForegroundLayer());
+    const tree = nestInStaticWrappers(makeForegroundLayer(), 8);
+    document.body.append(host, tree);
+
+    startMutationMonitor(document, () => {}, {
+      onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+      isOverlayCleanupActive: () => false,
+    });
+    scanExistingForegroundOverlay(document);
+    expect(cleanupCandidates).toEqual([]);
+
+    host.remove();
+    tree.remove();
+    stopMutationMonitor();
+  });
+
+  it("preserves deep layers inside dialog, cookie, and shadow-hosted chat containers (#564)", () => {
+    const alerts: MutationAlert[] = [];
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.appendChild(nestInStaticWrappers(makeForegroundLayer(), 7));
+    const cookie = document.createElement("div");
+    cookie.id = "cookie-consent-root";
+    cookie.appendChild(nestInStaticWrappers(makeForegroundLayer(), 7));
+    const chatHost = document.createElement("div");
+    chatHost.id = "intercom-container";
+    chatHost.attachShadow({ mode: "open" }).appendChild(makeForegroundLayer());
+    const wrappers = [dialog, cookie, chatHost].map((layer) => nestInStaticWrappers(layer, 3));
+    document.body.append(...wrappers);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(false);
+    expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+
+    wrappers.forEach((wrapper) => wrapper.remove());
+    stopMutationMonitor();
+  });
+
+  it("does not re-report descendants of an overlay the shallow walk already claimed (#564)", () => {
+    const alerts: MutationAlert[] = [];
+    const outer = makeForegroundLayer();
+    const inner = makeForegroundLayer();
+    outer.appendChild(nestInStaticWrappers(inner, 4));
+    document.body.appendChild(outer);
+
+    startMutationMonitor(document, (alert) => alerts.push(alert));
+    expect(scanExistingForegroundOverlay(document)).toBe(true);
+    expect(alerts.find((alert) => alert.type === "overlay_detected")?.elements).toEqual([outer]);
+
+    outer.remove();
+    stopMutationMonitor();
+  });
+
+  it("preserves slotted light DOM inside a shadow ARIA dialog (#564)", () => {
+    const alerts: MutationAlert[] = [];
+    const host = document.createElement("custom-modal");
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const slot = dialog.appendChild(document.createElement("slot"));
+    host.attachShadow({ mode: "open" }).appendChild(dialog);
+    const panel = makeForegroundLayer();
+    // happy-dom does not compute slot assignment; Chromium reports this slot.
+    Object.defineProperty(panel, "assignedSlot", { value: slot });
+    host.appendChild(panel);
+    const tree = nestInStaticWrappers(host, 4);
+    document.body.appendChild(tree);
+
+    try {
+      startMutationMonitor(document, (alert) => alerts.push(alert));
+      expect(scanExistingForegroundOverlay(document)).toBe(false);
+      expect(alerts.some((alert) => alert.type === "overlay_detected")).toBe(false);
+    } finally {
+      tree.remove();
+      stopMutationMonitor();
+    }
+  });
+
+  it("keeps a restored overlay's deep descendants restored on rescan (#564)", () => {
+    const cleanupCandidates: MutationAlert[] = [];
+    const outer = makeForegroundLayer();
+    const inner = makeForegroundLayer();
+    outer.appendChild(nestInStaticWrappers(inner, 4));
+    document.body.appendChild(outer);
+
+    try {
+      startMutationMonitor(document, () => {}, {
+        onOverlayCandidate: (alert) => cleanupCandidates.push(alert),
+        isOverlayCleanupActive: () => true,
+      });
+      scanExistingForegroundOverlay(document);
+      expect(cleanupCandidates.map((alert) => alert.elements)).toEqual([[outer]]);
+
+      bypassNextRestoredOverlayAttributeBatch(outer);
+      scanExistingForegroundOverlay(document);
+      expect(cleanupCandidates).toHaveLength(1);
+    } finally {
+      outer.remove();
+      stopMutationMonitor();
+    }
   });
 
   it("does not report a pre-existing native dialog as a risky foreground overlay", () => {

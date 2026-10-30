@@ -114,7 +114,7 @@ function ownOpacity(el: Element): number {
   return Number.isFinite(o) ? o : 1;
 }
 
-function composedParentElement(el: Element): Element | null {
+export function composedParentElement(el: Element): Element | null {
   if (el.assignedSlot) return el.assignedSlot;
   if (el.parentElement) return el.parentElement;
   const root = el.getRootNode();
