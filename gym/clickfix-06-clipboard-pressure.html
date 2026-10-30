@@ -45,8 +45,10 @@
     // verification, clipboard receipts wait in the MAIN-world outbound queue,
     // which #599 coalesces to the latest command-like and the latest other
     // receipt. This page fires its whole clipboard burst the moment the hook is
-    // installed and while the public bridge-ready marker is still absent, so
-    // the burst lands in that queue. Chrome only allows these writes without a
+    // installed and while the public bridge-ready marker is still absent.
+    // That marker is only diagnostic: VALID requires a synchronous witness
+    // from a clearly instrumented test copy of the actual queue and its first
+    // accepted handshake. Chrome only allows these writes without a
     // click when the site's Clipboard permission is set to Allow.
     //
     // Nothing here is runnable: the flood values are plain labels, and the
@@ -73,6 +75,7 @@
         hookAt: null,
         burstAt: null,
         readyAt: null,
+        queueEvidence: null,
         writes: [],
       };
       window.__cf06SelfCheck = check;
@@ -81,26 +84,46 @@
         const resolved = check.writes.filter((write) => write.resolvedAt !== null);
         const refused = check.writes.filter((write) => write.error !== null);
         const beforeReady = resolved.filter((write) => check.readyAt === null || write.resolvedAt < check.readyAt);
+        const firstResolvedAt = resolved.reduce(
+          (min, write) => Math.min(min, write.resolvedAt),
+          Number.POSITIVE_INFINITY,
+        );
+        const lastResolvedAt = resolved.reduce((max, write) => Math.max(max, write.resolvedAt), 0);
+        const normalizedFirst = Number.isFinite(firstResolvedAt) ? firstResolvedAt : null;
+        const normalizedLast = lastResolvedAt || null;
+        const burstSpreadMs = normalizedFirst === null || normalizedLast === null
+          ? null
+          : Math.round((normalizedLast - normalizedFirst) * 10) / 10;
+        const readyGapMs = check.readyAt === null || normalizedLast === null
+          ? null
+          : Math.round((check.readyAt - normalizedLast) * 10) / 10;
         return {
           attempted: check.writes.length,
           resolved: resolved.length,
           refused: refused.length,
           pending: check.writes.length - resolved.length - refused.length,
           beforeReady: beforeReady.length,
-          lastResolvedAt: resolved.reduce((max, write) => Math.max(max, write.resolvedAt), 0) || null,
+          firstResolvedAt: normalizedFirst,
+          lastResolvedAt: normalizedLast,
+          burstSpreadMs,
+          readyGapMs,
           firstError: refused[0]?.error ?? null,
         };
       };
 
       const render = () => {
         const s = summary();
-        root.dataset.pressureMode = check.mode;
-        root.dataset.pressureState = check.state;
-        root.dataset.pressureReason = check.reason;
-        root.dataset.pressureAttempted = String(s.attempted);
-        root.dataset.pressureResolved = String(s.resolved);
-        root.dataset.pressureRefused = String(s.refused);
-        root.dataset.pressureBeforeReady = String(s.beforeReady);
+        const data = root.dataset;
+        data.pressureMode = check.mode;
+        data.pressureState = check.state;
+        data.pressureReason = check.reason;
+        data.pressureAttempted = String(s.attempted);
+        data.pressureResolved = String(s.resolved);
+        data.pressureRefused = String(s.refused);
+        data.pressureBeforeReady = String(s.beforeReady);
+        data.pressureBurstSpreadMs = s.burstSpreadMs === null ? "" : String(s.burstSpreadMs);
+        data.pressureReadyGapMs = s.readyGapMs === null ? "" : String(s.readyGapMs);
+        data.pressureQueueEvidence = JSON.stringify(check.queueEvidence);
         const panel = document.getElementById("self-check");
         const state = document.getElementById("self-check-state");
         const detail = document.getElementById("self-check-detail");
@@ -112,7 +135,7 @@
           idle: "IDLE: add ?mode=benign or ?mode=attack to the address and reload.",
           waiting: "Waiting for Heedline's clipboard hook...",
           writing: "Clipboard burst in progress...",
-          valid: "VALID: the whole burst finished before Heedline's bridge-ready marker.",
+          valid: "VALID: direct observation confirms the whole burst reached the unverified queue.",
           retry: "RETRY: this load did not exercise the pre-handshake window.",
           failed: "FAILED: Heedline's bridge never reported ready.",
         }[check.state];
@@ -121,7 +144,9 @@
           `arm: ${check.mode}`,
           `writes: ${s.resolved}/${s.attempted} finished, ${s.refused} refused, ${s.pending} pending`,
           `finished before the bridge-ready marker: ${s.beforeReady}/${s.attempted}`,
-          `hook seen: ${check.hookAt === null ? "-" : `${check.hookAt} ms`}; burst: ${check.burstAt === null ? "-" : `${check.burstAt} ms`}; last write: ${s.lastResolvedAt === null ? "-" : `${s.lastResolvedAt} ms`}; bridge-ready marker: ${check.readyAt === null ? "-" : `${check.readyAt} ms`}`,
+          `burst spread: ${s.burstSpreadMs === null ? "-" : `${s.burstSpreadMs} ms`}; ready gap: ${s.readyGapMs === null ? "-" : `${s.readyGapMs} ms`} (diagnostic only)`,
+          `direct queue calls before first accepted handshake: ${check.queueEvidence?.firstVerification?.clipboardEnqueueCalls ?? "unobserved"}/${s.attempted}`,
+          `hook seen: ${check.hookAt === null ? "-" : `${check.hookAt} ms`}; burst: ${check.burstAt === null ? "-" : `${check.burstAt} ms`}; first write: ${s.firstResolvedAt === null ? "-" : `${s.firstResolvedAt} ms`}; last write: ${s.lastResolvedAt === null ? "-" : `${s.lastResolvedAt} ms`}; bridge-ready marker: ${check.readyAt === null ? "-" : `${check.readyAt} ms`}`,
         ].join("\n");
       };
 
@@ -153,6 +178,7 @@
 
       const evaluate = () => {
         const s = summary();
+        check.queueEvidence = window.__navsentinelClipboardQueueTestEvidence ?? null;
         if (s.refused > 0) {
           finish("retry", `${s.refused} clipboard write(s) were refused (${s.firstError}). Allow Clipboard for this site in Chrome's Site settings, click inside the page, then reload.`);
           return;
@@ -169,7 +195,25 @@
           finish("retry", `${s.attempted - s.beforeReady} write(s) finished after the bridge-ready marker; reload to try again.`);
           return;
         }
-        finish("valid", `${s.attempted}/${s.attempted} writes finished before it.`);
+        const evidence = check.queueEvidence;
+        const first = evidence?.firstVerification;
+        const expectedCommandLike = MODE === "attack" ? 1 : 0;
+        if (evidence?.schema !== "navsentinel-clipboard-queue-test/v2" ||
+            typeof evidence.artifactId !== "string" || !evidence.artifactId ||
+            evidence.verificationCount !== 1 || evidence.queuedAfterVerification !== 0 ||
+            s.attempted !== FLOOD_WRITES + expectedCommandLike ||
+            first?.clipboardEnqueueCalls !== s.attempted ||
+            first.other !== FLOOD_WRITES || first.commandLike !== expectedCommandLike) {
+          finish(
+            "retry",
+            "No complete direct queue witness for this document. Use the marked diagnostic test copy; a public marker gap cannot certify this load.",
+          );
+          return;
+        }
+        finish(
+          "valid",
+          `${s.attempted}/${s.attempted} successful receipts reached the queue before its first accepted handshake.`,
+        );
       };
 
       const burst = () => {
@@ -244,8 +288,9 @@
     flood fills the pre-handshake queue, the command-like receipt is dropped, and an overflow row appears.
     <br><br>
     <strong>Setup:</strong> Chrome writes to the clipboard without a click only when this site's Clipboard
-    permission is Allow (Site settings). Use ?mode=benign or ?mode=attack; the self-check below must read
-    VALID for the result to count.
+    permission is Allow (Site settings). Use ?mode=benign or ?mode=attack and the marked diagnostic
+    test copy; the self-check below must read VALID for the result to count. An ordinary release
+    build has no direct queue observer and cannot certify this diagnostic self-check.
   </div>
 
   <div id="pressure-overlay">
