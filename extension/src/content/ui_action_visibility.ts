@@ -15,9 +15,11 @@ type FocusRecord = { h: boolean; u: number; a: boolean; r?: Set<number> };
 // The capture_isolated document_start loader records these before any page
 // script runs, so a page capture listener registered during the module import
 // cannot stop the events from reaching us (#1242, UI_FOCUS_FENCE).
-// A frame without the loader can expose a page element under this name through
-// window named access; only the loader's own record (with its Set) counts.
-const published = (globalThis as { __navsentinelUiFence?: FocusRecord }).__navsentinelUiFence;
+// A frame without the loader can expose a page element, or a cross-origin
+// WindowProxy whose properties throw, under this name through window named
+// access. Read only the global's own property, and only the loader's record
+// (with its Set) counts (#1243 review).
+const published = Object.getOwnPropertyDescriptor(globalThis, "__navsentinelUiFence")?.value as FocusRecord | undefined;
 const loaderRecord = published?.r instanceof Set ? published : undefined;
 const fence: FocusRecord = loaderRecord ?? { h: false, u: -Infinity, a: false };
 function focusChange(event: Event): void {
