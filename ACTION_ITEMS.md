@@ -218,7 +218,7 @@ Answer these in the estate cockpit or in chat. Each record is `agent-hq/decision
 - **`navsentinel-main-guard-budget-20261023`**: raise the `main_guard` (MAIN-world) perf budget so
   #1141's captured-natives fix, and later #1134 and #1017, can land? #1141 stays open until it is answered.
 
-### Retroactive Gate-3 checks (AI-48 to AI-56)
+### Retroactive Gate-3 checks (AI-48 onward)
 
 Standing rule since 2026-10-26 (D-2026-10-26-A): every browser-facing PR lands on automated gates and gets a row here.
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
@@ -240,8 +240,14 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-55 | #1017 opener `location` facade (MAIN world) | merge commit `c47c5991` (merged 2026-10-18) | OPEN — not run |
 | AI-56 | #1060 subframe form-target capture (MAIN world) | merge commit `a0035874` (merged 2026-10-18) | OPEN — not run |
 | AI-52 | #1072 CRXJS 3 build pipeline | merge commit `44d8875a` (merged 2026-10-24) | OPEN — not run |
+| AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
+| AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-58 (#1165):** follow the [journal continuity checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional history. Check retained expansion, keyboard focus and reading position during arrivals; Show latest and explicit navigation; removal after replacement, eviction and clear; and the unchanged frozen export preview. Confirm screen-reader and physical-input behavior. The linked merge receipt identifies the exact merge commit. Automated evidence does not complete this check; a failed owner check gets a revert PR for that commit.
+
+- **AI-57 (#1163):** follow [Protection Center activity](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional records. Review the four categories and separate corrections, keyboard drill-down, Today/history, narrow themes and reduced motion; use existing Options backup/import/clear only on that fictional history. Confirm screen-reader and physical-input behavior. Automated receipts do not complete this check. The PR's merge receipt records the exact merge commit; a failed owner check gets a revert PR for that commit.
 
 - **AI-48 (#1100):** (1) a normal login on a real site still goes through after "Proceed once"; (2) on the
   fixture in `tests/e2e/credential-resubmit-retarget.spec.ts` (or any page whose submit handler swaps
