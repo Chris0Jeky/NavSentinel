@@ -10,6 +10,9 @@ import {
 
 type FenceRecord = { h: boolean; u: number; a: boolean; r: Set<number> };
 
+// happy-dom marks every dispatched event untrusted; stand in for a browser-fired one.
+const trusted = <E extends Event>(event: E): E => Object.defineProperty(event, "isTrusted", { value: true });
+
 // #1242: the document_start loader records focus and PiP before page script runs.
 describe("document_start focus/PiP fence", () => {
   const sent: unknown[] = [];
@@ -89,12 +92,16 @@ describe("document_start focus/PiP fence", () => {
     expect(sent).toEqual([{ type: "ns-pip", open: true }, { type: "ns-pip", open: false }]);
   });
 
-  it("reports a Document PiP window until it closes", () => {
+  it("reports a Document PiP window until it really closes, ignoring a forged pagehide", () => {
     sent.length = 0;
     const pipWindow = new EventTarget();
     documentPip.dispatchEvent(Object.assign(new Event("enter"), { window: pipWindow }));
     expect(sent).toEqual([{ type: "ns-pip", open: true }]);
+    // Page script can dispatch pagehide on the PiP window or its own window while PiP stays open.
     pipWindow.dispatchEvent(new Event("pagehide"));
+    window.dispatchEvent(new Event("pagehide"));
+    expect(sent).toEqual([{ type: "ns-pip", open: true }]);
+    pipWindow.dispatchEvent(trusted(new Event("pagehide")));
     expect(sent).toEqual([{ type: "ns-pip", open: true }, { type: "ns-pip", open: false }]);
   });
 
