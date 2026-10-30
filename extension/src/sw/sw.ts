@@ -968,6 +968,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (pending && !rollbackSendInFlight.has(sendInFlightKey(tabId, pending.url))) {
           trySendRollback(tabId, pending);
         }
+        // A tabnab or device-code warning whose load-complete send beat the content
+        // script's listener: deliver now that it is listening (active tab only).
+        if (tabnabPendingByTab.get(tabId) && !tabnabPendingByTab.get(tabId)!.w) {
+          chrome.tabs.get(tabId).then((tab) => { if (tab.active) onActivatedHandler(tabId); }).catch(() => {});
+        }
       }
     }, false);
   }
@@ -1534,10 +1539,12 @@ function onActivatedHandler(tabId: number): void {
     const reg = httpRegistrable(tab.url);
     // A device-code entry's source was already vetted (a provider's own Docs or repo pages warn).
     if (!reg || (reg === pending.origReg && !pending.k)) return drop();
-    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg, ...(pending.k && { kind: "devicecode" }) }, () => {
-      // The listener never responds, so a delivered message still reports "message port
-      // closed"; only a missing receiver means the toast was not shown.
-      if (!/Receiving end does not exist/.test(chrome.runtime.lastError?.message ?? "")) drop();
+    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg, ...(pending.k && { kind: "devicecode" }) }, (shown) => {
+      // Only the warning listener's own reply means it was shown: an early send can reach a
+      // document whose other listeners are up but not this one ("message port closed").
+      // Unshown entries are retried on the page's ns-ready and on the next load or return.
+      void chrome.runtime.lastError;
+      if (shown === true) drop();
     });
   }).catch(() => {});
 }
