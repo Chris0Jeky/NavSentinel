@@ -243,8 +243,14 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 | AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
+| AI-67 | #1184 Options recorded-choices labels and export omission notice | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1184) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
+  and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
+  Export shows "... include explanations that are not part of the portable export." and the downloaded file
+  matches the preview. A failure gets a revert PR for the merge commit.
 
 - **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
   (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
