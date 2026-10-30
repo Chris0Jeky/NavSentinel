@@ -146,6 +146,49 @@ test("a second document.open() keeps the credential guard (#1105 review) @regres
   });
 });
 
+// #1113: the written script runs inside document.write(), before the guard's
+// MutationObserver re-adds its window listeners, so its capture listener is first.
+const HIDE_SUBMIT = `<script>addEventListener("submit", (e) => e.stopImmediatePropagation(), true);</script>`;
+// The deep review of #1187: after stopping the submit, the page makes the form look
+// password-free (the field list keeps the value) so a live password check misses it.
+const HIDE_SUBMIT_AND_PASSWORD = `<script>addEventListener("submit", (e) => {
+  e.stopImmediatePropagation();
+  for (const f of document.querySelectorAll('input[type="password"]')) f.type = "text";
+}, true);</script>`;
+const HIDE_SUBMIT_AND_FORMDATA = `<script>
+  addEventListener("submit", (e) => e.stopImmediatePropagation(), true);
+  addEventListener("formdata", (e) => e.stopImmediatePropagation(), true);
+</script>`;
+
+for (const [name, script] of [
+  ["a written submit listener", HIDE_SUBMIT],
+  ["written submit and formdata listeners", HIDE_SUBMIT_AND_FORMDATA],
+] as const) {
+  test(`document.open() + ${name} ahead of the re-added guard still prompts (#1113) @regression`, async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+    // Before the fix this POSTed the canary to the attacker with no prompt.
+    await withVictimPage(async (page, attacker) => {
+      await page.evaluate(REWRITE, script + LOGIN_FORM);
+      await expect(page.locator("#go")).toBeVisible();
+      await expectGuardIntercepts(page, attacker);
+    });
+  });
+}
+
+test("document.open() + a written submit listener: proceeding sends to the assessed destination once (#1113) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(async (page, attacker) => {
+    await page.evaluate(REWRITE, HIDE_SUBMIT + LOGIN_FORM);
+    await expect(page.locator("#go")).toBeVisible();
+    await page.click("#go", { noWaitAfter: true });
+    await waitForCredentialModal(page);
+    expect(attacker).toEqual([]);
+    await clickModalButton(page, "Proceed once");
+    await expect.poll(() => attacker.length).toBe(1);
+    expect(attacker[0]).toContain(CANARY);
+  });
+});
+
 test("document.open() keeps the paste warning (#1105) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   await withVictimPage(async (page) => {
@@ -154,5 +197,16 @@ test("document.open() keeps the paste warning (#1105) @regression", async () => 
       document.getElementById("password")!.dispatchEvent(new ClipboardEvent("paste", { bubbles: true }));
     });
     await waitForToastText(page, "You pasted into a password field on an untrusted domain");
+  });
+});
+
+test("document.open() + a written listener that hides the password field after the submit sends nothing (#1113 review) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  await withVictimPage(async (page, attacker) => {
+    await page.evaluate(REWRITE, HIDE_SUBMIT_AND_PASSWORD + LOGIN_FORM);
+    await expect(page.locator("#go")).toBeVisible();
+    await page.click("#go", { noWaitAfter: true });
+    await page.waitForTimeout(1_500);
+    expect(attacker).toEqual([]);
   });
 });
