@@ -771,7 +771,7 @@ addPersistentListener(window, "formdata", handleFormData);
 let focusChecked = false;
 addPersistentListener(window, "focusin", (e) => {
   const t = e.composedPath()[0];
-  if (focusChecked || cachedCredMode === "off" || !(t instanceof HTMLInputElement) ||
+  if (!e.isTrusted || focusChecked || cachedCredMode === "off" || !(t instanceof HTMLInputElement) ||
     !isPasswordTypeInput(t) || !isVisiblePasswordField(t)) return;
   focusChecked = true;
   void import("./credential_focus_warning")

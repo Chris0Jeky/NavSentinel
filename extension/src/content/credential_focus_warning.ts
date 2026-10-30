@@ -14,30 +14,45 @@ import { showToast } from "./ui_toast";
  * fresh install trusts nothing, so "untrusted" alone would fire everywhere.
  * PUNYCODE_HOST is deliberately absent: an IDN alone (müller.de) is an
  * ordinary non-English name. Punycode warns only through the lookalike or
- * mixed-script codes the model raises alongside it.
+ * mixed-script codes the model raises alongside it. BRAND_KEYWORD_DOMAIN is
+ * absent too: it is a prefix match, so applebees.com reads as "apple".
  */
 const STRONG_PAGE_SIGNALS = [
   "LOOKALIKE_DOMAIN",
   "HOMOGLYPH_LOOKALIKE",
-  "BRAND_KEYWORD_DOMAIN",
   "SUBDOMAIN_STUFFING",
   "MIXED_SCRIPT_HOST",
   "IP_HOST",
   "NON_HTTPS_PAGE"
 ];
 
+const LOCAL_SUFFIX = /\.(?:localhost|test|local|lan|internal|home\.arpa|intranet|corp)$/;
+
+function isPrivateIPv4(a: number, b: number): boolean {
+  return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+    (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
+}
+
 /**
- * Router, NAS and dev hosts: loopback, private and link-local IP literals
- * (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, ::1, fc00::/7, fe80::/10).
+ * Router, NAS, intranet and dev hosts: single-label names, reserved private
+ * suffixes, and loopback/private/link-local/CGNAT IP literals (10/8,
+ * 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10, ::1, fc00::/7,
+ * fe80::/10, and IPv4-mapped forms of the IPv4 ranges).
  */
 function isLocalHost(host: string): boolean {
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".test")) return true;
-  if (!isIPAddress(host)) return false;
-  // A short first group has dropped leading zeros ("fc::1" is 00fc::1, public).
-  if (host.includes(":")) return host === "::1" || /^(?:f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(host);
+  if (!isIPAddress(host)) return !host.includes(".") || host === "localhost" || LOCAL_SUFFIX.test(host);
+  if (host.includes(":")) {
+    // URL serializes ::ffff:a.b.c.d as ::ffff:XXXX:XXXX.
+    const mapped = /^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/.exec(host);
+    if (mapped) {
+      const hi = parseInt(mapped[1]!, 16);
+      return isPrivateIPv4(hi >> 8, hi & 255);
+    }
+    // A short first group has dropped leading zeros ("fc::1" is 00fc::1, public).
+    return host === "::1" || /^(?:f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(host);
+  }
   const [a, b] = host.split(".").map(Number) as [number, number];
-  return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) || (a === 169 && b === 254);
+  return isPrivateIPv4(a, b);
 }
 
 /** The strongest page-only signal that warrants a focus warning, or null. */

@@ -39,7 +39,7 @@ describe("focusWarningReason (#1170)", () => {
     expect(code("http://login.northwind.example/")).toBe("NON_HTTPS_PAGE");
     expect(code("https://192.0.2.10/signin")).toBe("IP_HOST");
     expect(code("https://[2001:db8::1]/signin")).toBe("IP_HOST");
-    expect(code("https://paypa1.com/signin")).toBe("BRAND_KEYWORD_DOMAIN");
+    expect(code("https://paypa1.com/signin", ["paypal.com"])).toBe("LOOKALIKE_DOMAIN");
     expect(code("https://paypal.login.billing-example.com/")).toBe("SUBDOMAIN_STUFFING");
     expect(code("https://gooogle.com/", ["google.com"])).toBe("LOOKALIKE_DOMAIN");
   });
@@ -51,6 +51,20 @@ describe("focusWarningReason (#1170)", () => {
     expect(code("https://a.b.c.d.northwind.example/")).toBeNull();
     // The real brand domain is not its own lookalike.
     expect(code("https://www.paypal.com/signin")).toBeNull();
+  });
+
+  it("ignores the brand-keyword prefix match (applebees.com is not apple)", () => {
+    expect(code("https://www.applebees.com/login")).toBeNull();
+    expect(code("https://paypal-community.com/login")).toBeNull();
+  });
+
+  it("exempts intranet names: single-label hosts and reserved private suffixes", () => {
+    for (const url of ["http://intranet/", "http://nas:5000/", "http://printer.local/", "http://router.lan/",
+      "http://wiki.internal/", "http://nas.home.arpa/", "http://hr.intranet/", "http://mail.corp/"]) {
+      expect(code(url), url).toBeNull();
+    }
+    expect(code("http://intranet-portal.example/")).toBe("NON_HTTPS_PAGE");
+    expect(code("http://login.local-bank.com/")).toBe("NON_HTTPS_PAGE");
   });
 
   it("never warns on a trusted site, even over http", () => {
@@ -75,7 +89,9 @@ describe("focusWarningReason (#1170)", () => {
   it("exempts private and link-local IP literals (router, NAS admin pages)", () => {
     for (const url of ["http://10.0.0.1/", "http://172.16.0.1/", "http://172.31.255.254/",
       "http://192.168.1.1/login", "http://169.254.10.20/", "http://127.8.9.10/",
-      "http://[fc00::1]/", "http://[fd12:3456::1]/", "http://[fe80::1]/", "http://[febf::1]/"]) {
+      "http://[fc00::1]/", "http://[fd12:3456::1]/", "http://[fe80::1]/", "http://[febf::1]/",
+      "http://100.64.0.1/", "http://100.127.255.254/", "http://[::ffff:10.1.2.3]/",
+      "http://[::ffff:192.168.1.1]/", "http://[::ffff:172.20.0.1]/", "http://[::ffff:100.100.0.1]/"]) {
       expect(code(url), url).toBeNull();
     }
   });
@@ -83,7 +99,9 @@ describe("focusWarningReason (#1170)", () => {
   it("still warns on public IP literals next to the private ranges", () => {
     for (const [url, want] of [["http://172.15.0.1/", "IP_HOST"], ["http://172.32.0.1/", "IP_HOST"],
       ["https://8.8.8.8/", "IP_HOST"], ["http://203.0.113.24/", "IP_HOST"], ["http://192.169.0.1/", "IP_HOST"],
-      ["http://[fec0::1]/", "IP_HOST"], ["http://[fc::1]/", "IP_HOST"], ["http://[2001:db8::1]/", "IP_HOST"]]) {
+      ["http://[fec0::1]/", "IP_HOST"], ["http://[fc::1]/", "IP_HOST"], ["http://[2001:db8::1]/", "IP_HOST"],
+      ["http://100.63.0.1/", "IP_HOST"], ["http://100.128.0.1/", "IP_HOST"], ["http://[::ffff:8.8.8.8]/", "IP_HOST"],
+      ["http://[::ffff:172.32.0.1]/", "IP_HOST"]]) {
       expect(code(url!), url).toBe(want);
     }
   });
@@ -145,11 +163,16 @@ describe("credential_guard password-focus hook", () => {
       document.body.appendChild(el);
       return el;
     };
-    const focus = (el: Element): void => {
-      el.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
+    // happy-dom has no trusted events; mark a user focus the way Chrome does.
+    const focus = (el: Element, trusted = true): void => {
+      const ev = new FocusEvent("focusin", { bubbles: true, composed: true });
+      Object.defineProperty(ev, "isTrusted", { value: trusted });
+      el.dispatchEvent(ev);
     };
     const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 50));
 
+    // A page-dispatched focusin neither warns nor spends the once-per-page check.
+    focus(field("password"), false);
     focus(field("text"));
     focus(field("password", "display:none"));
     focus(field("password", "", true));
