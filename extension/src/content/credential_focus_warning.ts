@@ -1,5 +1,6 @@
 import { appendEvent, getCredentialSettings, getTrustedDomains, type CredentialSettings } from "../shared/storage";
-import { computeCredentialRisk, isIPAddress, normalizeHost, type RiskReason } from "../shared/domain";
+import { computeCredentialRisk, getRegistrableDomain, isIPAddress, normalizeHost, type RiskReason } from "../shared/domain";
+import type { ContentAnalysisResult } from "./content_analyzer";
 import { explainJournalReason } from "../evidence/evidence_reasons";
 import { showToast } from "./ui_toast";
 
@@ -55,20 +56,49 @@ function isLocalHost(host: string): boolean {
   return isPrivateIPv4(a, b);
 }
 
-/** The strongest page-only signal that warrants a focus warning, or null. */
+/**
+ * The strongest page-only signal that warrants a focus warning; `null` when no
+ * address signal fires on an eligible page (the content check may still run);
+ * `undefined` when the page is off-limits (mode off, trusted, local).
+ */
 export function focusWarningReason(
   pageUrl: string,
   trustedDomains: string[],
   config: CredentialSettings
-): RiskReason | null {
-  if (config.mode === "off") return null;
+): RiskReason | null | undefined {
+  if (config.mode === "off") return undefined;
   // Page-only: the action is the page itself, so no cross-site signal applies.
   const risk = computeCredentialRisk({ pageUrl, actionUrl: pageUrl, trustedDomains, config });
   const host = risk.page.host;
-  if (!host || risk.page.isTrusted || isLocalHost(host)) return null;
+  if (!host || risk.page.isTrusted || isLocalHost(host)) return undefined;
   for (const code of STRONG_PAGE_SIGNALS) {
     const reason = risk.reasons.find((r) => r.code === code);
     if (reason) return reason;
+  }
+  return null;
+}
+
+/**
+ * Structural fingerprints that also match ordinary pages; only named kits
+ * (EvilProxy, Evilginx, W3LL, Telegram/Discord exfil, ...) warn at focus.
+ */
+const GENERIC_KITS = new Set([
+  "Phish-Hidden-Iframe", "Base64-Form-Action", "Exfil-Hidden-Form", "Data-Exfil-Iframe",
+  "Suspicious-Meta-Refresh", "OTP-Kit", "Hidden-Input-Harvester",
+]);
+
+/**
+ * AiTM proxies and fetch-exfil kits often sit on an address with no signal at
+ * all. At first password focus, a named kit fingerprint or a page title naming
+ * a brand the domain does not belong to is strong enough to warn. A logo or a
+ * "Sign in with Microsoft" button alone is not.
+ */
+export function contentFocusMessage(content: ContentAnalysisResult, host: string): string | null {
+  if (content.phishingKitMatch && content.kitName && !GENERIC_KITS.has(content.kitName)) {
+    return `Heedline: this sign-in page matches a known phishing kit (${content.kitName}). Do not type a password here.`;
+  }
+  if (content.brandTitleMatch && content.brandDetected) {
+    return `Heedline: this page calls itself ${content.brandDetected}, but its address (${host}) is not ${content.brandDetected}'s. Check the address before typing a password.`;
   }
   return null;
 }
@@ -81,13 +111,28 @@ export function focusWarningMessage(code: string): string {
 export async function warnOnPasswordFocus(pageUrl: string): Promise<void> {
   const cfg = await getCredentialSettings();
   const reason = focusWarningReason(pageUrl, await getTrustedDomains(), cfg);
-  if (!reason) return;
+  if (reason === undefined) return;
+  const host = normalizeHost(new URL(pageUrl).hostname);
+  if (!reason) {
+    const { analyzePageContent } = await import("./content_analyzer");
+    const message = contentFocusMessage(analyzePageContent(document, getRegistrableDomain(host) || host), host);
+    if (!message) return;
+    showToast({ message, timeoutMs: 12000 });
+    await appendEvent({
+      kind: "cred_paste_warn",
+      site: host,
+      url: pageUrl,
+      reasons: ["CONTENT_FP", "PASSWORD_FOCUS_WARNING"],
+      extra: { trigger: "password_focus" }
+    });
+    return;
+  }
   // Warn and dismiss only (RI-01): no trust or allow action on page-injected UI.
   showToast({ message: focusWarningMessage(reason.code), timeoutMs: 12000 });
   // Existing warn-only credential kind; `trigger` tells it apart from a paste.
   await appendEvent({
     kind: "cred_paste_warn",
-    site: normalizeHost(new URL(pageUrl).hostname),
+    site: host,
     url: pageUrl,
     reasons: [reason.code, "PASSWORD_FOCUS_WARNING"],
     extra: { trigger: "password_focus" }

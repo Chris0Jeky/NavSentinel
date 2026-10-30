@@ -22,6 +22,8 @@ import { hasVisiblePasswordField, queryPasswordInputs } from "./password_field";
 export interface ContentAnalysisResult {
   brandMismatch: boolean;
   brandDetected?: string;
+  /** The page title names the impersonated brand (the strong channel). */
+  brandTitleMatch?: boolean;
   phishingKitMatch: boolean;
   kitName?: string;
   suspiciousFormAction: boolean;
@@ -1182,6 +1184,7 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
     if (signal) {
       result.brandMismatch = true;
       result.brandDetected = signal.brand.name;
+      if (signal.titleMatch) result.brandTitleMatch = true;
       result.score += signal.score;
       const channels: string[] = [];
       if (signal.titleMatch) channels.push("title");
