@@ -9,6 +9,10 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   let lastFrame = performance.now();
   let frame = 0;
   let disposed = false;
+  // A subframe's hasFocus() is also false while focus is elsewhere in the same tab, which
+  // would leave a toast in a never-clicked frame (a cleanup chip in an ad frame) unable to
+  // arm before its first click. Subframes require focus once they have had it (#1225).
+  let needsFocus = window.top === window;
   const buttonExposure = new Map<HTMLElement, { since: number; rect: DOMRect }>();
   // IntersectionObserver v2 reports the rendered result: occlusion by any later
   // top-layer or pointer-events:none cover, and opacity, transforms, filters and
@@ -73,8 +77,10 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   function visible(): boolean {
     // No observer sees another window over ours: a page popup placed over an
     // approval can take the arming window and close on the first press (#1225).
-    // In a subframe this needs that frame's own focus, which clicking it gives.
-    if (!document.hasFocus() || !topLayer() || !rendered(host) || !rendered(surface)) return false;
+    // Residual: a subframe surface that never had focus arms without it.
+    const focused = document.hasFocus();
+    needsFocus ||= focused;
+    if ((needsFocus && !focused) || !topLayer() || !rendered(host) || !rendered(surface)) return false;
     const rect = surface.getBoundingClientRect();
     return hit(surface, rect.x + rect.width / 2, rect.y + rect.height / 2);
   }
