@@ -276,7 +276,10 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-93 | #1237 pending off-site meta refresh scored on credential pages (#1144) | merge commit `5229650a` (merged 2026-10-30) | OPEN — not run |
 | AI-94 | #1238 approvals refused under PiP and after short blurs; per-load subframe focus latch (#1236) | merge commit `8a866350` (merged 2026-10-30) | OPEN — not run |
 | AI-95 | #1243 loader-level blur/focus fence and tab-wide PiP relay (#1242) | merge commit `a6fff55d` (merged 2026-10-30) | OPEN — not run |
-| AI-96 | #1141 MAIN-world bridge and guards use natives captured at document start | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1141) (candidate until merged) | OPEN — not run |
+| AI-96 | #1141 MAIN-world bridge and guards use natives captured at document start | merge commit `4d0b1dc4` (merged 2026-10-30) | OPEN — not run |
+| AI-100 | #1249 every frame asked for Picture-in-Picture state (hostile frames, blob and sandboxed frames, removed frames; #1244) | merge commit `ba17e96c` (merged 2026-10-30) | OPEN — not run |
+| AI-101 | #1252 meta-refresh credential signal fails closed on overflowing or cut refresh tags (#1241) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1252) (candidate until merged) | OPEN — not run |
+| AI-102 | #1246 and #1255 built pages without indentation, recompressed icons, compact manifest | merge commits `cc1700bc` and `2053f883` (merged 2026-10-30) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -410,6 +413,28 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   regression smoke only: with the Gym served, the deceptive-popup and credential-submit scenarios still warn as before,
   a real-click popup still opens, and the page console shows no `[NavSentinel]` errors. A failure gets a revert PR
   for the merge.
+
+- **AI-100 (#1249):** as AI-95, plus: with a credential prompt open on a local page, add a sandboxed frame from
+  DevTools (no network: the video is a canvas stream):
+
+  ```js
+  const f = document.createElement("iframe"); f.sandbox = "allow-scripts"; f.src = URL.createObjectURL(new Blob([`<button id=pip>PiP</button><script>const v = document.createElement("video"); v.muted = true; const c = document.createElement("canvas"); c.getContext("2d").fillRect(0, 0, 160, 90); v.srcObject = c.captureStream(); v.play(); pip.onclick = () => v.requestPictureInPicture();<\/script>`], { type: "text/html" })); document.body.append(f);
+  ```
+
+  Click the frame's PiP button: Proceed once does nothing and the prompt says to close Picture-in-Picture; it works
+  again shortly after PiP closes. Automated: `credential-modal-covers.spec.ts`. A failure gets a revert PR for
+  `ba17e96c`.
+
+- **AI-101 (#1252):** dummy credentials only. On a local login page with a password field, add from DevTools
+  `const m = document.createElement("meta"); m.httpEquiv = "refresh"; m.content = "300;" + " ".repeat(2100) + "url=//example.org/"; document.head.append(m)`
+  and submit: the credential prompt lists "Page refresh tags are too many or too long to check". A normal page with
+  one short same-site refresh shows no refresh reason. Automated: `content-analyzer-meta-refresh.test.ts`. A failure
+  gets a revert PR for the merge.
+
+- **AI-102 (#1246, #1255):** open the popup, Options, the onboarding page and the Protection Center (evidence page)
+  in light and dark themes: text spacing, inline links and buttons look as before; the toolbar and
+  `chrome://extensions` icons are sharp and unchanged; the extension loads with no manifest error. A failure gets a
+  revert PR for the merge in question.
 
 - **AI-97 (#1245):** with the Gym served (`npm run gym:serve`), on `http://localhost:5173/rw-fullscreen-benign.html`
   run the AI-83 DevTools line (a delayed inert command copy, then the shadow-root lure a second later) and click the
