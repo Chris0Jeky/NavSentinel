@@ -3,7 +3,8 @@ import {
   computeCredentialRisk,
   decodePunycode,
   detectLookalike,
-  idnSkeletonHost
+  idnSkeletonHost,
+  isMixedScript
 } from "../extension/src/shared/domain";
 import type { CredentialSettings } from "../extension/src/shared/storage";
 
@@ -127,11 +128,47 @@ describe("plain IDNs gain no lookalike signal", () => {
 });
 
 describe("isMixedScript on decoded punycode labels (#1196)", () => {
-  it("flags a homograph label and keeps plain IDNs unflagged", async () => {
-    const { isMixedScript } = await import("../extension/src/shared/domain");
+  it("flags a homograph label and keeps plain IDNs unflagged", () => {
     expect(isMixedScript("xn--pypal-4ve.com")).toBe(true);
     for (const plain of ["xn--mller-kva.de", "xn--bcher-kva.ch", "xn--wgv71a.jp", "paypal.com"]) {
       expect(isMixedScript(plain), plain).toBe(false);
     }
+  });
+});
+
+describe("fix round: scope, stuffing, mixed-script and robustness (#1196)", () => {
+  it("keeps brand-own-domain and alias exemptions when only a subdomain is IDN", () => {
+    for (const host of [asciiHost("а.paypal.com"), asciiHost("о.microsoftonline.com")]) {
+      const found = codes(host, ["paypal.com", "microsoft.com"]);
+      expect(found).not.toContain("BRAND_KEYWORD_DOMAIN");
+      expect(found).not.toContain("LOOKALIKE_DOMAIN");
+      expect(detectLookalike(host, ["paypal.com"]).brandKeyword).toBeNull();
+    }
+  });
+
+  it("keeps SUBDOMAIN_STUFFING when the registrable domain is a homograph of a brand alias", () => {
+    // netflix.nflxext.com is a legitimate alias host, so only the raw form stuffs.
+    const host = asciiHost("netflix.nflхext.com");
+    expect(detectLookalike(host, []).subdomainStuffing?.brand).toBe("netflix");
+    expect(codes(host, [])).toContain("SUBDOMAIN_STUFFING");
+  });
+
+  it("MIXED_SCRIPT_HOST on decoded labels needs two of Latin/Cyrillic/Greek", () => {
+    expect(isMixedScript("xn--pypal-4ve.com")).toBe(true);
+    expect(isMixedScript(asciiHost("tokyo東京.jp"))).toBe(false);
+    expect(isMixedScript(asciiHost("пример.com"))).toBe(false);
+    expect(codes(asciiHost("tokyo東京.jp"), [])).not.toContain("MIXED_SCRIPT_HOST");
+  });
+
+  it("does not let NFKC-produced dots shift label boundaries", () => {
+    // xn--ab-yu3n decodes to "a" + fullwidth full stop + "b".
+    expect(idnSkeletonHost("xn--ab-yu3n.com")).toBe("xn--ab-yu3n.com");
+    expect(idnSkeletonHost("xn--paypal-kn68a.com")).toBe("xn--paypal-kn68a.com");
+  });
+
+  it("leaves labels over 63 characters encoded", () => {
+    expect(decodePunycode("a".repeat(64))).toBeNull();
+    const long = `xn--${"a".repeat(60)}`;
+    expect(idnSkeletonHost(`${long}.com`)).toBe(`${long}.com`);
   });
 });

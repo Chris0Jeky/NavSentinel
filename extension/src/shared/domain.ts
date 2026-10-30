@@ -309,8 +309,19 @@ export function isMixedScript(host: string): boolean {
   if (!h) return false;
   // Punycode labels are ASCII, so also check each decoded xn-- label on its own:
   // xn--pypal-4ve (Cyrillic a in paypal) is mixed; xn--wgv71a (CJK) is not (#1196).
+  // Decoded labels count only a mix of the confusable scripts (Latin, Cyrillic,
+  // Greek): Latin+CJK labels such as tokyo-<kanji> are ordinary Japanese hosts.
   return hasTwoLetterScripts(h) || h.split(".").some((label) =>
-    label.startsWith("xn--") && hasTwoLetterScripts(decodePunycode(label.slice(4)) ?? ""));
+    label.startsWith("xn--") && hasTwoConfusableScripts(decodePunycode(label.slice(4)) ?? ""));
+}
+
+function hasTwoConfusableScripts(text: string): boolean {
+  const scripts = new Set<ScriptClass>();
+  for (const ch of text) {
+    const script = charScript(ch.codePointAt(0) ?? 0);
+    if (script === "Latin" || script === "Cyrillic" || script === "Greek") scripts.add(script);
+  }
+  return scripts.size >= 2;
 }
 
 function hasTwoLetterScripts(text: string): boolean {
@@ -804,6 +815,8 @@ export function normalizeHomoglyphs(input: string): string {
  * allocation-light. Returns null on malformed input instead of throwing.
  */
 export function decodePunycode(input: string): string | null {
+  // A DNS label is at most 63 characters; anything longer is not a real host.
+  if (input.length > 63) return null;
   const delim = input.lastIndexOf("-");
   const basicEnd = Math.max(delim, 0);
   const out: number[] = [];
@@ -879,14 +892,20 @@ export function idnSkeletonHost(host: string): string {
   return h
     .split(".")
     .map((label) => {
-      if (!label.startsWith("xn--")) return label;
-      const decoded = decodePunycode(label.slice(4));
-      if (decoded === null) return label;
-      let folded = "";
-      for (const ch of decoded.normalize("NFKC").toLowerCase()) {
-        folded += CONFUSABLE_LATIN.get(ch.codePointAt(0) ?? 0) ?? ch;
+      if (!label.startsWith("xn--") || label.length > 63) return label;
+      try {
+        const decoded = decodePunycode(label.slice(4));
+        if (decoded === null) return label;
+        let folded = "";
+        for (const ch of decoded.normalize("NFKC").toLowerCase()) {
+          folded += CONFUSABLE_LATIN.get(ch.codePointAt(0) ?? 0) ?? ch;
+        }
+        // Letters, digits and hyphen only: NFKC can emit dots or slashes that
+        // would shift label boundaries.
+        return /^[a-z0-9-]+$/.test(folded) ? folded : label;
+      } catch {
+        return label;
       }
-      return /^[ -~]*$/.test(folded) ? folded : label;
     })
     .join(".");
 }
@@ -1075,8 +1094,10 @@ export function detectLookalike(
   // Compare the decoded IDN skeleton (xn--pypal-4ve.com -> paypal.com); `reg`
   // stays the host as written so the trusted domain itself is never its own lookalike.
   const h = idnSkeletonHost(rawHost);
-  const idnFolded = h !== rawHost;
-  const skelReg = idnFolded ? getRegistrableDomain(h) : reg;
+  const skelReg = h !== rawHost ? getRegistrableDomain(h) : reg;
+  // Only a folded registrable domain is a spoof; a folded subdomain of a genuine
+  // brand domain (xn--80a.paypal.com) keeps the brand-own-domain exemptions.
+  const idnFolded = skelReg !== reg;
 
   // Use precomputed raw Levenshtein if provided, otherwise compute it
   const lev = rawLookalike !== undefined
@@ -1111,7 +1132,9 @@ export function detectLookalike(
   }
 
   const brandKeyword = reg ? detectBrandInDomain(skelReg, idnFolded) : null;
-  const subStuffing = h ? detectSubdomainStuffing(h) : null;
+  // Both forms, so decoding can only add a stuffing hit, never hide one.
+  const subStuffing =
+    detectSubdomainStuffing(rawHost) ?? (h !== rawHost ? detectSubdomainStuffing(h) : null);
 
   return {
     levenshtein: lev,
