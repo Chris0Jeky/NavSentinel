@@ -21,7 +21,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { AcceptanceSession, toastState, trustedClick } from "./acceptance_harness";
-import { attemptSyntheticModalClick, readCredentialModal } from "../e2e/extension_test_utils";
+import { attemptSyntheticModalClick, evaluateInToast, readCredentialModal } from "../e2e/extension_test_utils";
 import { uniqueMarker, type Attempt } from "./redteam_helpers";
 
 /** The modal's buttons as the harness sees them (through CDP; the root is closed, #894). */
@@ -45,6 +45,25 @@ async function synthClickModalBothWays(page: Page, label: string): Promise<{ rea
   const pageClick = await ev<string>(page, "__synthClickModal", label);
   await attemptSyntheticModalClick(page, label);
   return { reach, pageClick };
+}
+
+/**
+ * The same two-step attack on a toast action whose label starts with `prefix`:
+ * the page's own click (it must not reach the closed root, #1142), then an
+ * untrusted click from the main world through CDP. `cdpClick` is "clicked"
+ * when that second click found the control.
+ */
+async function synthClickToastBothWays(page: Page, prefix: string): Promise<{ pageClick: string; cdpClick: string }> {
+  const pageClick = await ev<string>(page, "__synthClickToast", prefix);
+  const cdpClick = await evaluateInToast(page, (roots, expected) => {
+    const button = roots
+      .flatMap((root) => Array.from(root.querySelectorAll("button")))
+      .find((candidate) => candidate.textContent?.trim().startsWith(expected));
+    if (!button) return "no-button";
+    button.click(); // synthetic => event.isTrusted === false
+    return "clicked";
+  }, prefix);
+  return { pageClick, cdpClick };
 }
 
 const ev = <T = unknown>(page: Page, name: string, arg?: unknown) =>
@@ -78,17 +97,18 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
       session.note(`A1a page before synthetic click: ${page.url()}`);
       const navigated = page.waitForURL((url) => url.href.includes(`/dest/${marker}/`), { timeout: 6000 })
         .then(() => true, () => false);
-      const clicked = await ev<string>(page, "__synthClickToast", "Allow");
+      const clicked = await synthClickToastBothWays(page, "Allow");
       // Read the toast straight after the click: it auto-hides after ~5 s, so a
       // read after the navigation wait cannot tell "consumed" from "expired" (#873).
       const after = await toastState(page);
-      session.note(`A1a synthetic 'Allow once' -> ${clicked}`);
+      session.note(`A1a synthetic 'Allow once' -> ${JSON.stringify(clicked)}`);
+      expect(clicked.pageClick, "page script must not reach the toast's controls (#1142)").toBe("closed-root");
       const reachedNav = await navigated;
-      const controlFired = clicked === "clicked" && (reachedNav || (toast.buttons.length > 0 && after.buttons.length === 0));
+      const controlFired = clicked.cdpClick === "clicked" && (reachedNav || (toast.buttons.length > 0 && after.buttons.length === 0));
       session.note(`A1a reachedNav=${reachedNav} finalUrl=${page.url()} toastAfter=${JSON.stringify(after)} controlFired=${controlFired}`);
       attempts.push({
         id: "A1a",
-        technique: "scripted requestSubmit() then untrusted .click() on nav 'Allow once' toast",
+        technique: "scripted requestSubmit() then untrusted .click() on nav 'Allow once' toast (page script, then CDP past the closed root)",
         fixture: "redteam-cred-modal.html",
         expected: "nav Allow prompt activates only on trusted input",
         observed: controlFired ? "REACHED-HARM" : "BLOCKED",
@@ -201,8 +221,9 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
       const trustBtn = toast.buttons.find((b) => b.startsWith("Trust"));
       expect(trustBtn, "paste-warning toast offers a Trust action").toBeTruthy();
       await session.screenshot(page, "a3-paste-toast");
-      const clicked = await ev<string>(page, "__synthClickToast", "Trust");
-      session.note(`A3 synthetic toast click -> ${clicked}`);
+      const clicked = await synthClickToastBothWays(page, "Trust");
+      session.note(`A3 synthetic toast click -> ${JSON.stringify(clicked)}`);
+      expect(clicked.pageClick, "page script must not reach the toast's controls (#1142)").toBe("closed-root");
       let fired = false;
       await expect.poll(async () => {
         fired = (await session.eventLog()).slice(before).some((row) => String(row.kind) === "cred_trust_domain");
@@ -212,7 +233,7 @@ test("red-team: page-synthetic clicks activate NavSentinel's own nav/credential/
       const reached = fired || (toast.buttons.length > 0 && after.buttons.length === 0);
       session.note(`A3 after: toast=${JSON.stringify(after)} trustEvent=${fired} reached=${reached}`);
       attempts.push({
-        id: "A3", technique: "untrusted .click() on toast action (bindControl direct listener)",
+        id: "A3", technique: "untrusted .click() on toast action (bindControl direct listener; page script, then CDP past the closed root)",
         fixture: "redteam-paste-toast.html", expected: "toast controls activate only on trusted input (fence)",
         observed: reached ? "REACHED-HARM" : "BLOCKED", finding: reached ? "NEW" : "KNOWN",
         detail: reached ? "toast action ran from a synthetic click (trust event / card removed)" : "synthetic click ignored",

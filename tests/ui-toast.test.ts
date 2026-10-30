@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stubVisibleUi, armVisibleControl } from "./helpers/visible-ui";
+import { shadowOf } from "./helpers/shadow-roots";
 stubVisibleUi();
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -44,7 +45,7 @@ describe("ui_toast", () => {
   }
 
   function getRoot(): ShadowRoot | null {
-    return getHost()?.shadowRoot ?? null;
+    return shadowOf(getHost());
   }
 
   function getWraps(): NodeListOf<Element> {
@@ -80,7 +81,7 @@ describe("ui_toast", () => {
       showToast({ message: "Next warning", timeoutMs: 0 });
       expect(getHost()).toBe(host);
       expect(host.isConnected).toBe(true);
-      expect(host.shadowRoot!.textContent).toContain("Next warning");
+      expect(shadowOf(host)!.textContent).toContain("Next warning");
       expect(showPopover).toHaveBeenCalledOnce();
     });
 
@@ -92,9 +93,52 @@ describe("ui_toast", () => {
       expect(getHost()!.parentElement).toBe(document.documentElement);
     });
 
-    it("creates shadow root in open mode", () => {
-      showToast({ message: "Test" });
-      expect(getRoot()).not.toBeNull();
+    it("gives page script no reference to the toast's controls (closed root, #1142)", () => {
+      showToast({ message: "Blocked", timeoutMs: 0, actions: [{ label: "Allow once", onClick: vi.fn() }] });
+      const host = getHost()!;
+      expect(host.shadowRoot).toBeNull();
+      expect(host.querySelector("button")).toBeNull();
+      expect(document.querySelectorAll("button")).toHaveLength(0);
+      expect(getButtons().map((button) => button.textContent)).toEqual(["Allow once", "Dismiss"]);
+    });
+
+    describe("fence path truncated at the closed host (#1142)", () => {
+      async function allowOnceToast(): Promise<{
+        mod: ToastModule;
+        host: HTMLElement;
+        allow: ReturnType<typeof vi.fn>;
+      }> {
+        const mod = await import("../extension/src/content/ui_toast");
+        const allow = vi.fn();
+        showToast({ message: "Blocked", timeoutMs: 0, actions: [{ label: "Allow once", onClick: allow }] });
+        return { mod, host: getHost()!, allow };
+      }
+
+      it("activates the focused control for keyboard input", async () => {
+        const { mod, host, allow } = await allowOnceToast();
+        getButtons()[0]!.focus();
+        vi.advanceTimersByTime(1000);
+        const keyup = new KeyboardEvent("keyup", { key: "Enter" });
+        expect(mod.activateOwnedToastControl(host, [host, document.documentElement, document, window], keyup)).toBe(true);
+        expect(allow).toHaveBeenCalledOnce();
+      });
+
+      it("activates the hit control for pointer input", async () => {
+        const { mod, host, allow } = await allowOnceToast();
+        vi.advanceTimersByTime(1000);
+        const click = new MouseEvent("click", { detail: 1, clientX: 120, clientY: 40 });
+        expect(mod.activateOwnedToastControl(host, [host, document.documentElement, document, window], click)).toBe(true);
+        expect(allow).toHaveBeenCalledOnce();
+      });
+
+      it("activates nothing for keyboard input with no toast control focused", async () => {
+        const { mod, host, allow } = await allowOnceToast();
+        vi.advanceTimersByTime(1000);
+        const keyup = new KeyboardEvent("keyup", { key: "Enter" });
+        expect(mod.activateOwnedToastControl(host, [host, document, window], keyup)).toBe(false);
+        expect(allow).not.toHaveBeenCalled();
+        expect(getButtons()).toHaveLength(2);
+      });
     });
 
     it("host has fixed positioning at bottom-right with max z-index and style isolation", () => {

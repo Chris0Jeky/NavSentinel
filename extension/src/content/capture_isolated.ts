@@ -1691,6 +1691,12 @@ if (chrome?.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message) => {
     if (!isTopFrame()) return;
     handleDblclickRuntimeMessage(message);
+    // Reverse tabnabbing (#1172): lazy warn-only toast, kept out of the always-on chunk.
+    // Direct import(): the research profile sits ~20 B under the cap, so no Promise.resolve
+    // wrapper; a head-less document just fails this listener and shows no toast.
+    if (message?.type === "ns-tabnab-warning" && settings.defaultMode !== "off") {
+      void import("./tabnab_warning").then(m => m.warn(message));
+    }
   });
 
   // OAuth monitoring: delegate to oauth_monitor module for

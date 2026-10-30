@@ -18,7 +18,10 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  evaluateInToast,
+  focusToastButton,
   getGymBaseUrl,
+  toastButtonPoint,
   waitForNavSentinelBridge,
   waitForToastText,
 } from "./extension_test_utils";
@@ -31,6 +34,10 @@ const extensionPath = process.env.EXTENSION_PATH
 const gymRoot = path.resolve(__dirname, "..", "..", "gym");
 
 test.setTimeout(120_000);
+
+// A block card removes itself 4 s after it appears. Activation is synchronous,
+// so a card still present 1.5 s after the input was not removed by the control.
+const BEFORE_IDLE_EXPIRY = { timeout: 1500 };
 
 async function setupFenceTest(pathname: string): Promise<{
   page: Page;
@@ -69,25 +76,10 @@ async function setupFenceTest(pathname: string): Promise<{
   }
 }
 
-/** Viewport centre of an extension-owned toast button, read from its shadow root. */
-async function toastButtonPoint(page: Page, label: string): Promise<{ x: number; y: number }> {
-  const point = await page.evaluate((expected) => {
-    const host = document.querySelector("#__navsentinel_toast_host");
-    const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
-    const match = buttons.find((button) => button.textContent?.trim() === expected);
-    if (!match) return null;
-    const rect = match.getBoundingClientRect();
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }, label);
-  expect(point, `toast button "${label}" should be rendered`).not.toBeNull();
-  return point!;
-}
-
 /** Full (non-persistent) cards across every element carrying the host id, so a page-forged host cannot mask the real one. */
 async function fullCardCount(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll("#__navsentinel_toast_host")).reduce((count, host) =>
-      count + (host.shadowRoot?.querySelectorAll(".wrap:not([data-persistent='true'])").length ?? 0), 0),
+  return evaluateInToast(page, (roots) =>
+    roots.reduce((count, root) => count + root.querySelectorAll(".wrap:not([data-persistent='true'])").length, 0),
   );
 }
 
@@ -132,10 +124,34 @@ test("trusted mouse Dismiss clears a regular block card without leaking to page 
     const popupPromise = context.waitForEvent("page", { timeout: 1000 }).catch(() => null);
     await page.mouse.click(dismiss.x, dismiss.y);
 
-    await expect.poll(() => fullCardCount(page)).toBe(0);
+    await expect.poll(() => fullCardCount(page), BEFORE_IDLE_EXPIRY).toBe(0);
     expect(await popupPromise, "Dismiss must not open the blocked tab").toBeNull();
     expect(await pageCaptureEventCount(page)).toBe(0);
     await expect(page).toHaveURL(/evasion-01-opacity-009\.html/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("page script cannot reach the toast's controls through its closed root (#1142) @regression", async () => {
+  test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
+  const { page, context, cleanup } = await setupFenceTest("evasion-01-opacity-009.html");
+  try {
+    await blockTrapNewTab(page, context);
+    // A page that wants to focus() "Allow once" before the user's next real
+    // Enter, or relabel a control, needs a reference to the button first.
+    const reach = await page.evaluate(() => {
+      const host = document.querySelector("#__navsentinel_toast_host");
+      return {
+        host: host !== null,
+        shadowRoot: (host?.shadowRoot ?? null) !== null,
+        lightButtons: host?.querySelectorAll("button").length ?? -1,
+      };
+    });
+    expect(reach).toEqual({ host: true, shadowRoot: false, lightButtons: 0 });
+    // The extension still renders its control behind the closed root.
+    expect(await evaluateInToast(page, (roots) => roots.length)).toBe(1);
+    expect(await toastButtonPoint(page, "Dismiss")).toBeTruthy();
   } finally {
     await cleanup();
   }
@@ -147,11 +163,8 @@ test("the page warning exposes Dismiss as its only control @regression", async (
   try {
     await blockTrapNewTab(page, context);
     const before = context.pages().length;
-    const labels = await page.evaluate(() => {
-      const host = document.querySelector("#__navsentinel_toast_host");
-      return Array.from(host?.shadowRoot?.querySelectorAll("button") ?? [], (button) =>
-        button.textContent?.trim() ?? "");
-    });
+    const labels = await evaluateInToast(page, (roots) =>
+      Array.from(roots[0]?.querySelectorAll("button") ?? [], (button) => button.textContent?.trim() ?? ""));
     expect(labels).toEqual(["Dismiss"]);
     expect(context.pages()).toHaveLength(before);
   } finally {
@@ -164,28 +177,20 @@ test("keyboard Enter and Space activate focused toast controls @regression", asy
   const { page, context, cleanup } = await setupFenceTest("evasion-01-opacity-009.html");
   try {
     await blockTrapNewTab(page, context);
-    const focusToastButton = (label: string) => page.evaluate((expected) => {
-      const host = document.querySelector("#__navsentinel_toast_host");
-      const buttons = Array.from(host?.shadowRoot?.querySelectorAll("button") ?? []);
-      const match = buttons.find((button) => button.textContent?.trim() === expected);
-      if (!match) throw new Error(`Toast button not found: ${expected}`);
-      match.focus();
-    }, label);
-
-    await focusToastButton("Dismiss");
+    await focusToastButton(page, "Dismiss");
     // Count only the keyboard input; the trap click above is a page click by design.
     await countPageCaptureEvents(page);
     const popupPromise = context.waitForEvent("page", { timeout: 1000 }).catch(() => null);
     await page.keyboard.press("Enter");
-    await expect.poll(() => fullCardCount(page)).toBe(0);
+    await expect.poll(() => fullCardCount(page), BEFORE_IDLE_EXPIRY).toBe(0);
     expect(await popupPromise).toBeNull();
     expect(await pageCaptureEventCount(page)).toBe(0);
 
     await blockTrapNewTab(page, context);
-    await focusToastButton("Dismiss");
+    await focusToastButton(page, "Dismiss");
     await countPageCaptureEvents(page);
     await page.keyboard.press("Space");
-    await expect.poll(() => fullCardCount(page)).toBe(0);
+    await expect.poll(() => fullCardCount(page), BEFORE_IDLE_EXPIRY).toBe(0);
     expect(await pageCaptureEventCount(page)).toBe(0);
   } finally {
     await cleanup();
@@ -216,7 +221,7 @@ test("toast controls stay clickable above a maximum-z-index layer inserted after
     expect(hitsToastHost, "the late layer must not sit above the toast host").toBe(true);
 
     await page.mouse.click(dismiss.x, dismiss.y);
-    await expect.poll(() => fullCardCount(page)).toBe(0);
+    await expect.poll(() => fullCardCount(page), BEFORE_IDLE_EXPIRY).toBe(0);
   } finally {
     await cleanup();
   }
@@ -227,9 +232,10 @@ test("a page-forged toast host cannot activate a real warning control @regressio
   const { page, context, cleanup } = await setupFenceTest("evasion-01-opacity-009.html");
   try {
     await blockTrapNewTab(page, context);
-    // The page can read the open shadow root, so it copies whatever marks the
-    // real Dismiss control onto a full-viewport element inside a fake host
-    // that carries the extension's host id, then waits for any trusted click.
+    // The root is closed (#1142), so `dismiss` is undefined here; the page
+    // still forges a full-viewport element inside a fake host that carries the
+    // extension's host id (copying any marks it could read), then waits for
+    // any trusted click.
     await page.evaluate(() => {
       const real = document.querySelector("#__navsentinel_toast_host");
       const dismiss = Array.from(real?.shadowRoot?.querySelectorAll("button") ?? [])

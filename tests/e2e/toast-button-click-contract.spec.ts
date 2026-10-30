@@ -12,18 +12,20 @@ for (const childFrame of [false, true]) {
     await scope.evaluate(async () => {
       const host = document.createElement("div");
       host.id = "__navsentinel_toast_host";
-      host.attachShadow({ mode: "open" }).innerHTML = `
+      // Closed, as the product's toast root is (#1142).
+      const root = host.attachShadow({ mode: "closed" });
+      root.innerHTML = `
         <style>
           .wrap { position: fixed; left: 20px; top: 20px; }
           button { width: 100px; height: 40px; }
         </style>
         <div class="wrap brief-recovery"><button>Undo</button></div>`;
       document.body.appendChild(host);
-      const card = host.shadowRoot!.querySelector<HTMLElement>(".wrap")!;
+      const card = root.querySelector<HTMLElement>(".wrap")!;
       const animation = card.animate([{ transform: "translateY(0)" }, { transform: "translateY(160px)" }], {
         duration: 400, fill: "forwards",
       });
-      host.shadowRoot!.querySelector("button")!.addEventListener("click", event => {
+      root.querySelector("button")!.addEventListener("click", event => {
         document.body.dataset.clickTop = String(card.getBoundingClientRect().top);
         document.body.dataset.clickTrusted = String(event.isTrusted);
         document.body.dataset.clickCount = String(Number(document.body.dataset.clickCount ?? 0) + 1);

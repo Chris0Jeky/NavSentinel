@@ -5,6 +5,7 @@
  * not make the user's own click look like a hidden overlay.
  */
 import { expect, test, type Frame, type Page } from "@playwright/test";
+import { readToastText } from "../e2e/extension_test_utils";
 import { AcceptanceSession } from "./acceptance_harness";
 
 async function humanClick(page: Page, box: { x: number; y: number; width: number; height: number }): Promise<void> {
@@ -41,8 +42,7 @@ test("state-layer link: a labelled new-tab link opens in the top frame and insid
         const seenToasts = new Set<string>();
         for (let tick = 0; tick < 15; tick += 1) {
           for (const candidate of page.frames()) {
-            const text = await candidate.evaluate(() =>
-              document.querySelector("#__navsentinel_toast_host")?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? null).catch(() => null);
+            const text = await readToastText(candidate).catch(() => null);
             if (text) seenToasts.add(`${new URL(candidate.url()).hostname}: ${text}`);
           }
           await page.waitForTimeout(200);
@@ -52,8 +52,7 @@ test("state-layer link: a labelled new-tab link opens in the top frame and insid
         const journal = (await session.eventLog()).slice(journalBefore).map((row) => String(row.kind));
         const profile = await session.storageLocal<Record<string, { factors?: Record<string, number> }>>("sentinelsuite:domain_profiles_v1");
         session.note(`${variant}: newTab=${tab ? new URL(tab.url() || "about:blank").pathname : "none"} journal=${JSON.stringify(journal)} factors=${JSON.stringify(Object.fromEntries(Object.entries(profile ?? {}).map(([host, value]) => [host, value.factors])))}`);
-        const frameToasts = await Promise.all(page.frames().map((candidate) => candidate.evaluate(() =>
-          document.querySelector("#__navsentinel_toast_host")?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? null).catch(() => null)));
+        const frameToasts = await Promise.all(page.frames().map((candidate) => readToastText(candidate).catch(() => null)));
         session.note(`${variant}: toasts by frame=${JSON.stringify(frameToasts)}`);
         await session.screenshot(page, `${variant}-after-click`);
         if (tab) await tab.close();
