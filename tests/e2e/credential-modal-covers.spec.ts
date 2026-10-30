@@ -250,6 +250,55 @@ test("a short blur stays refused when an early page listener stops blur and focu
   });
 });
 
+test("a short blur stays refused after the page rewrites itself with document.open() (#1244) @regression", async () => {
+  test.setTimeout(90_000);
+  await withExtension("rewritten-blur", async (context, posts) => {
+    // document.open() erases every listener the loader and the module added; only
+    // the loader's MutationObserver can put the blur/focus recorder back.
+    const written = `<script>window.focusLog = []; for (const type of ["blur", "focus"]) addEventListener(type,
+      (e) => { if (e.target === window) window.focusLog.push(type + "@" + Math.round(performance.now())); });</script>${LOGIN}`;
+    await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html", body: `
+      <body><script>addEventListener("load", () => setTimeout(() => {
+        document.open(); document.write(${JSON.stringify(written).replace(/<\//g, "<\\/")}); document.close();
+      }));</script></body>` }));
+    const page = await context.newPage();
+    const cdp = await realFocus(context, page);
+    // The rewrite restarts the document lifecycle, so do not wait for its load event.
+    await page.goto("http://victim.test/login", { waitUntil: "commit" });
+    await page.waitForSelector("#go");
+    await page.bringToFront();
+    await page.waitForTimeout(300);
+    await page.click("#go", { noWaitAfter: true });
+    await expect.poll(() => proceedPoint(page).then(() => true).catch(() => false)).toBe(true);
+    const popup = await openCoveringWindow(context, cdp);
+    await page.bringToFront();
+    await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
+    await page.evaluate(() => { (window as unknown as { focusLog: string[] }).focusLog = []; });
+    await page.waitForTimeout(ARMED_MS);
+    const point = await proceedPoint(page);
+
+    // As in the short-blur test: only the blur event can see this focus loss.
+    await page.evaluate(() => setTimeout(() => {
+      const probe = window as unknown as { focusLog: string[] };
+      const start = performance.now();
+      while (performance.now() - start < 60);
+      probe.focusLog.push(`task@${Math.round(start)}-${Math.round(performance.now())}`);
+    }, 0));
+    await popup.bringToFront();
+    await page.bringToFront();
+    await page.mouse.click(point.x, point.y);
+    await page.waitForTimeout(1000);
+    // Checked first: an accepted approval navigates away and loses the log.
+    expect(posts(), "a short blur after a rewrite must still refuse").toBe(0);
+    const log = await page.evaluate(() => (window as unknown as { focusLog: string[] }).focusLog);
+    expect(log.slice(0, 3).map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
+
+    await page.waitForTimeout(ARMED_MS);
+    await page.mouse.click(point.x, point.y);
+    await expect.poll(posts, { timeout: 5000 }).toBe(1);
+  });
+});
+
 // A child frame's player. `place` puts the video `v` somewhere; window.v keeps it reachable.
 const player = (place: string) => `
   <button id="pip">Watch in PiP</button>
