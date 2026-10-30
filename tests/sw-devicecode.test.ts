@@ -38,6 +38,10 @@ const ENDPOINTS = [
   "https://login.microsoftonline.com/common/oauth2/deviceauth",
   "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/deviceauth?user_code=X",
   "https://login.live.com/oauth20_remoteconnect.srf",
+  // Gov and China clouds, where microsoft.com/deviceloginus and /deviceloginchina land.
+  "https://login.microsoftonline.us/common/oauth2/deviceauth",
+  "https://login.partner.microsoftonline.cn/common/oauth2/deviceauth",
+  "https://login.chinacloudapi.cn/common/oauth2/deviceauth",
   "https://www.google.com/device",
   // What Chrome commits after google.com/device's server redirect (curl -IL, 2026-10-30).
   "https://accounts.google.com/o/oauth2/device/usercode",
@@ -147,6 +151,9 @@ describe("device-code phishing warning", () => {
     "https://portal.azure.com/",
     "https://microsoft.com/en-us",
     "https://login.microsoftonline.com/common/oauth2/authorize",
+    "https://login.microsoftonline.us/common/oauth2/authorize",
+    "https://login.partner.microsoftonline.cn/common/oauth2/authorize",
+    "https://login.chinacloudapi.cn/common/oauth2/authorize",
   ])("ignores the provider's own sign-in or docs page as the source (%s)", async (source) => {
     const { commit, swState } = await setup();
     swState.lastUrlByTab.set(30, source);
