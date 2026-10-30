@@ -4,7 +4,7 @@ import { showToast } from "../extension/src/content/ui_toast";
 import { _resetDeviceCodeLure, checkDeviceCodeLure as check } from "../extension/src/content/devicecode_lure";
 import { scannableText } from "../extension/src/content/clickfix_detector";
 
-const checkDeviceCodeLure = (host: string) => check(scannableText, host);
+const checkDeviceCodeLure = (host: string) => check(scannableText, host, false);
 
 vi.mock("../extension/src/content/ui_toast", () => ({ showToast: vi.fn() }));
 
@@ -25,7 +25,8 @@ describe("checkDeviceCodeLure", () => {
     checkDeviceCodeLure("secure-meeting.example");
     checkDeviceCodeLure("secure-meeting.example");
     expect(showToast).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(showToast).mock.calls[0]![0]).toMatchObject({ timeoutMs: 0, persistent: true });
+    expect(vi.mocked(showToast).mock.calls[0]![0]).toMatchObject({ timeoutMs: 0 });
+    expect(vi.mocked(showToast).mock.calls[0]![0].persistent).toBeUndefined();
   });
 
   it("stays quiet on docs and in-browser terminals, and on pages without a device address", () => {
@@ -45,5 +46,39 @@ describe("checkDeviceCodeLure", () => {
     document.body.append(host);
     checkDeviceCodeLure("teams-invite.example");
     expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["split across elements", "<p>Open <b>microsoft.com</b>/<i>devicelogin</i></p>"],
+    ["broken by wbr", "<p>Open microsoft.com/device<wbr>login</p>"],
+    ["zero-width space", "<p>Open microsoft.com/device​login</p>"],
+    ["spaced out", "<p>Open microsoft . com / devicelogin</p>"],
+    ["full-width", "<p>Open ｍｉｃｒｏｓｏｆｔ.com/devicelogin</p>"],
+  ])("still matches an address %s", (_name, html) => {
+    document.body.innerHTML = html;
+    checkDeviceCodeLure("lure.example");
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not exempt Codespaces port hosts (anyone can serve pages there)", () => {
+    document.body.innerHTML = "<p>Go to microsoft.com/devicelogin</p>";
+    checkDeviceCodeLure("my-space-8080.app.github.dev");
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks once more 1.5 s later for an address shown after the copy", () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = "<p>Copied!</p>";
+      check(scannableText, "lure.example");
+      expect(showToast).not.toHaveBeenCalled();
+      document.body.innerHTML = "<p>Now open microsoft.com/devicelogin</p>";
+      vi.advanceTimersByTime(1500);
+      expect(showToast).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(5000);
+      expect(showToast).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

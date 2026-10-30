@@ -323,16 +323,17 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
 
 - **AI-83 (#1233):** with the Gym served (`npm run gym:serve`), open `http://localhost:5173/clickfix-04-winr.html` and
   click its fake verification: the ClickFix warning still appears. Then on `http://localhost:5173/rw-fullscreen-benign.html`
-  run in DevTools `navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64")` and, a second later,
-  `const h=document.createElement("div");h.attachShadow({mode:"open"}).innerHTML="<p>Verify you are human: press Win + R, paste and press Enter.</p>";document.body.append(h)`:
-  the warning appears within about two seconds. A docs page's copy button (any code sample) stays quiet. A failure
-  gets a revert PR for `f415ae13`.
+  run in DevTools (a page must have focus to write the clipboard, so the line waits 3 s while you click the page)
+  `setTimeout(() => { navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64"); setTimeout(() => { const h = document.createElement("div"); h.attachShadow({ mode: "open" }).innerHTML = "<p>Verify you are human: press Win + R, paste and press Enter.</p>"; document.body.append(h); }, 1000); }, 3000)`
+  and click the page: the warning appears within about two seconds of the text. A docs page's copy button (any code
+  sample) stays quiet. A failure gets a revert PR for `f415ae13`.
 
 - **AI-84 (#1240):** do not enter any code anywhere. On `http://localhost:5173/rw-fullscreen-benign.html` run in
-  DevTools `navigator.clipboard.writeText("ORDER-1234")`: no warning. Then add the text "open
-  microsoft.com/devicelogin and enter the code below" to the page (DevTools: `document.body.append("open microsoft.com/devicelogin and enter the code below")`)
-  and run `navigator.clipboard.writeText("ABCD-1234")`: a persistent warning says the page copied a code for a device
-  sign-in page. On `https://learn.microsoft.com/` the same two lines stay quiet. A failure gets a revert PR for the merge.
+  DevTools `setTimeout(() => navigator.clipboard.writeText("ORDER-1234"), 3000)` and click the page: no warning.
+  Then run `document.body.append("open microsoft.com/devicelogin and enter the code below")` and
+  `setTimeout(() => navigator.clipboard.writeText("ABCD-1234"), 3000)`, and click the page: a warning says the page
+  copied a code for a device sign-in page. On `https://learn.microsoft.com/` the same lines stay quiet. A failure gets
+  a revert PR for the merge.
 
 - **AI-80 (#1216):** nothing typed or pasted here is real. On a public page with a plain text box (for example
   the search box on `https://www.wikipedia.org/`, without pressing Enter) paste

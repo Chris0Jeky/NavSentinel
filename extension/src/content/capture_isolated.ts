@@ -636,10 +636,7 @@ function handleBridgeMessage(message: unknown): void {
     }, receivedAtMs);
     if (settings.defaultMode !== "off") {
       handleClickFixScan(data.looksLikeCommand === true);
-      // A short non-command copy may be a device code a lure hands out (#1223).
-      if (!data.looksLikeCommand && (data.contentLength ?? 0) >= 8 && (data.contentLength ?? 0) <= 12) {
-        import("./devicecode_lure").then((m) => m.checkDeviceCodeLure(scannableText), () => {});
-      }
+      if (!data.looksLikeCommand) checkDeviceCodeLure(data.contentLength ?? 0);
     }
     return;
   }
@@ -961,7 +958,16 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
 
 // Pastejacking: read the page-rewritten copy payload in this world (#1168).
 // The copy path passes no receipt, so `command` stays false and it never overwrites (#1169).
-installCopyListener(() => settings.defaultMode !== "off", () => handleClickFixScan());
+installCopyListener(() => settings.defaultMode !== "off", (length) => {
+  handleClickFixScan();
+  checkDeviceCodeLure(length);
+});
+
+// A short non-command copy may be a device code a lure hands out (#1223); the
+// window absorbs a little padding around 8-11 character codes.
+function checkDeviceCodeLure(length: number): void {
+  if (length >= 8 && length <= 16) import("./devicecode_lure").then((m) => m.checkDeviceCodeLure(scannableText), () => {});
+}
 
 // Instructions shown after the copy (#1218): an undetected command write is
 // rescanned at 1.5, 5 and 15 s (inside the 30 s write window), one chain at a time.
