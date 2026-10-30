@@ -55,9 +55,29 @@ describe("isScarewareFullscreen", () => {
     expect(isScarewareFullscreen(el).scare).toBe(true);
   });
 
-  it("combines two weak scare words", () => {
-    const el = div("<p>Error code 0x80070005 firewall breach. Call 1-800-555-0100</p>");
+  it("combines three weak scare words", () => {
+    const el = div("<p>Error code 0x80070005, firewall breach, trojan on disk. Call 1-800-555-0100</p>");
     expect(isScarewareFullscreen(el).scare).toBe(true);
+  });
+
+  it("combines one specific phrase with one weak word", () => {
+    const el = div("<p>Virus detected. Error code 0x80070005. Call 1-800-555-0100</p>");
+    expect(isScarewareFullscreen(el).scare).toBe(true);
+  });
+
+  it("does not flag two weak scare words beside a phone number", () => {
+    const el = div("<p>Error code 0x80070005 firewall breach. Call 1-800-555-0100</p>");
+    expect(isScarewareFullscreen(el).scare).toBe(false);
+  });
+
+  it("does not flag a proctored exam banner with a support line", () => {
+    const el = div("<h1>Final exam in progress</h1><p>Do not close this window until you submit. Technical issues? Exam support: 1-800-555-0123.</p>");
+    expect(isScarewareFullscreen(el).scare).toBe(false);
+  });
+
+  it("does not flag a security-awareness slide that quotes one scam phrase", () => {
+    const el = div("<h1>Spot the scam</h1><p>A pop-up saying virus detected is fake. Report it to the help desk: 1-888-555-0188.</p>");
+    expect(isScarewareFullscreen(el).scare).toBe(false);
   });
 
   it("does not flag scare wording without a phone number", () => {
@@ -123,11 +143,19 @@ describe("isScarewareFullscreen", () => {
     expect(isScarewareFullscreen(el).scare).toBe(false);
   });
 
-  it("stays fast on pathological whitespace", () => {
-    const el = div(`<p>your computer${" ".repeat(4000)}is${" ".repeat(4000)}locked</p>`);
+  it.each([
+    ["wide gaps", `your computer${" ".repeat(5000)}is locked`],
+    ["repeated near-miss vendors", `call ${"microsoft ".repeat(600)}`],
+    ["repeated near-miss digits", `+1${" 12".repeat(1700)}`],
+    ["repeated freephone starts", `0800${" 123".repeat(1200)}`],
+    ["repeated toll-free starts", `1 800 ${"555 ".repeat(1200)}`],
+    ["repeated near-miss virus", `virus${"s".repeat(5000)}`],
+  ])("scans adversarial near-miss text in bounded time: %s", (_name, text) => {
+    const el = div(`<p>${text}</p>`);
     const started = Date.now();
     isScarewareFullscreen(el);
-    expect(Date.now() - started).toBeLessThan(500);
+    // A backtracking-prone pattern would take seconds to forever on 5000 chars.
+    expect(Date.now() - started).toBeLessThan(250);
   });
 });
 

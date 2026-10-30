@@ -20,13 +20,15 @@ const MEDIA_SHARE = 0.5;
 const MEDIA_TAGS = new Set(["VIDEO", "CANVAS", "IFRAME", "EMBED", "OBJECT"]);
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
 
-// Weight 2 = specific scam wording; weight 1 = common words that need a second hit.
+// Weight 2 = specific scam wording; weight 1 = common words (including "do not close", which
+// exam and kiosk pages use legitimately). A match needs two distinct weight-2 phrases or a
+// total of 3, so one stray phrase beside a support number never triggers.
 // All gaps are bounded, so a hostile page cannot trigger catastrophic backtracking.
 const SCARE: ReadonlyArray<readonly [RegExp, number]> = [
   [/\byour (?:computer|pc|device|browser|system|windows)\s{1,3}(?:has been|is|was|have been)\s{1,3}(?:locked|blocked|infected|compromised|disabled)/i, 2],
   [/\b(?:virus(?:es)?|malware|spyware|trojan)s?\s{1,3}(?:detected|found|alert|warning)/i, 2],
   [/\bcall\s{1,3}(?:(?:microsoft|windows|apple|google|chrome|security|tech|technical)\s{1,3}){1,2}(?:support|helpline|center|centre|team|department)/i, 2],
-  [/\bdo\s{1,3}not\s{1,3}(?:close|restart|shut\s?down|turn\s{1,3}off|ignore)/i, 2],
+  [/\bdo\s{1,3}not\s{1,3}(?:close|restart|shut\s?down|turn\s{1,3}off|ignore)/i, 1],
   [/\byour\s{1,3}(?:personal|banking|financial|private|credit\s{1,3}card)\s{1,3}(?:data|information|details)\s{1,3}(?:is|are)\s{1,3}at\s{1,3}risk/i, 2],
   [/\berror\s{1,3}code/i, 1],
   [/\bfirewall/i, 1],
@@ -51,7 +53,14 @@ function area(el: Element): number {
   return r.width * r.height;
 }
 
-/** True when a contained video/canvas dominates the element (player, slide with video, game). */
+/**
+ * True when a contained video/canvas dominates the element (player, slide with video, game).
+ *
+ * Known heuristic ceiling (residual risk): a locker that lays a full-size transparent
+ * canvas under its text is read as media and defeats the guard. Closing that hole would
+ * mean judging whether the media is actually visible, which risks exiting real players;
+ * revisit if lockers are seen doing this.
+ */
 function mediaDominated(el: Element): boolean {
   const media = el.querySelectorAll("video,canvas");
   if (!media.length) return false;
@@ -90,9 +99,14 @@ export function isScarewareFullscreen(el: Element): FullscreenVerdict {
   const reasons: string[] = [];
   if (MEDIA_TAGS.has(el.tagName) || mediaDominated(el)) return { scare: false, reasons };
   const text = boundedText(el);
-  if (SCARE.reduce((sum, [re, w]) => sum + (re.test(text) ? w : 0), 0) >= 2) {
-    reasons.push("fullscreen_scare_text");
+  let total = 0;
+  let strong = 0;
+  for (const [re, w] of SCARE) {
+    if (!re.test(text)) continue;
+    total += w;
+    if (w === 2) strong++;
   }
+  if (strong >= 2 || total >= 3) reasons.push("fullscreen_scare_text");
   if (PHONE.some((re) => re.test(text))) reasons.push("fullscreen_phone_number");
   return { scare: reasons.length === 2, reasons };
 }
