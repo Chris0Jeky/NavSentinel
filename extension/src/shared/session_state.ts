@@ -41,6 +41,8 @@ export interface ChildWindowEntry {
 export interface TabnabPendingEntry {
   origReg: string;
   ts: number;
+  /** Opener was active under a popup window: deliver only once the user returns to it (#1205). */
+  w?: 1;
 }
 
 export interface AllowTargetEntry {
