@@ -1,11 +1,12 @@
 import { explainReasonCode, isKnownReasonCode } from "../shared/explanations";
 
 /**
- * Readable text for reason codes the product stores on event-log entries but
- * never shows in a page toast (#867), so they are not in `shared/explanations.ts`.
- * That table is a shared chunk every frame loads through capture_isolated, and
- * its keys are the portable export vocabulary the Lab importer accepts
- * (`experiments/vision-lab/shared/evidence.js` REASONS). These codes therefore
+ * Readable text for reason codes the product stores on event-log entries (#867).
+ * They are not in `shared/explanations.ts`: the lazily loaded password-focus
+ * warning (#1170) is the only page toast that shows one, so the always-on
+ * chunks never carry them. That table is a shared chunk every frame loads
+ * through capture_isolated, and its keys are the portable export vocabulary
+ * the Lab importer accepts (`experiments/vision-lab/shared/evidence.js` REASONS). These codes therefore
  * stay local to the Protection Center: they are displayed, never exported.
  *
  * Keys are the exact stored codes; `tests/evidence-reasons.test.ts` reads the
@@ -27,12 +28,18 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
   BRAND_KEYWORD_DOMAIN: "The site name borrows a well-known brand it does not belong to",
   SUBDOMAIN_STUFFING: "A brand name is placed in front of an unrelated site name",
   UNTRUSTED_DOMAIN: "This site is not on your trusted list",
+  // content/credential_guard.ts ConsentFix paste guard.
+  CONSENTFIX_PASTE_BLOCKED: "Stopped pasting a sign-in address with an access code from this computer",
+  // content/credential_focus_warning.ts (#1170): marks the focus trigger (#1198).
+  PASSWORD_FOCUS_WARNING: "Warned when you clicked into a password field on this page; nothing was pasted",
   CONTENT_FP: "The page content resembles a phishing page (brand, template or form clues)",
   SRI_MISSING_ON_CREDENTIAL_PAGE: "Scripts on this sign-in page load without integrity checks",
   SRI_PRESENT_ON_CREDENTIAL_PAGE: "Scripts on this sign-in page use integrity checks (lower risk)",
 
   // ClickFix detector (content/clickfix_detector.ts)
   legit_captcha_present: "A recognized CAPTCHA provider was also on the page (lower risk)",
+  // ClickFix clipboard neutralization (content/clipboard_neutralizer.ts, #1169)
+  clipboard_neutralized: "Heedline replaced the copied command on your clipboard with a warning",
 
   // MAIN-world pushState checks (content/main_guard.ts checkPushStateSuspicious)
   rapid_pushstate: "The page rewrote its address many times in quick succession",

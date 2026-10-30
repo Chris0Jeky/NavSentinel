@@ -53,7 +53,7 @@ function createRow(event: ProtectionEvent): HTMLDetailsElement {
   const row = element("details", "", "event");
   const summary = element("summary", "");
   const body = element("div", "", "event-body");
-  body.append(element("div", eventTitle(event.kind), "event-title"), element("div", `${event.sourceSite ?? "Source unavailable"} → ${event.destinationSite ?? "Destination unavailable"}`, "event-route"));
+  body.append(element("div", eventTitle(event.kind, event.reasons), "event-title"), element("div", `${event.sourceSite ?? "Source unavailable"} → ${event.destinationSite ?? "Destination unavailable"}`, "event-route"));
   if (event.activity === "corrections") body.append(element("div", event.activityDetail, "activity-context"));
   const time = element("time", new Date(event.timestamp).toLocaleString());
   time.dateTime = event.timestamp;

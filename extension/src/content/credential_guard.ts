@@ -18,8 +18,9 @@ import {
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
 import { checkSRI } from "./sri_checker";
-import { queryPasswordInputs } from "./password_field";
+import { isPasswordTypeInput, isVisiblePasswordField, queryPasswordInputs } from "./password_field";
 import { addPersistentListener, documentRewritten } from "./persistent_listener";
+import { isLoopbackAuthCodePaste } from "./consentfix";
 import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
@@ -777,7 +778,51 @@ addPersistentListener(window, "submit", (e) => {
   }
 });
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
+// ConsentFix: stop a pasted or dropped loopback sign-in URL that carries an OAuth code.
+// Window capture keeps it out of the field and away from the field's own listeners (a page
+// listener added on window capture before this loader finished still sees a paste). The
+// only way through is the toast's own button, which a page cannot click or hide-and-click.
+let consentFixAllowed: string | null = null;
+function guardConsentFix(e: Event, text: string): void {
+  if (cachedCredMode === "off" || !e.isTrusted) return;
+  const host = pageIdentity().hostname;
+  if (!isLoopbackAuthCodePaste(text, host)) return;
+  if (consentFixAllowed === text) {
+    consentFixAllowed = null;
+    return;
+  }
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  showToast({
+    message: "Heedline stopped this: a sign-in address with an access code from your own computer (localhost). A page that asks you to paste one is trying to take over your account, so close it.",
+    timeoutMs: 0,
+    actions: [{ label: "Allow once (my own app)", onClick: () => { consentFixAllowed = text; } }],
+  });
+  void appendEvent({
+    kind: "cred_paste_warn",
+    site: normalizeHost(host),
+    url: pageIdentity().href,
+    reasons: ["CONSENTFIX_PASTE_BLOCKED"],
+  }).catch(() => {});
+}
+addPersistentListener(window, "paste", (e) =>
+  guardConsentFix(e, (e as ClipboardEvent).clipboardData?.getData("text/plain") ?? ""));
+addPersistentListener(window, "drop", (e) =>
+  guardConsentFix(e, (e as DragEvent).dataTransfer?.getData("text/plain") ?? ""));
 addPersistentListener(window, "formdata", handleFormData);
+
+// #1170: fetch-based kits never submit a form. Once per page, the first focus of a
+// visible password field lazily checks the page address (warn-only toast).
+let focusChecked = false;
+addPersistentListener(window, "focusin", (e) => {
+  const t = e.composedPath()[0];
+  if (!e.isTrusted || focusChecked || cachedCredMode === "off" || !(t instanceof HTMLInputElement) ||
+    !isPasswordTypeInput(t) || !isVisiblePasswordField(t)) return;
+  focusChecked = true;
+  void import("./credential_focus_warning")
+    .then((m) => m.warnOnPasswordFocus(pageIdentity().href))
+    .catch((err) => { console.warn("[NavSentinel] password focus check failed:", err); });
+});
 
 // #1113: a script written by document.write() in the same task as document.open()
 // adds its window capture listener before the helper above re-adds the guard, so it

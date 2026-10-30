@@ -1,12 +1,14 @@
-import { test, expect, chromium, type BrowserContext, type Page } from "@playwright/test";
+import { test, chromium, type BrowserContext, type Page } from "@playwright/test";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import {
+  assertNoToastFor,
   getServiceWorker,
   updateNavigationSettings,
   waitForNavSentinelBridge,
+  waitForToastMatch,
 } from "./extension_test_utils";
 
 // Reverse tabnabbing (#1172), content delivery: the service worker's ns-tabnab-warning reaches
@@ -16,12 +18,15 @@ import {
 // that swap and replaces the toast, so it cannot isolate this path.
 const WARNING = /Another tab changed this page from site-a\.test while you were away/;
 
-async function sendWarning(context: BrowserContext, page: Page) {
+// Device-code phishing shares this delivery path with `kind: "devicecode"`.
+const DEVICE_CODE = /lure\.test sent you to this device sign-in page\. Only enter a code that your own TV/;
+
+async function sendWarning(context: BrowserContext, page: Page, extra: Record<string, unknown> = {}) {
   const worker = await getServiceWorker(context);
-  await worker.evaluate(async (url) => {
-    const [tab] = await chrome.tabs.query({ url });
-    await chrome.tabs.sendMessage(tab!.id!, { type: "ns-tabnab-warning", from: "site-a.test" });
-  }, page.url());
+  await worker.evaluate(async ([url, message]) => {
+    const [tab] = await chrome.tabs.query({ url: url as string });
+    await chrome.tabs.sendMessage(tab!.id!, { type: "ns-tabnab-warning", from: "site-a.test", ...(message as object) });
+  }, [page.url(), extra] as const);
 }
 
 test("tabnab warning message shows a toast unless protection is off @regression", async () => {
@@ -54,14 +59,16 @@ test("tabnab warning message shows a toast unless protection is off @regression"
     await page.goto(`${origin}/`);
     await waitForNavSentinelBridge(page);
     await sendWarning(context, page);
-    await expect(page.getByText(WARNING)).toBeVisible({ timeout: 10_000 });
+    // The toast's shadow root is closed (#1202): read it through the CDP helper.
+    await waitForToastMatch(page, WARNING, 10_000);
+    await sendWarning(context, page, { kind: "devicecode", from: "lure.test" });
+    await waitForToastMatch(page, DEVICE_CODE, 10_000);
 
     await updateNavigationSettings(context, { defaultMode: "off" });
     await page.reload();
     await waitForNavSentinelBridge(page);
     await sendWarning(context, page);
-    await page.waitForTimeout(1_000);
-    await expect(page.getByText(WARNING)).toHaveCount(0);
+    await assertNoToastFor(page, 1_000);
   } finally {
     await context?.close();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
