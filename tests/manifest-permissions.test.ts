@@ -35,7 +35,15 @@ function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[]
   const start = lines.findIndex((line) => /^### Permission Justifications\s*$/.test(line));
   const tail = start < 0 ? [] : lines.slice(start + 1);
   const end = tail.findIndex((line) => /^#{1,3}\s/.test(line));
-  const table = end < 0 ? tail : tail.slice(0, end);
+  const section = end < 0 ? tail : tail.slice(0, end);
+  const header = section.findIndex((line) => /^\|\s*Permission\s*\|\s*Justification\s*\|\s*$/.test(line));
+  const table: string[] = [];
+  if (header >= 0) {
+    for (const line of section.slice(header + 1)) {
+      if (!line.startsWith("|")) break;
+      table.push(line);
+    }
+  }
   // Each grant must be the first backticked token in the permission column,
   // not merely a mention in another column or another table.
   const disclosed = new Set(table.filter((line) => line.startsWith("|")).flatMap((line) => {
@@ -87,6 +95,7 @@ describe("manifest permissions", () => {
     const otherCell = heading + "| `storage` | Unlike `clipboardRead`, stores data. |\n";
     expect(findUndisclosedGrants(manifest, otherSection)).toEqual(["permissions: clipboardRead"]);
     expect(findUndisclosedGrants(manifest, otherCell)).toEqual(["permissions: clipboardRead"]);
+    expect(findUndisclosedGrants(manifest, heading + "| `storage` | yes |\n\n| `clipboardRead` | unrelated table |\n")).toEqual(["permissions: clipboardRead"]);
     expect(findUndisclosedGrants(manifest, heading + "| `clipboardRead` | Reads clipboard. |\n")).toEqual([]);
     expect(findUndisclosedGrants(manifest, "| `clipboardRead` | No permission section. |\n")).toEqual(["permissions: clipboardRead"]);
   });
