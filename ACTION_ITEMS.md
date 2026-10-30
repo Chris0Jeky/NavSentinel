@@ -217,13 +217,10 @@ Answer these in the estate cockpit or in chat. Each record is `agent-hq/decision
 
 - **`navsentinel-main-guard-budget-20261023`**: raise the `main_guard` (MAIN-world) perf budget so
   #1141's captured-natives fix, and later #1134 and #1017, can land? #1141 stays open until it is answered.
-- **`navsentinel-browser-pr-retroactive-gate3-20261024`**: may browser-facing PRs land on automated gates
-  (exact-head CI, one independent review, green branded E2E and acceptance), with your Gate-3 check
-  afterwards on the merged build, as for AI-48 to AI-56? #1140 (visible, armed approvals for #1139) and
-  #1065 (captured `closest`) wait on it.
 
 ### Retroactive Gate-3 checks (AI-48 onward)
 
+Standing rule since 2026-10-26 (D-2026-10-26-A): every browser-facing PR lands on automated gates and gets a row here.
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
 Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
 (`scripts/check-perf-budget.mjs`), and Chris runs its branded-Chrome check afterwards on the merged build. A

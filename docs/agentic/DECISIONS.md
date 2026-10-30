@@ -14,6 +14,33 @@ When a decision changes, edit it in place and date the change.
 
 ---
 
+## 2026-10-26 — Browser-facing PRs land on automated gates
+
+### D-2026-10-26-A — Standing rule: Gate-3 runs afterwards, on the merged build
+
+**Decision:** Chris answered agent-hq decision
+`navsentinel-browser-pr-retroactive-gate3-20261024` in chat on 2026-10-26 with
+option a: "standing rule: land browser-facing PRs on automated gates and do my
+Gate-3 check afterwards on the merged build." A browser-facing PR may merge once:
+- its exact-head CI is green, after a refresh onto current `main`;
+- it has one independent review;
+- its branded-Chrome E2E and acceptance lanes are green (known reds with open
+  issues excepted, D-2026-09-27-S).
+
+Each merged PR gets an AI row in `ACTION_ITEMS.md` "Retroactive Gate-3 checks",
+naming its merge commit. A failed check gets a revert PR for that merge commit.
+The rule extends the 2026-10-16 answer for AI-48 to AI-56 to every later
+browser-facing PR.
+
+**Not covered:** a perf-budget change (still a gate change, for example
+`navsentinel-main-guard-budget-20261023`), and a PR whose automated gates are
+red.
+
+**Why:** browser fixes, including security fixes such as #1140, stopped waiting
+on Chris's browser time, with the same evidence bar AI-48 to AI-56 used.
+
+---
+
 ## 2026-09-27 — After the v0.5.0 pre-release
 
 ### D-2026-09-27-T — The product is renamed Heedline (user-facing surfaces only)
