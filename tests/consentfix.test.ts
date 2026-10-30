@@ -53,4 +53,20 @@ describe("isAuthCodePaste", () => {
     expect(isAuthCodePaste("https://insiders.vscode.dev/docs?postcode=1", "mail.google.com")).toBe(false);
     expect(isAuthCodePaste("https://login.microsoftonline.com.evil.example/WebApp/CloudDomainJoin/8?code=1", "mail.google.com")).toBe(false);
   });
+
+  it("flags a bare Entra code, the stable vscode.dev redirect and a scheme-less first-party URL", () => {
+    const code = `1.AXoA${"Ab3_-".repeat(30)}`;
+    expect(isAuthCodePaste(code, "web.whatsapp.com")).toBe(true);
+    expect(isAuthCodePaste(`code=${code}&state=mae.gov.ro`, "mail.google.com")).toBe(true);
+    expect(isAuthCodePaste("https://vscode.dev/redirect?code=1.AXoAexample", "web.whatsapp.com")).toBe(true);
+    expect(isAuthCodePaste("insiders.vscode.dev/redirect?code=1.AXoAexample", "web.whatsapp.com")).toBe(true);
+    expect(isAuthCodePaste("vscode.dev/redirect?code=1.AXoAexample", "vscode.dev")).toBe(false);
+  });
+
+  it("leaves short, prose-wrapped and version-like strings alone", () => {
+    expect(isAuthCodePaste("1.AXoA_short", "mail.google.com")).toBe(false);
+    expect(isAuthCodePaste(`my code is 1.AXoA${"Ab3_-".repeat(30)} thanks`, "mail.google.com")).toBe(false);
+    expect(isAuthCodePaste("1.A section heading", "mail.google.com")).toBe(false);
+    expect(isAuthCodePaste(`eyJ${"a".repeat(200)}`, "mail.google.com")).toBe(false);
+  });
 });

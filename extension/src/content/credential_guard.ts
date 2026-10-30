@@ -794,9 +794,9 @@ function guardConsentFix(e: Event, text: string): void {
   e.preventDefault();
   e.stopImmediatePropagation();
   showToast({
-    message: "Heedline stopped this: a sign-in address that carries an access code to your account. Anyone who asks you to paste or send one (a page, a chat or an email) is trying to take over your account. Do not share it.",
+    message: "Heedline stopped this: it carries a sign-in code for your account. Anyone who asks you to paste or send one (a page, a chat or an email) is almost certainly trying to take over your account. Do not share it.",
     timeoutMs: 0,
-    actions: [{ label: "Allow once (my own app)", onClick: () => { consentFixAllowed = text; } }],
+    actions: [{ label: "Allow once (I meant to)", onClick: () => { consentFixAllowed = text; } }],
   });
   void appendEvent({
     kind: "cred_paste_warn",
