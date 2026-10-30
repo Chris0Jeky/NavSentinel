@@ -263,6 +263,8 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-82 | #1224 masked and type-flipped password fields count as password fields for the credential prompt | merge commit `9d3e804e` (merged 2026-10-30) | OPEN — not run |
 | AI-83 | #1233 ClickFix reads lure text in open shadow roots and rescans late instructions | merge commit `f415ae13` (merged 2026-10-30) | OPEN — not run |
 | AI-84 | #1240 device-code phishing, lure side: warning when a page copies a code next to a device sign-in address | merge commit `51f9a302` (merged 2026-10-30) | OPEN — not run |
+| AI-97 | #1245 late ClickFix detection neutralizes the clipboard only when no newer copy happened | merge commit `3d53539d` (merged 2026-10-30) | OPEN — not run |
+| AI-98 | #1247 warning when Microsoft's sign-in form is served by a non-Microsoft host (AiTM relays and clones) | merge commit `fcc92793` (merged 2026-10-30) | OPEN — not run |
 | AI-85 | #1202 protection toast in a closed shadow root (#1142 item 4) | merge commit `737bcdb6` (merged 2026-10-30) | OPEN — not run |
 | AI-86 | #1206 lazy-loaded overlay cleanup and credential content analyzer | merge commit `7f48c229` (merged 2026-10-30) | OPEN — not run |
 | AI-87 | #1195 password-focus warning on high-risk pages (#1170) | merge commit `0d64e7ef` (merged 2026-10-30) | OPEN — not run |
@@ -408,6 +410,17 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   regression smoke only: with the Gym served, the deceptive-popup and credential-submit scenarios still warn as before,
   a real-click popup still opens, and the page console shows no `[NavSentinel]` errors. A failure gets a revert PR
   for the merge.
+
+- **AI-97 (#1245):** with the Gym served (`npm run gym:serve`), on `http://localhost:5173/rw-fullscreen-benign.html`
+  run the AI-83 DevTools line (a delayed inert command copy, then the shadow-root lure a second later) and click the
+  page: after the warning appears, paste into a text box: the clipboard now holds Heedline's warning text, not the
+  command. Repeat, but after clicking the page select some page text and press Ctrl+C before the lure appears: the
+  warning still shows and your own copied text survives. A failure gets a revert PR for `3d53539d`.
+
+- **AI-98 (#1247):** dummy credentials only. On any https page you control (or a local page mapped to a public-looking
+  host), add `<input type="password" id="i0118" name="passwd">` and click into it: a warning says Microsoft's sign-in
+  form is served by that host. The same field on `https://login.microsoftonline.com/` (the real sign-in, password
+  step) shows nothing, and an ordinary site's password field shows nothing. A failure gets a revert PR for `fcc92793`.
 
 - **AI-80 (#1216):** nothing typed or pasted here is real. On a public page with a plain text box (for example
   the search box on `https://www.wikipedia.org/`, without pressing Enter) paste

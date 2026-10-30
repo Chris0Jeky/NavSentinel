@@ -80,7 +80,8 @@ async function setup(opts: { active?: boolean } = {}) {
       create: vi.fn().mockResolvedValue({}),
       get: vi.fn(async (id: number) => ({ id, ...tabs.get(id) })),
       query: vi.fn().mockResolvedValue([]),
-      sendMessage: vi.fn((_tabId: number, _message: Message, callback?: () => void) => { callback?.(); }),
+      // The page's warning listener replies true; an error means it never ran.
+      sendMessage: vi.fn((_tabId: number, _message: Message, callback?: (shown?: boolean) => void) => { callback?.(browser.runtime.lastError ? undefined : true); }),
     },
     windows: { onFocusChanged: createEvent<(windowId: number) => void>() },
   };
@@ -255,6 +256,24 @@ describe("device-code phishing warning", () => {
     expect(warnings()).toHaveLength(1);
     expect(swState.tabnabPendingByTab.has(30)).toBe(true);
     await complete();
+    expect(warnings()).toHaveLength(2);
+    expect(swState.tabnabPendingByTab.has(30)).toBe(false);
+  });
+
+  it("re-delivers on the page's ns-ready when the load-complete send went unanswered", async () => {
+    const { browser, commit, complete, warnings, swState } = await setup();
+    await commit(DEVICE);
+    let unanswered = 1;
+    browser.tabs.sendMessage.mockImplementation((_t: number, m: Message, callback?: (shown?: boolean) => void) => {
+      // The first warning reaches a page whose warning listener is not up yet: no reply.
+      callback?.(m.type === "ns-tabnab-warning" && unanswered-- > 0 ? undefined : true);
+    });
+    await complete();
+    expect(warnings()).toHaveLength(1);
+    expect(swState.tabnabPendingByTab.has(30)).toBe(true);
+    browser.runtime.onMessage.emit({ type: "ns-ready" }, { tab: { id: 30 } }, () => {});
+    await flush();
+    await flush();
     expect(warnings()).toHaveLength(2);
     expect(swState.tabnabPendingByTab.has(30)).toBe(false);
   });
