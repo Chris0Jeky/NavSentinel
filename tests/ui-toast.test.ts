@@ -155,6 +155,15 @@ describe("ui_toast", () => {
         expect(getButtons()).toHaveLength(2);
       });
 
+      it("clears the press after each click delivery (#1236)", async () => {
+        const { mod, host, allow } = await allowOnceToast();
+        vi.advanceTimersByTime(1000);
+        press(mod, host, 120); // Allow once
+        expect(release(mod, host, 180)).toBe(false); // abandoned over Dismiss
+        expect(release(mod, host, 120)).toBe(false); // a later click with no press of its own
+        expect(allow).not.toHaveBeenCalled();
+      });
+
       it("activates nothing for keyboard input with no toast control focused", async () => {
         const { mod, host, allow } = await allowOnceToast();
         vi.advanceTimersByTime(1000);
