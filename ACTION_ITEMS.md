@@ -244,7 +244,6 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 | AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
 | AI-67 | #1184 Options recorded-choices labels and export omission notice | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1184) (candidate until merged) | OPEN — not run |
-
 | AI-66 | #1183 tech-support-scam fullscreen locker exit | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1183) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
