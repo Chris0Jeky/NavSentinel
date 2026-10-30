@@ -195,3 +195,95 @@ test("an iframe that had focus does not arm a later prompt behind a covering win
     await expect.poll(posts, { timeout: 5000 }).toBe(1);
   });
 });
+
+test("a short blur stays refused when an early page listener stops blur and focus (#1242) @regression", async () => {
+  test.setTimeout(90_000);
+  await withExtension("stopped-blur", async (context, posts) => {
+    // The page registers window capture listeners from its first script, during the
+    // content module's import gap, and hides blur/focus from every later listener.
+    await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html", body: `
+      <head><script>
+        window.focusLog = [];
+        for (const type of ["blur", "focus"]) addEventListener(type, (e) => {
+          if (e.target !== window) return;
+          window.focusLog.push(type + "@" + Math.round(performance.now()));
+          e.stopImmediatePropagation();
+        }, true);
+      </script></head><body>${LOGIN}</body>` }));
+    const page = await context.newPage();
+    const cdp = await realFocus(context, page);
+    await page.goto("http://victim.test/login");
+    await page.bringToFront();
+    await page.waitForTimeout(300);
+    await page.click("#go", { noWaitAfter: true });
+    await expect.poll(() => proceedPoint(page).then(() => true).catch(() => false)).toBe(true);
+    const popup = await openCoveringWindow(context, cdp);
+    await page.bringToFront();
+    await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
+    await page.evaluate(() => { (window as unknown as { focusLog: string[] }).focusLog = []; });
+    await page.waitForTimeout(ARMED_MS);
+    const point = await proceedPoint(page);
+
+    // As in the short-blur test: only the blur event can see this focus loss.
+    await page.evaluate(() => setTimeout(() => {
+      const probe = window as unknown as { focusLog: string[] };
+      const start = performance.now();
+      while (performance.now() - start < 60);
+      probe.focusLog.push(`task@${Math.round(start)}-${Math.round(performance.now())}`);
+    }, 0));
+    await popup.bringToFront();
+    await page.bringToFront();
+    await page.mouse.click(point.x, point.y);
+    const log = await page.evaluate(() => (window as unknown as { focusLog: string[] }).focusLog);
+    expect(log.map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
+    await page.waitForTimeout(1000);
+    expect(posts(), "a blur the page hid from later listeners must still refuse").toBe(0);
+
+    await page.waitForTimeout(ARMED_MS);
+    await page.mouse.click(point.x, point.y);
+    await expect.poll(posts, { timeout: 5000 }).toBe(1);
+  });
+});
+
+test("Proceed once in the top frame refuses while a child frame's video PiP is open (#1242) @regression", async () => {
+  test.setTimeout(90_000);
+  await withExtension("frame-pip", async (context, posts) => {
+    await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html",
+      body: route.request().url().endsWith("/player") ? `
+        <button id="pip">Watch in PiP</button>
+        <video id="v" muted playsinline width="160" height="90"></video>
+        <script>
+          const v = document.getElementById("v");
+          const c = document.createElement("canvas"); c.width = 160; c.height = 90;
+          c.getContext("2d").fillRect(0, 0, 160, 90);
+          v.srcObject = c.captureStream(); v.play();
+          document.getElementById("pip").addEventListener("click", () => { v.requestPictureInPicture(); });
+        </script>` : `${LOGIN}<iframe src="/player" width="300" height="200"></iframe>` }));
+    const page = await context.newPage();
+    await realFocus(context, page);
+    await page.goto("http://victim.test/login");
+    await page.bringToFront();
+    const player = page.frames().find((frame) => frame.url().endsWith("/player"))!;
+    await player.waitForFunction(() => (document.getElementById("v") as HTMLVideoElement).readyState >= 1);
+    await player.click("#pip");
+    await expect.poll(() => player.evaluate(() => !!document.pictureInPictureElement)).toBe(true);
+    expect(await page.evaluate(() => !!document.pictureInPictureElement), "PiP belongs to the child frame").toBe(false);
+
+    await page.click("#go", { noWaitAfter: true });
+    await expect.poll(() => proceedPoint(page).then(() => true).catch(() => false)).toBe(true);
+    await page.waitForTimeout(ARMED_MS);
+    const point = await proceedPoint(page);
+    await page.mouse.click(point.x, point.y);
+    await page.waitForTimeout(1000);
+    expect(posts(), "an approval under another frame's PiP window must be refused").toBe(0);
+    const hint = await evaluateInCredentialModal(page, function (this: ShadowRoot) {
+      return this.querySelector("[role=status]")?.textContent ?? null;
+    });
+    expect(hint, "the refusal says why").toBe("Close Picture-in-Picture to continue");
+
+    await player.evaluate(() => document.exitPictureInPicture());
+    await page.waitForTimeout(ARMED_MS);
+    await page.mouse.click(point.x, point.y);
+    await expect.poll(posts, { timeout: 5000 }).toBe(1);
+  });
+});
