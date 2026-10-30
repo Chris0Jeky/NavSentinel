@@ -1,5 +1,6 @@
 import { chromium, expect, test, type BrowserContext, type CDPSession, type Frame, type Page } from "@playwright/test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
 import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
@@ -18,8 +19,9 @@ const ARMED_MS = DBLCLICK_WINDOW_MS + 700;
 async function withExtension(name: string, run: (context: BrowserContext, posts: () => number) => Promise<void>) {
   const extensionPath = path.resolve("extension/dist");
   expect(fs.existsSync(extensionPath), "build required").toBe(true);
-  fs.mkdirSync("test-results", { recursive: true });
-  const profile = fs.mkdtempSync(path.resolve(`test-results/credential-${name}-profile-`));
+  // Under the OS temp dir: Chrome's extension-storage paths overflow Windows MAX_PATH
+  // from a deep worktree with a long test name (#1257).
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), `ns-${name}-`));
   let context: BrowserContext | undefined;
   try {
     context = await chromium.launchPersistentContext(profile, {
@@ -150,7 +152,8 @@ test("Proceed once is refused right after a short blur, then approves once re-ar
     await page.mouse.click(point.x, point.y);
     // Both events queue behind the task and dispatch back to back, after it.
     const log = await page.evaluate(() => (window as unknown as { focusLog: string[] }).focusLog);
-    expect(log.map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
+    // A window manager can add a later blur/focus pair; the scenario is the first three.
+    expect(log.slice(0, 3).map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
     await page.waitForTimeout(1000);
     expect(posts(), "the click right after a short blur must be refused").toBe(0);
 
@@ -238,7 +241,8 @@ test("a short blur stays refused when an early page listener stops blur and focu
     // Checked first: an accepted approval navigates away and loses the log.
     expect(posts(), "a blur the page hid from later listeners must still refuse").toBe(0);
     const log = await page.evaluate(() => (window as unknown as { focusLog: string[] }).focusLog);
-    expect(log.map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
+    // A window manager can add a later blur/focus pair; the scenario is the first three.
+    expect(log.slice(0, 3).map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
 
     await page.waitForTimeout(ARMED_MS);
     await page.mouse.click(point.x, point.y);
