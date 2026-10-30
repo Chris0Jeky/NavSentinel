@@ -6,10 +6,18 @@ export function armVisibleControl(control: HTMLElement): MouseEvent {
   return new MouseEvent("click", { detail: 0 });
 }
 
+/** The service worker's tab-wide Picture-in-Picture answer (#1244); null never answers. */
+export const tabPip: { open: boolean | null } = { open: false };
+
 /** happy-dom has no layout, top layer, or hit testing. Model those browser APIs. */
 export function stubVisibleUi(): void {
   let popoverDescriptor: PropertyDescriptor | undefined;
   beforeEach(() => {
+    // Answered synchronously: fake timers run rAF samples without draining microtasks.
+    tabPip.open = false;
+    vi.stubGlobal("chrome", { runtime: { sendMessage: vi.fn(() => ({
+      then: (answer: (open: boolean) => void) => { if (tabPip.open !== null) answer(tabPip.open); },
+    })) } });
     popoverDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "showPopover");
     Object.defineProperty(HTMLElement.prototype, "showPopover", { configurable: true, value: vi.fn() });
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(

@@ -39,27 +39,22 @@ export function assertContentAddressedLoader(loaderPath, content) {
 /** Isolated-world global the focus fence publishes its record under (#1242). */
 export const UI_FENCE_STATE = "__navsentinelUiFence";
 
-// #1242: window blur/focus/visibility and this tab's Picture-in-Picture state,
-// recorded at document_start before any page script can register a capture
-// listener that stops those events. The record lives in an isolated-world
-// global: the page's JS realm cannot read or write it, and capture_isolated
-// (near its cap) does not grow by another entry export, which the minified
-// shared chunk would otherwise need. ui_action_visibility reads it; its own window state is
-// a fallback for frames without this loader. A frame's PiP state is sent from
-// ground truth (pictureInPictureElement, the Document PiP window), and only
-// trusted enter/pagehide events change it; the service worker relays it, with Chrome's frame id,
-// to every frame of the tab. A lost close only keeps approvals refused. Only a
-// trusted pagehide clears the state: page script can dispatch a synthetic one
-// while its PiP window stays open (#1243 review). The relay covers a benign PiP
-// in another frame; a hostile frame that opens PiP after document.open() erased
-// these listeners, or on a detached video, never reports it (tracked in #1242).
+// #1242: window blur/focus/visibility, recorded at document_start before any
+// page script can register a capture listener that stops those events. The
+// record lives in an isolated-world global: the page's JS realm cannot read or
+// write it, and capture_isolated (near its cap) does not grow by another entry
+// export, which the minified shared chunk would otherwise need.
+// ui_action_visibility reads it; its own window state is a fallback for frames
+// without this loader.
+// #1244: Picture-in-Picture is asked, not pushed. The service worker asks every
+// frame of the tab, and this frame answers from ground truth at query time.
+// Page script cannot remove a chrome.runtime listener (document.open() erases
+// only DOM listeners), and Chrome reports a detached video as
+// pictureInPictureElement and a shadow-root one as its host.
 export const UI_FOCUS_FENCE =
-  `const S={h:top===window||document.hasFocus(),u:-1/0,a:false,r:new Set};try{Object.defineProperty(globalThis,'${UI_FENCE_STATE}',{value:S})}catch(_){}` +
+  `const S={h:top===window||document.hasFocus(),u:-1/0,a:false};try{Object.defineProperty(globalThis,'${UI_FENCE_STATE}',{value:S})}catch(_){}` +
   "const fc=e=>{const t=e.type;if(t==='visibilitychange'){if(document.hidden)S.u=performance.now();return}if(e.target instanceof Node)return;S.h=true;if(t==='blur')S.a=!document.hasFocus();if(S.a)S.u=performance.now();if(t==='focus')S.a=false};for(const t of ['blur','focus','visibilitychange'])addEventListener(t,fc,true);" +
-  "let sent=false,dp=false;const pip=o=>{if(o!==sent){sent=o;try{chrome.runtime.sendMessage({type:'ns-pip',open:o}).catch(()=>{})}catch(_){}}};" +
-  "const pv=e=>{if(e.type==='enterpictureinpicture')e.target.addEventListener('leavepictureinpicture',pv);pip(dp||!!document.pictureInPictureElement)};addEventListener('enterpictureinpicture',pv,true);addEventListener('leavepictureinpicture',pv,true);addEventListener('pagehide',e=>{if(e.isTrusted){dp=false;pip(false)}},true);" +
-  "try{documentPictureInPicture.addEventListener('enter',e=>{if(!e.isTrusted)return;dp=true;pip(true);e.window.addEventListener('pagehide',x=>{if(x.isTrusted){dp=false;pip(!!document.pictureInPictureElement)}})})}catch(_){}" +
-  "chrome.runtime.onMessage.addListener(m=>{if(m?.type==='ns-pip'&&typeof m.frame==='number')m.open===true?S.r.add(m.frame):S.r.delete(m.frame)});";
+  "chrome.runtime.onMessage.addListener((m,_,r)=>{if(m?.type==='ns-pip')r(!!document.pictureInPictureElement||!!self.documentPictureInPicture?.window)});";
 
 /**
  * The synchronous document_start loader for capture_isolated. CRXJS loads the

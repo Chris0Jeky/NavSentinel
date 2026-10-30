@@ -706,14 +706,18 @@ function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
-  // #1242: relay a frame's Picture-in-Picture state to every frame of its tab,
-  // so approvals in any frame refuse while it is open. Chrome supplies the frame id.
+  // #1244: is a Picture-in-Picture window open in any frame of the sender's tab?
+  // Each frame's loader answers from ground truth (UI_FOCUS_FENCE). A frame that
+  // cannot answer (no content script, gone mid-query) counts as closed; one that
+  // never answers holds the reply, and the asking gate stays refused.
   if (message.type === "ns-pip") {
-    if (sender.tab?.id !== undefined && sender.frameId !== undefined) {
-      chrome.tabs.sendMessage(sender.tab.id, { type: "ns-pip", open: message.open === true, frame: sender.frameId })
-        .catch(() => {});
-    }
-    return;
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) return;
+    chrome.webNavigation.getAllFrames({ tabId })
+      .then((frames) => Promise.all((frames ?? []).map(({ frameId }) =>
+        chrome.tabs.sendMessage(tabId, { type: "ns-pip" }, { frameId }).then((open) => open === true, () => false))))
+      .then((answers) => sendResponse(answers.includes(true)), () => sendResponse(true));
+    return true;
   }
 
   if (isPendingDecisionRuntimeMessage(message)) {
