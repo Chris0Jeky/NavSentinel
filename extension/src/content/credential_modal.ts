@@ -395,8 +395,18 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     card.appendChild(footer);
     overlay.appendChild(card);
     activeRoot.appendChild(overlay);
-    const visibility = visibleActionGate(host!, activeRoot, card);
-    activateFocusTrap(card, activeRoot, focusFallback);
+    let visibility: ReturnType<typeof visibleActionGate>;
+    try {
+      visibility = visibleActionGate(host!, activeRoot, card);
+      activateFocusTrap(card, activeRoot, focusFallback);
+    } catch (error) {
+      // Leave nothing live behind a prompt that never finished setting up.
+      removalObserver.disconnect();
+      window.removeEventListener("keydown", onKeyDown, true);
+      clearFocusTrap(card);
+      overlay.remove();
+      throw error;
+    }
     // Only once setup has finished: a teardown installed earlier would hit the
     // not-yet-initialised `visibility` and break every later prompt (#1215).
     activeDispose = () => {

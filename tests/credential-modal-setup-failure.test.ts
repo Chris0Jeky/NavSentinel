@@ -16,6 +16,7 @@ describe("credential prompt setup failure (#1215)", () => {
     const modal = await import("../extension/src/content/credential_modal");
     const spec = { title: "Credentials", actions: [{ id: "proceed", label: "Proceed once" }] };
     await expect(modal.showCredentialModal(spec)).rejects.toThrow("setup failed");
+    expect(modal.credentialModalRoot()?.querySelector(".overlay")).toBeNull();
     gate.fail = false;
     void modal.showCredentialModal(spec);
     expect(modal.credentialModalRoot()?.querySelector("button")?.textContent).toBe("Proceed once");
