@@ -754,14 +754,15 @@ function softPatchProto(
   }
 }
 
-// Clipboard API natives (may not exist in all contexts)
+// Clipboard API natives (may not exist in all contexts). Unbound: the
+// prototype wrappers forward the caller's receiver, as the native would (#1166).
 const nativeClipboardWriteText =
   typeof navigator !== "undefined" && navigator.clipboard
-    ? navigator.clipboard.writeText?.bind(navigator.clipboard)
+    ? navigator.clipboard.writeText
     : undefined;
 const nativeClipboardWrite =
   typeof navigator !== "undefined" && navigator.clipboard
-    ? navigator.clipboard.write?.bind(navigator.clipboard)
+    ? navigator.clipboard.write
     : undefined;
 
 function callNativeOpen(
@@ -1603,7 +1604,7 @@ function patchClipboard(): void {
 
   if (nativeClipboardWriteText) {
     try {
-      clip.writeText = async function (data: string): Promise<void> {
+      clip.writeText = async function (this: Clipboard, data: string): Promise<void> {
         // WebIDL string conversion is observable and may throw. An async
         // wrapper preserves native Promise rejection, including missing args.
         const text = `${data}`;
@@ -1612,7 +1613,7 @@ function patchClipboard(): void {
         // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted data from explicit undefined.
         if (arguments.length) arguments[0] = text;
         // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
-        const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
+        const result = await nativeApply(nativeClipboardWriteText!, this, arguments);
         // Failed native writes must not produce a successful-write receipt.
         recordClipboardWrite(len, cmdLike);
         if (debug) {
@@ -1630,14 +1631,22 @@ function patchClipboard(): void {
 
   if (nativeClipboardWrite) {
     try {
-      clip.write = function (data: ClipboardItem[]): Promise<void> {
+      clip.write = function (this: Clipboard, data: ClipboardItem[]): Promise<void> {
+        // Snapshot the items the browser is about to write: reading the page's
+        // array after the write lets it swap in a benign item first (#1166).
+        let items: ClipboardItem[] = [];
+        try {
+          items = [...data];
+        } catch {
+          // Non-iterable input: the native write rejects it below.
+        }
         // Only send the bridge message after the native write succeeds.
-        return nativeClipboardWrite!(data).then((result) => {
+        return nativeApply(nativeClipboardWrite!, this, [data]).then((result) => {
           // Try to read text/plain content from ClipboardItems for command detection.
           // Non-text MIME types are skipped (blobs may be expensive to read).
           let inspected = false;
           try {
-            for (const item of data) {
+            for (const item of items) {
               if (item.types.includes("text/plain")) {
                 item.getType("text/plain").then((blob) => {
                   blob.text().then((text) => {
@@ -1942,28 +1951,38 @@ function patchOpenerLocation(): void {
 
 // Also intercept document.execCommand("copy") as an evasion vector. Wrapped on
 // Document.prototype for the same reason as the clipboard methods (#1166).
-const nativeExecCommand = document.execCommand.bind(document);
+const nativeExecCommand = document.execCommand;
 try {
-  Document.prototype.execCommand = function (command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
-    const result = nativeExecCommand(command, ...rest);
-    // Only emit clipboard event when the copy actually succeeded
-    if (command.toLowerCase() === "copy" && result && !isOff()) {
-      // Read the current selection to detect command-like content
-      let selText = "";
+  Document.prototype.execCommand = function (this: Document, command: string): boolean {
+    // Convert once, as the native would, so a stateful command object cannot
+    // say "copy" to the browser and something else to this check; and cover
+    // "cut". The selection is read first because a cut deletes it (#1166).
+    const name = `${command}`;
+    const clipLike = /^c(opy|ut)$/i.test(name);
+    let selText = "";
+    if (clipLike) {
       try {
         selText = window.getSelection()?.toString() ?? "";
       } catch {
         // getSelection may throw in some contexts
       }
+    }
+    // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted args.
+    if (arguments.length) arguments[0] = name;
+    // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
+    const result = nativeApply(nativeExecCommand, this, arguments);
+    // Only emit clipboard event when the copy or cut actually succeeded
+    if (clipLike && result && !isOff()) {
+      const cmdLike = looksLikeCommand(selText);
       postToIsolated("ns-clipboard-write", {
         ts: nowMs(),
         contentLength: selText.length || -1,
-        looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
+        looksLikeCommand: cmdLike,
       });
       if (debug) {
-        console.debug("[NavSentinel] document.execCommand('copy') intercepted", {
+        console.debug("[NavSentinel] copy/cut intercepted", {
           length: selText.length,
-          looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
+          looksLikeCommand: cmdLike,
         });
       }
     }

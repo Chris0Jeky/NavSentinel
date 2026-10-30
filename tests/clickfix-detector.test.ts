@@ -146,6 +146,9 @@ describe("looksLikeCommand", () => {
       "%comspec% /k x",
       "\\\\files.example@SSL\\dav\\a",
       "\\\\203.0.113.9@8080\\s\\a",
+      "\\\\203.0.113.9\\s\\a.exe",
+      "cmd/c x",
+      "cmd\t/k x",
     ]) {
       expect(looksLikeCommand(sample), sample).toBe(true);
     }

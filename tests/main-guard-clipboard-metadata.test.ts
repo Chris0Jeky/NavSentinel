@@ -63,6 +63,17 @@ describe("clipboard successful-write metadata equivalence", () => {
     await settle();
     assert.deepEqual(h.snapshot(), expected(6, false));
   });
+  it("classifies the items written, not ones swapped into the array afterwards (#1166)", async () => {
+    let finish!: () => void;
+    const h = boot(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const items = [item("NS_INERT base64")];
+    const pending = h.clipboard.write(items);
+    items[0] = item("benign");
+    finish();
+    await pending;
+    await settle();
+    assert.deepEqual(h.snapshot(), expected(15, true));
+  });
   it("emits nothing before native settlement", async () => {
     let finish!: () => void;
     const h = boot(() => new Promise<void>((resolve) => { finish = resolve; }));

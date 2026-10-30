@@ -252,10 +252,11 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
 - **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
   (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
   copies and paste shows the expected text; (2) select text and press Ctrl+C: paste is unchanged; (3) open the
-  Gym ClickFix page and click its fake verification: the ClickFix warning still appears. Bypass resistance
-  (prototype calls, a deleted own property, obfuscated commands) is covered by
-  `tests/main-guard-clipboard-native.test.ts`, `tests/clickfix-detector.test.ts` and
-  `tests/e2e/clipboard-native-contract.spec.ts`. A failure gets a revert PR for the merge commit.
+  Gym ClickFix page and click its fake verification: the ClickFix warning still appears. Same-realm bypass
+  resistance (prototype calls, a deleted own property, cut, obfuscated commands) is covered by
+  `tests/main-guard-clipboard-native.test.ts`, `tests/main-guard-execcommand.test.ts`,
+  `tests/clickfix-detector.test.ts` and `tests/e2e/clipboard-native-contract.spec.ts`; natives taken from an
+  uncovered about:blank frame remain open under #1134. A failure gets a revert PR for the merge commit.
 
 - **AI-58 (#1165):** follow the [journal continuity checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional history. Check retained expansion, keyboard focus and reading position during arrivals; Show latest and explicit navigation; removal after replacement, eviction and clear; and the unchanged frozen export preview. Confirm screen-reader and physical-input behavior. The linked merge receipt identifies the exact merge commit. Automated evidence does not complete this check; a failed owner check gets a revert PR for that commit.
 
