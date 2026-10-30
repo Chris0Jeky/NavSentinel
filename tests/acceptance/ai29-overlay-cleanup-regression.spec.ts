@@ -9,6 +9,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { expect, test, type Frame, type Page } from "@playwright/test";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
 import { AcceptanceSession, SETTINGS_KEY, repoRoot, trustedClick } from "./acceptance_harness";
 import {
   briefCardCount,
@@ -19,6 +20,7 @@ import {
   hitTargetId,
   nextPage,
   openTabCount,
+  toastButtonCenter,
   toastCards,
 } from "./page_ui_helpers";
 
@@ -215,12 +217,17 @@ test("AI-29 regression: setting surfaces, mutation-01 fallback, load-time trap c
       for (let attempt = 1; attempt <= 2 && !restored; attempt += 1) {
         await session.gotoReady(page, session.url("/mutation-05-sequential-overlays.html"));
         await expectEventuallyHidden(page, "#trap-a", 16_000, "first sequential layer hidden");
+        // The card appears with the first layer; Undo arms 800 ms later (#1139).
+        const cardSeenAt = Date.now();
         await expectEventuallyHidden(page, "#trap-b", 4_000, "second delayed layer hidden");
         if (await briefCardCount(page) === 0) {
           session.note(`mutation-05 attempt ${attempt}: the 2 s Undo window expired before the second layer settled; reloading as the guide allows`);
           continue;
         }
-        await clickToastButton(page, page, "Undo", "brief");
+        // Click as soon as Undo is armed: a fixed arming wait from here would outlast the window.
+        await page.waitForTimeout(Math.max(0, DBLCLICK_WINDOW_MS + 150 - (Date.now() - cardSeenAt)));
+        const undo = await toastButtonCenter(page, "Undo", "brief");
+        await page.mouse.click(undo.x, undo.y);
         await expect.poll(async () => (await visible(page, "#trap-a")) && (await visible(page, "#trap-b")), { timeout: 1500 }).toBe(true);
         await page.waitForTimeout(1500);
         expect(await visible(page, "#trap-a")).toBe(true);

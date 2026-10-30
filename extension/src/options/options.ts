@@ -461,6 +461,7 @@ async function refreshEventLog(): Promise<void> {
 function renderStats(outcomes: PromptOutcomeEntry[]): void {
   const stats = computePromptOutcomeStats(outcomes);
   statTotalEl.textContent = String(stats.total);
+  document.getElementById("choiceHistory")!.textContent = stats.historySummary;
   statAllowRateEl.textContent = stats.allowRate;
   statBlockRateEl.textContent = stats.blockRate;
   statTrustRateEl.textContent = stats.trustRate;
@@ -478,12 +479,12 @@ function renderStats(outcomes: PromptOutcomeEntry[]): void {
 
   topDomainsEl.innerHTML = "";
   if (top5.length === 0) {
-    appendEmpty(topDomainsEl, "No prompt outcomes recorded yet.");
+    appendEmpty(topDomainsEl, "No recorded choices yet.");
     return;
   }
 
   for (const [domain, count] of top5) {
-    topDomainsEl.appendChild(createProfileRow(domain, `${count} prompt${count === 1 ? "" : "s"}`));
+    topDomainsEl.appendChild(createProfileRow(domain, `${count} recorded choice${count === 1 ? "" : "s"}`));
   }
 }
 

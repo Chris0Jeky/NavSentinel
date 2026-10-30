@@ -3,6 +3,7 @@
 import { registerExtensionOwnedOverlayElement } from "./extension_owned_overlay";
 import { attachUiHost } from "./ui_host";
 import modalStyles from "./credential_modal.css?inline";
+import { visibleActionGate } from "./ui_action_visibility";
 
 export type ModalActionKind = "primary" | "danger" | "neutral";
 
@@ -93,7 +94,7 @@ function clearFocusTrap(card: HTMLElement): void {
   state.getFallback = null;
 }
 
-const modalControlActions = new WeakMap<EventTarget, () => void>();
+const modalControlActions = new WeakMap<EventTarget, (event?: MouseEvent) => boolean>();
 
 /**
  * Invoke the modal control found on a trusted event path, mirroring
@@ -107,6 +108,7 @@ const modalControlActions = new WeakMap<EventTarget, () => void>();
 export function activateOwnedModalControl(
   eventHost: unknown,
   path: readonly unknown[],
+  event?: MouseEvent,
 ): boolean {
   if (!host || eventHost !== host) return false;
   for (const node of path) {
@@ -116,8 +118,7 @@ export function activateOwnedModalControl(
         ? modalControlActions.get(node as EventTarget)
         : undefined;
     if (action) {
-      action();
-      return true;
+      return action(event);
     }
   }
   return false;
@@ -291,6 +292,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     }
 
     function cleanupListeners(): void {
+      visibility.dispose();
       removalObserver.disconnect();
       window.removeEventListener("keydown", onKeyDown, true);
       clearFocusTrap(card);
@@ -380,10 +382,15 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       // otherwise self-approve the prompt with a synthesized click (#783).
       // Keyboard activation (Enter/Space) produces trusted clicks, so
       // keyboard and assistive-technology users are unaffected.
-      modalControlActions.set(btn, () => done(action.id));
+      const activate = (event?: MouseEvent) => {
+        if (action.id !== outside && !visibility.accepts(btn, event)) return false;
+        done(action.id);
+        return true;
+      };
+      modalControlActions.set(btn, activate);
       btn.addEventListener("click", (e) => {
         if (!e.isTrusted) return;
-        done(action.id);
+        activate(e);
       });
       footer.appendChild(btn);
     }
@@ -393,6 +400,7 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     card.appendChild(footer);
     overlay.appendChild(card);
     activeRoot.appendChild(overlay);
+    const visibility = visibleActionGate(host!, activeRoot, card);
     activateFocusTrap(card, activeRoot, focusFallback);
 
     window.setTimeout(() => {

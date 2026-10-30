@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stubVisibleUi, armVisibleControl } from "./helpers/visible-ui";
+stubVisibleUi();
 import type { showCredentialModal as ShowCredentialModalType } from "../extension/src/content/credential_modal";
 import type { ModalSpec } from "../extension/src/content/credential_modal";
 import type { activateOwnedModalControl as ActivateOwnedModalControlType } from "../extension/src/content/credential_modal";
@@ -44,7 +46,7 @@ function getButtons(): HTMLElement[] {
 // Unit DOMs cannot forge trusted input, so trusted-equivalent activation goes
 // through the identity relay — the same pattern as the toast tests (#783).
 function activateButton(btn: HTMLElement): boolean {
-  return activateOwnedModalControl(getHost(), [btn]);
+  return activateOwnedModalControl(getHost(), [btn], armVisibleControl(btn));
 }
 
 // Escape and backdrop dismissal accept only trusted input (#826). happy-dom
@@ -84,7 +86,7 @@ describe("credential modal", () => {
   describe("showCredentialModal basic contract", () => {
     it("creates a shadow DOM host in the document", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       expect(getHost()).not.toBeNull();
       expect(getShadow()).not.toBeNull();
@@ -96,7 +98,7 @@ describe("credential modal", () => {
 
     it("renders the title text", async () => {
       const promise = showCredentialModal(minimalSpec({ title: "Phishing Alert" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const title = getShadow()?.querySelector(".title");
       expect(title?.textContent).toBe("Phishing Alert");
@@ -109,7 +111,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(
         minimalSpec({ subtitle: "This site may be dangerous" }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const subtitle = getShadow()?.querySelector(".subtitle");
       expect(subtitle?.textContent).toBe("This site may be dangerous");
@@ -120,7 +122,7 @@ describe("credential modal", () => {
 
     it("does not render subtitle when absent", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const subtitle = getShadow()?.querySelector(".subtitle");
       expect(subtitle).toBeNull();
@@ -138,7 +140,7 @@ describe("credential modal", () => {
           ],
         }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const kvGrid = getShadow()?.querySelector(".kv");
       expect(kvGrid).not.toBeNull();
@@ -153,7 +155,7 @@ describe("credential modal", () => {
 
     it("does not render kv grid when absent", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       expect(getShadow()?.querySelector(".kv")).toBeNull();
 
@@ -165,7 +167,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(
         minimalSpec({ reasons: ["Domain mismatch", "No HTTPS"] }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const reasonsTitle = getShadow()?.querySelector(".reasons-title");
       expect(reasonsTitle?.textContent).toBe("Signals");
@@ -181,7 +183,7 @@ describe("credential modal", () => {
 
     it("does not render reasons when absent", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       expect(getShadow()?.querySelector(".reasons")).toBeNull();
 
@@ -199,7 +201,7 @@ describe("credential modal", () => {
           reasons: [xss],
         }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const title = getShadow()?.querySelector(".title");
       expect(title?.textContent).toBe(xss);
@@ -237,7 +239,7 @@ describe("credential modal", () => {
           ],
         }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const buttons = getButtons();
       expect(buttons).toHaveLength(3);
@@ -255,7 +257,7 @@ describe("credential modal", () => {
 
     it("resolves with the clicked button action id", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       activateButton(getButtons()[1]!);
 
@@ -264,7 +266,7 @@ describe("credential modal", () => {
 
     it("resolves with the first button action id when clicked", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       activateButton(getButtons()[0]!);
 
@@ -277,7 +279,7 @@ describe("credential modal", () => {
         actions: [],
         outsideAction: "dismissed",
       });
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       expect(getCard()).not.toBeNull();
       expect(getButtons()).toHaveLength(0);
@@ -292,7 +294,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(
         minimalSpec({ outsideAction: "dismissed" }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
 
@@ -303,7 +305,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(
         minimalSpec(),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
 
@@ -312,7 +314,7 @@ describe("credential modal", () => {
 
     it("removes the overlay after Escape", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
@@ -326,7 +328,7 @@ describe("credential modal", () => {
       const promise = showCredentialModal(
         minimalSpec({ outsideAction: "outside_dismiss" }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const overlay = getOverlay()!;
       overlay.dispatchEvent(trusted(new MouseEvent("mousedown", { bubbles: true })));
@@ -336,7 +338,7 @@ describe("credential modal", () => {
 
     it("resolves with default 'cancel' when clicking overlay without outsideAction", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const overlay = getOverlay()!;
       overlay.dispatchEvent(trusted(new MouseEvent("mousedown", { bubbles: true })));
@@ -346,7 +348,7 @@ describe("credential modal", () => {
 
     it("does NOT dismiss when clicking the card itself", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const card = getCard()!;
       card.dispatchEvent(trusted(new MouseEvent("mousedown", { bubbles: true })));
@@ -364,6 +366,7 @@ describe("credential modal", () => {
   describe("ensureHost idempotency", () => {
     it("reattaches a removed host for a new warning", async () => {
       const first = showCredentialModal(minimalSpec());
+      vi.advanceTimersByTime(1000);
       activateButton(getButtons()[1]!);
       await first;
       const host = getHost()!;
@@ -372,6 +375,7 @@ describe("credential modal", () => {
       expect(getHost()).toBe(host);
       expect(host.isConnected).toBe(true);
       expect(getCard()!.textContent).toContain("Next warning");
+      vi.advanceTimersByTime(1000);
       activateButton(getButtons()[1]!);
       await expect(next).resolves.toBe("block");
     });
@@ -396,12 +400,12 @@ describe("credential modal", () => {
 
     it("does not create duplicate hosts on repeated calls", async () => {
       const p1 = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
       activateButton(getButtons()[0]!);
       await p1;
 
       const p2 = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const hosts = document.querySelectorAll(`#${HOST_ID}`);
       expect(hosts.length).toBe(1);
@@ -419,10 +423,10 @@ describe("credential modal", () => {
       const p1 = showCredentialModal(
         minimalSpec({ title: "First", outsideAction: "replaced" }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const p2 = showCredentialModal(minimalSpec({ title: "Second" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const title = getShadow()?.querySelector(".title");
       expect(title?.textContent).toBe("Second");
@@ -439,10 +443,10 @@ describe("credential modal", () => {
 
     it("resolves displaced modal with default 'cancel' when no outsideAction", async () => {
       const p1 = showCredentialModal(minimalSpec({ title: "First" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const p2 = showCredentialModal(minimalSpec({ title: "Second" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       expect(await p1).toBe("cancel");
 
@@ -454,12 +458,12 @@ describe("credential modal", () => {
       const p1 = showCredentialModal(
         minimalSpec({ outsideAction: "first_dismiss" }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const p2 = showCredentialModal(
         minimalSpec({ outsideAction: "second_dismiss" }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       // p1 was already resolved by replacement
       expect(await p1).toBe("first_dismiss");
@@ -476,11 +480,11 @@ describe("credential modal", () => {
       focusTarget.focus();
 
       const p1 = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       // Replace p1 with p2
       const p2 = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
       await p1;
 
       // Focus should NOT have been restored to focusTarget during replacement
@@ -497,7 +501,7 @@ describe("credential modal", () => {
   describe("keydown listener cleanup", () => {
     it("removes keydown listener after button click", async () => {
       const promise = showCredentialModal(minimalSpec({ outsideAction: "dismissed" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const removeSpy = vi.spyOn(window, "removeEventListener");
       activateButton(getButtons()[0]!);
@@ -513,7 +517,7 @@ describe("credential modal", () => {
 
     it("removes keydown listener after Escape", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const removeSpy = vi.spyOn(window, "removeEventListener");
       window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
@@ -529,7 +533,7 @@ describe("credential modal", () => {
 
     it("second Escape after dismissal has no effect", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
@@ -544,7 +548,7 @@ describe("credential modal", () => {
   describe("ARIA and accessibility", () => {
     it("sets role=dialog and aria-modal on the card", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const card = getCard()!;
       expect(card.getAttribute("role")).toBe("dialog");
@@ -556,7 +560,7 @@ describe("credential modal", () => {
 
     it("sets aria-labelledby pointing to the title element", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const card = getCard()!;
       const titleId = card.getAttribute("aria-labelledby")!;
@@ -571,7 +575,7 @@ describe("credential modal", () => {
 
     it("sets aria-describedby pointing to the body element", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const card = getCard()!;
       const bodyId = card.getAttribute("aria-describedby")!;
@@ -589,7 +593,7 @@ describe("credential modal", () => {
   describe("focus management", () => {
     it("auto-focuses first focusable button after timer fires", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const buttons = getButtons();
       expect(buttons.length).toBeGreaterThan(0);
@@ -608,7 +612,7 @@ describe("credential modal", () => {
         title: "Card focus fallback",
         actions: [],
       });
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const card = getCard()!;
       expect(card.tabIndex).toBe(-1);
@@ -624,7 +628,7 @@ describe("credential modal", () => {
       focusTarget.focus();
 
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       activateButton(getButtons()[0]!);
       await promise;
@@ -638,7 +642,7 @@ describe("credential modal", () => {
   describe("closed shadow root (#894)", () => {
     it("gives page script no reference to the prompt's controls", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const host = getHost()!;
       expect(host.shadowRoot).toBeNull();
@@ -652,7 +656,7 @@ describe("credential modal", () => {
 
     it("keeps focus that re-enters on a second action instead of pulling it back to the first", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const buttons = getButtons();
       buttons[1]!.focus();
@@ -685,7 +689,7 @@ describe("credential modal", () => {
           ],
         }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const buttons = getButtons();
       expect(buttons).toHaveLength(2);
@@ -720,7 +724,7 @@ describe("credential modal", () => {
           ],
         }),
       );
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const buttons = getButtons();
       buttons[0]!.focus();
@@ -750,7 +754,7 @@ describe("credential modal", () => {
         title: "No buttons",
         actions: [],
       });
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       const tabEvent = new KeyboardEvent("keydown", {
         key: "Tab",
@@ -780,7 +784,7 @@ describe("credential modal", () => {
             ],
           }),
         );
-        vi.runAllTimers();
+        vi.advanceTimersByTime(1000);
 
         const buttons = getButtons();
         outside.focus();
@@ -813,7 +817,7 @@ describe("credential modal", () => {
             ],
           }),
         );
-        vi.runAllTimers();
+        vi.advanceTimersByTime(1000);
 
         const buttons = getButtons();
         outside.focus();
@@ -859,7 +863,7 @@ describe("credential modal", () => {
             ],
           }),
         );
-        vi.runAllTimers();
+        vi.advanceTimersByTime(1000);
 
         const buttons = getButtons();
         outside.focus();
@@ -908,7 +912,7 @@ describe("credential modal", () => {
             ],
           }),
         );
-        vi.runAllTimers();
+        vi.advanceTimersByTime(1000);
 
         const buttons = getButtons();
         stopFocusIn.mockClear();
@@ -933,7 +937,7 @@ describe("credential modal", () => {
   describe("synthetic activation rejection (#783)", () => {
     it("ignores a page-synthesized click on an action button", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       getButtons()[0]!.click();
 
@@ -949,7 +953,7 @@ describe("credential modal", () => {
 
     it("ignores a page-dispatched click event on an action button", async () => {
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       getButtons()[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -965,10 +969,10 @@ describe("credential modal", () => {
 
     it("relay ignores a forged host, a page element, and a stale control", async () => {
       const p1 = showCredentialModal(minimalSpec({ title: "First" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
       const stale = getButtons()[0]!;
       const p2 = showCredentialModal(minimalSpec({ title: "Second" }));
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
       await p1;
 
       const fakeHost = document.createElement("div");
@@ -999,7 +1003,7 @@ describe("credential modal", () => {
       // import would see a different WeakSet than the loaded modal module.
       const owned = await import("../extension/src/content/extension_owned_overlay");
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
 
       expect(owned.isExtensionOwnedOverlayElement(getHost()!)).toBe(true);
 
@@ -1010,7 +1014,7 @@ describe("credential modal", () => {
     it("is skipped by overlay classification even with fullscreen geometry", async () => {
       const monitor = await import("../extension/src/content/mutation_monitor");
       const promise = showCredentialModal(minimalSpec());
-      vi.runAllTimers();
+      vi.advanceTimersByTime(1000);
       const host = getHost()!;
 
       // happy-dom has no layout engine: stub the geometry reads so the host
@@ -1032,7 +1036,7 @@ describe("credential modal", () => {
         styleSpy.mockRestore();
       }
 
-      activateButton(getButtons()[0]!);
+      window.dispatchEvent(trusted(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await promise;
     });
 
@@ -1047,7 +1051,7 @@ describe("credential modal", () => {
         document.getElementById(HOST_ID)?.remove();
         await loadModule();
         const promise = showCredentialModal(minimalSpec());
-        vi.runAllTimers();
+        vi.advanceTimersByTime(1000);
 
         const host = getHost()!;
         expect(host.getAttribute("popover")).toBe("manual");

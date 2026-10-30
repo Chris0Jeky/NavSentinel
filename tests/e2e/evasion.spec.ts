@@ -625,11 +625,17 @@ test("Evasion 11: opt-in cleanup handles a shadow-path overlay across realms @re
     });
 
     await updateNavigationSettings(context, { autoDismissOverlays: true });
-    // Let the content setting propagate and the monitor arm. Existing shadow
-    // mutations are not replayed, so the target remains for the trusted click.
+    // Existing shadow mutations are not replayed, but the initial scan walks
+    // pre-existing open shadow roots (#564) and hides the trap before any
+    // interaction. Undo exempts that exact node until a later intercepted
+    // click, which then exercises the cross-realm click-time path.
+    const trap = page.locator("#shadow-host").locator("#trap");
+    await expect(trap).toBeHidden({ timeout: 3000 });
+    await waitForToastMatch(page, /overlay hidden/i, 3000);
+    await clickToastButton(page, "Undo");
+    await expect(trap).toBeVisible();
     await page.waitForTimeout(750);
 
-    const trap = page.locator("#shadow-host").locator("#trap");
     const box = await trap.boundingBox();
     expect(box, "shadow-internal overlay should be visible before the click").toBeTruthy();
 

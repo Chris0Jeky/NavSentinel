@@ -67,6 +67,8 @@ import playwright from ${JSON.stringify(pathToFileURL(testModule).href)};
 const { defineConfig } = playwright;
 export default defineConfig(base, {
   testDir: ".", testMatch: "probe.spec.cjs", testIgnore: [],
+  // The probe checks Git metadata only; the build preflight (#1175) is not under test.
+  globalSetup: [] as string[],
   projects: [{ name: "checkout-probe", testMatch: "probe.spec.cjs" }],
   fullyParallel: false, workers: 1, retries: 0,
   reporter: [["json", { outputFile: ${JSON.stringify(reportPath)} }]],
