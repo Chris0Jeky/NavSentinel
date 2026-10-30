@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as mutationMonitor from "../extension/src/content/mutation_monitor";
 import type { MutationAlert } from "../extension/src/content/mutation_monitor";
 import {
   _resetOverlaySuppressionGroupForTest,
+  bindOverlayCleanupMonitor,
   MAX_ACTIVE_OVERLAY_SUPPRESSIONS,
   reconcileDetectedOverlay,
   restoreActiveOverlaySuppressions,
@@ -10,6 +12,8 @@ import {
   suppressHighSeverityOverlayInPath,
   suppressOverlayElement,
 } from "../extension/src/content/overlay_cleanup";
+
+bindOverlayCleanupMonitor(mutationMonitor);
 
 function makeOverlay(options: { role?: string } = {}): HTMLDivElement {
   const overlay = document.createElement("div");

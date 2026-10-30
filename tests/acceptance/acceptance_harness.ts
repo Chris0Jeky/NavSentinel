@@ -22,6 +22,7 @@ import { hashDirectory } from "../maintainer-headed/receipt";
 import { readBuiltUiGuardRevision, waitForNavSentinelBridge } from "../e2e/extension_test_utils";
 import { CdpPageClient, listTargets, readDevToolsPort, type ConsoleRecord } from "./cdp_page_client";
 import { readToastState } from "./toast_state_reader";
+import { pressureLoadGymPath } from "./pressure_load_attribution";
 import { selectBrandedChrome } from "../branded/branded-chrome-selector.cjs";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -50,7 +51,7 @@ type Receipt = {
   startedAt: string;
   finishedAt?: string;
   git: { head: string; productSourceTree: string; lastProductCommit: string; productSourceClean: boolean; statusLines: string[] };
-  build: { distSha256: string; uiGuardRevision: string; manifestVersion: string };
+  build: { distSha256: string; uiGuardRevision: string; manifestVersion: string; diagnosticBundle?: DiagnosticBundle };
   browser: {
     /** What actually ran, from the browser's UA brands. */
     product: "branded-chrome" | "bundled-chromium";
@@ -91,6 +92,12 @@ export function acceptanceRunDirectory(): string {
 
 type LaunchedProfile = { context: BrowserContext; worker: Worker; devToolsPort: number };
 
+/** A per-session test copy; ordinary acceptance callers keep the default build. */
+type DiagnosticBundle = {
+  extensionPath: string;
+  classification: "TEST_ONLY_INSTRUMENTED_COPY_NOT_RELEASE_EVIDENCE";
+};
+
 /**
  * Playwright's Worker handle does not follow a real MV3 worker restart (the
  * Observatory fault driver reads worker state over raw DevTools for the same
@@ -108,14 +115,14 @@ function workerProxy(client: CdpPageClient, url: string): Worker {
 const WORKER_SUFFIX = "/service-worker-loader.js";
 
 /** Launch (or relaunch) Chrome on `userDataDir` with the exact build loaded. */
-async function launchProfile(userDataDir: string): Promise<LaunchedProfile> {
+async function launchProfile(userDataDir: string, selectedExtensionPath = extensionPath): Promise<LaunchedProfile> {
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     viewport: null,
     timeout: 60_000,
     args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
+      `--disable-extensions-except=${selectedExtensionPath}`,
+      `--load-extension=${selectedExtensionPath}`,
       "--remote-debugging-port=0",
       "--window-size=1280,900",
     ],
@@ -150,6 +157,7 @@ export class AcceptanceSession {
     readonly extensionId: string,
     readonly gym: { baseUrl: string; localhostUrl: string; close: () => Promise<void> },
     private readonly userDataDir: string,
+    private readonly selectedExtensionPath: string,
     private readonly testInfo: TestInfo,
     receipt: Receipt,
   ) {
@@ -174,19 +182,20 @@ export class AcceptanceSession {
     return this.currentDevToolsPort;
   }
 
-  static async open(testInfo: TestInfo, guide: string): Promise<AcceptanceSession> {
-    test.skip(!fs.existsSync(path.join(extensionPath, "manifest.json")), "Build extension/dist before the acceptance lane.");
+  static async open(testInfo: TestInfo, guide: string, diagnosticBundle?: DiagnosticBundle): Promise<AcceptanceSession> {
+    const selectedExtensionPath = diagnosticBundle ? path.resolve(diagnosticBundle.extensionPath) : extensionPath;
+    test.skip(!fs.existsSync(path.join(selectedExtensionPath, "manifest.json")), "Build extension/dist before the acceptance lane.");
     // Baseline comparisons load an older build whose loader predates the
     // current content-address contract; its printed guard revision is passed in.
     const uiGuardRevision = process.env.NAVSENTINEL_EXPECTED_GUARD ?? readBuiltUiGuardRevision();
-    const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, "manifest.json"), "utf8")) as { version: string };
+    const manifest = JSON.parse(fs.readFileSync(path.join(selectedExtensionPath, "manifest.json"), "utf8")) as { version: string };
     const statusLines = git(["status", "--porcelain", "--", "extension/src", "extension/public", "manifest.json", "vite.config.ts", "package.json", "package-lock.json"])
       .split(/\r?\n/).filter(Boolean);
     const gymServer = await startAcceptanceServer();
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-acceptance-"));
     let launched: LaunchedProfile | undefined;
     try {
-      launched = await launchProfile(userDataDir);
+      launched = await launchProfile(userDataDir, selectedExtensionPath);
       const extensionId = new URL(launched.worker.url()).host;
       // Same normalized selection the preload launched with (#1018): false/whitespace mean bundled Chromium.
       const selection = selectBrandedChrome(process.env.NAVSENTINEL_BRANDED_CHROME);
@@ -212,7 +221,8 @@ export class AcceptanceSession {
           productSourceClean: statusLines.length === 0,
           statusLines,
         },
-        build: { distSha256: hashDirectory(extensionPath), uiGuardRevision, manifestVersion: manifest.version },
+        build: { distSha256: hashDirectory(selectedExtensionPath), uiGuardRevision, manifestVersion: manifest.version,
+          ...(diagnosticBundle ? { diagnosticBundle: { ...diagnosticBundle, extensionPath: selectedExtensionPath } } : {}) },
         browser: {
           product: launchedBranded ? "branded-chrome" : "bundled-chromium",
           requested: branded ? "branded-chrome" : "bundled-chromium",
@@ -235,6 +245,7 @@ export class AcceptanceSession {
         extensionId,
         { ...gymServer, localhostUrl: gymServer.baseUrl.replace("127.0.0.1", "localhost") },
         userDataDir,
+        selectedExtensionPath,
         testInfo,
         receipt,
       );
@@ -361,7 +372,7 @@ export class AcceptanceSession {
       this.workerClient = null;
     }
     await this.currentContext.close();
-    const launched = await launchProfile(this.userDataDir);
+    const launched = await launchProfile(this.userDataDir, this.selectedExtensionPath);
     const relaunchedId = new URL(launched.worker.url()).host;
     if (relaunchedId !== this.extensionId) {
       await launched.context.close().catch(() => undefined);
@@ -631,8 +642,11 @@ export async function startAcceptanceServer(): Promise<{ baseUrl: string; close:
     const rawPath = decodeURIComponent(requestUrl.pathname);
     // Any `/acceptance/dest/<marker path>` serves the shared destination page,
     // so procedures can put a unique marker in the destination path itself.
-    const decoded = rawPath.startsWith("/acceptance/dest/") ? "/acceptance/destination.html" : rawPath;
-    const [root, relative] = decoded.startsWith("/acceptance/")
+    // `/acceptance/pressure-load/<label>/<gym file>` serves that Gym file, so
+    // each load's event rows carry their own path label (#954).
+    const loadGymPath = pressureLoadGymPath(rawPath);
+    const decoded = loadGymPath ?? (rawPath.startsWith("/acceptance/dest/") ? "/acceptance/destination.html" : rawPath);
+    const [root, relative] = !loadGymPath && decoded.startsWith("/acceptance/")
       ? [ACCEPTANCE_FIXTURE_ROOT, decoded.slice("/acceptance".length)]
       : [gymRoot, decoded === "/" ? "/index.html" : decoded];
     const resolved = path.resolve(root, `.${relative}`);

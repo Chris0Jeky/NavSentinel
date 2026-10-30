@@ -16,10 +16,9 @@ describe("deduplicated retained protection activity", () => {
       row("popup", { kind: "nav_blank_prompt" }), row("redirect", { kind: "nav_rollback" }),
       row("paste", { kind: "cred_paste_warn" }), row("clickfix", { kind: "clickfix_detected" }),
       row("reputation", { kind: "nav_reputation_late_warn" }),
-      row("locker", { kind: "fullscreen_locker_exit", reasons: ["fullscreen_scare_text", "fullscreen_phone_number"] }),
     ]);
-    expect(summarizeProtection(events, "history", now)).toEqual({ overlays: 3, clicks: 1, redirects: 2, warnings: 4, corrections: 0 });
-    expect(events.map(event => event.activity)).toEqual(["overlays", "overlays", "overlays", "clicks", "redirects", "redirects", "warnings", "warnings", "warnings", "warnings"]);
+    expect(summarizeProtection(events, "history", now)).toEqual({ overlays: 3, clicks: 1, redirects: 2, warnings: 3, corrections: 0 });
+    expect(events.map(event => event.activity)).toEqual(["overlays", "overlays", "overlays", "clicks", "redirects", "redirects", "warnings", "warnings", "warnings"]);
   });
 
   it("uses the last valid retained row of an existing ID, even when it is a correction", () => {

@@ -30,6 +30,7 @@
       "js": [
         "src/content/capture_isolated.ts"
       ],
+      "match_origin_as_fallback": true,
       "run_at": "document_start",
       "world": "ISOLATED",
       "all_frames": true
@@ -41,6 +42,7 @@
       "js": [
         "src/content/main_guard.ts"
       ],
+      "match_origin_as_fallback": true,
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": true
