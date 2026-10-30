@@ -43,6 +43,8 @@ const BRIEF_RECOVERY_DISMISS_MS = 2800;
 
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
+/** The control under the last fenced pointerdown on the host. */
+let pressed: Element | null | undefined;
 const controlActions = new WeakMap<EventTarget, (event?: MouseEvent | KeyboardEvent) => boolean | void>();
 const cardRemovers = new WeakMap<HTMLElement, (notifyDismiss?: boolean) => void>();
 
@@ -94,9 +96,15 @@ export function activateOwnedToastControl(eventHost: unknown, path: readonly unk
   // stops at the host. Ask the root where the input landed instead: the
   // focused control for keyboard (detail 0), the hit control for a pointer.
   if (path[0] === host && event) {
-    path = [(event.detail
+    const press = event.type == "pointerdown";
+    const control = (press || event.detail
       ? root!.elementFromPoint((event as MouseEvent).clientX, (event as MouseEvent).clientY)
-      : root!.activeElement)?.closest("button,.pill")];
+      : root!.activeElement)?.closest("button,.pill");
+    // Pin a pointer click to the control under its press: the page can shift
+    // the host under a held press so an approval sits under the release (#1203).
+    if (press) return pressed = control, false;
+    if (event.detail && control !== pressed) return false;
+    path = [control];
   }
   for (const node of path) {
     if (node === host) return false;
