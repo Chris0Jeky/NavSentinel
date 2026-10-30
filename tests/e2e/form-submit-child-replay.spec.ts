@@ -20,6 +20,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { startProvingGroundEgressFence } from "./proving_ground_fake_sink";
 import {
   assertNoToastFor,
   getGymBaseUrl,
@@ -111,13 +112,15 @@ async function captureWithin(
   }
 }
 
-async function withExtension(run: (context: BrowserContext, baseUrl: string) => Promise<void>): Promise<void> {
+async function withExtension(run: (context: BrowserContext, baseUrl: string) => Promise<void>, extraOrigins: string[] = []): Promise<void> {
   const { baseUrl, gym } = await getGymBaseUrl(gymRoot);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "navsentinel-child-replay-"));
+  const fence = await startProvingGroundEgressFence([], new Set([new URL(baseUrl).origin, ...extraOrigins]));
   try {
     const context = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
       timeout: 60_000,
+      proxy: { server: fence.proxyServer },
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     try {
@@ -126,6 +129,7 @@ async function withExtension(run: (context: BrowserContext, baseUrl: string) => 
       await context.close();
     }
   } finally {
+    await fence.close();
     if (gym) await gym.close();
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
@@ -236,7 +240,7 @@ test("legacy multipart POST preserves finalized file data inside the named child
       expect(new URL(page.url()).pathname).toBe(`/${FIXTURE}`);
       await assertNoToastFor(page, 500);
       await page.close();
-    });
+    }, [new URL(captureServer.actionUrl).origin]);
   } finally {
     await captureServer.close();
   }

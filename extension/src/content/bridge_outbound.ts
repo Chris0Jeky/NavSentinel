@@ -18,6 +18,8 @@
  * can never push out a buffered alert. Dropped messages are counted (not
  * silently discarded) so the count can be surfaced once the bridge is ready.
  */
+import type { MainWorldNatives } from "./main_world_natives";
+
 export interface OutboundMessage {
   type: string;
   payload?: Record<string, unknown>;
@@ -38,7 +40,9 @@ export class OutboundQueue {
   private dropped = 0;
   private coalesced = 0;
 
-  constructor(cap: number, reservedForScarce = 0) {
+  // MAIN injects its document-start capture. The isolated world's default is
+  // trusted; never look up a page-clobberable Window named property here.
+  constructor(cap: number, reservedForScarce = 0, private readonly define = Reflect.defineProperty) {
     // Guard against a non-finite cap (e.g. NaN), which would otherwise make the
     // length comparison always false and leave the queue effectively unbounded.
     this.cap = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : 0;
@@ -47,6 +51,17 @@ export class OutboundQueue {
     this.reservedForScarce = Number.isFinite(reservedForScarce)
       ? Math.max(0, Math.min(Math.floor(reservedForScarce), this.cap))
       : 0;
+  }
+
+  private put<T>(items: T[], index: number, value: T): void {
+    this.define(items, index, { value, writable: true, enumerable: true, configurable: true });
+  }
+
+  private remove(index: number): void {
+    for (let next = index + 1; next < this.items.length; next++) {
+      this.put(this.items, next - 1, this.items[next]!);
+    }
+    this.items.length--;
   }
 
   /**
@@ -72,7 +87,10 @@ export class OutboundQueue {
     coalesceKey?: string,
   ): void {
     if (coalesceKey) {
-      const existingIndex = this.items.findIndex((item) => item.coalesceKey === coalesceKey);
+      let existingIndex = -1;
+      for (let index = 0; index < this.items.length; index++) {
+        if (this.items[index]!.coalesceKey === coalesceKey) { existingIndex = index; break; }
+      }
       if (existingIndex !== -1) {
         const existing = this.items[existingIndex];
         if (!existing) return;
@@ -83,8 +101,8 @@ export class OutboundQueue {
           this.dropped++;
           return;
         }
-        this.items.splice(existingIndex, 1);
-        this.items.push({ message, priority, floodable, coalesceKey });
+        this.remove(existingIndex);
+        this.put(this.items, this.items.length, { message, priority, floodable, coalesceKey });
         this.coalesced++;
         return;
       }
@@ -94,7 +112,7 @@ export class OutboundQueue {
       return;
     }
     if (this.items.length < this.cap) {
-      this.items.push({ message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
+      this.put(this.items, this.items.length, { message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
       if (floodable) this.floodableCount++;
       return;
     }
@@ -105,14 +123,17 @@ export class OutboundQueue {
     }
     // An alert must be admitted: displace the oldest routine message. If the
     // buffer is entirely alerts, keep the earliest and drop this one.
-    const routineIdx = this.items.findIndex((q) => !q.priority);
+    let routineIdx = -1;
+    for (let index = 0; index < this.items.length; index++) {
+      if (!this.items[index]!.priority) { routineIdx = index; break; }
+    }
     if (routineIdx === -1) {
       this.dropped++;
       return;
     }
-    this.items.splice(routineIdx, 1);
+    this.remove(routineIdx);
     this.dropped++;
-    this.items.push({ message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
+    this.put(this.items, this.items.length, { message, priority, floodable, ...(coalesceKey ? { coalesceKey } : {}) });
     if (floodable) this.floodableCount++;
   }
 
@@ -122,7 +143,9 @@ export class OutboundQueue {
    * counters. Safe to call when empty.
    */
   drain(): { items: OutboundMessage[]; dropped: number; coalesced: number } {
-    const items = this.items.splice(0, this.items.length).map((q) => q.message);
+    const items: OutboundMessage[] = [];
+    for (let index = 0; index < this.items.length; index++) this.put(items, index, this.items[index]!.message);
+    this.items.length = 0;
     const dropped = this.dropped;
     const coalesced = this.coalesced;
     this.dropped = 0;
@@ -171,12 +194,12 @@ const MAIN_GUARD_ALERT_TYPES = new Set<string>([
  *                     dropping one makes the SW re-block an allowed action.
  * Routine (config-ack, pong, bridge-ready/overflow, debug) is droppable.
  */
-export function isMainGuardAlertType(type: string): boolean {
+export function isMainGuardAlertType(type: string, natives?: MainWorldNatives): boolean {
   return (
-    MAIN_GUARD_ALERT_TYPES.has(type) ||
-    type.startsWith("ns-js-") ||
-    type.startsWith("ns-dblclick-") ||
-    type.startsWith("ns-allow")
+    (natives ? natives.setHas(MAIN_GUARD_ALERT_TYPES, type) : MAIN_GUARD_ALERT_TYPES.has(type)) ||
+    (natives ? natives.starts(type, "ns-js-") : type.startsWith("ns-js-")) ||
+    (natives ? natives.starts(type, "ns-dblclick-") : type.startsWith("ns-dblclick-")) ||
+    (natives ? natives.starts(type, "ns-allow") : type.startsWith("ns-allow"))
   );
 }
 
@@ -219,6 +242,6 @@ const FLOODABLE_ALERT_TYPES = new Set<string>([
 
 /** Whether an alert is high-frequency per-navigation telemetry subject to the
  *  OutboundQueue floodable cap. (#377/F2) */
-export function isFloodableAlertType(type: string): boolean {
-  return FLOODABLE_ALERT_TYPES.has(type);
+export function isFloodableAlertType(type: string, natives?: MainWorldNatives): boolean {
+  return natives ? natives.setHas(FLOODABLE_ALERT_TYPES, type) : FLOODABLE_ALERT_TYPES.has(type);
 }

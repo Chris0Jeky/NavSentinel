@@ -17,6 +17,30 @@ const extensionPath = process.env.EXTENSION_PATH
 
 test.setTimeout(120_000);
 
+// Test instrument, not the attacker: the bridge posts through natives captured
+// at document_start (#1141), so only a script that runs before that prelude can
+// observe (or drop) its messages. The fixture's inline script controls the
+// page clock and random source.
+function installBlockedActionProbe(context: BrowserContext): Promise<void> {
+  return context.addInitScript(() => {
+    const probe = window as Window & {
+      blockedActionIdProbe?: Array<{ id: string; url: string | undefined; kind: string | undefined }>;
+      blockedActionIdDropSecond?: boolean;
+    };
+    probe.blockedActionIdProbe = [];
+    probe.blockedActionIdDropSecond = false;
+    const nativePostMessage = MessagePort.prototype.postMessage;
+    MessagePort.prototype.postMessage = function (this: MessagePort, message: unknown, ...rest: unknown[]) {
+      const data = message as { source?: string; type?: string; id?: unknown; url?: string; kind?: string } | null;
+      if (data?.source === "__navsentinel__" && data.type === "ns-nav-blocked" && typeof data.id === "string") {
+        probe.blockedActionIdProbe?.push({ id: data.id, url: data.url, kind: data.kind });
+        if (probe.blockedActionIdDropSecond && probe.blockedActionIdProbe?.length === 2) return;
+      }
+      return Reflect.apply(nativePostMessage, this, [message, ...rest]);
+    } as typeof MessagePort.prototype.postMessage;
+  });
+}
+
 test("blocked actions receive distinct authority IDs under a page-controlled clock and random source (#933) @regression", async () => {
   test.skip(!fs.existsSync(extensionPath), "Build the extension before running e2e tests.");
   const { baseUrl, gym } = await getGymBaseUrl(path.join(root, "gym"));
@@ -29,6 +53,7 @@ test("blocked actions receive distinct authority IDs under a page-controlled clo
       timeout: 60_000,
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
+    await installBlockedActionProbe(context);
     const page = await context.newPage();
     await page.goto(`${baseUrl}/main-world-blocked-action-id-collision.html`, {
       waitUntil: "domcontentloaded",
@@ -78,6 +103,7 @@ test("approving the first prompt can execute only its original blocked closure (
       timeout: 60_000,
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
+    await installBlockedActionProbe(context);
     const page = await context.newPage();
     await page.goto(`${baseUrl}/main-world-blocked-action-id-collision.html`, {
       waitUntil: "domcontentloaded",

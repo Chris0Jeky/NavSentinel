@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { startProvingGroundEgressFence } from "./proving_ground_fake_sink";
 import { getGymBaseUrl, readBuiltUiGuardRevision, waitForNavSentinelBridge } from "./extension_test_utils";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -31,11 +32,13 @@ async function journey(options: {
 }): Promise<{ receipts: string[]; formdataCount: number }> {
   const { baseUrl, gym } = await getGymBaseUrl(path.join(root, "gym"));
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "ns-unmatched-replay-"));
+  const fence = await startProvingGroundEgressFence([], new Set([new URL(baseUrl).origin]));
   let context: BrowserContext | undefined;
   const receipts: string[] = [];
   try {
     context = await chromium.launchPersistentContext(profile, {
       headless: false,
+      proxy: { server: fence.proxyServer },
       args: options.enabled
         ? [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
         : [],
@@ -99,6 +102,7 @@ async function journey(options: {
     };
   } finally {
     if (context) await context.close();
+    await fence.close();
     if (gym) await gym.close();
     fs.rmSync(profile, { recursive: true, force: true });
   }

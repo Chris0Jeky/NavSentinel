@@ -15,9 +15,11 @@ const compiled = ts.transpileModule(functions.map((node) => node.getText(file)).
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
 }).outputText;
 const { textLength, hasMeaningfulName } = vm.runInNewContext(
-  `${compiled}\n({ textLength, hasMeaningfulName });`, {
+  `${compiled}
+({ textLength, hasMeaningfulName });`, {
     document, Node, NodeFilter, readCapturedAttribute,
     nativeGetAttribute: Function.prototype.call.bind(Element.prototype.getAttribute),
+    natives: { test: Function.prototype.call.bind(RegExp.prototype.test), min: Math.min },
   },
 ) as { textLength: (el: Element) => number; hasMeaningfulName: (el: Element) => boolean };
 

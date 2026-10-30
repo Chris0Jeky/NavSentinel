@@ -64,7 +64,7 @@ describe("createBlockedActionIdAllocator (#933)", () => {
     expect(region).not.toContain("Math.random");
     expect(source).not.toContain("function makeId()");
     expect(region.indexOf("const id = allocateBlockedActionId();")).toBeLessThan(
-      region.indexOf("blockedActions.set(id"),
+      region.indexOf("natives.mapSet(blockedActions, id"),
     );
   });
 
