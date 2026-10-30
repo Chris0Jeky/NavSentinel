@@ -62,14 +62,12 @@ test("@regression popup has a single labelled main heading (#980)", async ({ pag
   expect(margin).toBe("0px");
 });
 
-test("@regression evidence heading separates both sentences (#980)", async ({ page }) => {
+test("@regression evidence heading describes protection activity (#980)", async ({ page }) => {
   await renderSurface(page, "evidence");
   const heading = page.getByRole("heading", { level: 1 });
   await expect(heading).toHaveCount(1);
-  await expect(heading).toHaveAccessibleName("Your browsing. A clearer picture.");
-  // Preserve textual separation even when accessible-name computation inserts
-  // whitespace for <br> independently of the authored text.
+  await expect(heading).toHaveAccessibleName("Your protection activity.");
   expect((await heading.textContent())?.replace(/\s+/g, " ").trim())
-    .toBe("Your browsing. A clearer picture.");
-  await expect(heading.locator("br")).toHaveCount(1);
+    .toBe("Your protection activity.");
+  await expect(heading.locator("br")).toHaveCount(0);
 });
