@@ -10,17 +10,18 @@ const MIN_CONTROL_PX = 10;
 // had focus earlier must not arm a later prompt behind a popup that holds it now.
 // h: had focus. u: when this frame last lost window focus or was hidden; a blur
 // shorter than a sample interval (a click on a covering popup or PiP window)
-// still restarts arming. r: frame ids in this tab with a PiP window open.
-type FocusRecord = { h: boolean; u: number; a: boolean; r?: Set<number> };
+// still restarts arming.
+type FocusRecord = { h: boolean; u: number; a: boolean };
 // The capture_isolated document_start loader records these before any page
 // script runs, so a page capture listener registered during the module import
 // cannot stop the events from reaching us (#1242, UI_FOCUS_FENCE).
 // A frame without the loader can expose a page element, or a cross-origin
 // WindowProxy whose properties throw, under this name through window named
-// access. Read only the global's own property, and only the loader's record
-// (with its Set) counts (#1243 review).
+// access. Read only the global's own property, and only a record of the
+// loader's shape counts (#1243 review).
 const published = Object.getOwnPropertyDescriptor(globalThis, "__navsentinelUiFence")?.value as FocusRecord | undefined;
-const loaderRecord = published?.r instanceof Set ? published : undefined;
+let loaderRecord: FocusRecord | undefined;
+try { if (typeof published?.u === "number") loaderRecord = published; } catch { /* Not the loader's. */ }
 const fence: FocusRecord = loaderRecord ?? { h: false, u: -Infinity, a: false };
 function focusChange(event: Event): void {
   if (event.target instanceof Node) return; // An element's focus or blur, not the window's.
@@ -41,11 +42,27 @@ if (!loaderRecord && typeof window === "object") {
 
 // Video and Document Picture-in-Picture windows stay on top of ours without
 // taking focus, by default over the corner where the toast sits (#1236), here
-// or from another frame of this tab (#1242). Residual: PiP from another tab,
-// including automatic PiP on a tab switch, and a frame loaded after PiP opened.
+// or from another frame of this tab (#1242). The service worker asks every frame
+// of the tab (#1244); only a fresh 'closed' answer arms, so a missing, stale or
+// failed answer refuses, and so does a query in flight for over 300 ms. Residual:
+// PiP from another tab, including automatic PiP on a tab switch, and a 'closed'
+// answer taken just before another frame opens PiP, which still arms until the
+// next query answers or times out: about 0.6 s (250 ms cadence + 300 ms flight).
+let tabPipClosedAt = -Infinity;
+let pipAskedAt = -Infinity;
+let pipAsking = false;
+function askTabPip(): void {
+  const sent = performance.now();
+  if (pipAsking || sent - pipAskedAt < 250) return;
+  pipAsking = true;
+  pipAskedAt = sent;
+  const answer = (open: unknown) => { tabPipClosedAt = open === false ? sent : -Infinity; pipAsking = false; };
+  try { chrome.runtime.sendMessage({ type: "ns-pip" }).then(answer, answer); } catch { answer(true); }
+}
 function pipOpen(): boolean {
-  return !!(document.pictureInPictureElement || fence.r?.size ||
-    (window as { documentPictureInPicture?: { window: Window | null } }).documentPictureInPicture?.window);
+  return !!(document.pictureInPictureElement ||
+    (window as { documentPictureInPicture?: { window: Window | null } }).documentPictureInPicture?.window) ||
+    performance.now() - tabPipClosedAt > 1000 || (pipAsking && performance.now() - pipAskedAt > 300);
 }
 
 /** Security controls need a painted, unobscured exposure window, not just trusted input. */
@@ -134,6 +151,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   function sample(): void {
     // Mutations request a fresh visibility check; unchanged visibility banks exposure.
     observer.takeRecords();
+    askTabPip();
     if (hint && !pipOpen()) { hint.remove(); hint = null; }
     const now = performance.now();
     // Background tabs and stalled rendering cannot bank an exposure window.

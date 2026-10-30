@@ -706,14 +706,22 @@ function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
-  // #1242: relay a frame's Picture-in-Picture state to every frame of its tab,
-  // so approvals in any frame refuse while it is open. Chrome supplies the frame id.
+  // #1244: is a Picture-in-Picture window open in any frame of the sender's tab?
+  // Each frame's loader answers from ground truth (UI_FOCUS_FENCE). A frame that
+  // cannot answer (no content script, gone mid-query) counts as closed; one that
+  // never answers holds the reply, and the asking gate stays refused. No frame
+  // list (not even the top frame) counts as open. The tab-wide {any:true}
+  // broadcast also reaches frames the list omits; only a frame that sees PiP replies.
   if (message.type === "ns-pip") {
-    if (sender.tab?.id !== undefined && sender.frameId !== undefined) {
-      chrome.tabs.sendMessage(sender.tab.id, { type: "ns-pip", open: message.open === true, frame: sender.frameId })
-        .catch(() => {});
-    }
-    return;
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) return;
+    const ask = (message: { type: string; any?: true }, options: chrome.tabs.MessageSendOptions = {}) =>
+      chrome.tabs.sendMessage(tabId, message, options).then((open) => open === true, () => false);
+    chrome.webNavigation.getAllFrames({ tabId })
+      .then((frames) => frames?.length ? Promise.all([ask({ type: "ns-pip", any: true }),
+        ...frames.map(({ frameId }) => ask({ type: "ns-pip" }, { frameId }))]) : [true])
+      .then((answers) => sendResponse(answers.includes(true)), () => sendResponse(true));
+    return true;
   }
 
   if (isPendingDecisionRuntimeMessage(message)) {
@@ -959,6 +967,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // not be blocked here. (#323/disc#3, #360)
         if (pending && !rollbackSendInFlight.has(sendInFlightKey(tabId, pending.url))) {
           trySendRollback(tabId, pending);
+        }
+        // A tabnab or device-code warning whose load-complete send beat the content
+        // script's listener: deliver now that it is listening (active tab only).
+        if (tabnabPendingByTab.get(tabId) && !tabnabPendingByTab.get(tabId)!.w) {
+          chrome.tabs.get(tabId).then((tab) => { if (tab.active) onActivatedHandler(tabId); }).catch(() => {});
         }
       }
     }, false);
@@ -1526,10 +1539,12 @@ function onActivatedHandler(tabId: number): void {
     const reg = httpRegistrable(tab.url);
     // A device-code entry's source was already vetted (a provider's own Docs or repo pages warn).
     if (!reg || (reg === pending.origReg && !pending.k)) return drop();
-    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg, ...(pending.k && { kind: "devicecode" }) }, () => {
-      // The listener never responds, so a delivered message still reports "message port
-      // closed"; only a missing receiver means the toast was not shown.
-      if (!/Receiving end does not exist/.test(chrome.runtime.lastError?.message ?? "")) drop();
+    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg, ...(pending.k && { kind: "devicecode" }) }, (shown) => {
+      // Only the warning listener's own reply means it was shown: an early send can reach a
+      // document whose other listeners are up but not this one ("message port closed").
+      // Unshown entries are retried on the page's ns-ready and on the next load or return.
+      void chrome.runtime.lastError;
+      if (shown === true) drop();
     });
   }).catch(() => {});
 }

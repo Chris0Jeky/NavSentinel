@@ -30,7 +30,7 @@ export function checkDeviceCodeLure(readText: (root: Element | null, max: number
   }
   warned = true;
   showToast({
-    message: "This page copied a code for a Microsoft, Google or GitHub device sign-in page. Only enter such a code if you started the sign-in yourself, on your own TV, console or command line. Entering a code a website or message gave you signs that sender in to your account.",
+    message: "This page copied a code for a Microsoft, Google or GitHub device sign-in page. Enter it only if you started that sign-in yourself: a code a website or message gives you signs its sender in to your account.",
     timeoutMs: 0,
   });
 }

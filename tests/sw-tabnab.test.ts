@@ -63,7 +63,8 @@ async function setup(
       create: vi.fn().mockResolvedValue({}),
       get: vi.fn(async (id: number) => ({ id, ...tabs.get(id) })),
       query: vi.fn().mockResolvedValue([]),
-      sendMessage: vi.fn((_tabId: number, _message: Message, callback?: () => void) => { callback?.(); }),
+      // The page's warning listener replies true; an error means it never ran.
+      sendMessage: vi.fn((_tabId: number, _message: Message, callback?: (shown?: boolean) => void) => { callback?.(browser.runtime.lastError ? undefined : true); }),
     },
     windows: { onFocusChanged: createEvent<(windowId: number) => void>() },
   };
@@ -233,13 +234,25 @@ describe("reverse tabnabbing warning (#1172)", () => {
     expect(swState.tabnabPendingByTab.has(10)).toBe(false);
   });
 
-  it("treats an unanswered but delivered message as delivered (no repeat toast)", async () => {
+  it("keeps the entry when the page received the message but its warning listener did not answer", async () => {
     const { browser, swap, activate, warnings, swState } = await setup();
     await swap();
-    browser.runtime.lastError = { message: "The message port closed before a response was received." };
+    // Another early listener was up, the warning listener was not: "message port closed", no reply.
+    let unanswered = 1;
+    browser.tabs.sendMessage.mockImplementation((_t: number, m: Message, callback?: (shown?: boolean) => void) => {
+      if (m.type === "ns-tabnab-warning" && unanswered-- > 0) {
+        browser.runtime.lastError = { message: "The message port closed before a response was received." };
+        callback?.(undefined);
+        browser.runtime.lastError = undefined;
+        return;
+      }
+      callback?.(true);
+    });
     await activate();
-    browser.runtime.lastError = undefined;
     expect(warnings()).toHaveLength(1);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(true);
+    await activate();
+    expect(warnings()).toHaveLength(2);
     expect(swState.tabnabPendingByTab.has(10)).toBe(false);
   });
 });
