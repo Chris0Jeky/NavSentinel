@@ -1310,6 +1310,65 @@ describe("suite storage and allowlist migration", () => {
     expect(storedOutcomes).toHaveLength(1);
   });
 
+  it.each(["direct", "worker"])("refuses an all-invalid prompt-history import before any %s writes", async (path) => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:settings_v1": { nav: { defaultMode: "strict" } },
+      "sentinelsuite:nav_allowlist_v1": { "saved.example": ["dest.example"] },
+      "sentinelsuite:trusted_domains_v1": ["saved.example"],
+      "sentinelsuite:event_log_v1": [{ id: "saved", ts: 1, kind: "nav_click_block" }],
+      "sentinelsuite:prompt_outcomes_v1": [{ id: "saved", ts: 1, domain: "saved.example", type: "nav", score: 60, outcome: "block" }],
+      "sentinelsuite:adaptive_scores_v1": { "saved.example": { adjustment: -5, sampleCount: 3, lastUpdated: 1 } },
+    });
+    Object.assign(chrome, { runtime: {
+      id: "suite-test", getURL: (path: string) => `chrome-extension://suite-test/${path}`,
+    } });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+    const before = structuredClone(store);
+    const { importAll, handleSuiteImportMessage } = await import("../extension/src/shared/storage");
+    const sender = { id: "suite-test", url: "chrome-extension://suite-test/src/options/options.html" } as chrome.runtime.MessageSender;
+    for (const promptOutcomes of [[null, {}], [{ id: "bad-host", ts: 2, domain: "not a hostname", type: "nav", score: 50, outcome: "allow" }]]) {
+      const payload = { settings: { nav: { defaultMode: "off" } }, allowlist: {}, trustedDomains: [], eventLog: [], promptOutcomes };
+      if (path === "direct") {
+        await expect(importAll(payload)).rejects.toThrow("no valid prompt outcomes");
+      } else {
+        expect(await handleSuiteImportMessage({ type: "ns-suite-import", payload }, sender))
+          .toMatchObject({ ok: false, error: expect.stringContaining("no valid prompt outcomes") });
+      }
+      expect(store).toEqual(before);
+      expect(setSpy).not.toHaveBeenCalled();
+    }
+  });
+
+  it("refuses an all-invalid worker replacement without clearing saved prompt history", async () => {
+    const { chrome, store } = createChromeMock({
+      "sentinelsuite:prompt_outcomes_v1": [{ id: "saved", ts: 1, domain: "saved.example", type: "nav", score: 60, outcome: "block" }],
+      "sentinelsuite:adaptive_scores_v1": { "saved.example": { adjustment: -5, sampleCount: 3, lastUpdated: 1 } },
+    });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const before = structuredClone(store);
+    const setSpy = vi.spyOn(chrome.storage.local, "set");
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+    expect(await handlePromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes: [{}] } as never, {}))
+      .toMatchObject({ ok: false, error: expect.stringMatching(/no valid prompt outcomes/i) });
+    expect(store).toEqual(before);
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it("imports surviving prompt rows from a mixed backup and accepts an explicit empty replacement", async () => {
+    const { chrome, store } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { importAll, handlePromptOutcomeStorageMessage, getPromptOutcomes } = await import("../extension/src/shared/storage");
+    const valid = { id: "valid", ts: 1, domain: "https://example.com/private?secret=omitted", type: "nav", score: 60, outcome: "block" };
+    await importAll({ settings: { logLimit: 700 }, promptOutcomes: [null, valid, {}] });
+    expect(store["sentinelsuite:settings_v1"]).toMatchObject({ logLimit: 700 });
+    expect(await getPromptOutcomes()).toEqual([expect.objectContaining({ id: "valid", domain: "example.com" })]);
+    expect(await handlePromptOutcomeStorageMessage({ type: "ns-prompt-outcome-replace", outcomes: [] }, {}))
+      .toEqual({ ok: true });
+    expect(store["sentinelsuite:prompt_outcomes_v1"]).toEqual([]);
+    expect(store["sentinelsuite:adaptive_scores_v1"]).toEqual({});
+  });
+
   it("handles empty arrays for eventLog and promptOutcomes", async () => {
     const { chrome, store } = createChromeMock({
       "sentinelsuite:event_log_v1": [{ id: "old", ts: 1, kind: "nav_click_block" }],
