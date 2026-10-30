@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // wrote, then warns on activation when the registrable domain changed.
 
 type Message = { type: string; [key: string]: unknown };
-type TabInfo = { url?: string; active?: boolean };
+type TabInfo = { url?: string; active?: boolean; status?: string };
 
 function createEvent<T extends (...args: never[]) => unknown>() {
   const listeners: T[] = [];
@@ -33,7 +33,10 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const ORIGINAL = "https://login.bank.example/";
 const SWAPPED = "https://login.bank-example.test/";
 
-async function setup(opener: TabInfo = { url: ORIGINAL, active: false }) {
+async function setup(
+  opener: TabInfo = { url: ORIGINAL, active: false },
+  { lastUrl }: { lastUrl?: string } = {},
+) {
   const tabs = new Map<number, TabInfo>([[10, opener], [20, { url: "https://child.example/", active: true }]]);
   const browser = {
     runtime: {
@@ -55,7 +58,7 @@ async function setup(opener: TabInfo = { url: ORIGINAL, active: false }) {
     tabs: {
       onCreated: createEvent<(tab: { id: number; openerTabId: number }) => void>(),
       onRemoved: createEvent<(tabId: number) => void>(),
-      onUpdated: createEvent(),
+      onUpdated: createEvent<(tabId: number, change: { status?: string }, tab: { id: number; active: boolean; url?: string }) => void>(),
       onActivated: createEvent<(info: { tabId: number }) => void>(),
       create: vi.fn().mockResolvedValue({}),
       get: vi.fn(async (id: number) => ({ id, ...tabs.get(id) })),
@@ -67,12 +70,13 @@ async function setup(opener: TabInfo = { url: ORIGINAL, active: false }) {
   await import("../extension/src/sw/sw");
   const { swState } = await import("../extension/src/shared/session_state");
   await swState.hydrate();
+  if (lastUrl) swState.lastUrlByTab.set(10, lastUrl);
   browser.tabs.onCreated.emit({ id: 20, openerTabId: 10 });
   await flush();
-  const swap = async (childTabId = 20) => {
+  const swap = async (childTabId = 20, writeUrl: string = SWAPPED) => {
     tabs.get(10)!.url = SWAPPED;
     browser.runtime.onMessage.emit(
-      { type: "ns-dblclick-opener-nav", url: SWAPPED, ts: Date.now() }, { tab: { id: childTabId } }, () => {});
+      { type: "ns-dblclick-opener-nav", url: writeUrl, ts: Date.now() }, { tab: { id: childTabId } }, () => {});
     await flush();
   };
   const activate = async (tabId = 10) => {
@@ -151,5 +155,53 @@ describe("reverse tabnabbing warning (#1172)", () => {
     expect(swState.tabnabPendingByTab.has(10)).toBe(false);
     await activate();
     expect(warnings()).toHaveLength(0);
+  });
+
+  it("takes the opener domain synchronously from the last committed URL", async () => {
+    const { browser, swState, swap } = await setup(undefined, { lastUrl: ORIGINAL });
+    // Creation needed no tabs.get, so a write right after creation cannot lose that race.
+    expect(browser.tabs.get).not.toHaveBeenCalled();
+    expect(swState.childWindowByTab.get(20)?.openerReg).toBe("bank.example");
+    await swap();
+    expect(swState.tabnabPendingByTab.get(10)).toMatchObject({ origReg: "bank.example" });
+  });
+
+  it("does not record a same-site write such as an SSO start", async () => {
+    const { swState, swap } = await setup();
+    await swap(20, "https://login.bank.example/sso/start");
+    expect(swState.tabnabPendingByTab.size).toBe(0);
+  });
+
+  it.each(["", "not a url"])("records when the write URL is empty or unparseable (%j)", async (writeUrl) => {
+    const { swState, swap } = await setup();
+    await swap(20, writeUrl);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(true);
+  });
+
+  it("keeps the entry while the tab is loading and delivers on onUpdated complete", async () => {
+    const { browser, swap, activate, warnings, swState, tabs } = await setup();
+    await swap();
+    tabs.get(10)!.status = "loading";
+    await activate();
+    expect(warnings()).toHaveLength(0);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(true);
+    tabs.get(10)!.status = "complete";
+    browser.tabs.onUpdated.emit(10, { status: "complete" }, { id: 10, active: true, url: SWAPPED });
+    await flush();
+    expect(warnings()).toHaveLength(1);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(false);
+  });
+
+  it("keeps the entry when delivery fails and clears it once a send succeeds", async () => {
+    const { browser, swap, activate, warnings, swState } = await setup();
+    await swap();
+    browser.runtime.lastError = { message: "Receiving end does not exist" };
+    await activate();
+    browser.runtime.lastError = undefined;
+    expect(warnings()).toHaveLength(1);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(true);
+    await activate();
+    expect(warnings()).toHaveLength(2);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(false);
   });
 });

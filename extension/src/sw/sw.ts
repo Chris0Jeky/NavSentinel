@@ -397,8 +397,10 @@ function httpRegistrable(url: string | undefined): string {
 
 // Called when a known child wrote opener.location. Only a background opener is
 // recorded: the user cannot have watched the swap, and returning fires onActivated.
-function recordTabnab(openerTabId: number, origReg: string | undefined): void {
-  if (!origReg) return;
+function recordTabnab(openerTabId: number, origReg: string | undefined, writeUrl: unknown): void {
+  // A same-site write (e.g. /sso/start that later 302s to an IdP) is not a swap. An empty
+  // or unparseable URL stays conservative and records.
+  if (!origReg || httpRegistrable(String(writeUrl ?? "")) === origReg) return;
   chrome.tabs.get(openerTabId).then((tab) => {
     if (tab.active !== false) return;
     const now = Date.now();
@@ -1074,7 +1076,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
       }
 
-      recordTabnab(childEntry.openerTabId, childEntry.openerReg);
+      recordTabnab(childEntry.openerTabId, childEntry.openerReg, message.url);
 
       chrome.tabs.sendMessage(
         childEntry.openerTabId,
@@ -1416,13 +1418,17 @@ function onCreatedHandler(tabId: number, openerTabId: number): void {
   // original age and observed-write flag, including on conflicting duplicates.
   if (childWindowByTab.has(tabId)) return;
   pruneStaleChildWindows();
+  // The opener's pre-swap registrable domain (#1172). lastUrlByTab is read synchronously so a
+  // write arriving before tabs.get resolves still has it; tabs.get is only the fallback.
+  const known = httpRegistrable(lastUrlByTab.get(openerTabId));
   childWindowByTab.set(tabId, {
     openerTabId,
     createdAt: Date.now(),
-    openerNavObserved: false
+    openerNavObserved: false,
+    ...(known ? { openerReg: known } : {})
   });
   swState.persistMap(childWindowByTab, "childWindow");
-  // Capture the opener's pre-swap registrable domain now (#1172); no write has happened yet.
+  if (known) return;
   chrome.tabs.get(openerTabId).then((tab) => {
     const entry = childWindowByTab.get(tabId);
     const openerReg = httpRegistrable(tab.url);
@@ -1439,14 +1445,18 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 function onActivatedHandler(tabId: number): void {
   const pending = tabnabPendingByTab.get(tabId);
   if (!pending) return;
-  tabnabPendingByTab.delete(tabId);
-  swState.persistMap(tabnabPendingByTab, "tabnabPending");
-  if (Date.now() - pending.ts > TABNAB_MAX_AGE_MS) return;
+  const drop = () => {
+    tabnabPendingByTab.delete(tabId);
+    swState.persistMap(tabnabPendingByTab, "tabnabPending");
+  };
+  if (Date.now() - pending.ts > TABNAB_MAX_AGE_MS) return drop();
   chrome.tabs.get(tabId).then((tab) => {
+    // Keep the entry while loading (onUpdated retries) or until delivery succeeds.
+    if (tab.status === "loading") return;
     const reg = httpRegistrable(tab.url);
-    if (!reg || reg === pending.origReg) return;
+    if (!reg || reg === pending.origReg) return drop();
     chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg }, () => {
-      if (chrome.runtime.lastError) { /* content script not ready */ }
+      if (!chrome.runtime.lastError) drop();
     });
   }).catch(() => {});
 }
@@ -1506,6 +1516,9 @@ function onUpdatedHandler(
   changeInfo: chrome.tabs.TabChangeInfo,
   tab: chrome.tabs.Tab
 ): void {
+  if (changeInfo.status === "complete" && tab.active && tabnabPendingByTab.has(tabId)) {
+    onActivatedHandler(tabId);
+  }
   const pendingRollback = pendingRollbackByTab.get(tabId);
   // Skip if a send is already in flight: onUpdated can fire twice (loading->complete,
   // or url+status) before the async callback resolves, and re-sending the same entry
