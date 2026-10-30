@@ -272,9 +272,9 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   listener that stops the event still gets the credential prompt, and Cancel sends nothing; (3) a search form in
   a page's own web component still submits. A failure gets a revert PR for `2f28d476`.
 
-- **AI-63 (#1152):** with automatic overlay cleanup turned on in Options, serve the Gym and open
-  `gym/overlay-nesting-frame.html`: deep and shadow-root traps are hidden with an Undo card, and the slotted
-  dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
+- **AI-63 (#1152):** with automatic overlay cleanup turned on in Options, serve the Gym (`npm run gym:serve`) and
+  open `overlay-nesting-lab.html?case=deep-static` and `?case=shadow-static`: the pre-existing deep and shadow-root
+  traps are hidden on load with an Undo card. Open `?case=deep-benign`: the slotted dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
   (residual risks are tracked in #1189). A failure gets a revert PR for `2b6523af`.
 
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
