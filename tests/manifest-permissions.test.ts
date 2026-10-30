@@ -37,7 +37,7 @@ function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[]
     const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/);
     if (marker) {
       const run = marker[1];
-      if (!fence) fence = { char: run[0], length: run.length };
+      if (!fence) { fence = { char: run[0], length: run.length }; lines.push(""); }
       else if (run[0] === fence.char && run.length >= fence.length && /^\s*$/.test(line.slice(marker[0].length))) fence = null;
       continue;
     }
@@ -112,6 +112,7 @@ describe("manifest permissions", () => {
     expect(findUndisclosedGrants(manifest, "| `clipboardRead` | No permission section. |\n")).toEqual(["permissions: clipboardRead"]);
     expect(findUndisclosedGrants(manifest, "### Permission Justifications\n| Permission | Justification |\n| `clipboardRead` | no delimiter |\n")).toEqual(["permissions: clipboardRead"]);
     expect(findUndisclosedGrants(manifest, "```md\n" + heading + "| `clipboardRead` | example |\n```\n")).toEqual(["permissions: clipboardRead"]);
+    expect(findUndisclosedGrants(manifest, heading + "| `storage` | yes |\n```text\nexample\n```\n| `clipboardRead` | not a table row |\n")).toEqual(["permissions: clipboardRead"]);
   });
 
   it.each(MANIFESTS)("%s requests no declarativeNetRequest permission", (name) => {
