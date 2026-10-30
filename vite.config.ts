@@ -32,6 +32,23 @@ function profileAssets(selectedProfile: ReleaseProfile): Plugin {
   };
 }
 
+/**
+ * Strip source indentation from built extension pages. Vite does not minify HTML,
+ * and a newline followed by spaces collapses to the same whitespace as a bare
+ * newline in rendering, except inside <pre> and <textarea>, so those pages are
+ * left untouched. Frees total-dist budget for protections.
+ */
+function stripHtmlIndentation(): Plugin {
+  return {
+    name: "navsentinel-strip-html-indentation",
+    transformIndexHtml: {
+      order: "post",
+      handler: (html) =>
+        /<(pre|textarea)\b/i.test(html) ? html : html.replace(/\n[ \t]+/g, "\n").replace(/\n{2,}/g, "\n"),
+    },
+  };
+}
+
 export default defineConfig({
   root: "extension",
   resolve: {
@@ -53,7 +70,7 @@ export default defineConfig({
       ),
     },
   },
-  plugins: [profileAssets(profile), crx({ manifest: profiledManifest })],
+  plugins: [profileAssets(profile), crx({ manifest: profiledManifest }), stripHtmlIndentation()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
