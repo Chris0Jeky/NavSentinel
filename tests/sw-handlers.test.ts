@@ -139,6 +139,7 @@ function createChromeMock(initialLocalStore: Record<string, unknown> = {}) {
         onCreated: tabCreated,
         onRemoved: tabRemoved,
         onUpdated: tabUpdated,
+        onActivated: createEvent(),
         create: vi.fn().mockResolvedValue({}),
         get: vi.fn().mockRejectedValue(new Error("tab not configured")),
         query: vi.fn().mockResolvedValue([]),

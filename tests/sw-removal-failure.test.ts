@@ -47,7 +47,7 @@ function createChromeMock() {
       getAllFrames: vi.fn().mockResolvedValue([]),
     },
     tabs: {
-      onCreated, onRemoved, onUpdated: createEvent(),
+      onCreated, onRemoved, onUpdated: createEvent(), onActivated: createEvent(),
       create: vi.fn().mockResolvedValue({}), get: vi.fn().mockResolvedValue({}),
       query: vi.fn().mockResolvedValue([]),
       sendMessage: vi.fn((_tabId: number, _message: Message, callback?: () => void) => { callback?.(); }),

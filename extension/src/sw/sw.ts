@@ -88,6 +88,8 @@ const TYPED_ORIGIN_MAX_MS = 15_000;
 const USER_NAV_CONTEXT_TTL_MS = 10_000;
 const DBLCLICK_CHILD_MAX_AGE_MS = 5_000;
 const DBLCLICK_CHILD_PRUNE_LIMIT = 50;
+const TABNAB_MAX_AGE_MS = 30 * 60_000;
+const TABNAB_PRUNE_LIMIT = 50;
 const OAUTH_FLOW_MAX_AGE_MS = 60_000;
 const OAUTH_FLOW_PRUNE_LIMIT = 50;
 
@@ -381,6 +383,37 @@ function pruneStaleChildWindows(): void {
     }
   }
   swState.persistMap(childWindowByTab, "childWindow");
+}
+
+// --- Reverse tabnabbing (#1172): warn when a child swapped a hidden opener tab ---
+const tabnabPendingByTab = swState.tabnabPendingByTab;
+
+function httpRegistrable(url: string | undefined): string {
+  try {
+    const u = new URL(url ?? "");
+    return u.protocol === "http:" || u.protocol === "https:" ? getRegistrableDomain(u.hostname) : "";
+  } catch { return ""; }
+}
+
+// Called when a known child wrote opener.location. Only a background opener is
+// recorded: the user cannot have watched the swap, and returning fires onActivated.
+function recordTabnab(openerTabId: number, origReg: string | undefined): void {
+  if (!origReg) return;
+  chrome.tabs.get(openerTabId).then((tab) => {
+    if (tab.active !== false) return;
+    const now = Date.now();
+    for (const [id, e] of tabnabPendingByTab) {
+      if (now - e.ts > TABNAB_MAX_AGE_MS) tabnabPendingByTab.delete(id);
+    }
+    // Keep the first record: a later child may have been opened after the swap.
+    if (tabnabPendingByTab.has(openerTabId)) return;
+    if (tabnabPendingByTab.size >= TABNAB_PRUNE_LIMIT) {
+      const oldest = [...tabnabPendingByTab.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+      if (oldest) tabnabPendingByTab.delete(oldest[0]);
+    }
+    tabnabPendingByTab.set(openerTabId, { origReg, ts: now });
+    swState.persistMap(tabnabPendingByTab, "tabnabPending");
+  }).catch(() => {});
 }
 
 function clearPendingTabState(
@@ -1041,6 +1074,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
       }
 
+      recordTabnab(childEntry.openerTabId, childEntry.openerReg);
+
       chrome.tabs.sendMessage(
         childEntry.openerTabId,
         {
@@ -1387,6 +1422,33 @@ function onCreatedHandler(tabId: number, openerTabId: number): void {
     openerNavObserved: false
   });
   swState.persistMap(childWindowByTab, "childWindow");
+  // Capture the opener's pre-swap registrable domain now (#1172); no write has happened yet.
+  chrome.tabs.get(openerTabId).then((tab) => {
+    const entry = childWindowByTab.get(tabId);
+    const openerReg = httpRegistrable(tab.url);
+    if (!entry || !openerReg) return;
+    entry.openerReg = openerReg;
+    swState.persistMap(childWindowByTab, "childWindow");
+  }).catch(() => {});
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  if (!swState.hydrated) { void hydrateReady.then(() => onActivatedHandler(tabId)); return; }
+  onActivatedHandler(tabId);
+});
+function onActivatedHandler(tabId: number): void {
+  const pending = tabnabPendingByTab.get(tabId);
+  if (!pending) return;
+  tabnabPendingByTab.delete(tabId);
+  swState.persistMap(tabnabPendingByTab, "tabnabPending");
+  if (Date.now() - pending.ts > TABNAB_MAX_AGE_MS) return;
+  chrome.tabs.get(tabId).then((tab) => {
+    const reg = httpRegistrable(tab.url);
+    if (!reg || reg === pending.origReg) return;
+    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg }, () => {
+      if (chrome.runtime.lastError) { /* content script not ready */ }
+    });
+  }).catch(() => {});
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
