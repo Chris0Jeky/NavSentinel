@@ -217,13 +217,10 @@ Answer these in the estate cockpit or in chat. Each record is `agent-hq/decision
 
 - **`navsentinel-main-guard-budget-20261023`**: raise the `main_guard` (MAIN-world) perf budget so
   #1141's captured-natives fix, and later #1134 and #1017, can land? #1141 stays open until it is answered.
-- **`navsentinel-browser-pr-retroactive-gate3-20261024`**: may browser-facing PRs land on automated gates
-  (exact-head CI, one independent review, green branded E2E and acceptance), with your Gate-3 check
-  afterwards on the merged build, as for AI-48 to AI-56? #1140 (visible, armed approvals for #1139) and
-  #1065 (captured `closest`) wait on it.
 
 ### Retroactive Gate-3 checks (AI-48 onward)
 
+Standing rule since 2026-10-26 (D-2026-10-26-A): every browser-facing PR lands on automated gates and gets a row here.
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
 Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
 (`scripts/check-perf-budget.mjs`), and Chris runs its branded-Chrome check afterwards on the merged build. A
@@ -245,8 +242,18 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-52 | #1072 CRXJS 3 build pipeline | merge commit `44d8875a` (merged 2026-10-24) | OPEN — not run |
 | AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
+| AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
+  (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
+  copies and paste shows the expected text; (2) select text and press Ctrl+C: paste is unchanged; (3) open the
+  Gym ClickFix page and click its fake verification: the ClickFix warning still appears. Same-realm bypass
+  resistance (prototype calls, a deleted own property, cut, obfuscated commands) is covered by
+  `tests/main-guard-clipboard-native.test.ts`, `tests/main-guard-execcommand.test.ts`,
+  `tests/clickfix-detector.test.ts` and `tests/e2e/clipboard-native-contract.spec.ts`; natives taken from an
+  uncovered about:blank frame remain open under #1134. A failure gets a revert PR for the merge commit.
 
 - **AI-58 (#1165):** follow the [journal continuity checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional history. Check retained expansion, keyboard focus and reading position during arrivals; Show latest and explicit navigation; removal after replacement, eviction and clear; and the unchanged frozen export preview. Confirm screen-reader and physical-input behavior. The linked merge receipt identifies the exact merge commit. Automated evidence does not complete this check; a failed owner check gets a revert PR for that commit.
 

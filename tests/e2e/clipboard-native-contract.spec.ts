@@ -45,7 +45,11 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
     const result = await page.evaluate(async () => {
       const clipboard = navigator.clipboard;
       const prototype = Object.getPrototypeOf(clipboard) as Clipboard;
-      const native = prototype.writeText;
+      // The guard wraps Clipboard.prototype (#1166), so the native control comes
+      // from a second realm: an about:blank frame the content scripts do not
+      // enter. If MAIN-world coverage reaches such frames (#1134), find another.
+      const frame = document.body.appendChild(document.createElement("iframe"));
+      const native = (frame.contentWindow as unknown as { Clipboard: typeof Clipboard }).Clipboard.prototype.writeText;
       const guarded = clipboard.writeText;
       const rows: Array<{
         arm: string; name: string; syncError: string | null; promise: boolean;
@@ -57,6 +61,9 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
       // ponytail: a 2 s window would also hide a guard that resolves before its
       // write lands; the attached read counts show how long each row needed.
       let reads = 0;
+      // The control's Promise and errors come from the frame's realm, so compare
+      // by brand and name rather than instanceof.
+      const errorName = (failure: unknown): string => (failure as Error | null)?.name ?? String(failure);
       const settle = async (want: string): Promise<string> => {
         let seen = await clipboard.readText();
         reads++;
@@ -100,11 +107,11 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
           let error: string | null = null;
           let returned: unknown;
           try { returned = Reflect.apply(write, clipboard, args); }
-          catch (failure) { syncError = failure instanceof Error ? failure.name : String(failure); }
+          catch (failure) { syncError = errorName(failure); }
           const conversionsAtReturn = conversions;
-          const promise = returned instanceof Promise;
+          const promise = Object.prototype.toString.call(returned) === "[object Promise]";
           try { await returned; }
-          catch (failure) { error = failure instanceof Error ? failure.name : String(failure); }
+          catch (failure) { error = errorName(failure); }
           // Accepted writes must expose the actual fixture text. Rejected calls
           // are inspected only for their Promise/error contract, never read.
           const copied = expected !== null && syncError === null && error === null
@@ -116,15 +123,19 @@ test("clipboard writeText preserves native conversion, copied contents and Promi
       return {
         rows, nativeLength: native.length, guardedLength: guarded.length,
         distinct: native !== guarded,
-        prototypeUnchanged: prototype.writeText === native,
+        nativeControl: Function.prototype.toString.call(native).includes("[native code]"),
+        prototypeGuarded: prototype.writeText === guarded,
+        instanceProperty: Object.hasOwn(clipboard, "writeText"),
       };
     });
     await testInfo.attach("clipboard-native-contract", {
       body: Buffer.from(JSON.stringify({ browser: context.browser()?.version(), ...result, denied }, null, 2)),
       contentType: "application/json",
     });
-    expect(result.distinct, "the control must bypass the installed instance wrapper").toBe(true);
-    expect(result.prototypeUnchanged).toBe(true);
+    expect(result.distinct, "the control must bypass the installed wrapper").toBe(true);
+    expect(result.nativeControl, "the second-realm control must be an unwrapped native").toBe(true);
+    expect(result.prototypeGuarded, "the guard wraps Clipboard.prototype (#1166)").toBe(true);
+    expect(result.instanceProperty, "no instance property a page could delete").toBe(false);
     expect(result.nativeLength).toBe(1);
     expect(result.guardedLength).toBe(1);
     expect(result.rows).toHaveLength(22);
