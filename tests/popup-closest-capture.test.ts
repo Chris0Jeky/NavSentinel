@@ -19,6 +19,7 @@ function decisions(overrides: Record<string, unknown> = {}) {
     ...helpers, Node, Element,
     nativeClosest: Function.prototype.call.bind(Element.prototype.closest),
     nativeGetAttribute: Function.prototype.call.bind(Element.prototype.getAttribute),
+    natives: { lower: Function.prototype.call.bind(String.prototype.toLowerCase), min: Math.min },
     ...overrides,
   }) as {
     findPopupIntentSource(target: EventTarget | null): Element | null;

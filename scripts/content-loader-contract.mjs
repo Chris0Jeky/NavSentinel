@@ -102,8 +102,13 @@ export const EARLY_MAIN_GET_ATTRIBUTE =
 export const EARLY_MAIN_CLOSEST =
   "try{const closest=Element.prototype.closest;if(typeof closest==='function')Object.defineProperty(globalThis,'__navsentinelMainClosest',{value:Function.prototype.call.bind(closest),writable:false,configurable:false})}catch(_){}";
 
+// Capture invokers before the async import, including the bridge's listener
+// setter: calling a page replacement with the genuine port leaks its authority.
+// Freeze the record, not browser prototypes. Public invokers confer no port.
+export const EARLY_MAIN_NATIVES = `try{const bind=fn=>Function.prototype.call.bind(fn),get=(p,k)=>bind(Object.getOwnPropertyDescriptor(p,k).get),define=Reflect.defineProperty,push=(a,v)=>{define(a,a.length,{value:v,writable:true,enumerable:true,configurable:true});return a.length},port=MessagePort.prototype,U=URL,M=Map,W=WeakSet,keys=bind(M.prototype.keys),next=bind(Object.getPrototypeOf(new M().keys()).next),exec=bind(RegExp.prototype.exec),indexOf=bind(String.prototype.indexOf),slice=bind(String.prototype.slice),href=get(U.prototype,'href'),origin=get(U.prototype,'origin'),pathname=get(U.prototype,'pathname'),protocol=get(U.prototype,'protocol');Object.defineProperty(globalThis,'__navsentinelMainNatives',{value:Object.freeze({apply:Reflect.apply,lower:bind(String.prototype.toLowerCase),trim:bind(String.prototype.trim),includes:bind(String.prototype.includes),starts:bind(String.prototype.startsWith),split:(s,sep)=>{if(sep==='')return[s];const a=[];let i=0,j;while((j=indexOf(s,sep,i))>=0){push(a,slice(s,i,j));i=j+sep.length}push(a,slice(s,i));return a},define,push,setHas:bind(Set.prototype.has),test:(r,s)=>exec(r,s)!==null,map:()=>new M(),mapGet:bind(M.prototype.get),mapSet:bind(M.prototype.set),mapDelete:bind(M.prototype.delete),mapEach:bind(M.prototype.forEach),mapSize:get(M.prototype,'size'),oldest:m=>next(keys(m)),weak:()=>new W(),weakHas:bind(W.prototype.has),weakAdd:bind(W.prototype.add),weakDelete:bind(W.prototype.delete),finite:Number.isFinite,min:Math.min,max:Math.max,parseFloat:Number.parseFloat,decode:decodeURIComponent,url:(s,b)=>{const u=b===undefined?new U(s):new U(s,b);return{href:href(u),origin:origin(u),pathname:pathname(u),protocol:protocol(u)}},post:bind(port.postMessage),start:bind(port.start),close:bind(port.close),listen:bind(Object.getOwnPropertyDescriptor(port,'onmessage').set),data:get(MessageEvent.prototype,'data'),source:get(MessageEvent.prototype,'source'),ports:get(MessageEvent.prototype,'ports'),stop:bind(Event.prototype.stopImmediatePropagation),on:bind(EventTarget.prototype.addEventListener)}),writable:false,configurable:false})}catch(_){} `;
+
 /** Every early native capture, in order: installed and asserted as one block. */
-export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}`;
+export const EARLY_MAIN_PRELUDE = `${EARLY_MAIN_CLOCK}${EARLY_MAIN_BASE_URI}${EARLY_MAIN_FORM_TARGET}${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}${EARLY_MAIN_NATIVES}`;
 
 const STRICT_MARKER = "'use strict';";
 const ASYNC_IMPORT = "await import(";
@@ -125,6 +130,10 @@ export function installEarlyMainClockText(generated) {
  */
 export function assertEarlyMainPrelude(loader) {
   assertEarlyMainClock(loader);
+  const nativesFirst = loader.indexOf(EARLY_MAIN_NATIVES);
+  if (nativesFirst < 0 || loader.indexOf(EARLY_MAIN_NATIVES, nativesFirst + EARLY_MAIN_NATIVES.length) >= 0) {
+    throw new Error("MAIN-world guard loader needs exactly one early natives capture");
+  }
   const baseFirst = loader.indexOf(EARLY_MAIN_BASE_URI);
   if (baseFirst < 0) throw new Error("MAIN-world guard loader is missing early baseURI capture");
   if (loader.indexOf(EARLY_MAIN_BASE_URI, baseFirst + EARLY_MAIN_BASE_URI.length) >= 0) {

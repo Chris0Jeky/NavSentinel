@@ -120,8 +120,13 @@ export function instrumentClipboardQueue(source: string, artifactId: string): st
       drain.parent.initializer !== drain || !ts.isObjectBindingPattern(drain.parent.name)) fail("MAIN flush declaration changed");
   const items = only(drain.parent.name.elements.filter((entry) =>
     (entry.propertyName ?? entry.name).getText(file) === "items" && ts.isIdentifier(entry.name)), "drain items binding");
-  const sendLoop = only(nodes(flush, ts.isForOfStatement).filter((loop) =>
-    loop.expression.getText(file) === items.name.getText(file) && nodes(loop, ts.isCallExpression).some((call) =>
+  // #1141 drains by index so a page-replaced array iterator never sees the messages.
+  const itemsName = items.name.getText(file);
+  const sendLoop = only(nodes(flush, (node): node is ts.ForOfStatement | ts.ForStatement =>
+    ts.isForOfStatement(node) || ts.isForStatement(node)).filter((loop) =>
+    (ts.isForOfStatement(loop) ? loop.expression.getText(file) === itemsName
+      : loop.condition?.getText(file).replace(/\s/gu, "").endsWith(`<${itemsName}.length`)) &&
+    nodes(loop, ts.isCallExpression).some((call) =>
       ts.isIdentifier(call.expression) && call.expression.text === postName)), "drained-message send loop");
   const flushName = flush.name.text;
   const flushCall = only(nodes(file, ts.isCallExpression).filter((call) =>

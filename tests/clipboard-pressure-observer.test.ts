@@ -23,7 +23,7 @@ const declarations = file.statements.filter((node) =>
   (ts.isFunctionDeclaration(node) && node.name && functions.has(node.name.text)) ||
   (ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) =>
     ts.isIdentifier(declaration.name) && variables.has(declaration.name.text))) ||
-  (ts.isExpressionStatement(node) && node.getText(file).startsWith("window.addEventListener(") && node.getText(file).includes("ns-challenge-response")));
+  (ts.isExpressionStatement(node) && node.getText(file).startsWith("natives.on(window,") && node.getText(file).includes("ns-challenge-response")));
 if (declarations.length !== functions.size + variables.size + 1) throw new Error("Expected the actual queue, clipboard and challenge declarations");
 const compiled = ts.transpileModule(declarations.map((node) => node.getText(file)).join("\n"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
@@ -64,6 +64,17 @@ function boot(regressed = false, observed = true, nativeWrite: (value: string) =
     generateChallenge: () => "actual-challenge", handleBridgeMessage: () => undefined,
     nativeClipboardWriteText: clipboard.writeText, nativeClipboardWrite: null,
     nativeApply: Reflect.apply, nowMs: () => 105, debug: false,
+    // Modeled document-start natives (#1141): the same port and event surface.
+    natives: {
+      define: Reflect.defineProperty, setHas: (set: Set<string>, value: string) => set.has(value),
+      starts: (text: string, prefix: string) => text.startsWith(prefix),
+      on: (target: typeof window, name: string, callback: (event: unknown) => void) => target.addEventListener(name, callback),
+      source: (event: { source: unknown }) => event.source, data: (event: { data: unknown }) => event.data,
+      ports: (event: { ports: unknown }) => event.ports, stop: () => undefined,
+      post: (port: MessagePort, message: BridgeRow) => port.postMessage(message),
+      listen: (port: MessagePort, callback: (event: { data: unknown }) => void) => { port.onmessage = callback; },
+      start: (port: MessagePort) => port.start(), close: (port: MessagePort) => port.close(),
+    },
   });
   vm.runInContext(observed ? instrumentClipboardQueue(compiled, "test-artifact") : compiled, context);
   vm.runInContext('patchClipboard();postToIsolated("ns-main-guard-ready");', context);
