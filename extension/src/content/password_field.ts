@@ -45,10 +45,11 @@ import { domAttribute, domProperty } from "./dom_access";
  * claims; broadening the model (with FP/TP measurement) is tracked in #199.
  */
 
-// Inputs ever seen as a password field (#1220). A page can flip `type` to text
-// just before submit (e.g. on pointerdown of a "show password" lookalike), so
-// the submit-time check must remember what the user typed a password into.
-const seenAsPassword = new WeakSet<Element>();
+// Credential fields and their forms seen while they still looked like one (#1220).
+// A page can flip `type` to text, swap in a clone, or copy the value to a hidden
+// input just before submit, so the submit-time check remembers both.
+const seenFields = new WeakSet<Element>();
+const seenForms = new WeakSet<Element>();
 
 // Types that never render typed text; everything else (including unknown types,
 // which the browser treats as text) can be masked with `-webkit-text-security`.
@@ -68,7 +69,7 @@ function isCssMasked(el: Element, type: string): boolean {
 }
 
 /**
- * True for an input the user types a secret into. (#820, #1220)
+ * ASCII case-insensitive `type=password` match for an element. (#820)
  *
  * The `type` attribute is an enumerated keyword: per spec the browser matches
  * it ASCII case-insensitively (`type="PASSWORD"` renders a native masked
@@ -79,25 +80,62 @@ function isCssMasked(el: Element, type: string): boolean {
  * spec semantics exactly (no whitespace trimming on either side: like the
  * browser, `type="password "` does NOT match).
  *
- * Also true for a text input that renders as dots via `-webkit-text-security`
- * (a phishing kit's lookalike), and for an input that was ever seen as a
- * password field (a later flip to text/hidden does not change what it holds).
- * The only side effect is remembering such an input in a WeakSet.
+ * Type only, with no style reads: this is shared by scoring lanes that must
+ * stay cheap. The credential guard uses {@link isCredentialField} instead.
  */
 export function isPasswordTypeInput(el: Element): boolean {
-  if (domProperty(Element.prototype, el, "tagName").toLowerCase() !== "input") return false;
-  const type = (domAttribute(el, "type") ?? "").toLowerCase();
-  if (type === "password" || seenAsPassword.has(el) || isCssMasked(el, type)) {
-    seenAsPassword.add(el);
-    return true;
-  }
-  return false;
+  return (
+    domProperty(Element.prototype, el, "tagName").toLowerCase() === "input" &&
+    (domAttribute(el, "type") ?? "").toLowerCase() === "password"
+  );
 }
 
-/** Event listener: remember the focused or edited input if it is a password field. */
+/**
+ * True for an input the user types a secret into, however it is disguised
+ * (#1220); used by the credential guard only. Beyond `type=password` it is true
+ * for an input remembered as one (a later flip to text/hidden does not change
+ * what it holds), one with an `autocomplete` of current-password or
+ * new-password, and a text-like input rendered as dots via
+ * `-webkit-text-security`. Pure: it remembers nothing.
+ */
+export function isCredentialField(el: HTMLInputElement): boolean {
+  if (isPasswordTypeInput(el) || seenFields.has(el)) return true;
+  const ac = (domAttribute(el, "autocomplete") ?? "").toLowerCase().split(/\s+/);
+  if (ac.includes("current-password") || ac.includes("new-password")) return true;
+  return isCssMasked(el, (domAttribute(el, "type") ?? "").toLowerCase());
+}
+
+/** True when a password field of this form was remembered. */
+export function isRememberedPasswordForm(form: HTMLFormElement): boolean {
+  return seenForms.has(form);
+}
+
+function remember(el: HTMLInputElement): void {
+  seenFields.add(el);
+  const form = domProperty(HTMLInputElement.prototype, el, "form");
+  if (form) seenForms.add(form);
+}
+
+/**
+ * Event listener (focusin, input): remember a credential field and its form,
+ * and any form on the event path, while it still looks like one. Style is read
+ * on focusin only, so typing in a plain text field costs nothing extra.
+ */
 export function rememberPasswordInput(e: Event): void {
-  const t = e.composedPath()[0];
-  if (t instanceof Element) isPasswordTypeInput(t);
+  const path = e.composedPath();
+  const t = path[0];
+  if (!(t instanceof HTMLInputElement)) return;
+  if (!isPasswordTypeInput(t) && !(e.type === "focusin" && isCredentialField(t))) return;
+  remember(t);
+  for (const n of path) if (n instanceof HTMLFormElement) seenForms.add(n);
+}
+
+/** MutationObserver callback (attribute `type`, with old values): remember inputs that were password. */
+export function rememberFlippedPasswords(records: MutationRecord[]): void {
+  for (const r of records) {
+    const t = r.target;
+    if (t instanceof HTMLInputElement && (r.oldValue ?? "").toLowerCase() === "password") remember(t);
+  }
 }
 
 /**

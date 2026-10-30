@@ -106,6 +106,50 @@ test("a password field flipped to text on pointerdown of the submit button still
   );
 });
 
+test("disabling the password field and copying it to a hidden input on pointerdown still raises the prompt @regression", async () => {
+  await withVictimPage(
+    `${FORM_HEAD}<input name="pw" id="pw" type="password">${FORM_TAIL}
+     <script>document.getElementById("go").addEventListener("pointerdown", () => {
+       const pw = document.getElementById("pw");
+       const copy = document.createElement("input");
+       copy.type = "hidden"; copy.name = pw.name; copy.value = pw.value;
+       pw.disabled = true;
+       pw.form.appendChild(copy);
+     });</script>`,
+    async (page, posts) => {
+      await page.fill("#pw", "dummy-canary");
+      await page.click("#go", { noWaitAfter: true });
+      expect(await page.evaluate(() => (document.getElementById("pw") as HTMLInputElement).disabled)).toBe(true);
+      await waitForCredentialModal(page);
+      await page.waitForTimeout(500);
+      expect(posts(), "no hidden-copy POST before a decision").toBe(0);
+      await clickModalButton(page, "Cancel");
+      await page.waitForTimeout(500);
+      expect(posts(), "no hidden-copy POST after cancellation").toBe(0);
+    },
+  );
+});
+
+test("a password field flipped to text by script before it is ever focused still raises the prompt @regression", async () => {
+  await withVictimPage(
+    `${FORM_HEAD}<input name="pw" id="pw" type="password">${FORM_TAIL}`,
+    async (page, posts) => {
+      // Flipped once the guard is running (the bridge is up) and before any focus or input.
+      // A flip inside the parser, before the guard module has loaded, is not observable.
+      await page.evaluate(() => { (document.getElementById("pw") as HTMLInputElement).type = "text"; });
+      expect(await page.evaluate(() => (document.getElementById("pw") as HTMLInputElement).type)).toBe("text");
+      await page.fill("#pw", "dummy-canary");
+      await page.click("#go", { noWaitAfter: true });
+      await waitForCredentialModal(page);
+      await page.waitForTimeout(500);
+      expect(posts(), "no pre-focus-flip POST before a decision").toBe(0);
+      await clickModalButton(page, "Cancel");
+      await page.waitForTimeout(500);
+      expect(posts(), "no pre-focus-flip POST after cancellation").toBe(0);
+    },
+  );
+});
+
 test("a plain cross-site search form with no masked field stays quiet @regression", async () => {
   await withVictimPage(
     `${FORM_HEAD}<input name="q" type="search" value="weather"><input name="n" type="text" value="plain">${FORM_TAIL}`,
