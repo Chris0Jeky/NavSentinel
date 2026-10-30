@@ -1136,9 +1136,10 @@ function refreshTargetSettled(url: string): boolean {
   let i = 0;
   while (i < s.length && s.charCodeAt(i) <= 32) i++;
   s = s.slice(i);
-  const slash = (c: string | undefined) => c === "/" || c === "\\";
+  if (s === "") return false; // only padding so far: anything may follow
   const ended = (authority: string) => /[/\\?#]/.test(authority);
-  if (slash(s[0])) return s.length > 1 && (!slash(s[1]) || ended(s.slice(2)));
+  const rest = s.replace(/^[/\\]+/, ""); // the URL parser skips the whole slash run
+  if (rest !== s) return s.length - rest.length === 1 ? rest !== "" : ended(rest);
   const scheme = /^[A-Za-z][A-Za-z0-9+.-]*/.exec(s)?.[0];
   if (!scheme) return true;
   if (scheme.length === s.length) return false; // may still grow into a scheme

@@ -202,6 +202,38 @@ describe("off-site refresh signal", () => {
       expect(flagged([value]).offsiteRefresh).toBe("Page refresh tags are too many or too long to check");
     });
 
+    const UNREADABLE = "Page refresh tags are too many or too long to check";
+    const onExample = (value: string) =>
+      analyzeSnapshot(snapshot([value], { baseUrl: "https://example.com/login" }), "example.com").offsiteRefresh;
+
+    it("fails closed when the retained target is only space padding", () => {
+      // Quoted URL padded with spaces: the retained url is all whitespace.
+      const quoted = "0;url='" + " ".repeat(MAX_REFRESH_CONTENT - 7) + "//account-check.example/'";
+      expect(quoted.slice(0, MAX_REFRESH_CONTENT).trim().endsWith("url='")).toBe(true);
+      expect(flagged([quoted]).offsiteRefresh).toBe(UNREADABLE);
+    });
+
+    it("fails closed when the retained target is only C0 padding", () => {
+      // C0 controls are stripped by the URL parser, leaving an empty reference.
+      const c0 = "0;" + "\x01".repeat(MAX_REFRESH_CONTENT - 2) + "//account-check.example/";
+      expect(flagged([c0]).offsiteRefresh).toBe(UNREADABLE);
+    });
+
+    it.each([
+      ["a run of three slashes", "///example.com", "///example.com.evil.net/x"],
+      ["//\\ before the host", "//\\host", "//\\host.evil.net/x"],
+      ["/\\/ before the host", "/\\/host", "/\\/host.evil.net/x"],
+    ])("fails closed for %s", (_label, retained, full) => {
+      const value = "0;" + " ".repeat(MAX_REFRESH_CONTENT - 2 - 4 - retained.length) + "url=" + full;
+      expect(value.slice(0, MAX_REFRESH_CONTENT).endsWith(retained)).toBe(true);
+      expect(onExample(value)).toBe(UNREADABLE);
+    });
+
+    it("keeps a long single-slash path quiet", () => {
+      expect(onExample("0;url=/path/" + "a".repeat(MAX_REFRESH_CONTENT))).toBeUndefined();
+      expect(onExample("0;url=//" + "a".repeat(30) + ".example.com/" + "a".repeat(MAX_REFRESH_CONTENT))).toBeUndefined();
+    });
+
     it("names the site once the authority is ended inside the bound", () => {
       // A trailing character past the bound makes these cut, with the "/" retained.
       expect(flagged([withCutAt(target + "x", 30)]).offsiteRefresh).toContain("account-check.example");
