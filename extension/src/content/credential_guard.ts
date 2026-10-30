@@ -20,6 +20,7 @@ import {
 import { checkSRI } from "./sri_checker";
 import { queryPasswordInputs } from "./password_field";
 import { addPersistentListener, documentRewritten } from "./persistent_listener";
+import { isLoopbackAuthCodePaste } from "./consentfix";
 import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
@@ -777,6 +778,35 @@ addPersistentListener(window, "submit", (e) => {
   }
 });
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
+// ConsentFix: stop a pasted loopback sign-in URL that carries an OAuth code. Window capture
+// keeps it out of the field and away from the field's own listeners (a page listener added
+// on window capture before this loader finished still sees it). A developer pasting their
+// own callback URL repeats the same paste within 15 s and it goes through.
+let consentFixHeld: { text: string; at: number } | null = null;
+addPersistentListener(window, "paste", (e) => {
+  const evt = e as ClipboardEvent;
+  if (cachedCredMode === "off" || !evt.isTrusted) return;
+  const host = pageIdentity().hostname;
+  const text = evt.clipboardData?.getData("text/plain") ?? "";
+  if (!isLoopbackAuthCodePaste(text, host)) return;
+  if (consentFixHeld?.text === text && Date.now() - consentFixHeld.at < 15_000) {
+    consentFixHeld = null;
+    return;
+  }
+  consentFixHeld = { text, at: Date.now() };
+  evt.preventDefault();
+  evt.stopImmediatePropagation();
+  showToast({
+    message: "Heedline stopped this paste: a sign-in address with an access code from your own computer (localhost). A page that asks you to paste one is trying to take over your account, so close it. Testing your own app? Paste again.",
+    timeoutMs: 0,
+  });
+  void appendEvent({
+    kind: "cred_paste_warn",
+    site: normalizeHost(host),
+    url: pageIdentity().href,
+    reasons: ["CONSENTFIX_PASTE_BLOCKED"],
+  }).catch(() => {});
+});
 addPersistentListener(window, "formdata", handleFormData);
 
 // #1113: a script written by document.write() in the same task as document.open()
