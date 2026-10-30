@@ -33,7 +33,11 @@ type BridgeRow = { type: string; looksLikeCommand?: boolean; dropped?: number };
 /** Execute the actual production declarations with a modeled native clipboard and MessagePort. */
 function boot(regressed = false, observed = true, nativeWrite: (value: string) => Promise<void> = () => Promise.resolve()) {
   let init: (event: unknown) => void = () => { throw new Error("No actual bridge init listener"); };
-  const clipboard = { writeText: (value: string) => nativeWrite(value) };
+  // The guard wraps Clipboard.prototype (#1166), so model an instance that inherits it.
+  class Clipboard {
+    writeText(value: string) { return nativeWrite(value); }
+  }
+  const clipboard = new Clipboard();
   const rows: BridgeRow[] = [];
   const readySnapshots: ClipboardQueueEvidence[] = [];
   const evidence = () => context[PRESSURE_OBSERVER_PROPERTY] as ClipboardQueueEvidence;
@@ -51,7 +55,7 @@ function boot(regressed = false, observed = true, nativeWrite: (value: string) =
     setTimeout: () => 1,
   };
   const context = vm.createContext({
-    window, navigator: { clipboard }, MessagePort, OutboundQueue,
+    window, navigator: { clipboard }, Clipboard, MessagePort, OutboundQueue,
     coalesceKeyForMainGuardMessage: regressed ? () => undefined : coalesceKeyForMainGuardMessage,
     isMainGuardAlertType, isFloodableAlertType, looksLikeCommand,
     MAX_PENDING_OUTBOUND: 32, RESERVED_SCARCE_OUTBOUND_SLOTS: 8,
