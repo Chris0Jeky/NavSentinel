@@ -269,16 +269,17 @@ const IN_BODY = "document.body.appendChild(v);";
 async function refusedUnderFramePip(
   name: string, playerBody: string,
   then: (page: Page, player: Frame, point: { x: number; y: number }, posts: () => number) => Promise<void>,
+  frameMarkup = `<iframe name="player" src="/player" width="300" height="200"></iframe>`,
 ) {
   await withExtension(name, async (context, posts) => {
     await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html",
-      body: route.request().url().endsWith("/player") ? playerBody
-        : `${LOGIN}<iframe src="/player" width="300" height="200"></iframe>` }));
+      body: route.request().url().endsWith("/player") ? playerBody : `${LOGIN}${frameMarkup}` }));
     const page = await context.newPage();
     await realFocus(context, page);
     await page.goto("http://victim.test/login");
     await page.bringToFront();
-    const frame = page.frames().find((f) => f.url().endsWith("/player"))!;
+    await expect.poll(() => page.frames().some((f) => f.name() === "player")).toBe(true);
+    const frame = page.frames().find((f) => f.name() === "player")!;
     await frame.waitForFunction(() => ((window as unknown as { v?: HTMLVideoElement }).v?.readyState ?? 0) >= 1);
     await frame.click("#pip");
     await expect.poll(() => frame.evaluate(() => !!document.pictureInPictureElement)).toBe(true);
@@ -327,6 +328,32 @@ for (const [label, body] of HOSTILE_PLAYERS) {
   test(`Proceed once in the top frame refuses while a child frame's PiP opened ${label} is open (#1244) @regression`, async () => {
     test.setTimeout(90_000);
     await refusedUnderFramePip(`frame-pip-${label.replace(/\W+/g, "-")}`, body, approvesAfterExit);
+  });
+}
+
+// #1249 review: the top page builds the player inside a frame that never navigated.
+// webNavigation.getAllFrames omits such a blob: frame, so only the parent's answer,
+// which reads its same-origin descendants, can see this PiP. The src-less frame is
+// listed and answers for itself (measured); it stays as a guard for that path.
+const builtPlayer = (blob: boolean) => `<iframe name="player" width="300" height="200"></iframe><script>
+  const f = document.querySelector("iframe[name=player]");
+  const build = () => {
+    const d = f.contentDocument;
+    const v = d.createElement("video"); v.muted = true; v.width = 160; v.height = 90;
+    const c = d.createElement("canvas"); c.width = 160; c.height = 90;
+    c.getContext("2d").fillRect(0, 0, 160, 90);
+    v.srcObject = c.captureStream(); v.play(); d.body.appendChild(v);
+    const b = d.createElement("button"); b.id = "pip"; b.textContent = "Watch in PiP"; d.body.appendChild(b);
+    b.addEventListener("click", () => { v.requestPictureInPicture(); });
+    f.contentWindow.v = v;
+  };
+  ${blob ? `f.addEventListener("load", build, { once: true });
+  f.src = URL.createObjectURL(new Blob(["<p>blob</p>"], { type: "text/html" }));` : "build();"}
+</script>`;
+for (const [label, blob] of [["src-less", false], ["blob:", true]] as const) {
+  test(`Proceed once in the top frame refuses while PiP is open in a ${label} frame the page built (#1249) @regression`, async () => {
+    test.setTimeout(90_000);
+    await refusedUnderFramePip(`frame-pip-built-${blob ? "blob" : "srcless"}`, "", approvesAfterExit, builtPlayer(blob));
   });
 }
 
