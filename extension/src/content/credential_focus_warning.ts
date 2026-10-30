@@ -12,21 +12,32 @@ import { showToast } from "./ui_toast";
  * Only these computeCredentialRisk page codes qualify, strongest first (the
  * toast names one). Weak codes (untrusted, deep subdomain) never warn: a
  * fresh install trusts nothing, so "untrusted" alone would fire everywhere.
+ * PUNYCODE_HOST is deliberately absent: an IDN alone (müller.de) is an
+ * ordinary non-English name. Punycode warns only through the lookalike or
+ * mixed-script codes the model raises alongside it.
  */
 const STRONG_PAGE_SIGNALS = [
   "LOOKALIKE_DOMAIN",
   "HOMOGLYPH_LOOKALIKE",
   "BRAND_KEYWORD_DOMAIN",
   "SUBDOMAIN_STUFFING",
-  "PUNYCODE_HOST",
   "MIXED_SCRIPT_HOST",
   "IP_HOST",
   "NON_HTTPS_PAGE"
 ];
 
-function isLocalDevHost(host: string): boolean {
-  return host === "localhost" || host.endsWith(".localhost") || host.endsWith(".test") ||
-    host === "::1" || (host.startsWith("127.") && isIPAddress(host));
+/**
+ * Router, NAS and dev hosts: loopback, private and link-local IP literals
+ * (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, ::1, fc00::/7, fe80::/10).
+ */
+function isLocalHost(host: string): boolean {
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".test")) return true;
+  if (!isIPAddress(host)) return false;
+  // A short first group has dropped leading zeros ("fc::1" is 00fc::1, public).
+  if (host.includes(":")) return host === "::1" || /^(?:f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(host);
+  const [a, b] = host.split(".").map(Number) as [number, number];
+  return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) || (a === 169 && b === 254);
 }
 
 /** The strongest page-only signal that warrants a focus warning, or null. */
@@ -39,7 +50,7 @@ export function focusWarningReason(
   // Page-only: the action is the page itself, so no cross-site signal applies.
   const risk = computeCredentialRisk({ pageUrl, actionUrl: pageUrl, trustedDomains, config });
   const host = risk.page.host;
-  if (!host || risk.page.isTrusted || isLocalDevHost(host)) return null;
+  if (!host || risk.page.isTrusted || isLocalHost(host)) return null;
   for (const code of STRONG_PAGE_SIGNALS) {
     const reason = risk.reasons.find((r) => r.code === code);
     if (reason) return reason;

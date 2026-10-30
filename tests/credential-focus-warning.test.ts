@@ -39,7 +39,6 @@ describe("focusWarningReason (#1170)", () => {
     expect(code("http://login.northwind.example/")).toBe("NON_HTTPS_PAGE");
     expect(code("https://192.0.2.10/signin")).toBe("IP_HOST");
     expect(code("https://[2001:db8::1]/signin")).toBe("IP_HOST");
-    expect(code("https://xn--pypal-4ve.com/signin")).toBe("PUNYCODE_HOST");
     expect(code("https://paypa1.com/signin")).toBe("BRAND_KEYWORD_DOMAIN");
     expect(code("https://paypal.login.billing-example.com/")).toBe("SUBDOMAIN_STUFFING");
     expect(code("https://gooogle.com/", ["google.com"])).toBe("LOOKALIKE_DOMAIN");
@@ -61,7 +60,7 @@ describe("focusWarningReason (#1170)", () => {
 
   it("never warns when credential protection is off", () => {
     expect(code("http://192.0.2.10/", [], off)).toBeNull();
-    expect(code("https://xn--pypal-4ve.com/", [], off)).toBeNull();
+    expect(code("https://paypa1.com/", [], off)).toBeNull();
   });
 
   it("exempts localhost, loopback and .test hosts", () => {
@@ -71,6 +70,28 @@ describe("focusWarningReason (#1170)", () => {
     }
     // A DNS name that merely starts with 127 is not loopback.
     expect(code("http://127.evil-example.com/")).toBe("NON_HTTPS_PAGE");
+  });
+
+  it("exempts private and link-local IP literals (router, NAS admin pages)", () => {
+    for (const url of ["http://10.0.0.1/", "http://172.16.0.1/", "http://172.31.255.254/",
+      "http://192.168.1.1/login", "http://169.254.10.20/", "http://127.8.9.10/",
+      "http://[fc00::1]/", "http://[fd12:3456::1]/", "http://[fe80::1]/", "http://[febf::1]/"]) {
+      expect(code(url), url).toBeNull();
+    }
+  });
+
+  it("still warns on public IP literals next to the private ranges", () => {
+    for (const [url, want] of [["http://172.15.0.1/", "IP_HOST"], ["http://172.32.0.1/", "IP_HOST"],
+      ["https://8.8.8.8/", "IP_HOST"], ["http://203.0.113.24/", "IP_HOST"], ["http://192.169.0.1/", "IP_HOST"],
+      ["http://[fec0::1]/", "IP_HOST"], ["http://[fc::1]/", "IP_HOST"], ["http://[2001:db8::1]/", "IP_HOST"]]) {
+      expect(code(url!), url).toBe(want);
+    }
+  });
+
+  it("stays silent on a pure IDN, but warns when punycode carries a lookalike signal", () => {
+    expect(code("https://xn--mller-kva.de/anmelden")).toBeNull(); // müller.de
+    expect(code("https://xn--bcher-kva.ch/")).toBeNull(); // bücher.ch
+    expect(code("https://paypal.xn--mller-kva.de/")).toBe("SUBDOMAIN_STUFFING");
   });
 
   it("treats strict like smart: the page model does not depend on mode", () => {
