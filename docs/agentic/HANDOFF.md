@@ -1,9 +1,70 @@
 # NavSentinel handoff
 
-Updated 2026-09-25 14:27 UTC. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-10-30 23:10 UTC. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
 required reading.
+
+## 2026-10-30 flagship builder checkpoint (23:10 UTC)
+
+Reconcile GitHub before acting; this is a snapshot.
+
+**Merged today by the builder session (merge commits, exact-head CI, law-2 review):**
+
+- New protections and bypass fixes:
+  - #1187 credential backstop after `document.open()`
+  - #1140 visible, armed approvals
+  - #1152 deep overlay cleanup
+  - #1155 fallback frames
+  - #1202 closed toast root
+  - #1199 IDN lookalikes
+  - #1195 password-focus warning
+  - #1182 overlay-free ClickFix and pastejacking
+  - #1191 clipboard overwrite
+  - #1065 captured `closest`
+  - #1214 IO v2 visible gate
+  - #1231 focus, fonts and press pin
+  - #1237 meta refresh
+  - #1238 PiP and short-blur covers
+  - #1243 loader blur/focus fence
+  - #1141 captured MAIN natives
+  - #1249 request-based PiP check (#1244 items 1, 3, 4, 5)
+  - #1252 meta-refresh fail-closed (#1241 items 1, 2, 4, 5)
+- Real-user bugs: #1251, a credential prompt teardown crash (#1215).
+- Enabling (budget headroom): #1179 (PSL), #1206 (lazy chunks), #1246 (built HTML indentation and icons), #1255 (compact manifest).
+- Tests: #1259 (covers flake and MAX_PATH, #1257/#1258), plus earlier test PRs.
+- Gate-3 rows AI-85 to AI-96 and AI-100 to AI-102 are in `ACTION_ITEMS.md`. AI-97 to AI-99 belong to the ideas session.
+
+**Parked:** #1260 (#1244 item 2, re-arm loader listeners after `document.open()`) is reviewed by two lenses with no HIGH finding. It merges once its exact-head CI is green. It carries the AI-99 and AI-103 rows.
+
+**Budgets (research profile, main bcff72dc after #1252):**
+
+| Chunk | Current | Cap | Headroom |
+|---|---|---|---|
+| total dist | about 539.4 KB | 540 KB | about 0.6 KB |
+| `main_guard` | 21.0 KB | 21 KB (100%) | about 23 B |
+| `ui_toast` | 8.0 KB | 8 KB (100%) | about 10 B |
+| `capture_isolated` | 66.3 KB | 67 KB | about 0.7 KB |
+| `credential_guard` | 21.7 KB | 31.5 KB | about 10 KB |
+
+The interaction-only total is about 536 KB. Total dist is the binding constraint, and new protections need the owner decisions below or more lossless savings. A remaining lossless candidate is `evidence.html`, which the indentation strip skips because of its `<textarea>`.
+
+**Next slices, highest value first:**
+
+1. #1219, MAIN-world natives captured before `main_guard`'s async loader (architectural). It needs `main_guard` shipped as one synchronous script, which duplicates `bridge_outbound` (about +2.8 KB), so it is blocked on the dist budget.
+2. #1261 / #1113, a page-proof focus recorder after `document.open()`, for example the service worker's `windows.onFocusChanged`.
+3. #1186, a credential submit to another window after `document.open()`.
+4. #1236 item 3, `all: initial` on the approval roots. The toast is blocked by the `ui_toast` cap.
+5. #1250, slow-frame refusal and the PiP hint wording.
+6. #1241 item 3, `<base>` timing.
+7. #1221, a fullscreen locker in a cross-origin iframe.
+8. #1228, credential field detection residuals.
+
+**Owner decisions waiting** (agent-hq inbox; also listed in `ACTION_ITEMS.md`):
+
+- `navsentinel-dist-budget-20261030`, the dist / `capture_isolated` / `credential_guard` caps.
+- `navsentinel-main-guard-budget-20261023`, the `main_guard` cap.
+- `navsentinel-clipboard-neutralize-default-20261030`, the #1169 default (a reversible default applies on expiry, 2026-11-03).
 
 ## 2026-09-25 continuation checkpoint (14:27 UTC)
 
