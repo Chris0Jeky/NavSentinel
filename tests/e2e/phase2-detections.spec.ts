@@ -28,6 +28,7 @@ import {
   waitForNavSentinelBridge,
   waitForToastMatch,
 } from "./extension_test_utils";
+import { CLIPBOARD_WARNING_TEXT } from "../../extension/src/content/clipboard_neutralizer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -419,6 +420,31 @@ test.describe("ClickFix", () => {
     }
   });
 
+  test("clickfix-01 command write: the hijacked clipboard is replaced with the warning (#1169) @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+
+    const { page, context, cleanup } = await setupFixtureTest("clickfix-01-basic.html");
+
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+      await page.click("#verify-btn");
+      await page.waitForFunction(
+        () => document.getElementById("status")?.textContent?.includes("Clipboard write triggered"),
+        null,
+        { timeout: 5000 },
+      );
+      // The gym sentinel is not command-like, so it only warns. A command-like
+      // (still inert) write behind the same overlay is neutralized.
+      await page.evaluate(() => navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64"));
+      await expect.poll(
+        () => page.evaluate(() => navigator.clipboard.readText()),
+        { message: "Heedline should overwrite the command with its warning", timeout: 5000 },
+      ).toBe(CLIPBOARD_WARNING_TEXT);
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("clickfix-02 terminal variant: clipboard write + instructions triggers alert @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
 
@@ -465,8 +491,9 @@ test.describe("ClickFix", () => {
       );
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("847293");
 
-      // Should NOT trigger a ClickFix alert
+      // Should NOT trigger a ClickFix alert, nor touch the copied code (#1169)
       await assertNoToastFor(page, 2000);
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("847293");
     } finally {
       await cleanup();
     }
