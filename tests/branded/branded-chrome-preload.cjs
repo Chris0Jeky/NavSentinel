@@ -3,15 +3,16 @@
  *
  * Branded Google Chrome ignores `--load-extension` since Chrome 137, so the
  * E2E specs (which pass that flag to `chromium.launchPersistentContext`) can
- * only exercise Playwright's bundled Chromium. This preload rewrites those
- * launches to use an installed branded Chrome with a fresh profile and loads
+ * only exercise Playwright's bundled Chromium. This preload rewrites Chromium
+ * persistent launches, including native controls, to the same selected Chrome
+ * with a fresh profile and loads
  * the same unpacked build through the DevTools `Extensions.loadUnpacked`
  * command, which Chrome accepts when started with
  * `--enable-unsafe-extension-debugging` over the pipe transport Playwright
  * already uses.
  *
  * It is inert unless `NAVSENTINEL_BRANDED_CHROME` is set:
- *   NAVSENTINEL_BRANDED_CHROME=1                 -> default install path
+ *   NAVSENTINEL_BRANDED_CHROME=1 (or true)       -> default chrome channel
  *   NAVSENTINEL_BRANDED_CHROME=<path to chrome>  -> that executable
  * `playwright.branded.config.ts` and `playwright.acceptance.config.ts` load it
  * themselves; Playwright workers re-evaluate the config, so no NODE_OPTIONS.
@@ -23,23 +24,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { selectBrandedChrome } = require("./branded-chrome-selector.cjs");
 
-const rawSelector = (process.env.NAVSENTINEL_BRANDED_CHROME || "").trim();
-const selector = rawSelector === "0" ? "" : rawSelector;
-
-function resolveExecutable() {
-  if (selector && selector !== "1") return path.resolve(selector);
-  const candidates = [
-    process.env.PROGRAMFILES && path.join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
-    process.env["PROGRAMFILES(X86)"] && path.join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
-    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/opt/google/chrome/chrome",
-  ].filter(Boolean);
-  const found = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!found) throw new Error("NAVSENTINEL_BRANDED_CHROME is set but no branded Chrome executable was found");
-  return found;
-}
+const browserChoice = selectBrandedChrome(process.env.NAVSENTINEL_BRANDED_CHROME);
 
 /**
  * Playwright's default Chromium switches that make automation diverge from an
@@ -144,22 +131,23 @@ function patchPopupLoadState(context) {
   }
 }
 
-if (selector) {
-  const executablePath = resolveExecutable();
+if (browserChoice.channel || browserChoice.executablePath) {
   const { chromium } = require("playwright-core");
   const proto = Object.getPrototypeOf(chromium);
   if (!proto.__navsentinelBrandedPatched) {
     const original = proto.launchPersistentContext;
     proto.launchPersistentContext = async function brandedLaunchPersistentContext(userDataDir, options = {}) {
       const { extensions, kept } = splitExtensionArgs(options.args);
-      if (extensions.length === 0 || this.name() !== "chromium") {
+      if (this.name() !== "chromium") {
         return original.call(this, userDataDir, options);
       }
       const realistic = process.env.NAVSENTINEL_REALISTIC_CHROME === "1";
-      const extraIgnored = ["--disable-extensions"];
+      // Native controls retain Playwright's extension isolation. Only an arm
+      // loading unpacked extensions needs the default disable flag removed.
+      const extraIgnored = extensions.length ? ["--disable-extensions"] : [];
       if (realistic) {
         extraIgnored.push(...REALISM_DISTORTING_SWITCHES);
-        const features = playwrightDisableFeaturesSwitch(undefined);
+        const features = playwrightDisableFeaturesSwitch(browserChoice.channel);
         if (features) extraIgnored.push(features);
       }
       const ignore = options.ignoreDefaultArgs === true
@@ -168,21 +156,24 @@ if (selector) {
       const context = await original.call(this, userDataDir, {
         ...options,
         channel: undefined,
-        executablePath,
+        executablePath: undefined,
+        ...browserChoice,
         ignoreDefaultArgs: ignore,
         ...(realistic ? { chromiumSandbox: true } : {}),
         args: [...kept, "--enable-unsafe-extension-debugging", "--no-first-run", "--no-default-browser-check"],
       });
       try {
         const browser = context.browser();
-        if (!browser) throw new Error("branded Chrome context has no browser handle for Extensions.loadUnpacked");
-        const session = await browser.newBrowserCDPSession();
-        for (const extension of extensions) {
-          await session.send("Extensions.loadUnpacked", { path: extension });
+        if (!browser) throw new Error("branded Chrome context has no browser handle");
+        if (extensions.length) {
+          const session = await browser.newBrowserCDPSession();
+          for (const extension of extensions) {
+            await session.send("Extensions.loadUnpacked", { path: extension });
+          }
+          await session.detach().catch(() => undefined);
         }
-        await session.detach().catch(() => undefined);
         if (process.env.NAVSENTINEL_BRANDED_RECORD) {
-          fs.appendFileSync(process.env.NAVSENTINEL_BRANDED_RECORD, `${JSON.stringify({ version: browser.version(), executablePath, realistic, extensions, at: new Date().toISOString() })}\n`);
+          fs.appendFileSync(process.env.NAVSENTINEL_BRANDED_RECORD, `${JSON.stringify({ version: browser.version(), ...browserChoice, realistic, extensions, at: new Date().toISOString() })}\n`);
         }
       } catch (error) {
         await context.close().catch(() => undefined);

@@ -211,15 +211,23 @@ frame reproduction and repair.
 
 ## Open and blocked items
 
-### Retroactive Gate-3 checks (AI-48 to AI-54)
+### Open owner decisions (agent-hq inbox)
 
+Answer these in the estate cockpit or in chat. Each record is `agent-hq/decisions/<id>.json`.
+
+- **`navsentinel-main-guard-budget-20261023`**: raise the `main_guard` (MAIN-world) perf budget so
+  #1141's captured-natives fix, and later #1134 and #1017, can land? #1141 stays open until it is answered.
+
+### Retroactive Gate-3 checks (AI-48 onward)
+
+Standing rule since 2026-10-26 (D-2026-10-26-A): every browser-facing PR lands on automated gates and gets a row here.
 Owner decision 2026-10-16: "add them to checks to be done retroactively". These PRs no longer wait for
 Gate-3. Each lands on green CI, one independent review and the credential_guard bundle cap
 (`scripts/check-perf-budget.mjs`), and Chris runs its branded-Chrome check afterwards on the merged build. A
 failure gets a revert PR for that merge commit. Build the merge commit (`npm ci`, `npm run build`), load
 `extension/dist` unpacked, and reply `AI-xx done; Gate-3 passed at <merge commit>` or describe what differed.
-PR #1072 (AI-52, CRXJS 3) is not on this list: it stays open on its recorded Windows hold, which is separate from
-Gate-3.
+PR #1072 (AI-52, CRXJS 3) joined on 2026-10-24, once its Windows contracts passed on a fresh run; the
+earlier red was the #1143 Git-test timeout, fixed by #1146.
 
 | AI | PR | Merged head | Human result |
 | --- | --- | --- | --- |
@@ -229,8 +237,17 @@ Gate-3.
 | AI-51 | #1104 credential snapshot bound | merge commit `fbe7648a` (merged 2026-10-17) | OPEN — not run |
 | AI-53 | #1077 popup trust after failed writes | merge commit `aa39a7b2` (merged 2026-10-16) | OPEN — not run |
 | AI-54 | #1106 guards through `document.open()` | merge commit `d2cbf115` (merged 2026-10-16) | OPEN — not run |
+| AI-55 | #1017 opener `location` facade (MAIN world) | merge commit `c47c5991` (merged 2026-10-18) | OPEN — not run |
+| AI-56 | #1060 subframe form-target capture (MAIN world) | merge commit `a0035874` (merged 2026-10-18) | OPEN — not run |
+| AI-52 | #1072 CRXJS 3 build pipeline | merge commit `44d8875a` (merged 2026-10-24) | OPEN — not run |
+| AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
+| AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-58 (#1165):** follow the [journal continuity checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional history. Check retained expansion, keyboard focus and reading position during arrivals; Show latest and explicit navigation; removal after replacement, eviction and clear; and the unchanged frozen export preview. Confirm screen-reader and physical-input behavior. The linked merge receipt identifies the exact merge commit. Automated evidence does not complete this check; a failed owner check gets a revert PR for that commit.
+
+- **AI-57 (#1163):** follow [Protection Center activity](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional records. Review the four categories and separate corrections, keyboard drill-down, Today/history, narrow themes and reduced motion; use existing Options backup/import/clear only on that fictional history. Confirm screen-reader and physical-input behavior. Automated receipts do not complete this check. The PR's merge receipt records the exact merge commit; a failed owner check gets a revert PR for that commit.
 
 - **AI-48 (#1100):** (1) a normal login on a real site still goes through after "Proceed once"; (2) on the
   fixture in `tests/e2e/credential-resubmit-retarget.spec.ts` (or any page whose submit handler swaps
@@ -257,8 +274,43 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   (2) a normal login still prompts (when risky) or goes through after "Proceed once". The local fixture is
   `tests/e2e/credential-document-open.spec.ts`. Not part of this check: a submit dispatched in the same task
   as `document.close()`, the MAIN-world and disabled js-behaviour listeners, Firefox.
+- **AI-55 (#1017):** landed under the same retroactive rule (green CI, independent review, the unchanged 20,992-byte
+  MAIN cap) by the estate-hub overnight session. In a child tab opened by a page: (1) with a same-origin opener, `window.opener.location.assign(url)`,
+  `.replace(url)`, `.href = url` and `window.opener.location = url` navigate the opener with no TypeError; (2) with a
+  cross-origin opener, `assign()` and reads still throw the native `SecurityError` and the opener is unchanged (as
+  `tests/e2e/opener-location-native.spec.ts` expects), which is a pass, not a failure; (3) `window.opener = null` disowns it and a
+  later assignment leaves it null. The local fixture is `tests/e2e/opener-location-native.spec.ts`. A failure gets a
+  revert PR for `c47c5991`.
+- **AI-56 (#1060):** landed under the same retroactive rule (green CI, independent review, MAIN budget 21 KB).
+  A behaviour smoke check that ordinary forms still behave, not a hand-timed tamper test: the page-tamper
+  resistance (a getter replaced between the document-start loader and the async MAIN import, or an own `call` set
+  on the captured invoker) is covered by the vm-realm regressions in `tests/main-base-uri-loader-contract.test.ts`
+  and `tests/form-target-self-exemption.test.ts`. In branded Chrome on the unpacked build of `a0035874`, with the
+  Gym served (`npm run gym:serve`, port 5173): (1) run the acceptance procedure for the subframe self-target form,
+  `NAVSENTINEL_BRANDED_CHROME=1 npm run test:acceptance -- tests/acceptance/fp-iframe-target-form.spec.ts` (fixture
+  `tests/acceptance/fixtures/fp-iframe-target-form.html`): a background form post into the page's own named iframe is
+  neither blocked nor announced, same-origin and cross-origin; (2) open `gym/base-uri-tamper.html`: the page's early
+  baseURI tamper does not change the base the guard resolves against (the outcome the page itself describes). Describe any
+  difference. A failure gets a revert PR for `a0035874`.
+- **AI-52 (#1072):** a build-pipeline change only (CRXJS 2.7.1 to 3.0.0, with `chunkFileNames` keeping the
+  `capture_isolated`, `main_guard` and `credential_guard` names), but the plugin regenerates the MAIN-world guard,
+  the content-script loaders and the service-worker loader. On the unpacked build of `44d8875a`: (1)
+  `chrome://extensions` shows no errors and the service worker starts; (2) on a real site a password-form submit
+  still raises the credential prompt and "Proceed once" lets the login through; (3) a page that triggers a
+  cross-site redirect or `window.open` still shows the navigation guard. Dev-server hot reload is not part of this
+  check. A failure gets a revert PR for `44d8875a`.
 
 ### Branch-held Gate-3 items
+
+**OPEN — credential named-property and UI-host recovery candidate**
+(branch `fix/credential-named-property-and-host-reattach`).
+This changes shipped credential interception and warning visibility; Gate-3 applies.
+No human browser result is recorded. On the owner's loaded candidate build, use only
+local fixture hosts and dummy credentials: submit a cross-site password POST whose form
+contains `<input name="querySelectorAll">`; the prompt must appear and Cancel must send
+zero POSTs. Remove a toast host, trigger another warning, and confirm it is visible.
+Remove an open credential-modal host; the same pending decision must reappear and remain
+usable. Automated Vitest/Playwright evidence does not complete this human check.
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and the procedure named in its entry; `main` carries no procedure for them, so
@@ -276,8 +328,8 @@ live.
   survivor); green CI is not containment evidence, so do not run the manual gate
   on the current head. Full procedure in that branch's
   `docs/agentic/GATE3_GUIDES.md`.
-- **AI-48 to AI-54**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-54) above by
-  owner decision 2026-10-16 (#1072 / AI-52 excepted: its own Windows hold). The AI-48 (#1100) and AI-50 (#1103)
+- **AI-48 to AI-56**: moved to [Retroactive Gate-3 checks](#retroactive-gate-3-checks-ai-48-to-ai-56) above by
+  owner decision 2026-10-16, with AI-52 (#1072) added on 2026-10-24 after its Windows hold cleared. The AI-48 (#1100) and AI-50 (#1103)
   branch entries were retired here; build their merge commits, not the pre-merge code heads. An AI-49/51/53/54
   entry that a PR branch brings into this list on merge is superseded the same way: run the check on that PR's
   merge commit and record the result in the retroactive table.

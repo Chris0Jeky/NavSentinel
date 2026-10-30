@@ -12,6 +12,7 @@ import { showToast } from "./ui_toast";
 import { showCredentialModal } from "./credential_modal";
 import {
   deriveCredentialPasteState,
+  getCredentialPageUrl,
   getCredentialReasonLines,
   isCrossSiteCredentialAction,
   shouldPromptCredentialSubmit
@@ -20,8 +21,15 @@ import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 import { queryPasswordInputs } from "./password_field";
 import { addPersistentListener } from "./persistent_listener";
+import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
+
+// In this isolated world, self.origin is the browser's inherited security
+// origin, unlike location.origin ("null" in about:blank/about:srcdoc).
+function pageIdentity(): URL {
+  return new URL(getCredentialPageUrl(location.href, self.origin));
+}
 
 // #227.5: the credential mode, cached synchronously so handleSubmit can decide
 // whether to interpose BEFORE preventDefault. When the guard is disabled it must
@@ -70,19 +78,22 @@ function isPasswordForm(form: HTMLFormElement): boolean {
     // query misses. Union both sources for resilience across DOM implementations,
     // then require at least one ENABLED password field (#227.2).
     const seen = new Set<Element>();
-    const collection = form.elements;
+    const collection = domProperty(HTMLFormElement.prototype, form, "elements");
     if (collection) {
-      for (let i = 0; i < collection.length; i++) {
-        const el = collection.item(i);
+      for (let i = 0; i < domProperty(HTMLCollection.prototype, collection, "length"); i++) {
+        const el = HTMLCollection.prototype.item.call(collection, i);
         if (el) seen.add(el);
       }
     }
     queryPasswordInputs(form).forEach((el) => seen.add(el));
     return Array.from(seen).some(
-      (el) => el instanceof HTMLInputElement && el.type === "password" && !el.disabled
+      (el) => el instanceof HTMLInputElement &&
+        domProperty(HTMLInputElement.prototype, el, "type") === "password" &&
+        !domProperty(HTMLInputElement.prototype, el, "disabled")
     );
   } catch {
-    return false;
+    // Classification failure must not discard a password seen in form.elements.
+    return true;
   }
 }
 
@@ -105,9 +116,7 @@ function resolveActionUrl(form: HTMLFormElement, submitter: HTMLElement | null):
     // destination, not just the form's action. A submitter carrying the
     // formaction attribute (even empty, which the browser resolves to the current
     // document) overrides the form action; otherwise fall back to it (#227.1).
-    const rawAttr = submitter?.hasAttribute("formaction")
-      ? submitter.getAttribute("formaction") || ""
-      : form.getAttribute("action") || "";
+    const rawAttr = (submitter && domAttribute(submitter, "formaction")) ?? domAttribute(form, "action") ?? "";
 
     // #410: bound the JS-level scan only -- head-slice a probe before trim().
     // Deliberately NOT the content_analyzer pattern of resolving the *sliced*
@@ -198,12 +207,13 @@ const DEST_CHANGED_MSG =
 // actionMoved's tolerance) plus the exact method and target.
 function resolveDestination(form: HTMLFormElement, submitter: HTMLElement | null): [string, string] {
   const attr = (name: string, formName: string): string =>
-    (submitter?.hasAttribute(name) ? submitter.getAttribute(name) : form.getAttribute(formName)) ?? "";
+    (submitter && domAttribute(submitter, name)) ?? domAttribute(form, formName) ?? "";
   // A form with no target falls back to the first <base target>.
+  const base = document.querySelector("base[target]");
   return [
     resolveActionUrl(form, submitter),
     attr("formmethod", "method").trim().toLowerCase() + " " +
-      (attr("formtarget", "target") || document.querySelector("base[target]")?.getAttribute("target"))
+      (attr("formtarget", "target") || (base ? domAttribute(base, "target") : undefined))
   ];
 }
 
@@ -258,8 +268,8 @@ function settleResumeBinding(b: ResumeBinding): void {
   window.stop();
   void appendEvent({
     kind: "cred_submit_prompt",
-    site: normalizeHost(location.hostname),
-    url: location.href,
+    site: normalizeHost(pageIdentity().hostname),
+    url: pageIdentity().href,
     destHost: actionHost(resolveActionUrl(b.form, b.submitter)),
     extra: { error: "action_mutated_during_resubmit" }
   }).catch(console.warn);
@@ -271,7 +281,7 @@ function settleResumeBinding(b: ResumeBinding): void {
   if (!rechecking.delete(b.form)) {
     recheckRequested.add(b.form);
     try {
-      b.form.requestSubmit(b.submitter);
+      HTMLFormElement.prototype.requestSubmit.call(b.form, b.submitter);
       return;
     } catch {
       // The submitter left the form; block below.
@@ -299,7 +309,7 @@ function resumeSubmit(
   resumeBinding = binding;
 
   try {
-    form.requestSubmit(submitter);
+    HTMLFormElement.prototype.requestSubmit.call(form, submitter);
   } catch {
     // requestSubmit failed (e.g. the submit control was detached or re-associated
     // during the await window). Nothing was submitted; the `finally` below revokes
@@ -310,7 +320,7 @@ function resumeSubmit(
     // tell the user instead of silently downgrading the target (R1 finding 1) --
     // UNLESS the caller assessed nothing (off mode / pre-assessment fail-open),
     // where blocking a disabled guard would be a regression (R2 L2).
-    if (submitter?.hasAttribute("formaction") && !opts?.allowUnsafeFallback) {
+    if (submitter && domAttribute(submitter, "formaction") !== null && !opts?.allowUnsafeFallback) {
       showToast({
         message: "The sign-in could not be completed safely (the submit control changed). Please try again.",
         timeoutMs: 8000
@@ -318,7 +328,7 @@ function resumeSubmit(
       return;
     }
     try {
-      form.submit();
+      HTMLFormElement.prototype.submit.call(form);
     } catch (e) {
       console.warn("[NavSentinel] form submit fallback failed:", e);
     }
@@ -358,7 +368,8 @@ async function blockIfActionMutated(
   // change (R1 finding 1/2).
   const submitterReassociated =
     (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) &&
-    submitter.form !== form;
+    domProperty(submitter instanceof HTMLButtonElement ? HTMLButtonElement.prototype : HTMLInputElement.prototype,
+      submitter, "form") !== form;
   if (!submitterReassociated && !actionMoved(assessedActionUrl, liveActionUrl)) return false;
 
   const liveHost = actionHost(liveActionUrl);
@@ -420,7 +431,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     const trusted = await getTrustedDomains();
     assessedActionUrl = resolveActionUrl(form, submitter);
     const risk = computeCredentialRisk({
-      pageUrl: location.href,
+      pageUrl: pageIdentity().href,
       actionUrl: assessedActionUrl,
       trustedDomains: trusted,
       config: cfg
@@ -434,7 +445,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // the fail-open catch and bypass the prompt.
     if (!risk.page.isTrusted) {
       try {
-        const pageHost = normalizeHost(location.hostname);
+        const pageHost = normalizeHost(pageIdentity().hostname);
         const pageDomain = getRegistrableDomain(pageHost) || pageHost;
         const contentAnalysis = analyzePageContent(document, pageDomain);
         if (contentAnalysis.score > 0) {
@@ -454,7 +465,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // Skip entirely for trusted domains -- consistent with content analysis above.
     if (!risk.page.isTrusted) {
       try {
-        const sriAnalysis = checkSRI(document, location.href, location.origin);
+        const page = pageIdentity();
+        const sriAnalysis = checkSRI(document, page.href, page.origin);
         if (sriAnalysis.score !== 0) {
           risk.score = Math.max(0, Math.min(100, risk.score + sriAnalysis.score));
           const sriCode = sriAnalysis.score > 0 ? "SRI_MISSING_ON_CREDENTIAL_PAGE" : "SRI_PRESENT_ON_CREDENTIAL_PAGE";
@@ -473,6 +485,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     const pageSite = risk.page.registrableDomain || risk.page.host;
 
     if (
+      // An opaque page has no trusted identity; enabled guards must prompt.
+      risk.page.host &&
       !shouldPromptCredentialSubmit({
         mode: cfg.mode,
         riskScore: risk.score,
@@ -562,16 +576,20 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     // (P5-C1 / #238 consistency fix).
     const credDest = risk.action.host || risk.action.registrableDomain || undefined;
 
-    if (choice === "cancel") {
-      decided = true;
+    const recordOutcome = (outcome: "cancel" | "trust" | "allow_once"): void => {
       void appendPromptOutcome({
         domain: credDomain,
         ...(credDest ? { destDomain: credDest } : {}),
         type: "cred",
         score: risk.score,
-        outcome: "cancel",
+        outcome,
         reasons: credReasons
-      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (cancel):", e); });
+      }).catch((e) => { console.warn(`[NavSentinel] prompt outcome append failed (${outcome}):`, e); });
+    };
+
+    if (choice === "cancel") {
+      decided = true;
+      recordOutcome("cancel");
       return;
     }
 
@@ -585,25 +603,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       return;
     }
 
-    if (choice === "trust_site" || choice === "trust_dest") {
-      void appendPromptOutcome({
-        domain: credDomain,
-        ...(credDest ? { destDomain: credDest } : {}),
-        type: "cred",
-        score: risk.score,
-        outcome: "trust",
-        reasons: credReasons
-      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (trust):", e); });
-    } else {
-      void appendPromptOutcome({
-        domain: credDomain,
-        ...(credDest ? { destDomain: credDest } : {}),
-        type: "cred",
-        score: risk.score,
-        outcome: "allow_once",
-        reasons: credReasons
-      }).catch((e) => { console.warn("[NavSentinel] prompt outcome append failed (allow_once):", e); });
-    }
+    recordOutcome(choice === "trust_site" || choice === "trust_dest" ? "trust" : "allow_once");
 
     // Trust writes are .catch-guarded so a failed write is non-fatal (log and
     // proceed with the approved submit) and cannot unwind to the fail-open catch.
@@ -677,8 +677,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
             form,
             submitter,
             assessedActionUrl,
-            normalizeHost(location.hostname),
-            location.href
+            normalizeHost(pageIdentity().hostname),
+            pageIdentity().href
           ))
         ) {
           // mutated during the fault -> do not resume
@@ -696,8 +696,8 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
     try {
       await appendEvent({
         kind: "cred_submit_prompt",
-        site: normalizeHost(location.hostname),
-        url: location.href,
+        site: normalizeHost(pageIdentity().hostname),
+        url: pageIdentity().href,
         extra: { error: e instanceof Error ? e.message : String(e) }
       });
     } catch (logErr) {
@@ -713,12 +713,12 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 
     const t = evt.target;
     if (!(t instanceof HTMLInputElement)) return;
-    if ((t.getAttribute("type") || "").toLowerCase() !== "password") return;
+    if ((domAttribute(t, "type") || "").toLowerCase() !== "password") return;
 
     const trusted = await getTrustedDomains();
-    const host = normalizeHost(location.hostname);
+    const host = normalizeHost(pageIdentity().hostname);
     const reg = getRegistrableDomain(host);
-    const pasteState = deriveCredentialPasteState(location.href, trusted);
+    const pasteState = deriveCredentialPasteState(pageIdentity().href, trusted);
     if (!pasteState.shouldWarn) return;
 
     showToast({
@@ -730,7 +730,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
           onClick: async () => {
             try {
               if (reg) await addTrustedDomain(reg);
-              await appendEvent({ kind: "cred_trust_domain", site: reg || host, url: location.href });
+              await appendEvent({ kind: "cred_trust_domain", site: reg || host, url: pageIdentity().href });
             } catch (e) {
               console.warn("[NavSentinel] event log append failed (cred_trust_domain/paste):", e);
             }
@@ -739,7 +739,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
       ]
     });
 
-    await appendEvent({ kind: "cred_paste_warn", site: pasteState.siteLabel, url: location.href });
+    await appendEvent({ kind: "cred_paste_warn", site: pasteState.siteLabel, url: pageIdentity().href });
   } catch (e) {
     console.warn("[NavSentinel] credential paste handler failed:", e);
   }

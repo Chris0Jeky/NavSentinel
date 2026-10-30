@@ -397,6 +397,47 @@ export function matchesAnchorOpenIntent(
   return parsed.origin === intent.origin && parsed.pathname === intent.pathname;
 }
 
+/**
+ * Form target for the subframe self-exemption (#1055).
+ * The caller supplies the invoker captured at MAIN-world startup. Null means
+ * the getter is missing, threw, or returned a non-string, so the exemption
+ * must not be granted. An empty string is a real self target and is distinct.
+ */
+/**
+ * Content attribute for a MAIN-world gate decision (#1061).
+ * Undefined means the captured reader is missing, threw, or returned a
+ * non-string. Null means the attribute is absent. Those are different:
+ * an empty action is a real document submit, and a failed read must not
+ * become one.
+ */
+export function readCapturedAttribute(
+  element: Element,
+  name: string,
+  nativeGetAttribute: ((element: Element, qualifiedName: string) => string | null) | undefined,
+): string | null | undefined {
+  if (!nativeGetAttribute) return undefined;
+  try {
+    const value = nativeGetAttribute(element, name);
+    if (value === null) return null;
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function readCapturedFormTarget(
+  form: HTMLFormElement,
+  nativeTargetGetter: ((form: HTMLFormElement) => string) | undefined,
+): string | null {
+  if (!nativeTargetGetter) return null;
+  try {
+    const value = nativeTargetGetter(form);
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 const HTML_WHITESPACE_EDGES = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
 
 /**

@@ -1294,11 +1294,11 @@ function sanitizeEventExtra(
 
 /**
  * Normalize runtime string fields before write-path validation can silently
- * evict them. Nullish fields stay absent; other values become bounded strings.
+ * evict them. Nullish and non-primitive fields stay absent (an object would
+ * otherwise persist as "[object Object]"); other primitives become strings.
  */
 function coerceEventLogString(value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  return typeof value === "string" ? value : String(value);
+  return value === undefined || typeof value === "object" || typeof value === "function" ? undefined : String(value);
 }
 
 function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
@@ -1328,7 +1328,8 @@ function buildEventLogEntry(partial: EventLogAppendPartial): EventLogEntry {
   };
 }
 
-async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
+/** Resolves false only when every verify re-read missed the entry (#1147). */
+async function persistEventLogEntry(entry: EventLogEntry): Promise<boolean> {
   const settings = await getSuiteSettings();
   const limit = clampInt(settings.logLimit, 50, 5000, DEFAULT_SUITE_SETTINGS.logLimit);
 
@@ -1350,18 +1351,19 @@ async function persistEventLogEntry(entry: EventLogEntry): Promise<void> {
     // persisted the correct log, so that is success — not a failed write. Without
     // this, appendEvent would burn all 3 retries and console.warn on every silent
     // allow once the log fills with loud events. (#236)
-    if (!next.some((item) => item.id === entry.id)) return;
+    if (!next.some((item) => item.id === entry.id)) return true;
 
     const verify = await chrome.storage.local.get(EVENT_LOG_KEY);
     const verifyLog = normalizeEventLog(verify[EVENT_LOG_KEY]);
     if (verifyLog.some((item) => item.id === entry.id)) {
-      return;
+      return true;
     }
   }
   console.warn("[NavSentinel] appendEvent: failed to persist after 3 attempts, id:", entry.id);
+  return false;
 }
 
-function appendEventDirect(entry: EventLogEntry): Promise<void> {
+function appendEventDirect(entry: EventLogEntry): Promise<boolean> {
   return queueEventLogWrite(async () => {
     await hydrateEventLogResetCutoff();
     // `<=` deliberately rejects the one-millisecond control boundary as well:
@@ -1369,8 +1371,8 @@ function appendEventDirect(entry: EventLogEntry): Promise<void> {
     // resurrect the prior corpus. An append issued after a queued control is
     // already ordered after it, so only cross-message retries can take this
     // bounded same-ms path.
-    if (entry.ts <= eventLogResetCutoffTs) return;
-    await persistEventLogEntry(entry);
+    if (entry.ts <= eventLogResetCutoffTs) return true;
+    return persistEventLogEntry(entry);
   });
 }
 
@@ -1503,7 +1505,7 @@ export async function appendEvent(partial: EventLogAppendPartial): Promise<void>
   if (shouldDelegateEventLogWrite()) {
     return delegateEventLogAppend({ type: "ns-event-log-append", entry });
   }
-  return appendEventDirect(entry);
+  await appendEventDirect(entry);
 }
 
 /**
@@ -1541,11 +1543,13 @@ export async function handleEventLogAppendMessage(
     // browser cannot provide a safe HTTP(S) hostname).
     const pageSite = deriveSenderPageSite(sender);
     const { pageSite: _ignoredPageSite, ...entryWithoutPageSite } = message.entry;
-    await appendEventDirect(buildEventLogEntry({
+    const persisted = await appendEventDirect(buildEventLogEntry({
       ...entryWithoutPageSite,
       ...(pageSite === undefined ? {} : { pageSite }),
     }));
-    return { ok: true };
+    // An unverified write replies ok:false so the delegating sender retries
+    // (idempotent: entries dedup by id); its own drop + log stays best effort.
+    return persisted ? { ok: true } : { ok: false, error: "Event log append not persisted" };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -1749,7 +1753,7 @@ function clampStr(value: unknown): string | undefined {
 function sanitizeElementHint(value: unknown): ElementHint | undefined {
   if (!value || typeof value !== "object") return undefined;
   const e = value as Record<string, unknown>;
-  if (typeof e.tag !== "string") return undefined;
+  if (typeof e.tag !== "string" || !e.tag) return undefined;
   const out: ElementHint = { tag: e.tag.slice(0, MAX_REASON_CODE_LEN) };
   const role = clampStr(e.role); if (role !== undefined) out.role = role;
   if (typeof e.hasOnClick === "boolean") out.hasOnClick = e.hasOnClick;
@@ -1758,17 +1762,20 @@ function sanitizeElementHint(value: unknown): ElementHint | undefined {
   // cursors are kept and a url() cursor (never "pointer") is safely omitted.
   const cursor = clampStr(e.cursor);
   if (cursor !== undefined && !/url\(/i.test(cursor)) out.cursor = cursor;
-  if (typeof e.textLength === "number" && Number.isFinite(e.textLength)) out.textLength = e.textLength;
-  if (typeof e.ariaLabelLength === "number" && Number.isFinite(e.ariaLabelLength)) out.ariaLabelLength = e.ariaLabelLength;
-  if (typeof e.titleLength === "number" && Number.isFinite(e.titleLength)) out.titleLength = e.titleLength;
   if (typeof e.targetBlank === "boolean") out.targetBlank = e.targetBlank;
   const rect = sanitizeRectHint(e.rect); if (rect) out.rect = rect;
-  if (typeof e.opacity === "number" && Number.isFinite(e.opacity)) out.opacity = e.opacity;
   const visibility = clampStr(e.visibility); if (visibility !== undefined) out.visibility = visibility;
   const display = clampStr(e.display); if (display !== undefined) out.display = display;
   const pointerEvents = clampStr(e.pointerEvents); if (pointerEvents !== undefined) out.pointerEvents = pointerEvents;
   const position = clampStr(e.position); if (position !== undefined) out.position = position;
-  if (typeof e.zIndex === "number" && Number.isFinite(e.zIndex)) out.zIndex = e.zIndex;
+  // Clamp numeric hints to the ranges the live producer (content/dom_builder.ts) can emit:
+  // lengths are capped at 80, opacity is a [0, 1] product, zIndex is a CSS 32-bit integer.
+  // A crafted backup otherwise skews replay scoring (#1147).
+  for (const [k, lo, hi] of [["textLength", 0, 80], ["ariaLabelLength", 0, 80], ["titleLength", 0, 80],
+    ["opacity", 0, 1], ["zIndex", -2147483648, 2147483647]] as const) {
+    const v = e[k];
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = Math.min(Math.max(v, lo), hi);
+  }
   return out;
 }
 
@@ -1843,6 +1850,15 @@ function normalizePromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
 
 function boundPromptOutcomeLog(value: unknown): PromptOutcomeEntry[] {
   return normalizePromptOutcomeLog(value).slice(-PROMPT_OUTCOMES_LIMIT);
+}
+
+function normalizePromptOutcomeReplacement(outcomes: unknown[]): PromptOutcomeEntry[] {
+  const normalized = boundPromptOutcomeLog(outcomes);
+  // An explicit [] can clear history; corrupt non-empty input must not do so.
+  if (outcomes.length > 0 && normalized.length === 0) {
+    throw new Error("Import contains no valid prompt outcomes");
+  }
+  return normalized;
 }
 
 export function isPromptOutcomeStorageMessage(message: unknown): message is PromptOutcomeStorageMessage {
@@ -2135,16 +2151,18 @@ function buildPromptOutcomeRecord(
   const reasons = sanitizeCodeList(partial.reasons);
   const nrsFactors = sanitizeCodeList(partial.nrsFactors);
   const elementContext = sanitizeClickContext(partial.elementContext);
-  // Reject corrupt scores; optional replay fields use their producer's bounds.
-  if (Number.isFinite(partial.score) &&
-    !isBoundedNumber(partial.score, 0, 1000)) return undefined;
+  // Reject corrupt scores, non-finite ones included: coercing NaN to 0 would
+  // record a low-risk allow, which adaptive scoring weights as full trust and
+  // so bypasses its high-score allow discount (#1147). Optional replay fields
+  // use their producer's bounds.
+  if (!isBoundedNumber(partial.score, 0, 1000)) return undefined;
   return {
     id: partial.id ?? makeId(),
     ts: Number.isFinite(partial.ts) ? (partial.ts as number) : Date.now(),
     domain,
     ...(destDomain ? { destDomain } : {}),
     type: partial.type,
-    score: Number.isFinite(partial.score) ? partial.score : 0,
+    score: partial.score,
     outcome: partial.outcome,
     ...(reasons !== undefined ? { reasons } : {}),
     ...(nrsFactors !== undefined && nrsFactors.length > 0 ? { nrsFactors } : {}),
@@ -2161,7 +2179,7 @@ export function appendPromptOutcome(
 ): Promise<void> {
   const entry = buildPromptOutcomeRecord(partial);
   // Prompt outcomes are best-effort adaptive-scoring input. A malformed
-  // caller-supplied domain is dropped rather than stored verbatim or allowed to
+  // caller-supplied domain or score is dropped rather than stored verbatim or allowed to
   // surface in exports.
   if (!entry) return Promise.resolve();
   if (shouldDelegatePromptOutcomeWrite()) {
@@ -2250,7 +2268,7 @@ export function clearAdaptiveScores(): Promise<void> {
 async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Promise<void> {
   // Rebuild every imported row so backups retain only declared bounded replay
   // fields and host-only source/destination identifiers.
-  const importedOutcomes = boundPromptOutcomeLog(outcomes);
+  const importedOutcomes = normalizePromptOutcomeReplacement(outcomes);
   await queuePromptOutcomeWrite(async () => {
     await hydratePromptOutcomeResetCutoff();
     const resetTs = Date.now();
@@ -2274,7 +2292,7 @@ async function replacePromptOutcomesDirect(outcomes: PromptOutcomeEntry[]): Prom
 // (PromptOutcomeDeliveryError) and reports a partial result rather than a flat
 // "Import failed." (#188 R1).
 async function replacePromptOutcomes(outcomes: PromptOutcomeEntry[]): Promise<void> {
-  const boundedOutcomes = boundPromptOutcomeLog(outcomes);
+  const boundedOutcomes = normalizePromptOutcomeReplacement(outcomes);
   if (shouldDelegatePromptOutcomeWrite()) {
     return delegatePromptOutcomeWrite(
       { type: "ns-prompt-outcome-replace", outcomes: boundedOutcomes },
@@ -2372,6 +2390,12 @@ export async function handlePromptOutcomeStorageMessage(
     } else if (message.type === "ns-prompt-outcome-reset-adaptive") {
       await clearPromptOutcomeAdaptiveScoresDirect();
     } else {
+      // A non-empty replacement whose every row fails normalization would wipe
+      // history; refuse it. An explicit [] still clears. (Page senders pre-bound
+      // their rows, so import keeps its reset-on-no-valid-outcomes contract.) (#1147)
+      if (message.outcomes.length > 0 && boundPromptOutcomeLog(message.outcomes).length === 0) {
+        return { ok: false, error: "No valid prompt outcomes in replacement" };
+      }
       await replacePromptOutcomesDirect(message.outcomes);
     }
     return { ok: true };
@@ -2428,10 +2452,12 @@ export async function exportAll(): Promise<{
  * operations, not a new per-write concurrency scheme: the existing per-lane
  * chains (and the #180/#182 fixes in them) are untouched.
  *
- * Scope: per JS context. Both controls live on the options page, so its module
- * instance serializes them end to end, including across the worker delegation
- * each awaits inside the queue. Two extension pages driving one bulk operation
- * each are still not ordered against one another — documented residual.
+ * Each JS context has its own queue instance. Supported extension-page imports
+ * and resets delegate the whole operation to the worker, whose queue serializes
+ * imports, resets, and startup resume across callers. The page-side queue keeps
+ * local bulk operations ordered while awaiting the worker response. This does
+ * not provide a cross-context lock for arbitrary direct storage writes, such as
+ * content-script domain-profile updates.
  */
 export const queueBulkDataOperation = createStorageWriteQueue((err) => {
     console.warn("[NavSentinel] bulk data serialization error:", err);
@@ -2562,8 +2588,11 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
     );
   }
 
-  const hasPromptOutcomes = Array.isArray(p.promptOutcomes);
-  if (!hasPromptOutcomes) {
+  // Validate destructive replacements before committing ANY core section.
+  const importedOutcomes = Array.isArray(p.promptOutcomes)
+    ? normalizePromptOutcomeReplacement(p.promptOutcomes)
+    : null;
+  if (!importedOutcomes) {
     // Intentional: any import without valid outcomes resets adaptive scores
     // to prevent stale data. adaptiveScores from payload are ignored —
     // they are recomputed from outcomes to prevent injection. Folded into the
@@ -2595,8 +2624,8 @@ async function importAllDirect(payload: unknown): Promise<ImportAllResult> {
   // scores; may be SW-delegated and reject on exhaustion → surfaced as a partial
   // import by the options UI). The core sections above are already consistent. ---
   try {
-    if (hasPromptOutcomes) {
-      await replacePromptOutcomes(p.promptOutcomes as PromptOutcomeEntry[]);
+    if (importedOutcomes) {
+      await replacePromptOutcomes(importedOutcomes);
     } else {
       // Keep the phase-2 atomic clear above, then queue an idempotent barrier so
       // an already-running startup migration cannot restore a stale derivative.

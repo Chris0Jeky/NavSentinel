@@ -25,7 +25,8 @@ vi.mock("../extension/src/content/credential_modal", () => ({
   showCredentialModal: vi.fn(),
 }));
 
-vi.mock("../extension/src/content/credential_guard_model", () => ({
+vi.mock("../extension/src/content/credential_guard_model", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../extension/src/content/credential_guard_model")>()),
   deriveCredentialPasteState: vi.fn(),
   getCredentialReasonLines: vi.fn(),
   isCrossSiteCredentialAction: vi.fn(),
@@ -140,11 +141,17 @@ function createPasswordInput(): HTMLInputElement {
   return input;
 }
 
-// Stub/override the form.requestSubmit DOM method (or remove it) for tests
-// that exercise the requestSubmit-vs-submit fallback path. Accepts a spy,
-// vi.fn(), or undefined.
+// The isolated guard invokes prototypes; stub the native seam per form.
+const requestSubmitStubs = new WeakMap<HTMLFormElement, unknown>();
+const nativeRequestSubmit = HTMLFormElement.prototype.requestSubmit;
 function stubRequestSubmit(form: HTMLFormElement, value: unknown): void {
-  (form as unknown as { requestSubmit: unknown }).requestSubmit = value;
+  requestSubmitStubs.set(form, value);
+  vi.spyOn(HTMLFormElement.prototype, "requestSubmit").mockImplementation(function (this: HTMLFormElement, submitter) {
+    if (!requestSubmitStubs.has(this)) return nativeRequestSubmit.call(this, submitter);
+    const stub = requestSubmitStubs.get(this);
+    if (typeof stub !== "function") throw new TypeError("requestSubmit unavailable");
+    stub(submitter);
+  });
 }
 
 // All mocks resolve synchronously so the async handler's microtask chain
@@ -250,10 +257,121 @@ describe("credential_guard", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     document.body.innerHTML = "";
   });
 
   describe("handleSubmit", () => {
+    it.each(["querySelectorAll", "elements", "getAttribute", "action", "method", "target"])(
+      "intercepts a password POST with a named %s control",
+      async (name) => {
+        const form = createPasswordForm("https://evil.com/collect");
+        form.setAttribute("method", "post");
+        form.setAttribute("target", "_self");
+        const control = document.createElement("input");
+        control.name = name;
+        form.appendChild(control);
+        // happy-dom does not implement Chrome's form named-property override.
+        Object.defineProperty(form, name, { value: control, configurable: true });
+        try {
+          const event = await dispatchSubmit(form);
+          expect(event.defaultPrevented).toBe(true);
+          expect(mockComputeRisk).toHaveBeenCalledWith(expect.objectContaining({
+            actionUrl: "https://evil.com/collect",
+          }));
+          expect(mockShowModal).toHaveBeenCalled();
+        } finally {
+          // happy-dom's own removal algorithm calls getAttribute dynamically.
+          Reflect.deleteProperty(form, name);
+        }
+      },
+    );
+
+    it("keeps a password found in the collection when the descendant scan throws", async () => {
+      const form = createPasswordForm("https://evil.com/collect");
+      const scan = vi.spyOn(Element.prototype, "querySelectorAll").mockImplementationOnce(() => {
+        throw new Error("unexpected DOM scan failure");
+      });
+      try {
+        const event = await dispatchSubmit(form);
+        expect(event.defaultPrevented).toBe(true);
+        expect(mockShowModal).toHaveBeenCalled();
+      } finally {
+        scan.mockRestore();
+      }
+    });
+
+    it.each(["elements", "item", "length"])("finds an external password despite a named %s control", async (name) => {
+      const form = createPlainForm();
+      form.id = "external-login";
+      const password = createPasswordInput();
+      password.setAttribute("form", form.id);
+      const control = document.createElement("input");
+      control.name = name;
+      form.appendChild(control);
+      const target = name === "elements" ? form : form.elements;
+      Object.defineProperty(target, name, { value: control, configurable: true });
+      try {
+        expect((await dispatchSubmit(form)).defaultPrevented).toBe(true);
+        expect(mockShowModal).toHaveBeenCalled();
+      } finally {
+        Reflect.deleteProperty(target, name);
+      }
+    });
+
+    it.each(["type", "disabled"])("classifies password inputs through the prototype despite an own %s property", async (name) => {
+      const form = createPasswordForm("https://evil.com/collect");
+      const password = form.querySelector("input")!;
+      Object.defineProperty(password, name, { value: name === "type" ? "text" : true, configurable: true });
+      expect((await dispatchSubmit(form)).defaultPrevented).toBe(true);
+      expect(mockShowModal).toHaveBeenCalled();
+    });
+
+    it("reads the real submitter form association when resuming", async () => {
+      const form = createPasswordForm("https://evil.com/collect");
+      const button = document.createElement("button");
+      form.appendChild(button);
+      Object.defineProperty(button, "form", { value: null, configurable: true });
+      mockShowModal.mockResolvedValue("proceed_once");
+      const nativeRequest = vi.fn();
+      stubRequestSubmit(form, nativeRequest);
+      await dispatchSubmit(form, button);
+      expect(nativeRequest).toHaveBeenCalledExactlyOnceWith(button);
+    });
+
+    it.each(["requestSubmit", "submit"])("resumes through the prototype despite a named %s control", async (name) => {
+      const form = createPasswordForm("https://evil.com/collect");
+      const control = document.createElement("input");
+      control.name = name;
+      form.appendChild(control);
+      Object.defineProperty(form, name, { value: control, configurable: true });
+      mockShowModal.mockResolvedValue("proceed_once");
+      const nativeSubmit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+      const nativeRequest = vi.fn(() => {
+        if (name === "submit") throw new Error("native requestSubmit failed");
+      });
+      stubRequestSubmit(form, nativeRequest);
+      await dispatchSubmit(form);
+      expect(nativeRequest).toHaveBeenCalled();
+      expect(nativeSubmit).toHaveBeenCalledTimes(name === "submit" ? 1 : 0);
+    });
+
+    it.each(["getAttribute", "hasAttribute"])("assesses the real submitter override despite an own %s property", async (name) => {
+      const form = createPasswordForm("https://example.com/login");
+      const button = document.createElement("button");
+      button.setAttribute("formaction", "https://evil.com/collect");
+      form.appendChild(button);
+      Object.defineProperty(button, name, { value: document.createElement("input"), configurable: true });
+      try {
+        const event = await dispatchSubmit(form, button);
+        expect(event.defaultPrevented).toBe(true);
+        expect(mockComputeRisk).toHaveBeenCalledWith(expect.objectContaining({ actionUrl: "https://evil.com/collect" }));
+        expect(mockShowModal).toHaveBeenCalled();
+      } finally {
+        Reflect.deleteProperty(button, name);
+      }
+    });
+
     it("ignores forms without password fields", async () => {
       const form = createPlainForm();
       await dispatchSubmit(form);
@@ -333,6 +451,22 @@ describe("credential_guard", () => {
           outsideAction: "cancel",
         }),
       );
+    });
+
+    it("prompts for an opaque page even when ordinary risk settings would silently allow", async () => {
+      stubLocation("about:srcdoc");
+      const risk = defaultRisk();
+      risk.page = { ...risk.page, url: "about:srcdoc", host: "", registrableDomain: "", isHttps: false };
+      mockComputeRisk.mockReturnValue(risk);
+      mockShouldPrompt.mockReturnValue(false);
+      const form = createPasswordForm("https://evil.com/collect");
+      const requestSubmitSpy = vi.fn();
+      stubRequestSubmit(form, requestSubmitSpy);
+
+      await dispatchSubmit(form);
+
+      expect(mockShowModal).toHaveBeenCalledTimes(1);
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
     });
 
     it("logs cred_submit_prompt event before showing modal", async () => {
@@ -749,7 +883,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
       stubRequestSubmit(form, undefined);
-      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+      const submitSpy = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form);
 
@@ -833,7 +967,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
       stubRequestSubmit(form, vi.fn(() => { throw new Error("requestSubmit failed"); }));
-      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+      const submitSpy = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form);
 
@@ -1120,7 +1254,7 @@ describe("credential_guard", () => {
       // requestSubmit throws (e.g. submitter detached); the unsafe form.submit
       // fallback uses form.action and would ignore the assessed formaction.
       stubRequestSubmit(form, vi.fn(() => { throw new Error("NotFoundError"); }));
-      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+      const submitSpy = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form, btn);
 
@@ -1454,7 +1588,7 @@ describe("credential_guard", () => {
       btn.setAttribute("formaction", "https://pay.example/checkout");
       form.appendChild(btn);
       stubRequestSubmit(form, vi.fn(() => { throw new Error("NotFoundError"); }));
-      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+      const submitSpy = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form, btn);
 
@@ -1715,7 +1849,7 @@ describe("credential_guard", () => {
       mockShowModal.mockResolvedValue("proceed_once");
       const form = createPasswordForm();
       stubRequestSubmit(form, vi.fn(() => { throw new Error("requestSubmit failed"); }));
-      vi.spyOn(form, "submit").mockImplementation(() => {}); // avoid jsdom navigation
+      vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {}); // avoid jsdom navigation
 
       await dispatchSubmit(form); // submit #1 -> resumeSubmit -> requestSubmit throws -> fallback
       expect(mockShowModal).toHaveBeenCalledTimes(1);
@@ -1740,7 +1874,7 @@ describe("credential_guard", () => {
       btn.setAttribute("formaction", "https://pay.example/checkout");
       form.appendChild(btn);
       stubRequestSubmit(form, vi.fn(() => { throw new Error("NotFoundError"); }));
-      const submitSpy = vi.spyOn(form, "submit").mockImplementation(() => {});
+      const submitSpy = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
 
       await dispatchSubmit(form, btn); // toast + early return (form.submit NOT called)
       expect(mockShowToast).toHaveBeenCalledWith(

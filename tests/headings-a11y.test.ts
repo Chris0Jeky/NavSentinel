@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-// #980: popup needs a real h1; the evidence h1 must expose a spaced
-// accessible name ("Your browsing. A clearer picture.") for screen readers.
+// #980: each page needs one readable h1 for screen readers.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,9 +25,9 @@ describe("popup heading (#980)", () => {
 });
 
 describe("evidence heading (#980)", () => {
-  it("reads 'Your browsing. A clearer picture.' with a space for screen readers", () => {
+  it("exposes one clear protection activity heading to screen readers", () => {
     const headings = parse("evidence/evidence.html").querySelectorAll("h1");
     expect(headings).toHaveLength(1);
-    expect(accessibleName(headings[0]!)).toBe("Your browsing. A clearer picture.");
+    expect(accessibleName(headings[0]!)).toBe("Your protection activity.");
   });
 });

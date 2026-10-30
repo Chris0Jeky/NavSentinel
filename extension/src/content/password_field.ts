@@ -1,3 +1,5 @@
+import { domAttribute, domProperty } from "./dom_access";
+
 /**
  * Shared password-field visibility helper (#196).
  *
@@ -57,8 +59,8 @@
  */
 export function isPasswordTypeInput(el: Element): boolean {
   return (
-    el.tagName.toLowerCase() === "input" &&
-    (el.getAttribute("type") ?? "").toLowerCase() === "password"
+    domProperty(Element.prototype, el, "tagName").toLowerCase() === "input" &&
+    (domAttribute(el, "type") ?? "").toLowerCase() === "password"
   );
 }
 
@@ -68,7 +70,9 @@ export function isPasswordTypeInput(el: Element): boolean {
  * its own `input[type="password"]` selector. (#820)
  */
 export function queryPasswordInputs(root: ParentNode): Element[] {
-  const all = root.querySelectorAll("input");
+  const prototype = root instanceof Element ? Element.prototype
+    : root instanceof Document ? Document.prototype : DocumentFragment.prototype;
+  const all = prototype.querySelectorAll.call(root, "input");
   const out: Element[] = [];
   for (let i = 0; i < all.length; i++) {
     const el = all[i]!;
@@ -83,14 +87,14 @@ export function queryPasswordInputs(root: ParentNode): Element[] {
  * unit testing; runtime consumers use {@link hasVisiblePasswordField}.
  */
 export function isVisiblePasswordField(input: HTMLInputElement): boolean {
-  if (input.disabled) return false;
+  if (!(input instanceof HTMLInputElement) || domProperty(HTMLInputElement.prototype, input, "disabled")) return false;
   // `.style` (ElementCSSInlineStyle) is mixed into HTML/SVG/MathML elements but
   // NOT a plain Element. A password input matched inside a non-HTML document
   // (e.g. an application/xml page under the <all_urls> match) is such a plain
   // element: it is not a rendered HTML credential field and has no inline style.
   // Treat it as not-visible rather than dereferencing undefined — the old
   // getAttribute("style") path was total over any Element and never threw.
-  const style = input.style;
+  const style = domProperty(HTMLElement.prototype, input, "style");
   if (!style) return false;
   return style.display !== "none" && style.visibility !== "hidden";
 }

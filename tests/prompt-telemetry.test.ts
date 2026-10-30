@@ -404,6 +404,35 @@ describe("prompt telemetry replay-grade enrichment (P5-C1 / #238)", () => {
     expect(entry!.elementContext?.top.tag).toBe("A");
   });
 
+  it("clamps numeric element hints to producer ranges and rejects an empty tag (#1147)", async () => {
+    const { chrome } = createChromeMock();
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { appendPromptOutcome, getPromptOutcomes } = await import("../extension/src/shared/storage");
+
+    const append = (p: unknown) => appendPromptOutcome(p as Parameters<typeof appendPromptOutcome>[0]);
+    await append({
+      domain: "clamp.example",
+      type: "nav",
+      score: 30,
+      outcome: "block",
+      elementContext: {
+        viewport: { w: 100, h: 100 },
+        input: "pointer",
+        top: { tag: "DIV", textLength: 1e9, ariaLabelLength: -5, titleLength: 12, opacity: -3, zIndex: 1e12 },
+        underlying: { tag: "", textLength: 3 }
+      }
+    });
+
+    const [entry] = await getPromptOutcomes();
+    const top = entry!.elementContext!.top;
+    expect(top.textLength).toBe(80);
+    expect(top.ariaLabelLength).toBe(0);
+    expect(top.titleLength).toBe(12);
+    expect(top.opacity).toBe(0);
+    expect(top.zIndex).toBe(2147483647);
+    expect(entry!.elementContext!.underlying).toBeUndefined();
+  });
+
   it("omits elementContext when there is no usable top element", async () => {
     const { chrome } = createChromeMock();
     vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);

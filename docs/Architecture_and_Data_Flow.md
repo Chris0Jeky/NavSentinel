@@ -2,7 +2,7 @@
 
 ## Runtime layers
 
-NavSentinel is a Manifest V3 extension with four main runtime surfaces:
+Heedline (formerly NavSentinel) is a Manifest V3 extension with four main runtime surfaces:
 
 1. isolated-world navigation control
 2. main-world navigation patching

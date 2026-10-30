@@ -539,6 +539,8 @@ const NON_RENDERED_TAGS: ReadonlySet<string> = new Set([
 function isPrunedBodyBranch(el: Element): boolean {
   if (NON_RENDERED_TAGS.has(el.tagName.toUpperCase())) return true;
   if (el.hasAttribute("hidden")) return true;
+  // Avoid materializing an inline style declaration for every unstyled node.
+  if (!el.hasAttribute("style")) return false;
   // `.style` is absent on non-HTML elements (e.g. inside an XML document);
   // those carry no inline style and cannot be inline-hidden.
   const style = (el as HTMLElement).style;

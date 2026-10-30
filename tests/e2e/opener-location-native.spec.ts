@@ -2,6 +2,7 @@ import { test, expect, chromium, type BrowserContext } from "@playwright/test";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { selectBrandedChrome } from "../branded/branded-chrome-selector.cjs";
 import { getServiceWorker, updateNavigationSettings, waitForNavSentinelBridge } from "./extension_test_utils";
 import { startProvingGroundEgressFence, type ProvingGroundEgressAttempt } from "./proving_ground_fake_sink";
 
@@ -60,6 +61,7 @@ for (const crossOrigin of [false, true]) {
       const arms: Record<string, unknown>[] = [];
       try {
         for (const protectedArm of [false, true]) {
+          const armStarted = performance.now();
           // Keep disposable Chrome profile paths short on Windows; trace output
           // paths include the full test title and can exceed native path limits.
           const profile = fs.mkdtempSync(path.join(profileRoot, "case-"));
@@ -69,7 +71,7 @@ for (const crossOrigin of [false, true]) {
             info.annotations.push({ type: "setup", description: `launching protected=${protectedArm}, profile=${profile}` });
             context = await chromium.launchPersistentContext(profile, {
               headless: false,
-              ...(protectedArm ? {} : process.env.NAVSENTINEL_BRANDED_CHROME ? { channel: "chrome" as const } : {}),
+              ...selectBrandedChrome(process.env.NAVSENTINEL_BRANDED_CHROME),
               proxy: { server: fence.proxyServer },
               args: ["--disable-background-networking", "--disable-quic", "--no-first-run",
                 ...(protectedArm ? [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] : [])],
@@ -83,8 +85,11 @@ for (const crossOrigin of [false, true]) {
             if (protectedArm) await updateNavigationSettings(context, { defaultMode: "smart" });
             const parent = await context.newPage();
             await parent.goto(`${parentOrigin}/parent`);
+            // goto waits for the fixture's inline click listener; protected arms
+            // additionally wait for capture, the bridge, and the exact built guard.
+            // No elapsed-time window is required before this trusted popup click.
             if (protectedArm) await waitForNavSentinelBridge(parent);
-            await parent.waitForTimeout(6_000);
+            const parentReadyMs = performance.now() - armStarted;
             const popupPromise = context.waitForEvent("page", { timeout: 5_000 });
             await parent.locator("#open-child").click();
             const child = await popupPromise;
@@ -122,12 +127,16 @@ for (const crossOrigin of [false, true]) {
               await expect.poll(async () => (await childState(context!)).children[childId!]?.openerNavObserved).toBe(!nativeRejected);
             }
             arms.push({ protectedArm, browser: context.browser()?.version(), stringify, attempt, parentUrl: parent.url(),
+              parentReadyMs, assertionsCompleteMs: performance.now() - armStarted,
               session: protectedArm ? await childState(context) : undefined });
           } finally {
             await context?.close();
             if (fs.existsSync(profile)) fs.rmSync(profile, { recursive: true });
           }
         }
+        expect(arms).toHaveLength(2);
+        expect(arms[0]!.browser).toBeTruthy();
+        expect(arms[1]!.browser, "Both arms must use the same browser version").toBe(arms[0]!.browser);
       } finally {
         await info.attach("opener-location-native", { body: Buffer.from(JSON.stringify({ method, crossOrigin, arms, denied,
           scope: "Local trusted-input native method compatibility and observation; no document replacement or pre-harm prevention claim." }, null, 2)), contentType: "application/json" });
