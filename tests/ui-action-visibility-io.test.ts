@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { stubVisibleUi } from "./helpers/visible-ui";
+import { stubVisibleUi, tabPip } from "./helpers/visible-ui";
 
 /** IntersectionObserver v2 stand-in: tests decide what the browser "painted". */
 class FakeVisibilityObserver {
@@ -202,18 +202,16 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(p.settled).toHaveBeenCalledWith("proceed");
   });
 
-  it("refuses while another frame of this tab has PiP open, with a hint, until it closes (#1242)", async () => {
+  it("refuses while another frame of this tab has PiP open, with a hint, until it closes (#1242, #1244)", async () => {
     FakeVisibilityObserver.supported = false;
-    // The document_start loader's record; the service worker relay fills r.
-    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
-    vi.stubGlobal("__navsentinelUiFence", record);
     const p = await prompt();
     const modal = await import("../extension/src/content/credential_modal");
-    record.r.add(3);
+    tabPip.open = true;
     vi.advanceTimersByTime(1000);
     expect(await p.click()).toBe(false);
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: "ns-pip" });
     expect(modal.credentialModalRoot()!.textContent).toContain("Close Picture-in-Picture to continue");
-    record.r.delete(3);
+    tabPip.open = false;
     vi.advanceTimersByTime(700);
     expect(modal.credentialModalRoot()!.textContent).not.toContain("Picture-in-Picture");
     expect(await p.click()).toBe(false);
@@ -222,10 +220,49 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(p.settled).toHaveBeenCalledWith("proceed");
   });
 
+  it("refuses while the tab has not answered, and once its last answer is over a second old (#1244)", async () => {
+    FakeVisibilityObserver.supported = false;
+    tabPip.open = null;
+    const p = await prompt();
+    vi.advanceTimersByTime(2000);
+    expect(await p.click()).toBe(false);
+    // One query in flight at a time: a stuck one is not re-sent every frame.
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops accepting once a query has been in flight for over 300 ms (#1244)", async () => {
+    FakeVisibilityObserver.supported = false;
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    tabPip.open = null;
+    // Under 1 s since the last 'closed' answer, but the next query is stuck.
+    vi.advanceTimersByTime(600);
+    expect(await p.click()).toBe(false);
+  });
+
+  it("asks again after a rejected query (#1244)", async () => {
+    FakeVisibilityObserver.supported = false;
+    tabPip.open = "reject";
+    const p = await prompt();
+    vi.advanceTimersByTime(100);
+    tabPip.open = false;
+    vi.advanceTimersByTime(2000);
+    expect(vi.mocked(chrome.runtime.sendMessage).mock.calls.length).toBeGreaterThan(1);
+    expect(await p.click()).toBe(true);
+  });
+
+  it("refuses when the tab cannot be asked (#1244)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.stubGlobal("chrome", { runtime: { sendMessage: () => { throw new Error("Extension context invalidated."); } } });
+    const p = await prompt();
+    vi.advanceTimersByTime(2000);
+    expect(await p.click()).toBe(false);
+  });
+
   it("refuses after a blur only the document_start loader saw (#1242)", async () => {
     FakeVisibilityObserver.supported = false;
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
-    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
+    const record = { h: true, u: -Infinity, a: false };
     vi.stubGlobal("__navsentinelUiFence", record);
     const p = await prompt();
     vi.advanceTimersByTime(1000);
