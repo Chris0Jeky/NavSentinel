@@ -28,6 +28,8 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
   BRAND_KEYWORD_DOMAIN: "The site name borrows a well-known brand it does not belong to",
   SUBDOMAIN_STUFFING: "A brand name is placed in front of an unrelated site name",
   UNTRUSTED_DOMAIN: "This site is not on your trusted list",
+  // content/credential_guard.ts ConsentFix paste guard.
+  CONSENTFIX_PASTE_BLOCKED: "Stopped pasting a sign-in address with an access code from this computer",
   // content/credential_focus_warning.ts (#1170): marks the focus trigger (#1198).
   PASSWORD_FOCUS_WARNING: "Warned when you clicked into a password field on this page; nothing was pasted",
   CONTENT_FP: "The page content resembles a phishing page (brand, template or form clues)",
