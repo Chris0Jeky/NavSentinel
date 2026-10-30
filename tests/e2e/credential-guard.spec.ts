@@ -1,6 +1,5 @@
 import { expect, test, chromium } from "@playwright/test";
 import fs from "fs";
-import { waitForVisibleAction } from "../helpers/visible-ui-browser";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -12,11 +11,13 @@ import {
 } from "../../extension/src/shared/storage";
 import {
   assertNoToastFor,
+  clickToastButton,
   getExtensionId,
   getGymBaseUrl,
   getServiceWorker,
   waitForCredentialModal,
-  waitForNavSentinelBridge
+  waitForNavSentinelBridge,
+  waitForToastText
 } from "./extension_test_utils";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -371,16 +372,8 @@ test("credential guard warns on password paste and trust action persists @regres
         input.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, composed: true }));
       });
 
-      const toast = page.locator("#__navsentinel_toast_host");
-      await expect(toast).toContainText(
-        "You pasted into a password field on an untrusted domain",
-        { timeout: 4000 }
-      );
-
-      const trustButton = toast.getByRole("button", { name: "Trust 127.0.0.1" });
-      await expect(trustButton).toBeVisible();
-      await waitForVisibleAction(trustButton);
-      await trustButton.click();
+      await waitForToastText(page, "You pasted into a password field on an untrusted domain", 4000);
+      await clickToastButton(page, "Trust 127.0.0.1");
 
       const serviceWorker = await getServiceWorker(context);
       await expect

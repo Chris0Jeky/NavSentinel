@@ -101,7 +101,10 @@ const budgets = [
   {
     label: "service worker",
     glob: "assets/sw.ts-*.js",
-    maxKB: 25,
+    // Bumped 25 -> 26 (#1172): reverse-tabnabbing tracking (opener domain at child creation,
+    // pending-entry map with its session validator, onActivated handler) adds ~1.26KB:
+    // 24,680 -> 25,939 B interaction-only, over the old 25,600 B ceiling by 339 B.
+    maxKB: 26,
   },
   {
     label: "storage module",

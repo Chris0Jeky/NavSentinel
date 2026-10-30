@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { expect, type Download, type Page } from "@playwright/test";
 import type { AcceptanceSession } from "./acceptance_harness";
 import type { CdpPageClient } from "./cdp_page_client";
-import { evaluateInCredentialModal } from "../e2e/extension_test_utils";
+import { evaluateInCredentialModal, evaluateInToast } from "../e2e/extension_test_utils";
 
 export const OPTIONS_PAGE = "src/options/options.html";
 export const EVIDENCE_PAGE = "src/evidence/evidence.html";
@@ -77,9 +77,12 @@ export async function readDownload(download: Download): Promise<Buffer> {
   return fs.readFileSync(file);
 }
 
-/** Buttons (in the light DOM or any open shadow root) whose label mentions Allow/Proceed. */
+/**
+ * Buttons (in the light DOM, any open shadow root, or the toast's closed root,
+ * #1142) whose label mentions Allow/Proceed.
+ */
 export async function allowProceedControls(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+  return evaluateInToast(page, (toastRoots) => {
     const found: string[] = [];
     const visit = (root: Document | ShadowRoot) => {
       for (const el of Array.from(root.querySelectorAll("button, a, [role=button], input[type=button], input[type=submit]"))) {
@@ -91,13 +94,15 @@ export async function allowProceedControls(page: Page): Promise<string[]> {
       }
     };
     visit(document);
+    // A forged host's open root was already visited above.
+    for (const root of toastRoots) if (!root.host.shadowRoot) visit(root);
     return found;
   });
 }
 
 /**
  * Centre of a visible button, by exact label, inside any open shadow root on
- * the page or inside the credential prompt, whose root is closed (#894).
+ * the page, in the toast (#1142) or in the credential prompt (#894), whose roots are closed.
  */
 export async function shadowButtonPoint(page: Page, label: string): Promise<{ x: number; y: number } | null> {
   const open = await page.evaluate((expected) => {
@@ -118,6 +123,15 @@ export async function shadowButtonPoint(page: Page, label: string): Promise<{ x:
     return visit(document);
   }, label);
   if (open) return open;
+  const toast = await evaluateInToast(page, (roots, expected) => {
+    for (const root of roots) {
+      const button = Array.from(root.querySelectorAll("button")).find((candidate) => candidate.textContent?.trim() === expected);
+      const rect = button?.getBoundingClientRect();
+      if (rect?.width && rect.height) return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    }
+    return null;
+  }, label);
+  if (toast) return toast;
   return evaluateInCredentialModal(
     page,
     function (this: ShadowRoot, expected: string) {

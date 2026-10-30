@@ -4,7 +4,8 @@
  * trusted input; they never call into the extension.
  */
 import { expect, type BrowserContext, type Frame, type Page } from "@playwright/test";
-import { waitForVisibleAction } from "../helpers/visible-ui-browser";
+import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
+import { evaluateInToast, frameViewportOffset } from "../e2e/extension_test_utils";
 
 export type Scope = Page | Frame;
 
@@ -49,10 +50,13 @@ export async function readPageInputEvents(scope: Scope): Promise<string[]> {
 
 export type ToastCard = { text: string; persistent: boolean; brief: boolean; buttons: string[] };
 
-/** Every card under every element carrying the host id, so a forged host cannot mask the real one. */
+/**
+ * Every card under every element carrying the host id, so a forged host cannot
+ * mask the real one. The real root is closed (#1142); read it through CDP.
+ */
 export async function toastCards(scope: Scope): Promise<ToastCard[]> {
-  return scope.evaluate(() => Array.from(document.querySelectorAll("#__navsentinel_toast_host")).flatMap((host) =>
-    Array.from(host.shadowRoot?.querySelectorAll<HTMLElement>(".wrap") ?? []).map((card) => ({
+  return evaluateInToast(scope, (roots) => roots.flatMap((root) =>
+    Array.from(root.querySelectorAll<HTMLElement>(".wrap")).map((card) => ({
       text: card.querySelector(".body")?.textContent?.trim() ?? "",
       persistent: card.dataset.persistent === "true",
       brief: card.classList.contains("brief-recovery"),
@@ -68,40 +72,64 @@ export async function briefCardCount(scope: Scope): Promise<number> {
   return (await toastCards(scope)).filter((card) => card.brief).length;
 }
 
+type ToastKind = "full" | "brief" | "any";
+
 /**
- * Main-viewport centre of an extension-owned toast button (works inside child
- * frames: Playwright reports frame content boxes in top-level coordinates).
+ * Main-viewport centre of an extension-owned toast button once its geometry is
+ * stable across two animation frames, or null after `timeoutMs`. Works inside
+ * child frames by adding the frame's viewport offset.
  */
-function toastButton(scope: Scope, label: string, kind: "full" | "brief" | "any") {
-  const cardSelector = kind === "full"
-    ? "#__navsentinel_toast_host .wrap:not([data-persistent='true'])"
-    : kind === "brief" ? "#__navsentinel_toast_host .wrap.brief-recovery" : "#__navsentinel_toast_host .wrap";
-  return scope.locator(cardSelector).getByRole("button", { name: label, exact: true }).first();
+async function stableToastButtonCenter(scope: Scope, label: string, kind: ToastKind, timeoutMs: number): Promise<{ x: number; y: number } | null> {
+  const point = await evaluateInToast(scope, async (roots, { label, kind, timeoutMs }) => {
+    const card = kind === "full" ? ".wrap:not([data-persistent='true'])" : kind === "brief" ? ".wrap.brief-recovery" : ".wrap";
+    const deadline = performance.now() + timeoutMs;
+    let last: { x: number; y: number } | null = null;
+    while (performance.now() < deadline) {
+      const button = roots
+        .flatMap((root) => Array.from(root.querySelectorAll(`${card} button`)))
+        .find((candidate) => candidate.textContent?.trim() === label);
+      const rect = button?.getBoundingClientRect();
+      const box = rect && rect.width > 0 && rect.height > 0
+        ? { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+        : null;
+      if (box && last && box.x === last.x && box.y === last.y) return box;
+      last = box;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+    return null;
+  }, { label, kind, timeoutMs });
+  if (!point) return null;
+  const offset = await frameViewportOffset("mainFrame" in scope ? scope.mainFrame() : scope);
+  return { x: point.x + offset.x, y: point.y + offset.y };
 }
 
-export async function toastButtonCenter(scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<{ x: number; y: number }> {
-  const button = toastButton(scope, label, kind);
-  const box = await button.boundingBox();
-  if (!box) throw new Error(`toast button "${label}" (${kind}) is not rendered`);
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+export async function toastButtonCenter(scope: Scope, label: string, kind: ToastKind = "any"): Promise<{ x: number; y: number }> {
+  const point = await stableToastButtonCenter(scope, label, kind, 3000);
+  if (!point) throw new Error(`toast button "${label}" (${kind}) is not rendered`);
+  return point;
 }
 
 /** One trusted mouse click on an extension-owned toast button. */
-export async function clickToastButton(_page: Page, scope: Scope, label: string, kind: "full" | "brief" | "any" = "any"): Promise<void> {
+export async function clickToastButton(page: Page, scope: Scope, label: string, kind: ToastKind = "any"): Promise<void> {
   // Wait for stable geometry and receive native trusted input. A sampled point
   // can move while the card's entrance animation is still running.
-  const button = toastButton(scope, label, kind);
-  if (label !== "Dismiss") await waitForVisibleAction(button);
+  if (label !== "Dismiss") {
+    await expect.poll(() => toastCards(scope).then((cards) => cards.some((card) => card.buttons.includes(label))))
+      .toBe(true);
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+  }
   // Brief cards expire; a missed window must fail the step, not hang the procedure.
-  await button.click({ timeout: 3000 });
+  const point = await stableToastButtonCenter(scope, label, kind, 3000);
+  if (!point) throw new Error(`toast button "${label}" (${kind}) did not settle within 3000 ms`);
+  await page.mouse.click(point.x, point.y);
 }
 
 /** Label of the toast button holding focus in this document, if focus is inside the real host. */
 export async function focusedToastButton(scope: Scope): Promise<string | null> {
-  return scope.evaluate(() => {
+  return evaluateInToast(scope, (roots) => {
     const active = document.activeElement;
     if (!active || active.id !== "__navsentinel_toast_host") return null;
-    return active.shadowRoot?.activeElement?.textContent?.trim() ?? null;
+    return roots.find((root) => root.host === active)?.activeElement?.textContent?.trim() ?? null;
   });
 }
 
