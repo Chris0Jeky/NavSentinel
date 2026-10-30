@@ -90,6 +90,14 @@ function bindControl(control: HTMLElement, action: (event?: MouseEvent | Keyboar
  */
 export function activateOwnedToastControl(eventHost: unknown, path: readonly unknown[], event?: MouseEvent | KeyboardEvent): boolean {
   if (!host || eventHost !== host) return false;
+  // The root is closed (#1142), so the fence's window-level composedPath()
+  // stops at the host. Ask the root where the input landed instead: the
+  // focused control for keyboard (detail 0), the hit control for a pointer.
+  if (path[0] === host && event) {
+    path = [(event.detail
+      ? root!.elementFromPoint((event as MouseEvent).clientX, (event as MouseEvent).clientY)
+      : root!.activeElement)?.closest("button,.pill")];
+  }
   for (const node of path) {
     if (node === host) return false;
     const action = typeof node === "object" && node !== null
@@ -122,7 +130,11 @@ function ensureHost() {
   host.style.alignItems = "flex-end";
   host.style.gap = "8px";
 
-  root = host.attachShadow({ mode: "open" });
+  // Closed (#1142, as #894 did for the credential prompt): with an open root,
+  // page script could reach the buttons and focus() "Allow once" or "Trust
+  // site" just before the user's next real Enter or Space, or relabel them.
+  // `root` stays the only reference; host.shadowRoot is null everywhere.
+  root = host.attachShadow({ mode: "closed" });
 
   // UI events are composed across a shadow boundary by default. The isolated
   // world's document-start fence consumes trusted input before hostile capture
@@ -254,7 +266,8 @@ function renderFullCard(opts: ToastOptions): void {
 
   if (opts.briefRecovery) {
     outsidePointerDown = (event: PointerEvent) => {
-      if (!event.isTrusted || event.composedPath().includes(wrap)) return;
+      // A closed root truncates this document-level path at the host.
+      if (!event.isTrusted || event.composedPath().includes(host!)) return;
       remove();
     };
     document.addEventListener("pointerdown", outsidePointerDown, true);
