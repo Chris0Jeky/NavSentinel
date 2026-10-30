@@ -36,9 +36,9 @@ function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[]
   for (const line of disclosure.split(/\r?\n/)) {
     const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/);
     if (marker) {
-      const run = marker[1];
-      if (!fence) { fence = { char: run[0], length: run.length }; lines.push(""); }
-      else if (run[0] === fence.char && run.length >= fence.length && /^\s*$/.test(line.slice(marker[0].length))) fence = null;
+      const run = marker[1] ?? "";
+      if (!fence) { fence = { char: run.charAt(0), length: run.length }; lines.push(""); }
+      else if (run.charAt(0) === fence.char && run.length >= fence.length && /^\s*$/.test(line.slice(marker[0].length))) fence = null;
       continue;
     }
     if (!fence) lines.push(line);
