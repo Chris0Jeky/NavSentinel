@@ -19,7 +19,7 @@ describe("tabnab warn (#1172)", () => {
     warn({ kind: "devicecode", from: "docs-share.example" });
     const opts = showToast.mock.calls[0]![0];
     expect(opts.message).toContain("docs-share.example sent you to this device sign-in page.");
-    expect(opts.message).toContain("Only enter a code that your own TV, console or command line showed you.");
+    expect(opts.message).toContain("Only enter a code your own TV, console or command line showed you:");
     expect(opts.timeoutMs).toBe(0);
     expect(opts.persistent).toBe(true);
     expect(opts.actions).toBeUndefined();
