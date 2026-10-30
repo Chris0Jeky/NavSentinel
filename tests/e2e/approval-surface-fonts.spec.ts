@@ -17,7 +17,9 @@ import {
 // families the prompt and toast used (with a ligature font) could show "Proceed once" as
 // "Cancel". Generic families cannot be redefined, and the page can only reach the roots
 // through properties inherited from the host, which the roots pin.
-const NAMED = ["-apple-system", "BlinkMacSystemFont", "Segoe UI Variable", "Segoe UI"];
+// The page also tries the generic names themselves (#1231 review): Chrome must not let a
+// quoted @font-face family override a generic keyword.
+const NAMED = ["-apple-system", "BlinkMacSystemFont", "Segoe UI Variable", "Segoe UI", "system-ui", "sans-serif", "monospace", "-webkit-sans-serif", "-webkit-monospace", "ui-sans-serif"];
 const PAGE_CSS = `
   ${NAMED.map((family) => `@font-face { font-family: "${family}";
     src: local("Courier New"), local("DejaVu Sans Mono"), local("Liberation Mono"), local("Consolas"); }`).join("\n")}
