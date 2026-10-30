@@ -239,18 +239,23 @@ const SKIPPED_TEXT_ELEMENTS = new Set(["script", "style", "noscript", "template"
 /**
  * Text of `root` up to `max` chars, skipping script/style/noscript/template
  * subtrees so non-rendered code cannot pad instruction text out of the scanned
- * window (#1167). The walk stops once `max` chars are collected.
+ * window (#1167), and reading open shadow roots so a lure drawn inside a web
+ * component is not invisible (#1218). The walk stops once `max` chars are collected.
  */
 export function scannableText(root: Element | null | undefined, max: number): string {
-  if (!root) return "";
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) =>
-      SKIPPED_TEXT_ELEMENTS.has((node as Element).localName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
-  });
   let text = "";
-  for (let node = walker.nextNode(); node && text.length < max; node = walker.nextNode()) {
+  const stack: Node[] = root ? [root] : [];
+  while (stack.length && text.length < max) {
+    const node = stack.pop()!;
     // Space-join so adjacent blocks ("...Win + R" then "Hello") stay separate words.
-    if (node.nodeType === Node.TEXT_NODE) text += `${node.nodeValue} `;
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += `${node.nodeValue} `;
+      continue;
+    }
+    if (node !== root && SKIPPED_TEXT_ELEMENTS.has((node as Element).localName)) continue;
+    const shadow = (node as Element).shadowRoot;
+    for (let c = node.lastChild; c; c = c.previousSibling) stack.push(c);
+    if (shadow) stack.push(shadow);
   }
   return text.slice(0, max);
 }

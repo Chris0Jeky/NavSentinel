@@ -88,7 +88,7 @@ import {
   isPushStateAbuseActive,
 } from "./pushstate_guard";
 import { correlatesShadowGuardPrompt } from "./shadow_guard_correlation";
-import { analyzeCSP, type CSPAnalysis } from "./csp_analyzer";
+import type { CSPAnalysis } from "./csp_analyzer";
 import { getDomainRisk, recordNavigation } from "../shared/domain_profile";
 import { recordNavigationAnomaly, getAnomalyScoreSync, primeAnomalySession } from "../shared/nav_anomaly";
 import { isRiskReducingReason } from "../shared/reason_codes";
@@ -959,6 +959,7 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
 // The copy path passes no receipt, so `command` stays false and it never overwrites (#1169).
 installCopyListener(() => settings.defaultMode !== "off", () => handleClickFixScan());
 
+let clickFixRescanned = false;
 function handleClickFixScan(command = false): void {
   if (settings.defaultMode === "off") return;
   const now = Date.now();
@@ -987,7 +988,14 @@ function handleClickFixScan(command = false): void {
       .catch(() => {});
   }
 
-  if (!result.detected) return;
+  if (!result.detected) {
+    // Instructions shown just after the copy (#1218): look once more.
+    if (command && !clickFixRescanned) {
+      clickFixRescanned = true;
+      setTimeout(() => handleClickFixScan(), 1500);
+    }
+    return;
+  }
 
   // Rate-limit standalone toast: at most one alert per 10 seconds
   if (now - clickFixAlertedAt < 10_000) return;
@@ -1264,12 +1272,14 @@ scheduleMutationMonitor();
 
 // --- CSP analysis (run once after DOM is ready) ---
 
+// Lazy (#1218): scoring reads it only after DOMContentLoaded, as before, and the
+// capture chunk has no headroom for it.
 function runCSPAnalysis(): void {
   if (cachedCSPAnalysis) return;
-  cachedCSPAnalysis = analyzeCSP(document);
-  if (settings.debug) {
-    console.debug("[NavSentinel] CSP analysis:", cachedCSPAnalysis);
-  }
+  import("./csp_analyzer").then((m) => {
+    cachedCSPAnalysis ??= m.analyzeCSP(document);
+    if (settings.debug) console.debug("[NavSentinel] CSP analysis:", cachedCSPAnalysis);
+  }, () => {});
 }
 
 if (document.readyState === "loading") {
