@@ -302,8 +302,21 @@ async function refusedUnderFramePip(
 
 async function approvesAfterExit(page: Page, frame: Frame, point: { x: number; y: number }, posts: () => number) {
   await frame.evaluate(() => document.exitPictureInPicture());
-  await page.waitForTimeout(ARMED_MS);
-  await page.mouse.click(point.x, point.y);
+  await expect.poll(() => frame.evaluate(() => !!document.pictureInPictureElement)).toBe(false);
+  await approvesSoon(page, point, posts);
+}
+
+/**
+ * Closing a PiP window can refocus ours a moment later, which restarts arming, and
+ * a refused click restarts it too, so try a few armed clicks (~10 s). An approval
+ * stuck refused, as on main after a removed PiP frame, still fails.
+ */
+async function approvesSoon(page: Page, point: { x: number; y: number }, posts: () => number) {
+  for (let attempt = 0; attempt < 4 && posts() === 0; attempt++) {
+    await page.waitForTimeout(ARMED_MS);
+    await page.mouse.click(point.x, point.y);
+    await page.waitForTimeout(500);
+  }
   await expect.poll(posts, { timeout: 5000 }).toBe(1);
 }
 
@@ -375,8 +388,6 @@ test("removing a frame with PiP open no longer leaves approvals refused (#1244) 
     // is seen; Chrome destroys the frame's player with the frame.
     await frame.evaluate(() => { document.open(); document.close(); });
     await page.evaluate(() => document.querySelector("iframe")!.remove());
-    await page.waitForTimeout(ARMED_MS);
-    await page.mouse.click(point.x, point.y);
-    await expect.poll(posts, { timeout: 5000 }).toBe(1);
+    await approvesSoon(page, point, posts);
   });
 });
