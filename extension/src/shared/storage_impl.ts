@@ -694,7 +694,6 @@ export type EventKind =
   | "nav_reputation_late_warn"
   | "mutation_alert"
   | "pushstate_abuse"
-  | "fullscreen_locker_exit"
   | "bridge_buffer_overflow";
 
 const EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>([
@@ -716,7 +715,6 @@ const EVENT_KINDS: ReadonlySet<EventKind> = new Set<EventKind>([
   "nav_reputation_late_warn",
   "mutation_alert",
   "pushstate_abuse",
-  "fullscreen_locker_exit",
   "bridge_buffer_overflow",
 ]);
 
