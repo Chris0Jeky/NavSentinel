@@ -418,8 +418,26 @@ export function readCapturedAttribute(
   if (!nativeGetAttribute) return undefined;
   try {
     const value = nativeGetAttribute(element, name);
-    if (value === null) return null;
-    return typeof value === "string" ? value : undefined;
+    return value === null || typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Popup-intent ancestry through a document-start bound invoker (#1063).
+ * Null is a confirmed miss; undefined means unreadable and cannot arm intent.
+ * Calling the invoker directly avoids its page-mutable .call/.apply properties.
+ */
+export function readCapturedClosest(
+  element: Element,
+  selector: string,
+  nativeClosest: ((element: Element, selector: string) => Element | null) | undefined,
+): Element | null | undefined {
+  if (!nativeClosest) return undefined;
+  try {
+    const value = nativeClosest(element, selector);
+    return value === null || value instanceof Element ? value : undefined;
   } catch {
     return undefined;
   }

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import vm from "node:vm";
 import * as ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import { readCapturedAttribute } from "../extension/src/content/main_guard_helpers";
 
 // Exercise the actual private functions without installing MAIN-world patches.
 const source = readFileSync(resolve("extension/src/content/main_guard.ts"), "utf8");
@@ -14,7 +15,10 @@ const compiled = ts.transpileModule(functions.map((node) => node.getText(file)).
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
 }).outputText;
 const { textLength, hasMeaningfulName } = vm.runInNewContext(
-  `${compiled}\n({ textLength, hasMeaningfulName });`, { document, Node, NodeFilter },
+  `${compiled}\n({ textLength, hasMeaningfulName });`, {
+    document, Node, NodeFilter, readCapturedAttribute,
+    nativeGetAttribute: Function.prototype.call.bind(Element.prototype.getAttribute),
+  },
 ) as { textLength: (el: Element) => number; hasMeaningfulName: (el: Element) => boolean };
 
 describe("MAIN-world popup text bounds (#1086)", () => {

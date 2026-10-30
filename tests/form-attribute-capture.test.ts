@@ -8,6 +8,7 @@ import { readCapturedAttribute } from "../extension/src/content/main_guard_helpe
 import {
   assertEarlyMainPrelude,
   EARLY_MAIN_FORM_TARGET,
+  EARLY_MAIN_CLOSEST,
   EARLY_MAIN_GET_ATTRIBUTE,
   EARLY_MAIN_PRELUDE,
   installEarlyMainClockText,
@@ -83,7 +84,11 @@ describe("form action and method use the captured reader (#1061)", () => {
     const resolveAt = guard.indexOf("function resolveFormAction(");
     expect(init).toBeGreaterThanOrEqual(0);
     expect(init).toBeLessThan(resolveAt);
-    const binding = guard.slice(init, guard.indexOf("const nativeDocumentQuerySelector", init));
+    const bindingStatements = source.statements.filter((node) => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some((declaration) => ts.isIdentifier(declaration.name)
+        && ["earlyGetAttribute", "nativeGetAttribute"].includes(declaration.name.text)));
+    expect(bindingStatements).toHaveLength(2);
+    const binding = bindingStatements.map((node) => node.getText(source)).join("\n");
     expect(binding).toContain("__navsentinelMainGetAttribute");
     const functions = ["resolveFormAction", "isGetForm"].map((name) => source.statements.find(
       (node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name,
@@ -119,7 +124,7 @@ describe("document-start getAttribute capture (#1061)", () => {
     const loader = installEarlyMainClockText(GENERATED);
     expect(loader.indexOf(EARLY_MAIN_FORM_TARGET)).toBeLessThan(loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE));
     expect(loader.indexOf(EARLY_MAIN_GET_ATTRIBUTE)).toBeLessThan(loader.indexOf("await import("));
-    expect(EARLY_MAIN_PRELUDE.endsWith(EARLY_MAIN_GET_ATTRIBUTE)).toBe(true);
+    expect(EARLY_MAIN_PRELUDE.endsWith(`${EARLY_MAIN_GET_ATTRIBUTE}${EARLY_MAIN_CLOSEST}`)).toBe(true);
     expect(EARLY_MAIN_GET_ATTRIBUTE).toContain("value:Function.prototype.call.bind(getAttribute),writable:false,configurable:false");
     expect(() => assertEarlyMainPrelude(loader)).not.toThrow();
   });

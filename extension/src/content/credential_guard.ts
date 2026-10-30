@@ -18,7 +18,10 @@ import {
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
 import { checkSRI } from "./sri_checker";
-import { isPasswordTypeInput, isVisiblePasswordField, queryPasswordInputs } from "./password_field";
+import {
+  isCredentialField, isPasswordTypeInput, isRememberedPasswordForm, isVisiblePasswordField, queryPasswordInputs,
+  rememberFlippedPasswords, rememberPasswordInput,
+} from "./password_field";
 import { addPersistentListener, documentRewritten } from "./persistent_listener";
 import { isLoopbackAuthCodePaste } from "./consentfix";
 import { domAttribute, domProperty } from "./dom_access";
@@ -82,6 +85,9 @@ function consumeAllowNext(form: HTMLFormElement): boolean {
 
 function isPasswordForm(form: HTMLFormElement): boolean {
   try {
+    // #1220: a form whose password field was seen stays a password form after the
+    // page flips, swaps, disables or copies that field.
+    if (isRememberedPasswordForm(form)) return true;
     // Consider every password input the form can actually submit, not just the
     // first descendant. `form.querySelector` returns the first match in document
     // order, so a disabled-first decoy ("<input type=password disabled>" before a
@@ -101,7 +107,7 @@ function isPasswordForm(form: HTMLFormElement): boolean {
     queryPasswordInputs(form).forEach((el) => seen.add(el));
     return Array.from(seen).some(
       (el) => el instanceof HTMLInputElement &&
-        domProperty(HTMLInputElement.prototype, el, "type") === "password" &&
+        isCredentialField(el) &&
         !domProperty(HTMLInputElement.prototype, el, "disabled")
     );
   } catch {
@@ -732,7 +738,7 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 
     const t = evt.target;
     if (!(t instanceof HTMLInputElement)) return;
-    if ((domAttribute(t, "type") || "").toLowerCase() !== "password") return;
+    if (!isCredentialField(t)) return;
 
     const trusted = await getTrustedDomains();
     const host = normalizeHost(pageIdentity().hostname);
@@ -776,6 +782,16 @@ addPersistentListener(window, "submit", (e) => {
     const submitter = (e as SubmitEvent).submitter;
     if (submitter) submitSeen.add(submitter);
   }
+});
+// #1220: remember password fields (and their forms) while they still look like one, so
+// a later flip, swap or copy is caught. The observer sees a type flip even on a field
+// that was never focused; an observer on `document` survives document.open() (see
+// persistent_listener.ts) and reads no style.
+const rememberWhenOn = (e: Event): void => { if (cachedCredMode !== "off") rememberPasswordInput(e); };
+addPersistentListener(window, "focusin", rememberWhenOn);
+addPersistentListener(window, "input", rememberWhenOn);
+new MutationObserver(rememberFlippedPasswords).observe(document, {
+  subtree: true, attributes: true, attributeFilter: ["type"], attributeOldValue: true,
 });
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
 // ConsentFix: stop a pasted or dropped loopback sign-in URL that carries an OAuth code.
