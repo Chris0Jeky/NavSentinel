@@ -1,11 +1,12 @@
 import { explainReasonCode, isKnownReasonCode } from "../shared/explanations";
 
 /**
- * Readable text for reason codes the product stores on event-log entries but
- * never shows in a page toast (#867), so they are not in `shared/explanations.ts`.
- * That table is a shared chunk every frame loads through capture_isolated, and
- * its keys are the portable export vocabulary the Lab importer accepts
- * (`experiments/vision-lab/shared/evidence.js` REASONS). These codes therefore
+ * Readable text for reason codes the product stores on event-log entries (#867).
+ * They are not in `shared/explanations.ts`: the lazily loaded password-focus
+ * warning (#1170) is the only page toast that shows one, so the always-on
+ * chunks never carry them. That table is a shared chunk every frame loads
+ * through capture_isolated, and its keys are the portable export vocabulary
+ * the Lab importer accepts (`experiments/vision-lab/shared/evidence.js` REASONS). These codes therefore
  * stay local to the Protection Center: they are displayed, never exported.
  *
  * Keys are the exact stored codes; `tests/evidence-reasons.test.ts` reads the
