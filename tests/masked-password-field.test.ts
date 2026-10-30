@@ -48,7 +48,7 @@ describe("isCredentialField", () => {
     expect(isCredentialField(input('<input type="nonsense" data-mask="disc">'))).toBe(true);
   });
 
-  it.each(["current-password", "new-password", "section-a NEW-PASSWORD", "username  current-password"])(
+  it.each(["current-password", "section-a CURRENT-PASSWORD", "username  current-password"])(
     "recognizes autocomplete=%j",
     (ac) => {
       expect(isCredentialField(input(`<input type="text" autocomplete="${ac}">`))).toBe(true);
@@ -59,6 +59,8 @@ describe("isCredentialField", () => {
     expect(isCredentialField(input('<input type="text" autocomplete="username">'))).toBe(false);
     expect(isCredentialField(input('<input type="text" autocomplete="off">'))).toBe(false);
     expect(isCredentialField(input('<input type="text" autocomplete="one-time-code">'))).toBe(false);
+    // Sites set new-password on search, address or coupon boxes just to stop autofill.
+    expect(isCredentialField(input('<input type="text" autocomplete="new-password">'))).toBe(false);
   });
 
   it("recognizes type=password, any casing", () => {

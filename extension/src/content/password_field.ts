@@ -94,14 +94,14 @@ export function isPasswordTypeInput(el: Element): boolean {
  * True for an input the user types a secret into, however it is disguised
  * (#1220); used by the credential guard only. Beyond `type=password` it is true
  * for an input remembered as one (a later flip to text/hidden does not change
- * what it holds), one with an `autocomplete` of current-password or
- * new-password, and a text-like input rendered as dots via
+ * what it holds), one with an `autocomplete` of current-password (new-password
+ * is widely set on ordinary fields only to stop autofill), and a text-like input rendered as dots via
  * `-webkit-text-security`. Pure: it remembers nothing.
  */
 export function isCredentialField(el: HTMLInputElement): boolean {
   if (isPasswordTypeInput(el) || seenFields.has(el)) return true;
   const ac = (domAttribute(el, "autocomplete") ?? "").toLowerCase().split(/\s+/);
-  if (ac.includes("current-password") || ac.includes("new-password")) return true;
+  if (ac.includes("current-password")) return true;
   return isCssMasked(el, (domAttribute(el, "type") ?? "").toLowerCase());
 }
 
