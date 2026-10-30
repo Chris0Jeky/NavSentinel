@@ -186,7 +186,7 @@ describe("credential_guard password-focus hook", () => {
       timeoutMs: 12000,
     });
     await vi.waitFor(() => expect(appendEvent).toHaveBeenCalledWith(expect.objectContaining({
-      kind: "cred_paste_warn", site: "login.northwind.example", reasons: ["NON_HTTPS_PAGE"],
+      kind: "cred_paste_warn", site: "login.northwind.example", reasons: ["NON_HTTPS_PAGE", "PASSWORD_FOCUS_WARNING"],
       extra: { trigger: "password_focus" },
     })));
 

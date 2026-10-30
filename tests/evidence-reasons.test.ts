@@ -52,6 +52,7 @@ const VOCABULARY = {
   credential: [
     ...captures(read("shared/domain.ts"), /\bcode: "([A-Z0-9_]+)"/g),
     ...captures(read("content/credential_guard.ts"), /"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g),
+    ...captures(read("content/credential_focus_warning.ts"), /"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g),
   ],
 } as const;
 
@@ -89,7 +90,7 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   '[typeof data.reason === "string" ? data.reason : "unknown"]': "pushstate",
   "risk.reasons.map((r) => r.code)": "credential",
   // Password-focus warning (#1170): one computeCredentialRisk page code.
-  "[reason.code]": "credential",
+  '[reason.code, "PASSWORD_FOCUS_WARNING"]': "credential",
   // Credential modal display lines, never persisted.
   "getCredentialReasonLines(risk.reasons)": null,
   // Prompt-outcome records (a separate store), not the event log.

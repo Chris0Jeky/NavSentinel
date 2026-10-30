@@ -89,7 +89,7 @@ export async function warnOnPasswordFocus(pageUrl: string): Promise<void> {
     kind: "cred_paste_warn",
     site: normalizeHost(new URL(pageUrl).hostname),
     url: pageUrl,
-    reasons: [reason.code],
+    reasons: [reason.code, "PASSWORD_FOCUS_WARNING"],
     extra: { trigger: "password_focus" }
   });
 }
