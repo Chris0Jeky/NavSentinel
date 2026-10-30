@@ -12,7 +12,14 @@ export const EVIDENCE_KINDS = [
   "clickfix_detected", "dblclickjack_detected", "nav_reputation_late_warn",
   "mutation_alert", "pushstate_abuse", "bridge_buffer_overflow",
 ] as const satisfies readonly EventKind[];
+/**
+ * Kinds the Protection Center journal shows but the portable export never
+ * carries: the Lab/desktop importer rejects a whole file on an unknown kind, so
+ * a kind joins EVIDENCE_KINDS only together with that importer.
+ */
+const JOURNAL_ONLY_KINDS = ["fullscreen_locker_exit"] as const satisfies readonly EventKind[];
 const kinds = new Set<string>(EVIDENCE_KINDS);
+const journalKinds = new Set<string>([...EVIDENCE_KINDS, ...JOURNAL_ONLY_KINDS]);
 export const MAX_EVIDENCE_EVENTS = 5000;
 /** Scores above this are corrupt, not diminished NRS; same bound as the popup gauge. */
 const MAX_PLAUSIBLE_EVENT_SCORE = 1000;
@@ -49,11 +56,15 @@ export function evidenceHostname(value: unknown): string | null {
  * Reasons keep only codes from a finite registry: the journal keeps every code
  * it can explain, and the export passes the portable registry instead (#867).
  */
-export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (code: string) => boolean = isJournalReasonCode): EvidenceEvent[] {
+export function projectEvidence(
+  log: readonly EventLogEntry[],
+  isReasonCode: (code: string) => boolean = isJournalReasonCode,
+  allowedKinds: ReadonlySet<string> = journalKinds,
+): EvidenceEvent[] {
   const events: EvidenceEvent[] = [];
   let droppedTimestamps = 0;
   for (const entry of log.slice(-MAX_EVIDENCE_EVENTS)) {
-    if (!entry || !kinds.has(entry.kind)) continue;
+    if (!entry || !allowedKinds.has(entry.kind)) continue;
     // A NaN/Infinity/missing ts (or one outside the Date range) cannot become an ISO
     // timestamp, so the entry stays out of the projection -- but count it and warn
     // instead of dropping it silently: a corrupt clock or a tampered journal entry
@@ -104,13 +115,14 @@ export function countExportOmittedExplanations(events: readonly (EvidenceEvent &
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {
   // Re-project even a caller-supplied view so export cannot inherit extra fields.
   // Only portable registry codes leave the browser: journal-only codes (credential
-  // risk and similar) are shown locally but are outside the Lab importer's vocabulary.
+  // risk and similar) are shown locally but are outside the Lab importer's vocabulary,
+  // and journal-only kinds are skipped for the same reason.
   const projected = projectEvidence(events.map(event => ({
     id: "", ts: Date.parse(event.timestamp), kind: event.kind,
     ...(event.sourceSite === null ? {} : { site: event.sourceSite }),
     ...(event.destinationSite === null ? {} : { destHost: event.destinationSite }),
     reasons: event.reasons, ...(event.score === undefined ? {} : { score: event.score }),
-  })), isKnownReasonCode);
+  })), isKnownReasonCode, kinds);
   return { format: "navsentinel-evidence", schema: 1, exportedAt: now.toISOString(),
     source: "navsentinel-extension", evidence: "recorded-observation", events: projected };
 }

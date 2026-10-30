@@ -1268,3 +1268,56 @@ test.describe("OAuth Flow Analysis", () => {
     }
   });
 });
+
+test.describe("Tech-support-scam fullscreen locker (#1171)", () => {
+  test("fullscreen-01 locker: lazily loaded guard exits fullscreen and explains @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, cleanup } = await setupFixtureTest("rw-fullscreen-locker.html");
+    try {
+      await page.click("#enter");
+      await waitForToastMatch(page, /closed a full-screen warning page/i, 6000);
+      await expect.poll(() => page.evaluate(() => document.fullscreenElement === null), { timeout: 5000 }).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("fullscreen-03 locker inside a same-origin iframe is still exited @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      // The scare page lives in a srcdoc iframe that the top page makes fullscreen.
+      await page.evaluate(() => {
+        const frame = document.createElement("iframe");
+        frame.id = "locker-frame";
+        frame.srcdoc = "<p>WARNING! Your computer has been locked. Virus detected. Do not close this window. " +
+          "Call Microsoft Support now at 1-800-555-0142.</p>";
+        document.body.appendChild(frame);
+        const button = document.createElement("button");
+        button.id = "enter-frame";
+        button.textContent = "Enter";
+        button.addEventListener("click", () => { void frame.requestFullscreen().catch(() => {}); });
+        document.body.appendChild(button);
+      });
+      await page.waitForFunction(() => (document.getElementById("locker-frame") as HTMLIFrameElement).contentDocument?.body?.textContent?.includes("Virus"));
+      await page.click("#enter-frame");
+      await waitForToastMatch(page, /closed a full-screen warning page/i, 6000);
+      await expect.poll(() => page.evaluate(() => document.fullscreenElement === null), { timeout: 5000 }).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("fullscreen-02 benign fullscreen: left alone, no toast @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await page.click("#enter-slide");
+      await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null), { timeout: 5000 }).toBe(true);
+      await assertNoToastFor(page, 1500);
+      expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+});
