@@ -8,25 +8,26 @@ import {
   uiGuardLoaderTemplate,
 } from "../scripts/content-loader-contract.mjs";
 
-type FenceRecord = { h: boolean; u: number; a: boolean; r: Set<number> };
+type FenceRecord = { h: boolean; u: number; a: boolean };
 
-// happy-dom marks every dispatched event untrusted; stand in for a browser-fired one.
-const trusted = <E extends Event>(event: E): E => Object.defineProperty(event, "isTrusted", { value: true });
-
-// #1242: the document_start loader records focus and PiP before page script runs.
+// #1242: the document_start loader records focus before page script runs, and
+// (#1244) answers the service worker's PiP query.
 describe("document_start focus/PiP fence", () => {
-  const sent: unknown[] = [];
-  let deliver: (message: unknown) => void = () => {};
+  let deliver: (message: unknown, sender: unknown, respond: (open: unknown) => void) => void = () => {};
   let record: FenceRecord;
   const imports: string[] = [];
-  const documentPip = new EventTarget();
+  const documentPip: { window: object | null } = { window: null };
+  const ask = (message: unknown = { type: "ns-pip" }) => {
+    const answers: unknown[] = [];
+    deliver(message, {}, (open) => answers.push(open));
+    return answers;
+  };
 
   beforeAll(() => {
     vi.stubGlobal("chrome", {
       runtime: {
         getURL: (path: string) => path,
-        sendMessage: (message: unknown) => { sent.push(message); return Promise.resolve(); },
-        onMessage: { addListener: (listener: (message: unknown) => void) => { deliver = listener; } },
+        onMessage: { addListener: (listener: typeof deliver) => { deliver = listener; } },
       },
     });
     vi.stubGlobal("documentPictureInPicture", documentPip);
@@ -40,7 +41,6 @@ describe("document_start focus/PiP fence", () => {
 
   it("publishes a record and still imports the module", () => {
     expect(record).toMatchObject({ u: -Infinity, a: false });
-    expect(record.r.size).toBe(0);
     expect(imports).toEqual(["assets/capture.js"]);
   });
 
@@ -74,47 +74,46 @@ describe("document_start focus/PiP fence", () => {
     hidden.mockRestore();
   });
 
-  it("reports this frame's video PiP from ground truth, not from forged events", () => {
-    const video = document.body.appendChild(document.createElement("video"));
-    // A forged enter with no PiP window reports nothing.
-    video.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
-    expect(sent).toEqual([]);
-    Object.defineProperty(document, "pictureInPictureElement", { configurable: true, value: video });
-    video.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
-    expect(sent).toEqual([{ type: "ns-pip", open: true }]);
-    // A forged leave while PiP is still open reports nothing.
-    video.dispatchEvent(new Event("leavepictureinpicture", { bubbles: true }));
-    expect(sent).toHaveLength(1);
-    // A real close of a detached video still reaches the element listener.
-    video.remove();
+  it("answers a PiP query from this frame's ground truth at query time (#1244)", () => {
+    expect(ask()).toEqual([false]);
+    // No DOM event is involved: a video whose events never reached a listener still counts.
+    Object.defineProperty(document, "pictureInPictureElement", { configurable: true, value: document.createElement("video") });
+    expect(ask()).toEqual([true]);
     Reflect.deleteProperty(document, "pictureInPictureElement");
-    video.dispatchEvent(new Event("leavepictureinpicture", { bubbles: true }));
-    expect(sent).toEqual([{ type: "ns-pip", open: true }, { type: "ns-pip", open: false }]);
+    expect(ask()).toEqual([false]);
+    documentPip.window = {};
+    expect(ask()).toEqual([true]);
+    documentPip.window = null;
+    expect(ask()).toEqual([false]);
   });
 
-  it("reports a Document PiP window until it really closes, ignoring a forged pagehide", () => {
-    sent.length = 0;
-    const pipWindow = new EventTarget();
-    // A forged enter (page-dispatched, untrusted) reports nothing.
-    documentPip.dispatchEvent(Object.assign(new Event("enter"), { window: pipWindow }));
-    expect(sent).toEqual([]);
-    documentPip.dispatchEvent(trusted(Object.assign(new Event("enter"), { window: pipWindow })));
-    expect(sent).toEqual([{ type: "ns-pip", open: true }]);
-    // Page script can dispatch pagehide on the PiP window or its own window while PiP stays open.
-    pipWindow.dispatchEvent(new Event("pagehide"));
-    window.dispatchEvent(new Event("pagehide"));
-    expect(sent).toEqual([{ type: "ns-pip", open: true }]);
-    pipWindow.dispatchEvent(trusted(new Event("pagehide")));
-    expect(sent).toEqual([{ type: "ns-pip", open: true }, { type: "ns-pip", open: false }]);
+  it("also answers for a readable descendant frame, and skips one that throws (#1249 review)", () => {
+    // happy-dom has no indexed frames: model window.length / window[i] for a two-level tree.
+    const grandchild = { length: 0, document: { pictureInPictureElement: null as object | null } };
+    const blocked = { length: 0, get document(): never { throw new DOMException("Blocked", "SecurityError"); } };
+    const child = { length: 2, 0: blocked, 1: grandchild, document: { pictureInPictureElement: null } };
+    Object.defineProperty(window, "length", { configurable: true, value: 1 });
+    Object.defineProperty(window, 0, { configurable: true, value: child });
+    try {
+      expect(ask()).toEqual([false]);
+      grandchild.document.pictureInPictureElement = {};
+      expect(ask()).toEqual([true]);
+    } finally {
+      Reflect.deleteProperty(window, 0);
+      Reflect.deleteProperty(window, "length");
+    }
   });
 
-  it("tracks relayed PiP state per frame and ignores malformed relays", () => {
-    deliver({ type: "ns-pip", open: true, frame: 4 });
-    deliver({ type: "ns-pip", open: true, frame: "4" });
-    deliver({ type: "ns-pip", open: "yes", frame: 5 });
-    expect([...record.r]).toEqual([4]);
-    deliver({ type: "ns-pip", open: false, frame: 4 });
-    expect(record.r.size).toBe(0);
+  it("replies to the tab-wide broadcast only while it sees PiP (#1249)", () => {
+    expect(ask({ type: "ns-pip", any: true })).toEqual([]);
+    documentPip.window = {};
+    expect(ask({ type: "ns-pip", any: true })).toEqual([true]);
+    documentPip.window = null;
+  });
+
+  it("answers no other message", () => {
+    expect(ask({ type: "ns-rollback" })).toEqual([]);
+    expect(ask(null)).toEqual([]);
   });
 
   it("is asserted present, once, before the module import", () => {
