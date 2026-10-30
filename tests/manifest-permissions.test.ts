@@ -88,6 +88,19 @@ describe("manifest permissions", () => {
     expect(permissions).toContain("tabs");
   });
 
+  // #1114/#1134: inherited-origin frames (about:blank, srcdoc, blob) need the
+  // credential guard, the MAIN-world guard and the isolated bridge that arms it.
+  it.each(["capture_isolated", "main_guard", "credential_guard"])(
+    "manifest.json injects %s into origin-fallback frames",
+    (script) => {
+      const scripts = (loadManifest("manifest.json") as {
+        content_scripts: Array<{ js: string[]; all_frames?: boolean; match_origin_as_fallback?: boolean }>;
+      }).content_scripts;
+      const entry = scripts.find((s) => s.js.includes(`src/content/${script}.ts`));
+      expect(entry).toMatchObject({ all_frames: true, match_origin_as_fallback: true });
+    },
+  );
+
   it("ships no static DNR ruleset file", () => {
     expect(existsSync(path.join(extensionDir, "rules", "dnr_static.json"))).toBe(false);
   });
