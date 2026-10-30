@@ -16,6 +16,7 @@ describe("document_start focus/PiP fence", () => {
   let deliver: (message: unknown) => void = () => {};
   let record: FenceRecord;
   const imports: string[] = [];
+  const documentPip = new EventTarget();
 
   beforeAll(() => {
     vi.stubGlobal("chrome", {
@@ -25,6 +26,7 @@ describe("document_start focus/PiP fence", () => {
         onMessage: { addListener: (listener: (message: unknown) => void) => { deliver = listener; } },
       },
     });
+    vi.stubGlobal("documentPictureInPicture", documentPip);
     const { content } = finalizeUiGuardLoader(uiGuardLoaderTemplate("assets/capture.js"));
     // Stand in for the module import; the fence itself runs unmodified.
     const loader = content.replace("await import(", "await __import(");
@@ -84,6 +86,15 @@ describe("document_start focus/PiP fence", () => {
     video.remove();
     Reflect.deleteProperty(document, "pictureInPictureElement");
     video.dispatchEvent(new Event("leavepictureinpicture", { bubbles: true }));
+    expect(sent).toEqual([{ type: "ns-pip", open: true }, { type: "ns-pip", open: false }]);
+  });
+
+  it("reports a Document PiP window until it closes", () => {
+    sent.length = 0;
+    const pipWindow = new EventTarget();
+    documentPip.dispatchEvent(Object.assign(new Event("enter"), { window: pipWindow }));
+    expect(sent).toEqual([{ type: "ns-pip", open: true }]);
+    pipWindow.dispatchEvent(new Event("pagehide"));
     expect(sent).toEqual([{ type: "ns-pip", open: true }, { type: "ns-pip", open: false }]);
   });
 
