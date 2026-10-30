@@ -243,8 +243,14 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-57 | #1163 Protection Center retained activity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1163) (candidate until merged) | OPEN — not run |
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 | AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
+| AI-66 | #1183 tech-support-scam fullscreen locker exit | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1183) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-66 (#1183):** with the Gym served (`npm run gym:serve`): (1) open `gym/rw-fullscreen-locker.html`, press its
+  button: fullscreen exits almost at once and the toast "Heedline closed a full-screen warning page..." appears;
+  (2) on `gym/rw-fullscreen-benign.html` and a real fullscreen video (any video site, `f` key) or a slide deck in
+  present mode, fullscreen stays. A failure gets a revert PR for the merge commit.
 
 - **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
   (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
