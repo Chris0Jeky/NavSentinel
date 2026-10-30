@@ -1456,7 +1456,9 @@ function onActivatedHandler(tabId: number): void {
     const reg = httpRegistrable(tab.url);
     if (!reg || reg === pending.origReg) return drop();
     chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg }, () => {
-      if (!chrome.runtime.lastError) drop();
+      // The listener never responds, so a delivered message still reports "message port
+      // closed"; only a missing receiver means the toast was not shown.
+      if (!/Receiving end does not exist/.test(chrome.runtime.lastError?.message ?? "")) drop();
     });
   }).catch(() => {});
 }

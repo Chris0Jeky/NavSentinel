@@ -204,4 +204,14 @@ describe("reverse tabnabbing warning (#1172)", () => {
     expect(warnings()).toHaveLength(2);
     expect(swState.tabnabPendingByTab.has(10)).toBe(false);
   });
+
+  it("treats an unanswered but delivered message as delivered (no repeat toast)", async () => {
+    const { browser, swap, activate, warnings, swState } = await setup();
+    await swap();
+    browser.runtime.lastError = { message: "The message port closed before a response was received." };
+    await activate();
+    browser.runtime.lastError = undefined;
+    expect(warnings()).toHaveLength(1);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(false);
+  });
 });
