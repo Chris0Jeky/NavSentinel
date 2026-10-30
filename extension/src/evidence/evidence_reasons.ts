@@ -33,6 +33,8 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
   // content/credential_focus_warning.ts (#1170): marks the focus trigger (#1198).
   PASSWORD_FOCUS_WARNING: "Warned when you clicked into a password field on this page; nothing was pasted",
   CONTENT_FP: "The page content resembles a phishing page (brand, template or form clues)",
+  // content/content_analyzer.ts off-site meta refresh (#1144).
+  META_REFRESH_OFFSITE: "The sign-in page was set to send you to a different site on its own",
   SRI_MISSING_ON_CREDENTIAL_PAGE: "Scripts on this sign-in page load without integrity checks",
   SRI_PRESENT_ON_CREDENTIAL_PAGE: "Scripts on this sign-in page use integrity checks (lower risk)",
 
