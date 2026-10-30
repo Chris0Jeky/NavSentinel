@@ -1228,3 +1228,30 @@ test.describe("OAuth Flow Analysis", () => {
     }
   });
 });
+
+test.describe("Tech-support-scam fullscreen locker (#1171)", () => {
+  test("fullscreen-01 locker: lazily loaded guard exits fullscreen and explains @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, cleanup } = await setupFixtureTest("rw-fullscreen-locker.html");
+    try {
+      await page.click("#enter");
+      await waitForToastMatch(page, /closed a full-screen warning page/i, 6000);
+      await expect.poll(() => page.evaluate(() => document.fullscreenElement === null), { timeout: 5000 }).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("fullscreen-02 benign fullscreen: left alone, no toast @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await page.click("#enter-slide");
+      await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null), { timeout: 5000 }).toBe(true);
+      await assertNoToastFor(page, 1500);
+      expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+});

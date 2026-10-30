@@ -88,6 +88,8 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   "[alert.type]": "mutation",
   '[typeof data.reason === "string" ? data.reason : "unknown"]': "pushstate",
   "risk.reasons.map((r) => r.code)": "credential",
+  // guardFullscreen's return value (fullscreen_guard.ts); onFullscreenChange journals it as verdict.reasons.
+  "verdict.reasons, notify };": null,
   // Credential modal display lines, never persisted.
   "getCredentialReasonLines(risk.reasons)": null,
   // Prompt-outcome records (a separate store), not the event log.

@@ -5,7 +5,13 @@ import {
   _resetFullscreenGuard,
   guardFullscreen,
   isScarewareFullscreen,
+  onFullscreenChange,
 } from "../extension/src/content/fullscreen_guard";
+import { appendEvent } from "../extension/src/shared/storage";
+import { showToast } from "../extension/src/content/ui_toast";
+
+vi.mock("../extension/src/shared/storage", () => ({ appendEvent: vi.fn(() => Promise.resolve()) }));
+vi.mock("../extension/src/content/ui_toast", () => ({ showToast: vi.fn() }));
 
 const SCARE_TEXT =
   "WARNING! Your computer has been locked. Virus detected. Do not close this window. " +
@@ -225,6 +231,31 @@ describe("guardFullscreen", () => {
     const exit = fullscreen(div(`<p>${SCARE_TEXT}</p>`));
     for (let i = 0; i < 25; i++) guardFullscreen(i);
     expect(exit).toHaveBeenCalledTimes(20);
+  });
+
+  it("onFullscreenChange marks the tab, journals and toasts once per notice", () => {
+    vi.mocked(appendEvent).mockClear();
+    vi.mocked(showToast).mockClear();
+    fullscreen(div(`<p>${SCARE_TEXT}</p>`));
+    const markRed = vi.fn();
+    onFullscreenChange(markRed);
+    onFullscreenChange(markRed); // re-entry inside 10 s: exits again, no second notice
+    expect(markRed).toHaveBeenCalledTimes(1);
+    expect(appendEvent).toHaveBeenCalledTimes(1);
+    expect(appendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "fullscreen_locker_exit",
+      reasons: ["fullscreen_scare_text", "fullscreen_phone_number"],
+    }));
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("onFullscreenChange stays silent for benign fullscreen", () => {
+    vi.mocked(showToast).mockClear();
+    fullscreen(div("<h1>Slides</h1>"));
+    const markRed = vi.fn();
+    onFullscreenChange(markRed);
+    expect(markRed).not.toHaveBeenCalled();
+    expect(showToast).not.toHaveBeenCalled();
   });
 
   it("survives exitFullscreen rejecting", async () => {

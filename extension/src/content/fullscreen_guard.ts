@@ -10,6 +10,9 @@
  * Isolated world only. Page text is read here and never stored or sent.
  */
 
+import { appendEvent } from "../shared/storage";
+import { showToast } from "./ui_toast";
+
 const MAX_TEXT = 5000;
 const MAX_NODES = 2000;
 const MAX_EXITS_PER_PAGE = 20;
@@ -133,6 +136,26 @@ export function guardFullscreen(now = Date.now()): { reasons: string[]; notify: 
   const notify = now - notifiedAt >= NOTIFY_INTERVAL_MS;
   if (notify) notifiedAt = now;
   return { reasons: verdict.reasons, notify };
+}
+
+/**
+ * capture_isolated's fullscreenchange entry point. `markRed` raises the tab icon
+ * through capture_isolated's own risk state so it is never downgraded later.
+ */
+export function onFullscreenChange(markRed: () => void): void {
+  const verdict = guardFullscreen();
+  if (!verdict?.notify) return;
+  markRed();
+  void appendEvent({
+    kind: "fullscreen_locker_exit",
+    site: location.hostname.toLowerCase(),
+    url: location.href,
+    reasons: verdict.reasons,
+  }).catch(() => {});
+  showToast({
+    message: "Heedline closed a full-screen warning page. Real security companies do not lock your browser or ask you to call them.",
+    timeoutMs: 0,
+  });
 }
 
 /** Test-only: reset per-page counters. */
