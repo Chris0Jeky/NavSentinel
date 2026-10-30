@@ -15,6 +15,22 @@ describe("tabnab warn (#1172)", () => {
     expect(opts.actions).toBeUndefined();
   });
 
+  it("shows a persistent warn-only toast naming the sending site (device-code)", () => {
+    warn({ kind: "devicecode", from: "docs-share.example" });
+    const opts = showToast.mock.calls[0]![0];
+    expect(opts.message).toContain("docs-share.example sent you to this device sign-in page.");
+    expect(opts.message).toContain("Only enter a code that your own TV, console or command line showed you.");
+    expect(opts.timeoutMs).toBe(0);
+    expect(opts.actions).toBeUndefined();
+  });
+
+  it.each([undefined, "<img src=x onerror=1>"])("never echoes a malformed device-code site (%j)", (from) => {
+    warn({ kind: "devicecode", from });
+    const message = showToast.mock.calls[0]![0].message;
+    expect(message).toMatch(/^A website sent you to a device sign-in page\. Only enter/);
+    expect(message).not.toContain("<");
+  });
+
   it("never echoes a malformed site value", () => {
     warn({ from: "<img src=x onerror=1>" });
     expect(showToast.mock.calls[0]![0].message).toBe(
