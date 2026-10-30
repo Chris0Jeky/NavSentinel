@@ -27,7 +27,7 @@ const OUT_PATH = resolve(__dirname, "..", "extension", "src", "shared", "psl_tri
 
 // The real PSL has ~9,000+ rules. A successful HTTP 200 can still return an empty
 // or truncated body (CDN hiccup, partial transfer); parsePSL("") yields [] and
-// buildTrie([]) yields {}, which would overwrite the committed psl_data.json with
+// buildTrie([]) yields {}, which would overwrite the committed psl_trie.txt with
 // an empty trie -> getRegistrableDomain then returns TLD-only for every host,
 // collapsing cross-registrant isolation for all multi-part ccTLDs (co.uk, com.au,
 // ...). Fail closed: refuse to write a suspiciously small rule set. (#322 / disc#15)
@@ -67,7 +67,7 @@ export function parsePSL(text) {
     // stray-whitespace line like "a. .b" into "a." — an empty label the guard below
     // rejects. We deliberately do NOT charset-filter labels: the real PSL lists IDN
     // rules in UNICODE form (e.g. 公司, امارات, みんな — see the ~1k non-ASCII labels in
-    // psl_data.json), so an ASCII-only [a-z0-9-] filter would reject thousands of valid
+    // psl_trie.txt), so an ASCII-only [a-z0-9-] filter would reject thousands of valid
     // rules and break update:psl. The reserved-key/empty-label guard below catches the
     // labels that actually corrupt the trie. (#322 / #18)
     const firstToken = line.split(/\s/)[0];
@@ -179,9 +179,9 @@ async function main() {
   console.log("Building trie...");
   const trie = buildTrie(rules);
 
-  const json = JSON.stringify(trie);
-  writeFileSync(OUT_PATH, json + "\n", "utf-8");
-  const sizeKB = (Buffer.byteLength(json, "utf-8") / 1024).toFixed(1);
+  const encoded = encodeTrie(trie);
+  writeFileSync(OUT_PATH, encoded, "utf-8");
+  const sizeKB = (Buffer.byteLength(encoded, "utf-8") / 1024).toFixed(1);
   console.log(`Wrote ${OUT_PATH} (${sizeKB} KB)`);
 }
 

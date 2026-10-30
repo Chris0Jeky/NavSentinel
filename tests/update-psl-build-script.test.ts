@@ -19,7 +19,7 @@ describe("update-psl build script: fail-closed on short rule sets (#322 / disc#1
     const rules = parsePSL("// comment\ncom\norg\nnet\n");
     expect(rules.length).toBeLessThan(MIN_PSL_RULES);
     // Pre-fix: main() had no such guard and would buildTrie([])/short -> overwrite
-    // psl_data.json with a near-empty trie. Now it fails closed before writing.
+    // psl_trie.txt with a near-empty trie. Now it fails closed before writing.
     expect(() => assertEnoughRules(rules)).toThrow(/too short/i);
   });
 
