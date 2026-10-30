@@ -634,7 +634,7 @@ function handleBridgeMessage(message: unknown): void {
       looksLikeCommand: data.looksLikeCommand,
     }, receivedAtMs);
     if (settings.defaultMode !== "off") {
-      handleClickFixScan();
+      handleClickFixScan(data.looksLikeCommand === true);
     }
     return;
   }
@@ -954,7 +954,7 @@ function handleJsBehaviorSignal(type: string, payload: Record<string, unknown>):
   _jsBehaviorState.score = computeJsBehaviorScore(_jsBehaviorState);
 }
 
-function handleClickFixScan(): void {
+function handleClickFixScan(command = false): void {
   if (settings.defaultMode === "off") return;
   const now = Date.now();
 
@@ -971,6 +971,15 @@ function handleClickFixScan(): void {
       score: newScore,
       lastScanTs: now,
     };
+  }
+
+  // #1169: a command-like receipt may get its clipboard overwritten by the lazy
+  // neutralizer; the warning below stays synchronous whatever it does.
+  if (command) {
+    void Promise.resolve()
+      .then(() => import("./clipboard_neutralizer"))
+      .then((m) => m.onClickFixReceipt({ ...result, command, mode: settings.defaultMode }))
+      .catch(() => {});
   }
 
   if (!result.detected) return;

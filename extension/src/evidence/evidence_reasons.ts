@@ -33,7 +33,7 @@ const JOURNAL_ONLY_EXPLANATIONS: Readonly<Record<string, string>> = {
 
   // ClickFix detector (content/clickfix_detector.ts)
   legit_captcha_present: "A recognized CAPTCHA provider was also on the page (lower risk)",
-  // ClickFix clipboard neutralization (content/capture_isolated.ts, #1169)
+  // ClickFix clipboard neutralization (content/clipboard_neutralizer.ts, #1169)
   clipboard_neutralized: "Heedline replaced the copied command on your clipboard with a warning",
 
   // MAIN-world pushState checks (content/main_guard.ts checkPushStateSuspicious)
