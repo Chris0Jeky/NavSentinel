@@ -23,3 +23,7 @@ export const EARLY_MAIN_GET_ATTRIBUTE: string;
 export const EARLY_MAIN_CLOSEST: string;
 export const EARLY_MAIN_PRELUDE: string;
 export function assertEarlyMainPrelude(loader: string): void;
+export const UI_FENCE_STATE: string;
+export const UI_FOCUS_FENCE: string;
+export function uiGuardLoaderTemplate(chunkPath: string): string;
+export function assertUiFocusFence(loader: string | Uint8Array): void;

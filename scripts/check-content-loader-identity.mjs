@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   assertContentAddressedLoader,
   assertEarlyMainPrelude,
+  assertUiFocusFence,
   assertUiGuardRevision,
 } from "./content-loader-contract.mjs";
 
@@ -31,6 +32,7 @@ if (!fs.existsSync(loaderPath)) {
 const loader = fs.readFileSync(loaderPath, "utf8");
 const digest = assertContentAddressedLoader(captureScript, loader);
 const revision = assertUiGuardRevision(loader);
+assertUiFocusFence(loader);
 
 const mainScript = manifest.content_scripts
   ?.find((entry) => entry.world === "MAIN" && /main_guard/.test(entry.js?.[0] ?? ""))
