@@ -978,7 +978,8 @@ function checkDeviceCodeLure(length: number): void {
 // another tab or app), so a newer copy of the user's is never overwritten.
 let clickFixRescanPending = false;
 let clipboardGeneration = 0;
-for (const type of ["copy", "cut"]) {
+// A right-click too: "Copy link address" and similar menu items fire no copy event.
+for (const type of ["copy", "cut", "contextmenu"]) {
   window.addEventListener(type, (e) => { if (e.isTrusted) clipboardGeneration++; }, true);
 }
 // The window's own blur (element blurs do not bubble to a non-capture listener) and hiding.
@@ -992,7 +993,8 @@ function rescanClickFix(step: number, generation: number, chain = ++clickFixResc
   setTimeout(() => {
     if (chain !== clickFixRescanChain) return;
     clickFixRescanPending = false;
-    const sameCopy = generation === clipboardGeneration && document.hasFocus();
+    // The 15 s look only warns: it is the one most likely to follow an away-and-back.
+    const sameCopy = step < 2 && generation === clipboardGeneration && document.hasFocus();
     if (!handleClickFixScan(sameCopy, true) && step < 2) rescanClickFix(step + 1, generation, chain);
   }, [1500, 3500, 10000][step]);
 }
