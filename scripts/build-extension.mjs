@@ -80,6 +80,8 @@ function compactPackagedHtml() {
   }
 }
 
+// The built manifest is written compact: Chrome only parses it, and the bytes
+// count against the total-dist budget.
 function installEarlyUiFence() {
   const dist = path.join(root, "extension", "dist");
   const manifestPath = path.join(dist, "manifest.json");
@@ -103,7 +105,7 @@ function installEarlyUiFence() {
   fs.writeFileSync(finalLoaderPath, fencedLoader, "utf8");
   if (finalLoaderPath !== loaderPath) fs.rmSync(loaderPath, { force: true });
   captureEntry.js[0] = finalCaptureScript;
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
   return revision;
 }
 
@@ -124,7 +126,7 @@ function installEarlyMainClock() {
   fs.writeFileSync(finalPath, finalLoader, "utf8");
   if (finalPath !== loaderPath) fs.rmSync(loaderPath, { force: true });
   mainEntry.js[0] = finalScript;
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, "utf8");
 }
 
 console.log(`[build] profile=${profile.id}; releaseEligible=${profile.releaseEligible}`);
