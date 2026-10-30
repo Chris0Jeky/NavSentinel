@@ -87,15 +87,30 @@ const CAPTCHA_PATTERNS: RegExp[] = [
   /confirm\s+you\s+are\s+(?:a\s+)?human/i,
 ];
 
+/**
+ * Run-dialog / FileFix instructions. Unlike generic "open a terminal" wording
+ * (common on developer docs beside a copy button), these rarely accompany a
+ * legitimate command copy, so they — not every instruction pattern — pair with
+ * a command-like clipboard write to detect without an overlay (#1167).
+ */
+const RUN_DIALOG_PATTERNS: RegExp[] = [
+  // Win+R, Windows+R, Windows key + R, ⊞ Win + R; Win+X is the admin-shell variant.
+  /\bwin(?:dows)?(?:\s+key)?\s*\+\s*[rx]\b/i,
+  /⊞\s*(?:win\s*)?\+\s*[rx]\b/i,
+  /\brun\s+(?:dialog|box)\b/i,
+  // FileFix: a command disguised as a path, pasted into File Explorer's address bar.
+  /file\s+explorer(?:'s)?\s+address\s+bar/i,
+];
+
 const INSTRUCTION_PATTERNS: RegExp[] = [
-  /press\s+win\s*\+\s*r/i,
+  ...RUN_DIALOG_PATTERNS,
   /press\s+ctrl\s*\+\s*v/i,
-  /press\s+⊞\s*\+\s*r/i,
-  /open\s+(?:a\s+)?(?:run|terminal|command|cmd|powershell)(?:\s+(?:dialog|window|prompt))?/i,
+  /ctrl\s*\+\s*l\b/i,
+  /open\s+(?:a\s+|the\s+)?(?:run|terminal|command|cmd|powershell)(?:\s+(?:dialog|window|prompt))?/i,
+  /windows\s+terminal/i,
   /paste\s+(?:it\s+)?(?:in|into)\s+(?:the\s+)?(?:run|terminal|command|address|search)/i,
   /cmd\s*\+\s*space/i,
-  /windows\s*\+\s*r/i,
-  /win\s+r/i,
+  /\bwin\s+r\b/i,
   /copy\s+and\s+paste/i,
   /press\s+enter\s+to\s+(?:verify|confirm|continue)/i,
   /click\s+(?:the\s+)?(?:verify|checkbox|button)(?:\s+\w+)*\s+(?:then|and)\s+(?:press|paste|open)/i,
@@ -213,6 +228,30 @@ export function matchesInstructionPattern(text: string): boolean {
     if (pattern.test(text)) return true;
   }
   return false;
+}
+
+function matchesRunDialogPattern(text: string): boolean {
+  return RUN_DIALOG_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+const SKIPPED_TEXT_ELEMENTS = new Set(["script", "style", "noscript", "template"]);
+
+/**
+ * Text of `root` up to `max` chars, skipping script/style/noscript/template
+ * subtrees so non-rendered code cannot pad instruction text out of the scanned
+ * window (#1167). The walk stops once `max` chars are collected.
+ */
+export function scannableText(root: Element | null | undefined, max: number): string {
+  if (!root) return "";
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) =>
+      SKIPPED_TEXT_ELEMENTS.has((node as Element).localName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  let text = "";
+  for (let node = walker.nextNode(); node && text.length < max; node = walker.nextNode()) {
+    if (node.nodeType === Node.TEXT_NODE) text += node.nodeValue;
+  }
+  return text.slice(0, max);
 }
 
 // --- Overlay detection ---
@@ -353,12 +392,8 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
 
   // Signal 3: text pattern matching
   // Scan both overlay text and body text — instruction text may be outside the overlay
-  let overlayText = "";
-  if (overlay) {
-    overlayText = (overlay.textContent ?? "").slice(0, 2000);
-  }
-
-  const bodyText = (root.body?.textContent ?? "").slice(0, 5000);
+  const overlayText = scannableText(overlay, 2000);
+  const bodyText = scannableText(root.body, 5000);
 
   // Captcha-text is the only ClickFix signal a legitimate CAPTCHA legitimately
   // trips, so it is the one (and only) signal suppressed when a real provider
@@ -380,6 +415,15 @@ export function scanForClickFix(root: Document = document): ClickFixScanResult {
   } else if (hadClipboardWrite && overlay && (hasCaptchaText || hasInstructionText)) {
     score += 35;
     reasons.push("clipboard_write_with_overlay");
+  } else if (
+    hadCommandWrite &&
+    (hasCaptchaText || matchesRunDialogPattern(overlayText) || matchesRunDialogPattern(bodyText))
+  ) {
+    // Full-page lures need no overlay: a command write plus fake-verification or
+    // Run-dialog/FileFix text reaches the threshold on its own. Generic terminal
+    // wording does not, so a docs page's copy button stays quiet (#1167).
+    score += 25;
+    reasons.push("clipboard_command_with_lure_text");
   }
 
   if (hasCaptchaText && hasInstructionText) {
