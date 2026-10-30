@@ -216,7 +216,13 @@ frame reproduction and repair.
 Answer these in the estate cockpit or in chat. Each record is `agent-hq/decisions/<id>.json`.
 
 - **`navsentinel-main-guard-budget-20261023`**: raise the `main_guard` (MAIN-world) perf budget so
-  #1141's captured-natives fix, and later #1134 and #1017, can land? #1141 stays open until it is answered.
+  #1141's captured-natives fix and #1065 (captured `closest`) can land? Both stay open until it is answered;
+  #1155 (#1134) landed within the cap at 21,481 of 21,504 bytes, leaving its `ownerDocument` check (`test.fixme`)
+  for after the decision.
+- **`navsentinel-dist-budget-20261030`**: raise the `capture_isolated` (67 -> 69 KB) and `credential_guard`
+  (31.5 -> 32.5 KB) caps so queued isolated-world detections can land? Waiting on it: #1183 (fullscreen-locker
+  exit, reverted by #1194 after it and #1152 together overran the research-profile capture cap), #1182, #1195,
+  and the #1142/#1149/#1189 follow-ups.
 
 ### Retroactive Gate-3 checks (AI-48 onward)
 
@@ -244,8 +250,32 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-58 | #1165 journal reading continuity | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1165) (candidate until merged) | OPEN — not run |
 | AI-59 | #1166 ClickFix clipboard hooks on prototypes (MAIN world) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1180) (candidate until merged) | OPEN — not run |
 | AI-67 | #1184 Options recorded-choices labels and export omission notice | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1184) (candidate until merged) | OPEN — not run |
+| AI-60 | #1140 visible, armed credential and toast approvals (#1139) | merge commit `a75986b9` (merged 2026-10-30) | OPEN — not run |
+| AI-61 | #1155 main_guard and its bridge in about:blank/srcdoc/blob frames (#1134, MAIN world) | merge commit `e96cc756` (merged 2026-10-30) | OPEN — not run |
+| AI-62 | #1187 credential backstop after `document.open()` (#1113) | merge commit `2f28d476` (merged 2026-10-30) | OPEN — not run |
+| AI-63 | #1152 overlay cleanup: deep and shadow-root foreground traps (#564, opt-in) | merge commit `2b6523af` (merged 2026-10-30) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
+
+- **AI-60 (#1140):** follow [`ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md`](docs/testing/ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md).
+  (1) A normal credential prompt's Proceed once and a toast's Trust or Allow once still work by mouse and by
+  Enter/Space after the prompt has been visible briefly. (2) A local page that hides the prompt with CSS
+  (`opacity:0`, `visibility:hidden`) cannot get an approval from a click on the hidden button; Cancel and Escape
+  still work. A failure gets a revert PR for `a75986b9`.
+
+- **AI-61 (#1155):** the PR body's "Gate-3 check for the owner" procedure (an about:blank and a srcdoc probe
+  frame must not navigate the top page without the guard). Also browse a few ordinary pages with about:blank ad or
+  editor frames and watch for new toasts, prompts or broken clicks. A failure gets a revert PR for `e96cc756`.
+
+- **AI-62 (#1187):** on a local page with dummy credentials: (1) a normal login form still submits after Proceed
+  once, with one POST; (2) a page that rewrites itself with `document.open()` and writes a capturing submit
+  listener that stops the event still gets the credential prompt, and Cancel sends nothing; (3) a search form in
+  a page's own web component still submits. A failure gets a revert PR for `2f28d476`.
+
+- **AI-63 (#1152):** with automatic overlay cleanup turned on in Options, serve the Gym and open
+  `gym/overlay-nesting-frame.html`: deep and shadow-root traps are hidden with an Undo card, and the slotted
+  dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
+  (residual risks are tracked in #1189). A failure gets a revert PR for `2b6523af`.
 
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
@@ -327,18 +357,6 @@ contains `<input name="querySelectorAll">`; the prompt must appear and Cancel mu
 zero POSTs. Remove a toast host, trigger another warning, and confirm it is visible.
 Remove an open credential-modal host; the same pending decision must reappear and remain
 usable. Automated Vitest/Playwright evidence does not complete this human check.
-
-**OPEN — #1134 navigation guard in origin-fallback frames** (branch `sol/navsentinel-1134`).
-`main_guard` and `capture_isolated` now also run in about:blank, srcdoc and blob frames; MAIN-world
-interception changed, so Gate-3 applies. The procedure is in that PR's body. Beyond the probe, watch
-ordinary pages with about:blank ad or editor frames for new toasts, prompts or broken clicks.
-
-- **Issue #1139 — visible approval gate, branch `fix/1139-prompt-visible-clicks`:**
-  Human Chrome result **NOT RUN**. Credential and toast approvals now require
-  visible, unobscured controls and 800 ms of arming. Automated pointer/Enter/Space
-  regressions pass; they do not complete Gate-3. Exact artifact, byte counts,
-  commands, and the remaining manual scope are recorded in
-  [`ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md`](docs/testing/ISSUE_1139_VISIBLE_APPROVALS_2026-10-22.md).
 
 Each item below is defined **only** inside its own PR branch's `ACTION_ITEMS.md`
 and the procedure named in its entry; `main` carries no procedure for them, so
