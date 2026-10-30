@@ -286,10 +286,11 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   mixed-alphabet site. (2) Submit on `xn--mller-kva.de` and `xn--wgv71a.jp` mapped the same way: no look-alike
   reason appears (a plain untrusted-site prompt is expected). A failure gets a revert PR for `025b9dc2`.
 
-- **AI-69 (#1204):** (1) open any page in tab A, open a second tab from it with `window.open(url)` (a new tab,
-  not a popup window), switch to the new tab and have it run `opener.location = "http://127.0.0.1:<other port>/"`
-  from DevTools; return to tab A: a toast says another tab changed this page and names the first site.
-  (2) Repeat with the opener write pointing at the same site: no toast. (3) Ordinary sign-in popups (a real
+- **AI-69 (#1204):** with the Gym served (`npm run gym:serve`): (1) in tab A open `http://localhost:5173/`, run
+  `window.open("http://localhost:5173/")` in its DevTools (a new tab, not a popup window), and in the new tab's
+  DevTools run `opener.location = "http://127.0.0.1:5173/"` (a different hostname; a different port alone is
+  the same site and stays silent by design); return to tab A: a toast says another tab changed this page and
+  names `localhost`. (2) Repeat with `opener.location = "http://localhost:5173/?same-site"`: no toast. (3) Ordinary sign-in popups (a real
   "Sign in with ..." button) show no toast. A failure gets a revert PR for `3ff1417e`.
 
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
