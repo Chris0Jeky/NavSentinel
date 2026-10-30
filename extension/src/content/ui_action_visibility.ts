@@ -8,25 +8,44 @@ const MIN_CONTROL_PX = 10;
 // never-clicked frame (a cleanup chip in an ad frame) unable to arm before its first
 // click, so subframes require focus once the frame has had it (#1225). A frame that
 // had focus earlier must not arm a later prompt behind a popup that holds it now.
-let hadFocus = false;
-// When this frame last lost or regained window focus. A blur shorter than a sample
-// interval (a click on a covering popup or PiP window) still restarts arming.
-let unfocusedAt = -Infinity;
-let away = false;
+// h: had focus. u: when this frame last lost window focus or was hidden; a blur
+// shorter than a sample interval (a click on a covering popup or PiP window)
+// still restarts arming. r: frame ids in this tab with a PiP window open.
+type FocusRecord = { h: boolean; u: number; a: boolean; r?: Set<number> };
+// The capture_isolated document_start loader records these before any page
+// script runs, so a page capture listener registered during the module import
+// cannot stop the events from reaching us (#1242, UI_FOCUS_FENCE).
+// A frame without the loader can expose a page element, or a cross-origin
+// WindowProxy whose properties throw, under this name through window named
+// access. Read only the global's own property, and only the loader's record
+// (with its Set) counts (#1243 review).
+const published = Object.getOwnPropertyDescriptor(globalThis, "__navsentinelUiFence")?.value as FocusRecord | undefined;
+const loaderRecord = published?.r instanceof Set ? published : undefined;
+const fence: FocusRecord = loaderRecord ?? { h: false, u: -Infinity, a: false };
 function focusChange(event: Event): void {
   if (event.target instanceof Node) return; // An element's focus or blur, not the window's.
-  hadFocus = true;
+  fence.h = true;
   // Chrome also blurs the window when focus moves into a child frame, while
   // hasFocus() stays true: that is not a loss and must not de-arm.
-  if (event.type === "blur") away = !document.hasFocus();
-  if (away) unfocusedAt = performance.now();
-  if (event.type === "focus") away = false;
+  if (event.type === "blur") fence.a = !document.hasFocus();
+  if (fence.a) fence.u = performance.now();
+  if (event.type === "focus") fence.a = false;
 }
+// Fallback for frames without that loader (about:blank credential frames).
 // Node-environment tests import the toast chain without a DOM.
-if (typeof window === "object") {
-  hadFocus = window.top === window || document.hasFocus();
+if (!loaderRecord && typeof window === "object") {
+  fence.h = window.top === window || document.hasFocus();
   window.addEventListener("blur", focusChange, true);
   window.addEventListener("focus", focusChange, true);
+}
+
+// Video and Document Picture-in-Picture windows stay on top of ours without
+// taking focus, by default over the corner where the toast sits (#1236), here
+// or from another frame of this tab (#1242). Residual: PiP from another tab,
+// including automatic PiP on a tab switch, and a frame loaded after PiP opened.
+function pipOpen(): boolean {
+  return !!(document.pictureInPictureElement || fence.r?.size ||
+    (window as { documentPictureInPicture?: { window: Window | null } }).documentPictureInPicture?.window);
 }
 
 /** Security controls need a painted, unobscured exposure window, not just trusted input. */
@@ -35,6 +54,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   let lastFrame = performance.now();
   let frame = 0;
   let disposed = false;
+  let hint: HTMLElement | null = null;
   const buttonExposure = new Map<HTMLElement, { since: number; rect: DOMRect }>();
   // IntersectionObserver v2 reports the rendered result: occlusion by any later
   // top-layer or pointer-events:none cover, and opacity, transforms, filters and
@@ -101,15 +121,12 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
     // approval can take the arming window and close on the first press (#1225).
     // Residual: a subframe surface that never had focus arms without it.
     const focused = document.hasFocus();
-    hadFocus ||= focused;
-    if (hadFocus && !focused) unfocusedAt = performance.now();
-    // Video and Document Picture-in-Picture windows stay on top of ours without
-    // taking focus, by default over the corner where the toast sits (#1236).
+    fence.h ||= focused;
+    if (fence.h && !focused) fence.u = performance.now();
     // Residual: Chrome's native <select>, date and colour pickers neither blur
-    // the window nor change hasFocus(), so they stay undetectable here.
-    if ((hadFocus && !focused) || document.pictureInPictureElement ||
-        (window as { documentPictureInPicture?: { window: Window | null } }).documentPictureInPicture?.window ||
-        !topLayer() || !rendered(host) || !rendered(surface)) return false;
+    // the window nor change hasFocus(), so they stay undetectable here. So does a
+    // top page focusing its own iframe, which keeps the blur from the top window.
+    if ((fence.h && !focused) || pipOpen() || !topLayer() || !rendered(host) || !rendered(surface)) return false;
     const rect = surface.getBoundingClientRect();
     return hit(surface, rect.x + rect.width / 2, rect.y + rect.height / 2);
   }
@@ -117,6 +134,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
   function sample(): void {
     // Mutations request a fresh visibility check; unchanged visibility banks exposure.
     observer.takeRecords();
+    if (hint && !pipOpen()) { hint.remove(); hint = null; }
     const now = performance.now();
     // Background tabs and stalled rendering cannot bank an exposure window.
     if (now - lastFrame > 100 || !visible()) visibleSince = null;
@@ -167,7 +185,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       // A button the browser never reported painted-visible is never armed.
       let allowed = !disposed && !!event && visibleSince !== null &&
         now - visibleSince >= DBLCLICK_WINDOW_MS && exposure !== undefined &&
-        now - exposure.since >= DBLCLICK_WINDOW_MS && now - unfocusedAt >= DBLCLICK_WINDOW_MS && rendered(button) &&
+        now - exposure.since >= DBLCLICK_WINDOW_MS && now - fence.u >= DBLCLICK_WINDOW_MS && rendered(button) &&
         (!paint || now - (painted.get(button) ?? now) >= DBLCLICK_WINDOW_MS);
       if (allowed && event) {
         const rect = button.getBoundingClientRect();
@@ -180,6 +198,13 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       if (!allowed) {
         visibleSince = null;
         buttonExposure.clear();
+        // Otherwise Allow once and Proceed once would silently do nothing (#1242).
+        if (!hint && pipOpen()) {
+          hint = surface.appendChild(document.createElement("p"));
+          hint.className = "body";
+          hint.setAttribute("role", "status");
+          hint.textContent = "Close Picture-in-Picture to continue";
+        }
         // Keep the decision pending and recover a detached/hidden top layer.
         if (host.parentElement !== document.documentElement) document.documentElement.appendChild(host);
         try { if (!topLayer()) host.showPopover(); } catch { /* Re-arm once renderable. */ }

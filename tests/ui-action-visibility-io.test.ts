@@ -202,6 +202,40 @@ describe("visible approval painted-visibility signal (#1142)", () => {
     expect(p.settled).toHaveBeenCalledWith("proceed");
   });
 
+  it("refuses while another frame of this tab has PiP open, with a hint, until it closes (#1242)", async () => {
+    FakeVisibilityObserver.supported = false;
+    // The document_start loader's record; the service worker relay fills r.
+    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
+    vi.stubGlobal("__navsentinelUiFence", record);
+    const p = await prompt();
+    const modal = await import("../extension/src/content/credential_modal");
+    record.r.add(3);
+    vi.advanceTimersByTime(1000);
+    expect(await p.click()).toBe(false);
+    expect(modal.credentialModalRoot()!.textContent).toContain("Close Picture-in-Picture to continue");
+    record.r.delete(3);
+    vi.advanceTimersByTime(700);
+    expect(modal.credentialModalRoot()!.textContent).not.toContain("Picture-in-Picture");
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+    expect(p.settled).toHaveBeenCalledWith("proceed");
+  });
+
+  it("refuses after a blur only the document_start loader saw (#1242)", async () => {
+    FakeVisibilityObserver.supported = false;
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const record = { h: true, u: -Infinity, a: false, r: new Set<number>() };
+    vi.stubGlobal("__navsentinelUiFence", record);
+    const p = await prompt();
+    vi.advanceTimersByTime(1000);
+    // A page capture listener stopped the blur before any module listener; the loader ran first.
+    record.u = performance.now();
+    expect(await p.click()).toBe(false);
+    vi.advanceTimersByTime(900);
+    expect(await p.click()).toBe(true);
+  });
+
   it("refuses a blended host in the fallback path", async () => {
     FakeVisibilityObserver.supported = false;
     const p = await prompt();
