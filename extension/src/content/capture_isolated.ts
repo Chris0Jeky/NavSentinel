@@ -975,23 +975,37 @@ function handleClickFixScan(): void {
 
   if (!result.detected) return;
 
+  // #1169: overwrite a hijacked clipboard once per page write receipt, even
+  // while the toast is rate-limited. The chunk loads only on a detection; the
+  // promise callback keeps Vite's preload helper from throwing synchronously.
+  const mode = settings.defaultMode;
+  // Resolves to the replaced-clipboard toast text, or "" when nothing was written.
+  const neutralized = Promise.resolve()
+    .then(() => import("./clipboard_neutralizer"))
+    .then(async (m) => (await m.maybeNeutralizeClipboard({ ...result, mode })) ? m.CLIPBOARD_REPLACED_TOAST : "")
+    .catch(() => "");
+
   // Rate-limit standalone toast: at most one alert per 10 seconds
   if (now - clickFixAlertedAt < 10_000) return;
 
   clickFixAlertedAt = now;
   sendIconUpdate("red");
+  void neutralized.then((replaced) => showClickFixAlert(result, replaced));
+}
+
+function showClickFixAlert(result: ReturnType<typeof scanForClickFix>, replaced: string): void {
   appendEventSafely({
     kind: "clickfix_detected",
     site: siteKeyFromLocation(),
     url: location.href,
     score: result.score,
-    reasons: result.reasons,
+    reasons: replaced ? [...result.reasons, "clipboard_neutralized"] : result.reasons,
   });
 
   // The card's built-in Dismiss is the only dismiss control (#869); onDismiss
   // fires for that explicit click only, never when a later notice replaces it.
   showToast({
-    message: buildPlainMessage("Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
+    message: buildPlainMessage(replaced || "Heedline detected a fake verification dialog with clipboard hijack. Do NOT paste into Run or Terminal", result.reasons),
     onDismiss: () => {
       appendOutcomeSafely({
         domain: siteKeyFromLocation(),
