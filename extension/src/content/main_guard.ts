@@ -754,14 +754,15 @@ function softPatchProto(
   }
 }
 
-// Clipboard API natives (may not exist in all contexts)
+// Clipboard API natives (may not exist in all contexts). Unbound: the
+// prototype wrappers forward the caller's receiver, as the native would (#1166).
 const nativeClipboardWriteText =
   typeof navigator !== "undefined" && navigator.clipboard
-    ? navigator.clipboard.writeText?.bind(navigator.clipboard)
+    ? navigator.clipboard.writeText
     : undefined;
 const nativeClipboardWrite =
   typeof navigator !== "undefined" && navigator.clipboard
-    ? navigator.clipboard.write?.bind(navigator.clipboard)
+    ? navigator.clipboard.write
     : undefined;
 
 function callNativeOpen(
@@ -1589,6 +1590,10 @@ window.addEventListener(
 
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
+  // #1166: wrap the prototype, not the instance. An own-property wrapper is
+  // skipped by `delete navigator.clipboard.writeText` or a direct
+  // Clipboard.prototype call, which leaves ClickFix without its write receipt.
+  const clip = Clipboard.prototype;
 
   // Share the unchanged successful-write receipt across text, item and
   // non-text fallback paths without retaining the clipboard contents.
@@ -1600,7 +1605,7 @@ function patchClipboard(): void {
 
   if (nativeClipboardWriteText) {
     try {
-      navigator.clipboard.writeText = async function (data: string): Promise<void> {
+      clip.writeText = async function (this: Clipboard, data: string): Promise<void> {
         // WebIDL string conversion is observable and may throw. An async
         // wrapper preserves native Promise rejection, including missing args.
         const text = `${data}`;
@@ -1609,7 +1614,7 @@ function patchClipboard(): void {
         // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted data from explicit undefined.
         if (arguments.length) arguments[0] = text;
         // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
-        const result = await nativeApply(nativeClipboardWriteText!, undefined, arguments);
+        const result = await nativeApply(nativeClipboardWriteText!, this, arguments);
         // Failed native writes must not produce a successful-write receipt.
         recordClipboardWrite(len, cmdLike);
         if (debug) {
@@ -1627,14 +1632,22 @@ function patchClipboard(): void {
 
   if (nativeClipboardWrite) {
     try {
-      navigator.clipboard.write = function (data: ClipboardItem[]): Promise<void> {
+      clip.write = function (this: Clipboard, data: ClipboardItem[]): Promise<void> {
+        // Snapshot the items the browser is about to write: reading the page's
+        // array after the write lets it swap in a benign item first (#1166).
+        let items: ClipboardItem[] = [];
+        try {
+          items = [...data];
+        } catch {
+          // Non-iterable input: the native write rejects it below.
+        }
         // Only send the bridge message after the native write succeeds.
-        return nativeClipboardWrite!(data).then((result) => {
+        return nativeApply(nativeClipboardWrite!, this, [data]).then((result) => {
           // Try to read text/plain content from ClipboardItems for command detection.
           // Non-text MIME types are skipped (blobs may be expensive to read).
           let inspected = false;
           try {
-            for (const item of data) {
+            for (const item of items) {
               if (item.types.includes("text/plain")) {
                 item.getType("text/plain").then((blob) => {
                   blob.text().then((text) => {
@@ -1937,34 +1950,43 @@ function patchOpenerLocation(): void {
   }
 }
 
-// Also intercept document.execCommand("copy") as an evasion vector
-const nativeExecCommand = document.execCommand.bind(document);
+// Also intercept document.execCommand("copy") as an evasion vector. Wrapped on
+// Document.prototype for the same reason as the clipboard methods (#1166).
+const nativeExecCommand = document.execCommand;
 try {
-  document.execCommand = function (command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
-    const result = nativeExecCommand(command, ...rest);
-    // Only emit clipboard event when the copy actually succeeded
-    if (command.toLowerCase() === "copy" && result && !isOff()) {
-      // Read the current selection to detect command-like content
-      let selText = "";
+  Document.prototype.execCommand = function (this: Document, command: string): boolean {
+    // Convert once, as the native would, so a stateful command object cannot
+    // say "copy" to the browser and something else to this check; and cover
+    // "cut". The selection is read first because a cut deletes it (#1166).
+    const name = `${command}`;
+    const clipLike = /^c(opy|ut)$/i.test(name);
+    let selText = "";
+    if (clipLike) {
       try {
-        selText = window.getSelection()?.toString() ?? "";
+        // The receiving document's selection, matching the forwarded receiver.
+        selText = this.getSelection()?.toString() ?? "";
       } catch {
         // getSelection may throw in some contexts
       }
+    }
+    // eslint-disable-next-line prefer-rest-params -- Keep native arity and distinguish omitted args.
+    if (arguments.length) arguments[0] = name;
+    // eslint-disable-next-line prefer-rest-params -- Forward the original supplied count and untouched extra arguments.
+    const result = nativeApply(nativeExecCommand, this, arguments);
+    // Only emit clipboard event when the copy or cut actually succeeded
+    if (clipLike && result && !isOff()) {
+      const cmdLike = looksLikeCommand(selText);
       postToIsolated("ns-clipboard-write", {
         ts: nowMs(),
         contentLength: selText.length || -1,
-        looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
+        looksLikeCommand: cmdLike,
       });
       if (debug) {
-        console.debug("[NavSentinel] document.execCommand('copy') intercepted", {
-          length: selText.length,
-          looksLikeCommand: selText.length > 0 ? looksLikeCommand(selText) : false,
-        });
+        console.debug("[NavSentinel] copy/cut intercepted", selText.length, cmdLike);
       }
     }
     return result;
-  } as typeof document.execCommand;
+  } as typeof Document.prototype.execCommand;
 } catch {
   // execCommand may not be configurable
 }

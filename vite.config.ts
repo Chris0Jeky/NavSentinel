@@ -112,6 +112,14 @@ export default defineConfig({
               priority: 10
             },
             {
+              // Shared by credential and toast approvals. Keep its static import
+              // independent of toast presentation; total-dist still bounds it.
+              name: "ui_action_visibility",
+              test: /[\\/]src[\\/]content[\\/]ui_action_visibility\.ts$/,
+              entriesAware: false,
+              priority: 20
+            },
+            {
               name: "pending-decision-runtime",
               test: /[\\/]src[\\/](?:shared[\\/]pending_decision|sw[\\/]pending_decision_(?:handlers|store))\.ts$/,
               entriesAware: true,

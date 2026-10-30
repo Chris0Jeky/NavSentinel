@@ -15,7 +15,7 @@ import {
   runClearStats,
   runImportFlow,
 } from "../extension/src/options/options_model";
-import type { SuiteSettings } from "../extension/src/shared/storage";
+import type { PromptOutcome, PromptOutcomeEntry, PromptType, SuiteSettings } from "../extension/src/shared/storage";
 import { deriveOptionsSettingsPatch, parseOptionsInt as parseIntSafe, rebaseOptionsSettingsDraft } from "../extension/src/shared/storage";
 
 describe("pct", () => {
@@ -240,7 +240,8 @@ describe("Options settings patch and rebase (#558)", () => {
 });
 
 describe("computePromptOutcomeStats", () => {
-  const mk = (outcome: string, score: number) => ({ outcome: outcome as never, score });
+  const mk = (outcome: PromptOutcome, score: number, ts = 0, type: PromptType = "nav"): PromptOutcomeEntry =>
+    ({ id: `${type}-${ts}`, domain: "example.test", outcome, score, ts, type });
 
   it("counts the bare 'allow' variant in the allow bucket (#367 repro)", () => {
     // Issue repro: one 'allow' (80) + one 'allow_once' (60). Pre-fix the bare
@@ -277,6 +278,42 @@ describe("computePromptOutcomeStats", () => {
     expect(stats.allowRate).toBe("--");
     expect(stats.avgScoreAllow).toBe("--");
     expect(stats.avgScoreBlock).toBe("--");
+    expect(stats.historySummary).toBe("Retained sample: 0 choices (cap: 500). Retained time span unavailable.");
+  });
+
+  it("describes a capped retained sample without claiming a lifetime prompt total", () => {
+    const history = Array.from({ length: 500 }, (_, i) => mk(i % 2 ? "allow" : "block", 60, 1000 + i));
+    const stats = computePromptOutcomeStats(history);
+    expect(stats.total).toBe(500);
+    expect(stats.allowRate).toBe("50.0%");
+    expect(stats.blockRate).toBe("50.0%");
+    expect(stats.historySummary).toBe(`Retained sample: 500 choices (cap: 500). Retained time span: ${fmtTime(1000)} to ${fmtTime(1499)}.`);
+  });
+
+  it("includes navigation and credential choices in the same retained sample", () => {
+    const stats = computePromptOutcomeStats([mk("allow_once", 20, 1000), mk("cancel", 80, 3000, "cred")]);
+    expect(stats.total).toBe(2);
+    expect(stats.allowRate).toBe("50.0%");
+    expect(stats.blockRate).toBe("50.0%");
+    expect(stats.historySummary).toBe(`Retained sample: 2 choices (cap: 500). Retained time span: ${fmtTime(1000)} to ${fmtTime(3000)}.`);
+  });
+
+  it("uses timestamp bounds for imported history without reordering it", () => {
+    const history = JSON.parse(JSON.stringify([mk("trust", 40, 3000, "cred"), mk("allow", 10, 1000), mk("dismiss", 20, 2000)])) as PromptOutcomeEntry[];
+    const original = structuredClone(history);
+    const stats = computePromptOutcomeStats(history);
+    expect(stats.total).toBe(3);
+    expect(stats.trustRate).toBe("33.3%");
+    expect(stats.historySummary).toBe(`Retained sample: 3 choices (cap: 500). Retained time span: ${fmtTime(1000)} to ${fmtTime(3000)}.`);
+    expect(history).toEqual(original);
+  });
+
+  it("keeps choices counted when their timestamps cannot supply a time span", () => {
+    const stats = computePromptOutcomeStats([mk("allow", 10, NaN), mk("block", 20, 8.64e15 + 1)]);
+    expect(stats.total).toBe(2);
+    expect(stats.historySummary).toBe("Retained sample: 2 choices (cap: 500). Retained time span unavailable.");
+    expect(computePromptOutcomeStats([mk("allow", 10)]).historySummary)
+      .toBe(`Retained sample: 1 choice (cap: 500). Retained time span: ${fmtTime(0)} to ${fmtTime(0)}.`);
   });
 
   it("groups 'cancel' with blocks", () => {

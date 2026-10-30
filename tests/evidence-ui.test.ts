@@ -44,13 +44,28 @@ describe("Protection Center wired UI", () => {
     get("resetFilters").click();
     expect(document.querySelectorAll("details.event")).toHaveLength(25);
   });
-  it("previews all filtered rows and downloads the exact reviewed snapshot", async () => {
+  it.each([
+    { reasons: ["no_accessible_name"], omitted: 0 },
+    { reasons: ["NON_HTTPS_PAGE", "IP_HOST"], omitted: 1 },
+    { reasons: ["NON_HTTPS_PAGE", "no_accessible_name"], omitted: 1 },
+  ])("previews omissions for $reasons and downloads the exact reviewed snapshot", async ({ reasons, omitted }) => {
+    mocks.getEventLog.mockResolvedValue(Array.from({ length: 29 }, (_, i) => ({
+      id: `private-${i}`, ts: 1700000000000 + i, kind: i === 0 ? "cred_submit_prompt" : "nav_click_block",
+      site: "source.test", reasons: i === 0 ? reasons : ["no_accessible_name"],
+    })));
+    get("refresh").click();
+    await vi.waitFor(() => expect(get("total").textContent).toBe("29"));
     let blob: Blob | undefined;
     vi.spyOn(URL, "createObjectURL").mockImplementation(value => { blob = value as Blob; return "blob:test"; });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     get("export").click();
     const reviewed = get<HTMLTextAreaElement>("exportPreview").value;
-    expect(JSON.parse(reviewed).events).toHaveLength(28);
+    expect(JSON.parse(reviewed).events).toHaveLength(29);
+    expect(JSON.parse(reviewed).events[0].reasons).toEqual(reasons.filter(reason => reason === "no_accessible_name"));
+    expect(reviewed).not.toMatch(/NON_HTTPS_PAGE|IP_HOST/);
+    expect(get("exportOmissions").hidden).toBe(omitted === 0);
+    expect(get("exportOmissions").textContent).toBe(omitted ? "1 record includes explanations that are not part of the portable export." : "");
+    expect(get("exportDialog").getAttribute("aria-describedby")).toContain("exportOmissions");
     expect(reviewed).not.toContain("private-");
     expect(get<HTMLDialogElement>("exportDialog").open).toBe(true);
     expect(blob).toBeUndefined();
@@ -58,10 +73,12 @@ describe("Protection Center wired UI", () => {
     mocks.getEventLog.mockResolvedValue([]);
     get("refresh").click();
     await vi.waitFor(() => expect(get("total").textContent).toBe("0"));
+    expect(get("exportOmissions").hidden).toBe(omitted === 0);
     get("downloadExport").click();
     expect(blob?.type).toBe("application/json");
     expect(await blob!.text()).toBe(reviewed);
-    expect(get("status").textContent).toContain("28 reviewed, minimized events");
+    expect(new Uint8Array(await blob!.arrayBuffer())).toEqual(new TextEncoder().encode(reviewed));
+    expect(get("status").textContent).toContain("29 reviewed, minimized events");
     expect(get<HTMLDialogElement>("exportDialog").open).toBe(false);
   });
   it("cancel clears the preview without preparing a download", async () => {
