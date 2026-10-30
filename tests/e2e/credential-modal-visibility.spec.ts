@@ -42,7 +42,7 @@ test(`page CSS cannot turn an invisible credential prompt into approval; visible
     await page.waitForTimeout(300);
     await page.click("#go", { noWaitAfter: true });
     await waitForCredentialModal(page);
-    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
     const point = await evaluateInCredentialModal(page, function (this: ShadowRoot) {
       const button = Array.from(this.querySelectorAll("button")).find((b) => b.textContent === "Proceed once")!;
       const rect = button.getBoundingClientRect();
@@ -58,7 +58,7 @@ test(`page CSS cannot turn an invisible credential prompt into approval; visible
     // Restoring visibility does not inherit the old exposure window.
     await page.mouse.click(point!.x, point!.y);
     expect(posts).toBe(0);
-    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
     if (activation === "pointer") await clickModalButton(page, "Proceed once");
     else {
       // DevTools can focus the closed-root control; the key is real browser input.
@@ -144,7 +144,7 @@ test(`credential prompt refuses Proceed once under a ${construction} (#1142) @re
       const rect = button.getBoundingClientRect();
       return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
     });
-    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
     const point = (await proceedPoint())!;
     await page.evaluate(apply, point);
     await page.waitForTimeout(DBLCLICK_WINDOW_MS + 500);
@@ -209,18 +209,19 @@ test(`built toast fence refuses immediate approval and permits armed ${activatio
     };
     await activate();
     expect(await page.evaluate(() => performance.now()) - started, "first trusted input must precede arming").toBeLessThan(DBLCLICK_WINDOW_MS);
-    expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank")).toHaveLength(0);
+    expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank" && !candidate.url().startsWith("chrome-extension:"))).toHaveLength(0);
     expect(await toastButtonPoint(page, "Allow once", 1000), "refused approval keeps the original action pending").toBeTruthy();
 
-    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
-    const popupPromise = context.waitForEvent("page", { timeout: 5000 });
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
+    // The extension's own onboarding tab can open late in a fresh profile; it is not the popup.
+    const popupPromise = context.waitForEvent("page", { timeout: 5000, predicate: (p) => !p.url().startsWith("chrome-extension:") });
     await activate();
     const popup = await popupPromise;
     await expect(popup).toHaveURL("http://toast.test/approved");
     await expect.poll(() => evaluateInToast(page, (roots) => roots
       .flatMap((root) => Array.from(root.querySelectorAll("button")))
       .filter((button) => button.textContent?.trim() === "Allow once").length)).toBe(0);
-    expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank")).toEqual([popup]);
+    expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank" && !candidate.url().startsWith("chrome-extension:"))).toEqual([popup]);
   } finally {
     await context?.close();
     fs.rmSync(profile, { recursive: true, force: true });

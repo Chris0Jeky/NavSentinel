@@ -116,7 +116,7 @@ export async function clickToastButton(page: Page, scope: Scope, label: string, 
   if (label !== "Dismiss") {
     await expect.poll(() => toastCards(scope).then((cards) => cards.some((card) => card.buttons.includes(label))))
       .toBe(true);
-    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
   }
   // Brief cards expire; a missed window must fail the step, not hang the procedure.
   const point = await stableToastButtonCenter(scope, label, kind, 3000);

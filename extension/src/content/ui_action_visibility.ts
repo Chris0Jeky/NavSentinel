@@ -27,8 +27,12 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
     }, { trackVisibility: true, delay: 100 } as IntersectionObserverInit);
   } catch { /* Fall back below. */ }
   // ponytail: without trackVisibility (Chromium builds lacking IO v2) the explicit
-  // checks below stand alone, with the #1142 residuals they cannot see.
-  if (!paint?.trackVisibility) {
+  // checks below stand alone, with the #1142 residuals they cannot see. Top frame
+  // only: Chrome judges a cross-site iframe's occlusion for the whole frame box, so
+  // any parent element over one corner (a sticky header, a cookie bar) would keep an
+  // embedded login's approvals from ever arming (#1214 review). Subframe prompts keep
+  // the explicit checks; the parent-fade residual stays tracked in #1149.
+  if (!paint?.trackVisibility || window.top !== window) {
     paint?.disconnect();
     paint = null;
   }

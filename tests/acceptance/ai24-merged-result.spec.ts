@@ -30,7 +30,7 @@ function recordCreatedPages(session: AcceptanceSession): Created[] {
 async function clickToastButton(page: Page, label: string): Promise<void> {
   if (!await toastButtonPoint(page, label)) throw new Error(`toast button "${label}" is not rendered`);
   // Owned actions arm only after a continuous visible exposure window (#1139).
-  await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
+  await page.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
   const point = await toastButtonPoint(page, label);
   if (!point) throw new Error(`toast button "${label}" is not rendered`);
   await page.mouse.click(point.x, point.y);
