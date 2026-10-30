@@ -116,6 +116,9 @@ These are read-only. They are never updated at runtime and require no network ca
 - no clipboard content bridging, storage, or transmission. ClickFix logic
   transiently inspects clipboard text/selection in the page's MAIN world to
   derive length and a command-like boolean, then sends only that metadata.
+  On a high-confidence ClickFix detection (a command-like write behind a fake
+  dialog) in Smart or Strict mode, Heedline overwrites the clipboard with a
+  fixed warning sentence; it never reads the clipboard to do so.
 
 ## Import And Export
 
