@@ -140,6 +140,14 @@ describe("isScarewareFullscreen", () => {
     expect(isScarewareFullscreen(el).scare).toBe(true);
   });
 
+  it("ignores CSS-hidden text such as an unshown slide (Codex P2 on #1210)", () => {
+    const deck = (style: string) =>
+      div(`<section><h1>Slide 3: phishing awareness</h1></section><section style="${style}"><p>${SCARE_TEXT}</p></section>`);
+    expect(isScarewareFullscreen(deck("display: none")).scare).toBe(false);
+    expect(isScarewareFullscreen(deck("visibility: hidden")).scare).toBe(false);
+    expect(isScarewareFullscreen(deck("")).scare).toBe(true);
+  });
+
   it("ignores script, style and hidden text", () => {
     const el = div(`<script>${SCARE_TEXT}</script><style>${SCARE_TEXT}</style><div hidden>${SCARE_TEXT}</div><p>Hello</p>`);
     expect(isScarewareFullscreen(el)).toEqual({ scare: false, reasons: [] });
@@ -169,7 +177,8 @@ describe("isScarewareFullscreen", () => {
 describe("Gym fixtures", () => {
   const load = (name: string, id: string): Element => {
     const html = readFileSync(`gym/${name}`, "utf8");
-    return new DOMParser().parseFromString(html, "text/html").getElementById(id)!;
+    // Attach it: a fullscreen element is always connected, and checkVisibility() is false when not.
+    return document.body.appendChild(document.adoptNode(new DOMParser().parseFromString(html, "text/html").getElementById(id)!));
   };
 
   it("classifies the attack fixture as a locker", () => {

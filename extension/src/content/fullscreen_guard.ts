@@ -73,7 +73,11 @@ function mediaDominated(el: Element): boolean {
   return Array.from(media).some((m) => area(m) / total >= MEDIA_SHARE);
 }
 
-/** Bounded, in-order text of the subtree (open shadow roots included), skipping script/style/hidden. */
+/**
+ * Bounded, in-order text of the subtree (open shadow roots included), skipping script/style
+ * and anything not rendered (`hidden`, display:none, visibility:hidden): a deck's unshown
+ * scam-training slide must not count as what the user sees.
+ */
 function boundedText(root: Element): string {
   let out = "";
   let nodes = 0;
@@ -86,7 +90,8 @@ function boundedText(root: Element): string {
     }
     if (n.nodeType === 1) {
       const e = n as Element;
-      if (SKIP_TAGS.has(e.tagName) || e.hasAttribute("hidden")) continue;
+      if (SKIP_TAGS.has(e.tagName) || e.hasAttribute("hidden") ||
+        e.checkVisibility?.({ visibilityProperty: true }) === false) continue;
       if (e.shadowRoot) stack.push(e.shadowRoot);
     }
     for (let c = n.lastChild; c; c = c.previousSibling) stack.push(c);
