@@ -86,6 +86,8 @@ const EXPRESSION_SOURCES: Record<string, keyof typeof VOCABULARY | null> = {
   "[alert.type]": "mutation",
   '[typeof data.reason === "string" ? data.reason : "unknown"]': "pushstate",
   "risk.reasons.map((r) => r.code)": "credential",
+  // Password-focus warning (#1170): one computeCredentialRisk page code.
+  "[reason.code]": "credential",
   // Credential modal display lines, never persisted.
   "getCredentialReasonLines(risk.reasons)": null,
   // Prompt-outcome records (a separate store), not the event log.
