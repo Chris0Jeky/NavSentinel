@@ -49,12 +49,34 @@ test("Proceed once does not arm while another window has focus (#1225) @regressi
     await page.click("#go", { noWaitAfter: true });
     await waitForCredentialModal(page);
 
-    // Another window takes focus for the whole arming window, then closes.
-    const popup = await context.newPage();
+    // Another browser window, offset so ours stays partly uncovered and keeps rendering,
+    // takes focus for the whole arming window and then closes (the issue's popup).
+    // Same-window tabs throttle animation frames, which already resets arming; record the
+    // longest frame gap so the test cannot pass that way.
+    await page.evaluate(() => {
+      const probe = window as unknown as { maxFrameGap: number };
+      probe.maxFrameGap = 0;
+      let last = performance.now();
+      const tick = (now: number) => {
+        probe.maxFrameGap = Math.max(probe.maxFrameGap, now - last);
+        last = now;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const main = await cdp.send("Browser.getWindowForTarget");
+    const opened = context.waitForEvent("page");
+    await cdp.send("Target.createTarget", {
+      url: "about:blank", newWindow: true,
+      left: (main.bounds.left ?? 0) + 40, top: (main.bounds.top ?? 0) + 40,
+    });
+    const popup = await opened;
     await popup.bringToFront();
     await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(false);
-    expect(await page.evaluate(() => document.visibilityState)).toBe("visible");
     await popup.waitForTimeout(DBLCLICK_WINDOW_MS + 700);
+    expect(await page.evaluate(() => document.visibilityState), "our page stayed visible behind the popup").toBe("visible");
+    expect(await page.evaluate(() => (window as unknown as { maxFrameGap: number }).maxFrameGap),
+      "our page kept rendering behind the popup, not throttled as a background tab").toBeLessThan(500);
     await popup.close();
     await page.bringToFront();
     await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
