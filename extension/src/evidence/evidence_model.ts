@@ -10,7 +10,7 @@ export const EVIDENCE_KINDS = [
   "cred_submit_allow_once", "cred_trust_domain", "cred_untrust_domain",
   "cred_paste_warn", "cred_form_evaluated", "suite_config_update",
   "clickfix_detected", "dblclickjack_detected", "nav_reputation_late_warn",
-  "mutation_alert", "pushstate_abuse", "bridge_buffer_overflow",
+  "mutation_alert", "pushstate_abuse", "fullscreen_locker_exit", "bridge_buffer_overflow",
 ] as const satisfies readonly EventKind[];
 const kinds = new Set<string>(EVIDENCE_KINDS);
 export const MAX_EVIDENCE_EVENTS = 5000;
