@@ -41,7 +41,7 @@ import {
   isUnexpectedCallback,
   type OAuthFlowState,
 } from "../content/oauth_monitor";
-import { swState } from "../shared/session_state";
+import { swState, type TabnabPendingEntry } from "../shared/session_state";
 import { updateTabIcon, updateTabIconWhen, clearTabIcon, setAllTabsGray } from "./icon_manager";
 import {
   createDefaultPendingDecisionRuntimeBroker,
@@ -404,19 +404,68 @@ function recordTabnab(openerTabId: number, origReg: string | undefined, writeUrl
   if (!origReg || httpRegistrable(String(writeUrl ?? "")) === origReg) return;
   chrome.tabs.get(openerTabId).then((tab) => {
     if (tab.active !== false && tab.windowId === childWindowId) return;
-    const now = Date.now();
-    for (const [id, e] of tabnabPendingByTab) {
-      if (now - e.ts > TABNAB_MAX_AGE_MS) tabnabPendingByTab.delete(id);
-    }
-    // Keep the first record: a later child may have been opened after the swap.
-    if (tabnabPendingByTab.has(openerTabId)) return;
-    // Entries are only inserted, never re-stamped, so Map order is age order: drop the oldest.
-    if (tabnabPendingByTab.size >= TABNAB_PRUNE_LIMIT) {
-      tabnabPendingByTab.delete(tabnabPendingByTab.keys().next().value!);
-    }
-    tabnabPendingByTab.set(openerTabId, tab.active ? { origReg, ts: now, w: 1 } : { origReg, ts: now });
-    swState.persistMap(tabnabPendingByTab, "tabnabPending");
+    addTabnabPending(openerTabId, tab.active ? { origReg, ts: Date.now(), w: 1 } : { origReg, ts: Date.now() });
   }).catch(() => {});
+}
+
+function addTabnabPending(tabId: number, entry: TabnabPendingEntry): void {
+  for (const [id, e] of tabnabPendingByTab) {
+    if (entry.ts - e.ts > TABNAB_MAX_AGE_MS) tabnabPendingByTab.delete(id);
+  }
+  // Keep the first record: a later child may have been opened after the swap. A tab swap
+  // still replaces a device-code entry, which the swap's own commit would clear anyway.
+  const cur = tabnabPendingByTab.get(tabId);
+  if (cur && !(cur.k && !entry.k)) return;
+  // Entries are only inserted, never re-stamped, so Map order is age order: drop the oldest.
+  if (tabnabPendingByTab.size >= TABNAB_PRUNE_LIMIT) {
+    tabnabPendingByTab.delete(tabnabPendingByTab.keys().next().value!);
+  }
+  tabnabPendingByTab.set(tabId, entry);
+  swState.persistMap(tabnabPendingByTab, "tabnabPending");
+}
+
+// --- Device-code phishing: a website sent the user to an OAuth device sign-in page ---
+// Entering a code a lure site displayed signs the attacker in to the account (MFA satisfied).
+// Each device page (matched on host+path+query of the committed URL, after server redirects)
+// with the only sources that may send users there without a warning: that provider's own
+// sign-in, account and docs pages. Its mail, documents, sites and any other provider warn.
+const DEVICE_PAGES: ReadonlyArray<readonly [RegExp, RegExp]> = [
+  [/^(?:(?:www\.)?microsoft\.com\/devicelogin|login\.microsoft(?:online)?\.com\/[^/]+\/oauth2\/(?:v2\.0\/)?deviceauth|login\.live\.com\/oauth20_remoteconnect\.srf)(?:[/?#]|$)/i,
+    /^(?:(?:www\.)?microsoft\.com|login\.microsoft(?:online)?\.com|login\.live\.com|account\.live\.com|learn\.microsoft\.com|portal\.azure\.com)\//i],
+  // google.com/device server-redirects to accounts.google.com/o/oauth2/device/usercode.
+  [/^(?:accounts\.google\.com\/(?:o\/oauth2\/device\/usercode|device)|(?:www\.)?google\.com\/device)(?:[/?#]|$)/i,
+    /^(?:accounts|myaccount)\.google\.com\//i],
+  // Signed out, github.com/login/device redirects to /login?return_to=...%2Flogin%2Fdevice.
+  [/^(?:www\.)?github\.com\/login(?:\/device(?:[/?#]|$)|\?\S*return_to=[^&]*%2Flogin%2Fdevice(?:%2F|%3F|%23|&|$))/i,
+    /^(?:www\.)?github\.com\/(?:login|sessions?|settings)(?:[/?#]|$)/i],
+];
+
+// "host/path" of an http(s) page; a blob: page counts as the site that made it.
+function pageKey(url: string | undefined): string {
+  try {
+    let u = new URL(url ?? "");
+    if (u.protocol === "blob:") u = new URL(u.origin);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.hostname + u.pathname : "";
+  } catch { return ""; }
+}
+
+function noteDeviceCode(tabId: number, url: string, prevUrl: string | undefined, skip: boolean): void {
+  let target: URL;
+  try { target = new URL(url); } catch { return; }
+  const page = skip ? undefined : DEVICE_PAGES.find(([re]) => re.test(target.hostname + target.pathname + target.search));
+  // A device entry belongs to the visit that made it: a later navigation must not inherit it,
+  // but the provider's own sign-in step back to a device page keeps it.
+  if (!page && tabnabPendingByTab.get(tabId)?.k) {
+    tabnabPendingByTab.delete(tabId);
+    swState.persistMap(tabnabPendingByTab, "tabnabPending");
+  }
+  if (!page) return;
+  // The previous page, else the opener of a new tab; neither means typed, bookmarked or opened by an app.
+  const key = pageKey(prevUrl);
+  const opener = childWindowByTab.get(tabId)?.openerReg;
+  const from = key ? getRegistrableDomain(key.slice(0, key.indexOf("/"))) : opener;
+  if (!from || page[1].test(key || `${opener}/`)) return;
+  addTabnabPending(tabId, { origReg: from, ts: Date.now(), k: 1 });
 }
 
 function clearPendingTabState(
@@ -1189,6 +1238,7 @@ function onCommittedHandler(details: chrome.webNavigation.WebNavigationTransitio
     details.transitionType === "auto_bookmark" ||
     qualifiers.includes("from_address_bar");
   const isLinkish = details.transitionType === "link";
+  noteDeviceCode(details.tabId, details.url, prevUrl, isUserTyped || isHistoryTraversal);
 
   // These are explicit user-navigation boundaries. Clear the previous chain
   // before any processing so a restored or unrelated redirect sequence cannot
@@ -1464,8 +1514,9 @@ function onActivatedHandler(tabId: number): void {
     // Keep the entry while loading (onUpdated retries) or until delivery succeeds.
     if (tab.status === "loading") return;
     const reg = httpRegistrable(tab.url);
-    if (!reg || reg === pending.origReg) return drop();
-    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg }, () => {
+    // A device-code entry's source was already vetted (a provider's own Docs or repo pages warn).
+    if (!reg || (reg === pending.origReg && !pending.k)) return drop();
+    chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg, ...(pending.k && { kind: "devicecode" }) }, () => {
       // The listener never responds, so a delivered message still reports "message port
       // closed"; only a missing receiver means the toast was not shown.
       if (!/Receiving end does not exist/.test(chrome.runtime.lastError?.message ?? "")) drop();
