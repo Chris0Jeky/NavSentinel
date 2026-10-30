@@ -14,7 +14,7 @@ by monitoring click context and navigation patterns locally.
 | `storage` | Stores settings, allow/trust lists, event and prompt-outcome history, adaptive/domain/category behavior profiles, smart-default cooldowns, and ephemeral security state. Nothing is transmitted. |
 | `webNavigation` | Monitors navigation commits to detect redirect chains, rollback suspicious navigations, and correlate gesture tokens with navigation events. |
 | `tabs` | Tracks tab creation/closure for DoubleClickjacking detection (child window monitoring) and rollback affordances. |
-| `host_permissions: <all_urls>` | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. Interaction data is processed locally and configured security history may be stored locally; nothing is transmitted. |
+| `<all_urls>` (`host_permissions` and `content_scripts.matches`) | Content scripts must run on all pages to detect click deception, credential risks, and overlay attacks. Interaction data is processed locally and configured security history may be stored locally; nothing is transmitted. |
 
 ### Data Usage Disclosure
 

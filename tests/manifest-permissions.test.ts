@@ -15,6 +15,10 @@ const extensionDir = path.resolve(__dirname, "..", "extension");
 
 type Manifest = {
   permissions?: string[];
+  optional_permissions?: string[];
+  host_permissions?: string[];
+  optional_host_permissions?: string[];
+  content_scripts?: { matches?: string[] }[];
   declarative_net_request?: unknown;
 };
 
@@ -24,7 +28,44 @@ function loadManifest(name: string): Manifest {
   return JSON.parse(readFileSync(path.join(extensionDir, name), "utf8")) as Manifest;
 }
 
+function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[] {
+  const disclosed = new Set(Array.from(disclosure.matchAll(/`([^`\r\n]+)`/g), (match) => match[1]));
+  const grants = {
+    permissions: manifest.permissions ?? [],
+    optional_permissions: manifest.optional_permissions ?? [],
+    host_permissions: manifest.host_permissions ?? [],
+    optional_host_permissions: manifest.optional_host_permissions ?? [],
+    "content_scripts.matches": manifest.content_scripts?.flatMap((script) => script.matches ?? []) ?? [],
+  };
+  return Object.entries(grants).flatMap(([field, values]) =>
+    [...new Set(values)].filter((value) => !disclosed.has(value)).map((value) => `${field}: ${value}`),
+  );
+}
+
 describe("manifest permissions", () => {
+  const disclosure = readFileSync(path.resolve(__dirname, "../docs/cws-listing/PRIVACY_DISCLOSURE.md"), "utf8");
+
+  it("discloses every Chrome permission, host grant, and content-script match", () => {
+    expect(findUndisclosedGrants(loadManifest("manifest.json"), disclosure)).toEqual([]);
+  });
+
+  it.each([
+    "permissions",
+    "optional_permissions",
+    "host_permissions",
+    "optional_host_permissions",
+    "content_scripts.matches",
+  ] as const)("reports an undisclosed grant in %s", (field) => {
+    const manifest = loadManifest("manifest.json");
+    const fakeGrant = "undisclosedFakeGrant";
+    const copy: Manifest = field === "content_scripts.matches"
+      ? { ...manifest, content_scripts: [...(manifest.content_scripts ?? []), { matches: [fakeGrant] }] }
+      : { ...manifest, [field]: [...(manifest[field] ?? []), fakeGrant] };
+    expect(findUndisclosedGrants(copy, disclosure)).toEqual([`${field}: ${fakeGrant}`]);
+    expect(findUndisclosedGrants(copy, `${disclosure}\n\`${fakeGrant}Suffix\``)).toEqual([`${field}: ${fakeGrant}`]);
+    expect(findUndisclosedGrants(copy, `${disclosure}\n\`${fakeGrant}\``)).toEqual([]);
+  });
+
   it.each(MANIFESTS)("%s requests no declarativeNetRequest permission", (name) => {
     const permissions = loadManifest(name).permissions ?? [];
     expect(permissions).not.toContain("declarativeNetRequest");
