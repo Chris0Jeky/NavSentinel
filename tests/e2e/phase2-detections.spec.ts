@@ -469,6 +469,39 @@ test.describe("ClickFix", () => {
         document.body.appendChild(host);
       });
       await waitForToastMatch(page, /Run-box steps|Do NOT paste/i, 6000);
+      // #1234: no newer copy since the command, so the late detection also neutralizes it.
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5000 })
+        .toBe(CLIPBOARD_WARNING_TEXT);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("clickfix-08 a late lure never overwrites a copy the user made after the command (#1234) @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+      await page.click("h1");
+      await page.evaluate(() => navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64"));
+      // The user copies something of their own before the lure appears.
+      await page.evaluate(() => {
+        const p = document.createElement("p");
+        p.id = "mine";
+        p.textContent = "my own notes";
+        document.body.appendChild(p);
+      });
+      await page.click("#mine", { clickCount: 3 });
+      await page.keyboard.press("Control+C");
+      await page.evaluate(() => {
+        const host = document.createElement("div");
+        host.attachShadow({ mode: "open" }).innerHTML =
+          "<p>Verify you are human: press Win + R, paste with Ctrl + V and press Enter.</p>";
+        document.body.appendChild(host);
+      });
+      await waitForToastMatch(page, /Run-box steps|Do NOT paste/i, 6000);
+      await page.waitForTimeout(1500);
+      expect((await page.evaluate(() => navigator.clipboard.readText())).trim()).toBe("my own notes");
     } finally {
       await cleanup();
     }

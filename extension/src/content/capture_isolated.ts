@@ -629,6 +629,7 @@ function handleBridgeMessage(message: unknown): void {
   }
 
   if (data.type === "ns-clipboard-write") {
+    clipboardGeneration++;
     recordClipboardBridgeWrite({
       ts: data.ts,
       contentLength: data.contentLength,
@@ -971,12 +972,20 @@ function checkDeviceCodeLure(length: number): void {
 
 // Instructions shown after the copy (#1218): an undetected command write is
 // rescanned at 1.5, 5 and 15 s (inside the 30 s write window), one chain at a time.
+// A late detection may also neutralize the clipboard (#1234), but only while no
+// copy, cut or page write has happened since and the page still has focus, so a
+// newer copy of the user's is never overwritten.
 let clickFixRescanPending = false;
-function rescanClickFix(step = 0): void {
+let clipboardGeneration = 0;
+for (const type of ["copy", "cut"]) {
+  window.addEventListener(type, (e) => { if (e.isTrusted) clipboardGeneration++; }, true);
+}
+function rescanClickFix(step = 0, generation = clipboardGeneration): void {
   clickFixRescanPending = true;
   setTimeout(() => {
     clickFixRescanPending = false;
-    if (!handleClickFixScan(false, true) && step < 2) rescanClickFix(step + 1);
+    const sameCopy = generation === clipboardGeneration && document.hasFocus();
+    if (!handleClickFixScan(sameCopy, true) && step < 2) rescanClickFix(step + 1, generation);
   }, [1500, 3500, 10000][step]);
 }
 
