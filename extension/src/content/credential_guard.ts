@@ -19,7 +19,7 @@ import {
 } from "./credential_guard_model";
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
-import { queryPasswordInputs } from "./password_field";
+import { isPasswordTypeInput, isVisiblePasswordField, queryPasswordInputs } from "./password_field";
 import { addPersistentListener } from "./persistent_listener";
 import { domAttribute, domProperty } from "./dom_access";
 
@@ -751,3 +751,16 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 addPersistentListener(window, "submit", (e) => void handleSubmit(e as SubmitEvent));
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
 addPersistentListener(window, "formdata", handleFormData);
+
+// #1170: fetch-based kits never submit a form. Once per page, the first focus of a
+// visible password field lazily checks the page address (warn-only toast).
+let focusChecked = false;
+addPersistentListener(window, "focusin", (e) => {
+  const t = e.composedPath()[0];
+  if (focusChecked || cachedCredMode === "off" || !(t instanceof HTMLInputElement) ||
+    !isPasswordTypeInput(t) || !isVisiblePasswordField(t)) return;
+  focusChecked = true;
+  void import("./credential_focus_warning")
+    .then((m) => m.warnOnPasswordFocus(pageIdentity().href))
+    .catch((err) => { console.warn("[NavSentinel] password focus check failed:", err); });
+});
