@@ -3,7 +3,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { readToastText, waitForNavSentinelBridge, waitForToastMatch } from "./extension_test_utils";
+import { evaluateInToast, readToastText, waitForNavSentinelBridge, waitForToastMatch } from "./extension_test_utils";
 
 // #1170: a fetch-only login never submits a form, so the only credential
 // warning is the password-focus toast. The host resolver maps public-looking
@@ -13,11 +13,10 @@ import { readToastText, waitForNavSentinelBridge, waitForToastMatch } from "./ex
 const RISKY = "risky-login.example";
 const INTRANET = "mail.internal";
 
+// The toast's shadow root is closed (#1142), so read it through the CDP helper.
 async function toastButtons(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const root = document.querySelector("#__navsentinel_toast_host")?.shadowRoot;
-    return Array.from(root?.querySelectorAll("button") ?? []).map((b) => b.textContent ?? "");
-  });
+  return evaluateInToast(page, (roots) =>
+    Array.from(roots[0]?.querySelectorAll("button") ?? []).map((b) => b.textContent ?? ""));
 }
 
 test("password focus warns on a risky http address and not on an intranet one (#1170) @regression", async () => {
