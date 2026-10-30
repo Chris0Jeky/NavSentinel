@@ -69,7 +69,8 @@ minimization sign-off before beta.
   isolated script, stored, or transmitted. During a `copy` event the isolated
   script also reads a page-rewritten copy payload in place to detect
   pastejacking, keeping only the same length and boolean; the text is never
-  stored, bridged, or transmitted.
+  stored, bridged, or transmitted. Ordinary copies the page does not replace
+  are not read.
 - No password values or form-field contents are stored or transmitted. Current
   exact operational URLs can contain OAuth authorization codes, access/ID
   tokens, or other response parameters; RI-06/#455 must redact these before any

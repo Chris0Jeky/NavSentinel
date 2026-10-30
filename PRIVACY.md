@@ -119,7 +119,8 @@ These are read-only. They are never updated at runtime and require no network ca
   derive length and a command-like boolean, then sends only that metadata. The
   isolated content script also reads a page-rewritten copy-event payload
   during a `copy` event to detect pastejacking; it keeps only the same length
-  and boolean and drops the text immediately.
+  and boolean and drops the text immediately. Ordinary copies, where the page
+  does not replace what you selected, are not read at all.
 
 ## Import And Export
 
