@@ -239,18 +239,25 @@ const SKIPPED_TEXT_ELEMENTS = new Set(["script", "style", "noscript", "template"
 /**
  * Text of `root` up to `max` chars, skipping script/style/noscript/template
  * subtrees so non-rendered code cannot pad instruction text out of the scanned
- * window (#1167). The walk stops once `max` chars are collected.
+ * window (#1167), and reading open shadow roots so a lure drawn inside a web
+ * component is not invisible (#1218). The walk stops once `max` chars are collected.
  */
 export function scannableText(root: Element | null | undefined, max: number): string {
-  if (!root) return "";
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) =>
-      SKIPPED_TEXT_ELEMENTS.has((node as Element).localName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
-  });
   let text = "";
-  for (let node = walker.nextNode(); node && text.length < max; node = walker.nextNode()) {
-    // Space-join so adjacent blocks ("...Win + R" then "Hello") stay separate words.
-    if (node.nodeType === Node.TEXT_NODE) text += `${node.nodeValue} `;
+  // A worklist, not recursion: a page nesting thousands of empty shadow roots must
+  // not overflow the stack and make the scan throw (fail open).
+  const roots: Node[] = root ? [root] : [];
+  for (let i = 0; i < roots.length && text.length < max; i++) {
+    // Lazy TreeWalker: siblings are visited only while the budget remains.
+    const walker = (roots[i]!.ownerDocument ?? document).createTreeWalker(roots[i]!, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) =>
+        SKIPPED_TEXT_ELEMENTS.has((node as Element).localName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    });
+    for (let node: Node | null = walker.currentNode; node && text.length < max; node = walker.nextNode()) {
+      // Space-join so adjacent blocks ("...Win + R" then "Hello") stay separate words.
+      if (node.nodeType === Node.TEXT_NODE) text += `${node.nodeValue} `;
+      else if ((node as Element).shadowRoot) roots.push((node as Element).shadowRoot!);
+    }
   }
   return text.slice(0, max);
 }
