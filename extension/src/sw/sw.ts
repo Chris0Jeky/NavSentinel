@@ -706,6 +706,16 @@ function runWhenHydrated(run: () => void, keepPortOpen = true): boolean {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return;
 
+  // #1242: relay a frame's Picture-in-Picture state to every frame of its tab,
+  // so approvals in any frame refuse while it is open. Chrome supplies the frame id.
+  if (message.type === "ns-pip") {
+    if (sender.tab?.id !== undefined && sender.frameId !== undefined) {
+      chrome.tabs.sendMessage(sender.tab.id, { type: "ns-pip", open: message.open === true, frame: sender.frameId })
+        .catch(() => {});
+    }
+    return;
+  }
+
   if (isPendingDecisionRuntimeMessage(message)) {
     void loadPendingDecisionRuntime()
       .then((runtime) => runtime.handle(message, sender))
