@@ -440,6 +440,12 @@ test.describe("ClickFix", () => {
         () => page.evaluate(() => navigator.clipboard.readText()),
         { message: "Heedline should overwrite the command with its warning", timeout: 5000 },
       ).toBe(CLIPBOARD_WARNING_TEXT);
+
+      // A benign copy afterwards, overlay still up, must survive: only the
+      // receipt that is itself command-like is ever overwritten.
+      await page.evaluate(() => navigator.clipboard.writeText("847293"));
+      await page.waitForTimeout(1500);
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("847293");
     } finally {
       await cleanup();
     }
