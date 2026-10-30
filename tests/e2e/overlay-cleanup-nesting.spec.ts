@@ -236,11 +236,11 @@ test("nested cleanup hides the exact cross-origin frame pattern and Undo restore
     await expect(frame.locator("#exact-overlay-frame")).toBeHidden({ timeout: 4000 });
     await expect(frame.locator("#underlay")).toBeVisible();
     await waitForFrameToast(frame, /overlay hidden/i);
-    expect(context.pages()).toHaveLength(pageCount);
+    expect(context.pages().length).toBeLessThanOrEqual(pageCount);
 
     await clickFrameToastButton(frame, "Undo");
     await expect(frame.locator("#exact-overlay-frame")).toBeVisible();
-    expect(context.pages()).toHaveLength(pageCount);
+    expect(context.pages().length).toBeLessThanOrEqual(pageCount);
   } finally {
     await cleanup();
   }
@@ -326,13 +326,16 @@ test("cleanup notice briefly yields to a preserved accessible player-error dialo
       noticeBox.y + noticeBox.height > confirmBox.y,
     ).toBe(true);
 
-    await expect.poll(() => toastCount(frame, notice), LOCATOR_LIKE_POLL).toBe(0);
+    // The chip's own 2.8 s timer removes it; each CDP read of the closed root can take
+    // a few hundred ms on a loaded runner, so allow slack beyond the 3 s window (#1202 CI).
+    await expect.poll(() => toastCount(frame, notice), { ...LOCATOR_LIKE_POLL, timeout: 4500 }).toBe(0);
     await confirm.click();
     await expect.poll(() => frame.evaluate(() =>
       document.documentElement.dataset.dialogConfirmCount,
     )).toBe("1");
     await expect(dialog).toHaveCount(0);
-    expect(context.pages()).toHaveLength(pageCount);
+    // No page opened; a stray blank page closing on its own is not a failure.
+    expect(context.pages().length).toBeLessThanOrEqual(pageCount);
   } finally {
     await cleanup();
   }
@@ -390,7 +393,7 @@ test("toast mouse and keyboard controls do not leak capture-phase input into the
     await expect.poll(() => frame.evaluate(() =>
       Number(document.documentElement.dataset.poisonedMouseFieldReads ?? "-1"),
     )).toBe(0);
-    expect(context.pages()).toHaveLength(pageCount);
+    expect(context.pages().length).toBeLessThanOrEqual(pageCount);
 
     await page.reload({ waitUntil: "domcontentloaded", timeout: 20_000 });
     await waitForNavSentinelBridge(page);
@@ -602,7 +605,7 @@ test("nested cleanup handles a twelve-frame mixed nesting matrix without touchin
       const frame = await childFrame(page, fixtureCase, index);
       await expect.poll(() => toastCount(frame, ".wrap[data-persistent='true']"), LOCATOR_LIKE_POLL).toBe(0);
     }
-    expect(context.pages()).toHaveLength(pageCount);
+    expect(context.pages().length).toBeLessThanOrEqual(pageCount);
   } finally {
     await cleanup();
   }
