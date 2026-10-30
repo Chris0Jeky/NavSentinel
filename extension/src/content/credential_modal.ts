@@ -306,11 +306,6 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
       resolve(actionId);
     }
 
-    activeDispose = () => {
-      cleanupListeners();
-      activeDispose = null;
-      resolve(outside);
-    };
 
     // Keep this exact pending decision accessible; removal is never a decision.
     const removalObserver = new MutationObserver(() => {
@@ -402,6 +397,13 @@ export function showCredentialModal(spec: ModalSpec): Promise<string> {
     activeRoot.appendChild(overlay);
     const visibility = visibleActionGate(host!, activeRoot, card);
     activateFocusTrap(card, activeRoot, focusFallback);
+    // Only once setup has finished: a teardown installed earlier would hit the
+    // not-yet-initialised `visibility` and break every later prompt (#1215).
+    activeDispose = () => {
+      cleanupListeners();
+      activeDispose = null;
+      resolve(outside);
+    };
 
     window.setTimeout(() => {
       const firstFocusable = listFocusable(card)[0];
