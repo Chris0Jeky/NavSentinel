@@ -1123,7 +1123,28 @@ const MAX_REFRESH_DELAY = 2147483647;
  * (more than MAX_REFRESH_METAS, or a value cut at MAX_REFRESH_CONTENT before its
  * target is settled). No real sign-in page needs either, so it fails closed.
  */
-const REFRESH_UNREADABLE = "its refresh tags are too many or too long to check";
+const REFRESH_UNREADABLE = "Page refresh tags are too many or too long to check";
+
+/**
+ * True when text appended to a refresh URL cut at the length cap cannot change
+ * which site it targets: a relative reference whose first characters are final,
+ * a non-http(s) scheme, or an http(s) authority already ended by / \ ? or #.
+ * Mirrors the WHATWG URL parser's leading C0/space and tab/newline stripping.
+ */
+function refreshTargetSettled(url: string): boolean {
+  let s = url.replace(/[\t\n\r]/g, "");
+  let i = 0;
+  while (i < s.length && s.charCodeAt(i) <= 32) i++;
+  s = s.slice(i);
+  const slash = (c: string | undefined) => c === "/" || c === "\\";
+  const ended = (authority: string) => /[/\\?#]/.test(authority);
+  if (slash(s[0])) return s.length > 1 && (!slash(s[1]) || ended(s.slice(2)));
+  const scheme = /^[A-Za-z][A-Za-z0-9+.-]*/.exec(s)?.[0];
+  if (!scheme) return true;
+  if (scheme.length === s.length) return false; // may still grow into a scheme
+  if (s[scheme.length] !== ":" || !/^https?$/i.test(scheme)) return true;
+  return ended(s.slice(scheme.length + 1).replace(/^[/\\]+/, ""));
+}
 
 /**
  * Registrable domain of the pending refresh target when it leaves the page's
@@ -1147,8 +1168,10 @@ function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): st
   for (let i = 0; i < contents.length; i++) {
     const cut = contents[i]!.length > MAX_REFRESH_CONTENT;
     const parsed = parseRefreshContent(contents[i]!.slice(0, MAX_REFRESH_CONTENT));
-    // A cut value without a complete target could still be the one scheduled.
-    if (cut && !parsed?.url) return REFRESH_UNREADABLE;
+    // A cut value that parses as a refresh without a complete target could still
+    // be the one scheduled. A value that is only padding so far is undecided too;
+    // one that already fails to parse is never scheduled, whatever follows.
+    if (cut && (parsed ? !parsed.url : !contents[i]!.trim())) return REFRESH_UNREADABLE;
     if (!parsed || parsed.delay > MAX_REFRESH_DELAY || parsed.delay > scheduledDelay) continue;
     if (!parsed.url) {
       scheduledDelay = parsed.delay;
@@ -1157,10 +1180,10 @@ function offsiteRefreshTarget(snapshot: PageSnapshot, currentDomain: string): st
     }
     let target: URL;
     try {
+      // Slicing can manufacture a different destination ("/" for "//evil.test/",
+      // "https://evil.ex" for "https://evil.example/"): trust it only once settled.
+      if (cut && !refreshTargetSettled(parsed.url)) return REFRESH_UNREADABLE;
       target = new URL(parsed.url, base);
-      // Slicing can manufacture a different host ("https://evil.ex|ample.test").
-      // The host is settled only if one more host character cannot change it.
-      if (cut && new URL(parsed.url + "a", base).host !== target.host) return REFRESH_UNREADABLE;
     } catch {
       if (cut) return REFRESH_UNREADABLE;
       continue; // an unparseable URL schedules nothing
@@ -1229,7 +1252,9 @@ export function analyzeSnapshot(snapshot: PageSnapshot, currentDomain: string): 
   const refreshTarget = offsiteRefreshTarget(snapshot, currentDomain);
   if (refreshTarget) {
     result.score += 25;
-    result.offsiteRefresh = `Page is set to send you to a different site: ${refreshTarget}`;
+    result.offsiteRefresh = refreshTarget === REFRESH_UNREADABLE
+      ? refreshTarget
+      : `Page is set to send you to a different site: ${refreshTarget}`;
   }
 
   // 4. Login form on unrecognizable domain mimicking branded flow

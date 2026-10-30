@@ -157,6 +157,64 @@ describe("off-site refresh signal", () => {
     // A cut value that settles on a same-host target is not a signal.
     const sameLong = "30;url=https://shop.example/" + "a".repeat(MAX_REFRESH_CONTENT * 2);
     expect(flagged([sameLong.slice(0, MAX_REFRESH_CONTENT + 1)]).offsiteRefresh).toBeUndefined();
+    // Relative targets and non-http schemes are final as soon as their start is.
+    for (const settled of ["/account?next=", "next/", "?x=", "mailto:a@b.test?subject="]) {
+      const value = "30;url=" + settled + "a".repeat(MAX_REFRESH_CONTENT * 2);
+      expect(flagged([value]).offsiteRefresh).toBeUndefined();
+    }
+  });
+
+  it("ignores a cut value that Chrome would reject whatever follows", () => {
+    const junk = "soon;url=//account-check.example/" + "a".repeat(MAX_REFRESH_CONTENT);
+    expect(flagged([junk]).offsiteRefresh).toBeUndefined();
+  });
+
+  it("states the unreadable case plainly instead of naming a site (#1241)", () => {
+    const pad = Array(MAX_REFRESH_METAS + 1).fill("99999999999;url=/account");
+    expect(flagged(pad).offsiteRefresh).toBe("Page refresh tags are too many or too long to check");
+    expect(flagged(["30;url=https://account-check.example/"]).offsiteRefresh).toBe(
+      "Page is set to send you to a different site: account-check.example"
+    );
+  });
+
+  describe("a cut that lands before the authority is ended", () => {
+    // Padding between the delay and url= places the bound exactly `kept` characters
+    // into the target, so only a prefix of it is read.
+    const target = "https://account-check.example/";
+    const withCutAt = (url: string, kept: number) =>
+      "0;" + " ".repeat(MAX_REFRESH_CONTENT - 2 - 4 - kept) + "url=" + url;
+
+    it.each([
+      ["url=/", "//account-check.example/", 1],
+      ["url=//", "//account-check.example/", 2],
+      ["h", target, 1],
+      ["ht", target, 2],
+      ["https:", target, 6],
+      ["https:/", target, 7],
+      ["https://", target, 8],
+      ["inside the host", target, 20],
+      ["the end of the host", target, 29],
+      ["a backslash authority", "\\\\account-check.example\\", 5],
+    ])("fails closed for a cut at %s", (_label, url, kept) => {
+      const value = withCutAt(url, kept);
+      expect(value.slice(0, MAX_REFRESH_CONTENT).endsWith(url.slice(0, kept))).toBe(true);
+      expect(value.length).toBeGreaterThan(MAX_REFRESH_CONTENT);
+      expect(flagged([value]).offsiteRefresh).toBe("Page refresh tags are too many or too long to check");
+    });
+
+    it("names the site once the authority is ended inside the bound", () => {
+      // A trailing character past the bound makes these cut, with the "/" retained.
+      expect(flagged([withCutAt(target + "x", 30)]).offsiteRefresh).toContain("account-check.example");
+      expect(flagged([withCutAt("//account-check.example/x", 24)]).offsiteRefresh).toContain("account-check.example");
+    });
+
+    it("tells 2048 characters (read in full) from 2049 (cut)", () => {
+      const exact = "0;" + " ".repeat(MAX_REFRESH_CONTENT - 2 - 4 - target.length) + "url=" + target;
+      expect(exact).toHaveLength(MAX_REFRESH_CONTENT);
+      expect(flagged([exact]).offsiteRefresh).toContain("different site: account-check.example");
+      // One more character: the bound drops the final "/", leaving the host unended.
+      expect(flagged([exact.replace("0;", "0; ")]).offsiteRefresh).toBe("Page refresh tags are too many or too long to check");
+    });
   });
 });
 
