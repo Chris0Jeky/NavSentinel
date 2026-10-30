@@ -67,7 +67,7 @@ minimization sign-off before beta.
 - Clipboard text/selection is inspected transiently in the page's MAIN world to
   derive length and a command-like boolean. Content is not bridged to the
   isolated script, stored, or transmitted. During a `copy` event the isolated
-  script also reads the copy payload (or selection) in place to detect
+  script also reads a page-rewritten copy payload in place to detect
   pastejacking, keeping only the same length and boolean; the text is never
   stored, bridged, or transmitted.
 - No password values or form-field contents are stored or transmitted. Current
