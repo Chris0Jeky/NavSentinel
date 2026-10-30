@@ -1962,7 +1962,8 @@ try {
     let selText = "";
     if (clipLike) {
       try {
-        selText = window.getSelection()?.toString() ?? "";
+        // The receiving document's selection, matching the forwarded receiver.
+        selText = this.getSelection()?.toString() ?? "";
       } catch {
         // getSelection may throw in some contexts
       }
@@ -1980,10 +1981,7 @@ try {
         looksLikeCommand: cmdLike,
       });
       if (debug) {
-        console.debug("[NavSentinel] copy/cut intercepted", {
-          length: selText.length,
-          looksLikeCommand: cmdLike,
-        });
+        console.debug("[NavSentinel] copy/cut intercepted", selText.length, cmdLike);
       }
     }
     return result;

@@ -23,6 +23,8 @@ function boot(selection: string) {
   const arity: number[] = [];
   const receipts: Array<Record<string, unknown>> = [];
   class Document {
+    // The wrapper reads the receiving document's selection (#1180 review).
+    getSelection() { return { toString: () => (this === document ? selection : "other-document") }; }
     execCommand(this: unknown, ...args: unknown[]): boolean {
       receivers.push(this);
       arity.push(args.length);
@@ -32,7 +34,7 @@ function boot(selection: string) {
   const document = new Document();
   vm.runInNewContext(executable, {
     exports: {}, Document, document, nativeApply: Reflect.apply, debug: false, nowMs: () => 1,
-    isOff: () => false, window: { getSelection: () => ({ toString: () => selection }) },
+    isOff: () => false, window: { getSelection: () => ({ toString: () => "window-selection" }) },
     postToIsolated: (type: string, payload: Record<string, unknown>) => receipts.push({ type, ...payload }),
   });
   return { Document, document, receivers, arity, receipts };
@@ -62,6 +64,12 @@ describe("execCommand copy receipt (#1166)", () => {
     Reflect.apply(h.Document.prototype.execCommand, h.document, []);
     assert.deepEqual(h.arity, [0]);
     assert.equal(h.receipts.length, 0);
+  });
+
+  it("classifies the receiving document's selection, not the top window's", () => {
+    const h = boot("NS_INERT base64");
+    assert.equal(new h.Document().execCommand("copy"), true);
+    assert.deepEqual(h.receipts, [{ type: "ns-clipboard-write", ts: 1, contentLength: 14, looksLikeCommand: false }]);
   });
 
   it("forwards the caller's receiver and reports nothing for other commands or failures", () => {
