@@ -261,6 +261,8 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-80 | #1216 ConsentFix: a pasted or dropped localhost sign-in URL with an OAuth code is stopped (and first-party redirect codes, this PR) | merge commit `f80e3a67` (merged 2026-10-30) | OPEN — not run |
 | AI-81 | #1222 device-code phishing warning on Microsoft, Google and GitHub device sign-in pages | merge commit `9641f9ef` (merged 2026-10-30) | OPEN — not run |
 | AI-82 | #1224 masked and type-flipped password fields count as password fields for the credential prompt | merge commit `9d3e804e` (merged 2026-10-30) | OPEN — not run |
+| AI-83 | #1233 ClickFix reads lure text in open shadow roots and rescans late instructions | merge commit `f415ae13` (merged 2026-10-30) | OPEN — not run |
+| AI-84 | Device-code phishing, lure side: warning when a page copies a code next to a device sign-in address (this PR) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pulls?q=is%3Apr+head%3Ainitiative%2Fdevice-code-lure-side) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -318,6 +320,19 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
   Export shows "... include explanations that are not part of the portable export." and the downloaded file
   matches the preview. A failure gets a revert PR for the merge commit.
+
+- **AI-83 (#1233):** with the Gym served (`npm run gym:serve`), open `http://localhost:5173/clickfix-04-winr.html` and
+  click its fake verification: the ClickFix warning still appears. Then on `http://localhost:5173/rw-fullscreen-benign.html`
+  run in DevTools `navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64")` and, a second later,
+  `const h=document.createElement("div");h.attachShadow({mode:"open"}).innerHTML="<p>Verify you are human: press Win + R, paste and press Enter.</p>";document.body.append(h)`:
+  the warning appears within about two seconds. A docs page's copy button (any code sample) stays quiet. A failure
+  gets a revert PR for `f415ae13`.
+
+- **AI-84 (this PR):** do not enter any code anywhere. On `http://localhost:5173/rw-fullscreen-benign.html` run in
+  DevTools `navigator.clipboard.writeText("ORDER-1234")`: no warning. Then add the text "open
+  microsoft.com/devicelogin and enter the code below" to the page (DevTools: `document.body.append("open microsoft.com/devicelogin and enter the code below")`)
+  and run `navigator.clipboard.writeText("ABCD-1234")`: a persistent warning says the page copied a code for a device
+  sign-in page. On `https://learn.microsoft.com/` the same two lines stay quiet. A failure gets a revert PR for the merge.
 
 - **AI-80 (#1216):** nothing typed or pasted here is real. On a public page with a plain text box (for example
   the search box on `https://www.wikipedia.org/`, without pressing Enter) paste
