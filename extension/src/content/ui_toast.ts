@@ -44,7 +44,7 @@ const BRIEF_RECOVERY_DISMISS_MS = 2800;
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
 /** The control under the last fenced pointerdown on the host. */
-let pressed: Element | null | undefined;
+let pressed: Element | null | undefined | false;
 const controlActions = new WeakMap<EventTarget, (event?: MouseEvent | KeyboardEvent) => boolean | void>();
 const cardRemovers = new WeakMap<HTMLElement, (notifyDismiss?: boolean) => void>();
 
@@ -102,8 +102,10 @@ export function activateOwnedToastControl(eventHost: unknown, path: readonly unk
       : root!.activeElement)?.closest("button,.pill");
     // Pin a pointer click to the control under its press: the page can shift
     // the host under a held press so an approval sits under the release (#1203).
-    if (press) return pressed = control, false;
-    if (event.detail && control !== pressed) return false;
+    // One press pins one delivery: any later click or key clears it (#1236).
+    const held = pressed;
+    pressed = press && control;
+    if (press || (event.detail && control !== held)) return false;
     path = [control];
   }
   for (const node of path) {

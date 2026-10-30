@@ -3,16 +3,38 @@ import { DBLCLICK_WINDOW_MS } from "../shared/doubleclick_timing";
 /** A control smaller than this in either CSS dimension is not a readable approval (#1142). */
 const MIN_CONTROL_PX = 10;
 
+// Focus state per frame load, not per prompt (#1236). A subframe's hasFocus() is also
+// false while focus is elsewhere in the same tab, which would leave a toast in a
+// never-clicked frame (a cleanup chip in an ad frame) unable to arm before its first
+// click, so subframes require focus once the frame has had it (#1225). A frame that
+// had focus earlier must not arm a later prompt behind a popup that holds it now.
+let hadFocus = false;
+// When this frame last lost or regained window focus. A blur shorter than a sample
+// interval (a click on a covering popup or PiP window) still restarts arming.
+let unfocusedAt = -Infinity;
+let away = false;
+function focusChange(event: Event): void {
+  if (event.target instanceof Node) return; // An element's focus or blur, not the window's.
+  hadFocus = true;
+  // Chrome also blurs the window when focus moves into a child frame, while
+  // hasFocus() stays true: that is not a loss and must not de-arm.
+  if (event.type === "blur") away = !document.hasFocus();
+  if (away) unfocusedAt = performance.now();
+  if (event.type === "focus") away = false;
+}
+// Node-environment tests import the toast chain without a DOM.
+if (typeof window === "object") {
+  hadFocus = window.top === window || document.hasFocus();
+  window.addEventListener("blur", focusChange, true);
+  window.addEventListener("focus", focusChange, true);
+}
+
 /** Security controls need a painted, unobscured exposure window, not just trusted input. */
 export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: HTMLElement) {
   let visibleSince: number | null = null;
   let lastFrame = performance.now();
   let frame = 0;
   let disposed = false;
-  // A subframe's hasFocus() is also false while focus is elsewhere in the same tab, which
-  // would leave a toast in a never-clicked frame (a cleanup chip in an ad frame) unable to
-  // arm before its first click. Subframes require focus once they have had it (#1225).
-  let needsFocus = window.top === window;
   const buttonExposure = new Map<HTMLElement, { since: number; rect: DOMRect }>();
   // IntersectionObserver v2 reports the rendered result: occlusion by any later
   // top-layer or pointer-events:none cover, and opacity, transforms, filters and
@@ -79,8 +101,15 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
     // approval can take the arming window and close on the first press (#1225).
     // Residual: a subframe surface that never had focus arms without it.
     const focused = document.hasFocus();
-    needsFocus ||= focused;
-    if ((needsFocus && !focused) || !topLayer() || !rendered(host) || !rendered(surface)) return false;
+    hadFocus ||= focused;
+    if (hadFocus && !focused) unfocusedAt = performance.now();
+    // Video and Document Picture-in-Picture windows stay on top of ours without
+    // taking focus, by default over the corner where the toast sits (#1236).
+    // Residual: Chrome's native <select>, date and colour pickers neither blur
+    // the window nor change hasFocus(), so they stay undetectable here.
+    if ((hadFocus && !focused) || document.pictureInPictureElement ||
+        (window as { documentPictureInPicture?: { window: Window | null } }).documentPictureInPicture?.window ||
+        !topLayer() || !rendered(host) || !rendered(surface)) return false;
     const rect = surface.getBoundingClientRect();
     return hit(surface, rect.x + rect.width / 2, rect.y + rect.height / 2);
   }
@@ -138,7 +167,7 @@ export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: 
       // A button the browser never reported painted-visible is never armed.
       let allowed = !disposed && !!event && visibleSince !== null &&
         now - visibleSince >= DBLCLICK_WINDOW_MS && exposure !== undefined &&
-        now - exposure.since >= DBLCLICK_WINDOW_MS && rendered(button) &&
+        now - exposure.since >= DBLCLICK_WINDOW_MS && now - unfocusedAt >= DBLCLICK_WINDOW_MS && rendered(button) &&
         (!paint || now - (painted.get(button) ?? now) >= DBLCLICK_WINDOW_MS);
       if (allowed && event) {
         const rect = button.getBoundingClientRect();
