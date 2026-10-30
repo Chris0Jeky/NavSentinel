@@ -33,6 +33,14 @@ export interface ChildWindowEntry {
   openerTabId: number;
   createdAt: number;
   openerNavObserved: boolean;
+  /** Registrable domain of the opener at child creation, before any swap (#1172). */
+  openerReg?: string;
+}
+
+/** An opener tab whose location a child wrote while it was in the background (#1172). */
+export interface TabnabPendingEntry {
+  origReg: string;
+  ts: number;
 }
 
 export interface AllowTargetEntry {
@@ -135,7 +143,10 @@ const isValidChildWindow = (v: unknown): boolean =>
   // suppressing the DoubleClickjacking child-closed notification. (#339)
   v.openerTabId > 0 &&
   isFiniteNumber(v.createdAt) &&
-  typeof v.openerNavObserved === "boolean";
+  typeof v.openerNavObserved === "boolean" &&
+  (v.openerReg === undefined || isString(v.openerReg));
+const isValidTabnabPending = (v: unknown): boolean =>
+  isRecord(v) && isString(v.origReg) && v.origReg !== "" && isFiniteNumber(v.ts);
 const isValidTypedOrigin = (v: unknown): boolean =>
   isRecord(v) && isFiniteNumber(v.ts) && isFiniteNumber(v.deadline);
 // Restorable phases. A LIVE flow is only ever 'redirect' or 'consent' in storage:
@@ -174,6 +185,7 @@ const KEYS = {
   lastUrl: `${PREFIX}lastUrl`,
   lastCommitted: `${PREFIX}lastCommitted`,
   childWindow: `${PREFIX}childWindow`,
+  tabnabPending: `${PREFIX}tabnabPending`,
   oauthFlow: `${PREFIX}oauthFlow`,
   redirectChains: `${PREFIX}redirectChains`,
 } as const;
@@ -247,6 +259,7 @@ export class SessionStateManager {
   readonly lastUrlByTab = new Map<number, string>();
   readonly lastCommittedByTab = new Map<number, LastCommittedEntry>();
   readonly childWindowByTab = new Map<number, ChildWindowEntry>();
+  readonly tabnabPendingByTab = new Map<number, TabnabPendingEntry>();
   readonly oauthFlowByTab = new Map<number, OAuthFlowState>();
 
   // Redirect chain data (separate because RedirectChainTracker has its own class)
@@ -322,6 +335,7 @@ export class SessionStateManager {
     this._restoreMap(this.lastUrlByTab, data[KEYS.lastUrl], isString);
     this._restoreMap(this.lastCommittedByTab, data[KEYS.lastCommitted], isValidLastCommitted);
     this._restoreMap(this.childWindowByTab, data[KEYS.childWindow], isValidChildWindow);
+    this._restoreMap(this.tabnabPendingByTab, data[KEYS.tabnabPending], isValidTabnabPending);
     this._restoreMap(this.oauthFlowByTab, data[KEYS.oauthFlow], isValidOAuthFlow);
     this._restoreRedirectChains(data[KEYS.redirectChains]);
     this._hydrated = true;
@@ -367,6 +381,7 @@ export class SessionStateManager {
       [KEYS.lastUrl]: mapToObj(this.lastUrlByTab),
       [KEYS.lastCommitted]: mapToObj(this.lastCommittedByTab),
       [KEYS.childWindow]: mapToObj(this.childWindowByTab),
+      [KEYS.tabnabPending]: mapToObj(this.tabnabPendingByTab),
       [KEYS.oauthFlow]: mapToObj(this.oauthFlowByTab),
       [KEYS.redirectChains]: mapToObj(this.redirectChainData),
     };
@@ -394,6 +409,7 @@ export class SessionStateManager {
     this.lastUrlByTab.delete(tabId);
     this.lastCommittedByTab.delete(tabId);
     this.childWindowByTab.delete(tabId);
+    this.tabnabPendingByTab.delete(tabId);
     this.oauthFlowByTab.delete(tabId);
     this.redirectChainData.delete(tabId);
     // Batch persist after bulk delete
