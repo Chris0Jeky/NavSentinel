@@ -249,6 +249,36 @@ describe("guardFullscreen", () => {
     expect(exit).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves a benign same-origin iframe and an unreadable (cross-origin) one alone", () => {
+    const deck = document.createElement("iframe");
+    document.body.appendChild(deck);
+    deck.contentDocument!.body.innerHTML = "<h1>Quarterly review</h1><p>Questions? Call 1-800-555-0142.</p>";
+    let exit = fullscreen(deck);
+    expect(guardFullscreen(1000)).toBeNull();
+    expect(exit).not.toHaveBeenCalled();
+    const embed = document.createElement("iframe");
+    Object.defineProperty(embed, "contentDocument", { value: null });
+    document.body.appendChild(embed);
+    exit = fullscreen(embed);
+    expect(guardFullscreen(1000)).toBeNull();
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("does not exit when the user already left fullscreen before the recheck", () => {
+    vi.useFakeTimers();
+    try {
+      const el = div("<h1>Loading</h1>");
+      const exit = fullscreen(el);
+      onFullscreenChange(vi.fn());
+      el.innerHTML = `<p>${SCARE_TEXT}</p>`;
+      fullscreen(null);
+      vi.advanceTimersByTime(1500);
+      expect(exit).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rechecks once when scare text arrives after entering fullscreen", () => {
     vi.useFakeTimers();
     try {
