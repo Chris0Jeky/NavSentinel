@@ -20,7 +20,7 @@ import {
 import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 import { isPasswordTypeInput, isVisiblePasswordField, queryPasswordInputs } from "./password_field";
-import { addPersistentListener } from "./persistent_listener";
+import { addPersistentListener, documentRewritten } from "./persistent_listener";
 import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
@@ -227,6 +227,10 @@ type ResumeBinding = {
 };
 
 let resumeBinding: ResumeBinding | null = null;
+// #1113: the destination each resumed form was approved for, and the forms whose
+// submit the guard saw and let through; both are read by the navigate listener.
+const resumedTo = new WeakMap<HTMLFormElement, string>();
+const submitSeen = new WeakSet<Element>();
 // One automatic re-check per moved resubmission (settleResumeBinding).
 const recheckRequested = new WeakSet<HTMLFormElement>();
 const rechecking = new WeakSet<HTMLFormElement>();
@@ -307,6 +311,7 @@ function resumeSubmit(
     approved: resolveDestination(form, submitter)
   };
   resumeBinding = binding;
+  resumedTo.set(form, binding.approved[0]);
 
   try {
     HTMLFormElement.prototype.requestSubmit.call(form, submitter);
@@ -748,7 +753,16 @@ async function handlePaste(evt: ClipboardEvent): Promise<void> {
 // Window capture, registered at document_start: ahead of every page submit
 // listener, so page script cannot stop a submit before the guard sees it.
 // #1105: document.open() erases these (window included); the helper re-adds them.
-addPersistentListener(window, "submit", (e) => void handleSubmit(e as SubmitEvent));
+addPersistentListener(window, "submit", (e) => {
+  void handleSubmit(e as SubmitEvent);
+  // handleSubmit cancels synchronously; a submit it held is not "let through". The
+  // submitter is kept too, for pages that swap the button out while submitting.
+  if (!e.defaultPrevented && e.isTrusted && e.target instanceof HTMLFormElement) {
+    submitSeen.add(e.target);
+    const submitter = (e as SubmitEvent).submitter;
+    if (submitter) submitSeen.add(submitter);
+  }
+});
 addPersistentListener(document, "paste", (e) => void handlePaste(e as ClipboardEvent));
 addPersistentListener(window, "formdata", handleFormData);
 
@@ -763,4 +777,41 @@ addPersistentListener(window, "focusin", (e) => {
   void import("./credential_focus_warning")
     .then((m) => m.warnOnPasswordFocus(pageIdentity().href))
     .catch((err) => { console.warn("[NavSentinel] password focus check failed:", err); });
+});
+
+// #1113: a script written by document.write() in the same task as document.open()
+// adds its window capture listener before the helper above re-adds the guard, so it
+// can stop a submit unseen. document.open() does not erase listeners on the
+// Navigation API object, so this one stays ahead of every page listener. A user
+// password-form navigation whose submit the guard never saw is cancelled and
+// assessed. After a rewrite, an unseen one fails closed whatever the form looks like
+// now (the page can switch the password field's type or move the submitter after
+// submitting); before one, forms in shadow roots (whose submit never reaches the
+// window) must keep working. A resumed form is re-assessed if it left its approved
+// destination.
+// ponytail: same-frame only; a submit targeting another window or frame stays open (#1186).
+type FormNavigateEvent = Event & { sourceElement?: Element | null; userInitiated: boolean; destination: { url: string } };
+(self as { navigation?: EventTarget }).navigation?.addEventListener("navigate", (e) => {
+  const n = e as FormNavigateEvent;
+  const s = n.sourceElement;
+  // A link has no .form; a submitter detached after its submit has form === null.
+  const owner = s instanceof HTMLFormElement ? s : (s as HTMLButtonElement | null | undefined)?.form;
+  if (owner === undefined || cachedCredMode === "off") return;
+  const form = owner instanceof HTMLFormElement ? owner : null;
+  const approved = form ? resumedTo.get(form) : undefined;
+  const seen = (!!form && submitSeen.has(form)) || (!!s && submitSeen.has(s));
+  if (form) {
+    resumedTo.delete(form);
+    submitSeen.delete(form);
+  }
+  if (approved !== undefined ? !actionMoved(approved, n.destination.url) : seen || !n.userInitiated) return;
+  const credential = !!form && isPasswordForm(form);
+  if (!credential && !documentRewritten()) return;
+  n.preventDefault();
+  if (credential) void handleSubmit({
+    target: form,
+    submitter: s === form ? null : s,
+    preventDefault() {},
+    stopImmediatePropagation() {}
+  } as unknown as SubmitEvent);
 });
