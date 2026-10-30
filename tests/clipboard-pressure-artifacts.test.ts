@@ -106,6 +106,18 @@ describe("receipt file/report binding", () => {
     }),
   );
 
+  it.skipIf(Number(process.versions.node.split(".")[0]) < 24)(
+    "a failed validate replaces a stale qualified verdict", () => fixture((root) => {
+      const output = path.join(root, "stale-output");
+      fs.mkdirSync(output);
+      const qualification = path.join(output, "qualification.json");
+      fs.writeFileSync(qualification, '{"qualified":true}\n');
+      const result = spawnSync(process.execPath, [entrypoint, "validate", output, "a".repeat(40)], { encoding: "utf8" });
+      expect(result.status).toBe(1);
+      expect(JSON.parse(fs.readFileSync(qualification, "utf8")).qualified).toBe(false);
+    }),
+  );
+
   it("binds Playwright's copied attachment and rejects altered/outside/duplicate evidence", () => fixture((root) => {
     const fresh = path.join(root, "fresh-run");
     fs.mkdirSync(path.join(fresh, "playwright", "attachments"), { recursive: true });

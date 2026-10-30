@@ -230,7 +230,10 @@ if (invokedDirectly) {
     writeJson(path.join(directory, "qualification.json"), result);
     console.log("Qualified the fixed/regressed diagnostic pair; attribution and owner/release proof remain held.");
   } catch (error) {
-    if (outputDirectoryCreated) writeJson(path.join(directory, "qualification.json"), { qualified: false,
+    // A failed run never overwrites evidence it did not create; a failed validate must still
+    // replace a stale verdict in the directory it was pointed at.
+    const ownsVerdict = mode === "run" ? outputDirectoryCreated : fs.existsSync(directory);
+    if (ownsVerdict) writeJson(path.join(directory, "qualification.json"), { qualified: false,
       error: error instanceof Error ? error.message : String(error) });
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
