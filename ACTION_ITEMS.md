@@ -265,6 +265,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-84 | #1240 device-code phishing, lure side: warning when a page copies a code next to a device sign-in address | merge commit `51f9a302` (merged 2026-10-30) | OPEN — not run |
 | AI-97 | #1245 late ClickFix detection neutralizes the clipboard only when no newer copy happened | merge commit `3d53539d` (merged 2026-10-30) | OPEN — not run |
 | AI-98 | #1247 warning when Microsoft's sign-in form is served by a non-Microsoft host (AiTM relays and clones) | merge commit `fcc92793` (merged 2026-10-30) | OPEN — not run |
+| AI-99 | #1256 device-code warning on the gov and China cloud device pages (login.microsoftonline.us, login.partner.microsoftonline.cn, login.chinacloudapi.cn) | merge commit `e82fb9e0` (merged 2026-10-30) | OPEN — not run |
 | AI-85 | #1202 protection toast in a closed shadow root (#1142 item 4) | merge commit `737bcdb6` (merged 2026-10-30) | OPEN — not run |
 | AI-86 | #1206 lazy-loaded overlay cleanup and credential content analyzer | merge commit `7f48c229` (merged 2026-10-30) | OPEN — not run |
 | AI-87 | #1195 password-focus warning on high-risk pages (#1170) | merge commit `0d64e7ef` (merged 2026-10-30) | OPEN — not run |
@@ -278,8 +279,9 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-95 | #1243 loader-level blur/focus fence and tab-wide PiP relay (#1242) | merge commit `a6fff55d` (merged 2026-10-30) | OPEN — not run |
 | AI-96 | #1141 MAIN-world bridge and guards use natives captured at document start | merge commit `4d0b1dc4` (merged 2026-10-30) | OPEN — not run |
 | AI-100 | #1249 every frame asked for Picture-in-Picture state (hostile frames, blob and sandboxed frames, removed frames; #1244) | merge commit `ba17e96c` (merged 2026-10-30) | OPEN — not run |
-| AI-101 | #1252 meta-refresh credential signal fails closed on overflowing or cut refresh tags (#1241) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1252) (candidate until merged) | OPEN — not run |
+| AI-101 | #1252 meta-refresh credential signal fails closed on overflowing or cut refresh tags (#1241) | merge commit `bcff72dc` (merged 2026-10-30) | OPEN — not run |
 | AI-102 | #1246 and #1255 built pages without indentation, recompressed icons, compact manifest | merge commits `cc1700bc` and `2053f883` (merged 2026-10-30) | OPEN — not run |
+| AI-103 | #1260 loader re-arms its toast input fence and focus recorder after `document.open()` (#1244 item 2) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1260) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -436,6 +438,12 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   `chrome://extensions` icons are sharp and unchanged; the extension loads with no manifest error. A failure gets a
   revert PR for the merge in question.
 
+- **AI-103 (#1260):** with the Gym served, open a local login page that rewrites itself on load
+  (`document.open(); document.write(...)`, as `credential-modal-covers.spec.ts` does), raise the credential prompt,
+  then alt-tab away and straight back: Proceed once waits before arming, as on a page that never rewrote itself. Toast
+  buttons (Trust, Allow once) still work by mouse and keyboard after such a rewrite. A failure gets a revert PR for
+  the merge.
+
 - **AI-97 (#1245):** with the Gym served (`npm run gym:serve`), on `http://localhost:5173/rw-fullscreen-benign.html`
   run the AI-83 DevTools line (a delayed inert command copy, then the shadow-root lure a second later) and click the
   page: after the warning appears, paste into a text box: the clipboard now holds Heedline's warning text, not the
@@ -446,6 +454,8 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   host), add `<input type="password" id="i0118" name="passwd">` and click into it: a warning says Microsoft's sign-in
   form is served by that host. The same field on `https://login.microsoftonline.com/` (the real sign-in, password
   step) shows nothing, and an ordinary site's password field shows nothing. A failure gets a revert PR for `fcc92793`.
+
+- **AI-99 (#1256):** from a page you control (any non-Microsoft host), click a link to `https://microsoft.com/deviceloginus`: after the redirect to `login.microsoftonline.us/.../deviceauth`, a warning says that host sent you to a device sign-in page. Typing `microsoft.com/deviceloginus` in the address bar shows nothing. A failure gets a revert PR for `e82fb9e0`.
 
 - **AI-80 (#1216):** nothing typed or pasted here is real. On a public page with a plain text box (for example
   the search box on `https://www.wikipedia.org/`, without pressing Enter) paste
