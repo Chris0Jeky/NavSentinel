@@ -105,15 +105,7 @@ async function childAuthorityFrame(page: Page): Promise<Frame> {
 }
 
 async function waitForFrameToast(frame: Frame, text: string): Promise<void> {
-  await frame.waitForFunction(
-    (expected) => {
-      const host = document.querySelector("#__navsentinel_toast_host");
-      const body = host?.shadowRoot?.querySelector(".body");
-      return !!body?.textContent?.includes(expected);
-    },
-    text,
-    { timeout: 4_000 },
-  );
+  await waitForToastText(frame, text, 4_000);
 }
 
 function childUrls(page: Page): string[] {

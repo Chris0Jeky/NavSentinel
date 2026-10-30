@@ -12,8 +12,10 @@ import {
   dismissOnboarding,
   getGymBaseUrl,
   getServiceWorker,
+  readToastText,
   updateNavigationSettings,
   waitForNavSentinelBridge,
+  waitForToast,
   waitForToastMatch,
   waitForToastText
 } from "./extension_test_utils";
@@ -280,18 +282,18 @@ test("Level 3 instant injection blocks the injected trap path @regression", asyn
 
       const popup = await popupPromise;
       expect(popup, "Expected the injected trap new tab to be blocked").toBeNull();
-      await page.waitForFunction(
-        () => {
-          const host = document.querySelector("#__navsentinel_toast_host");
-          const text = host?.shadowRoot?.querySelector(".body")?.textContent ?? "";
+      await waitForToast(
+        page,
+        (roots) => {
+          const text = roots[0]?.querySelector(".body")?.textContent ?? "";
           return (
             text.includes("Blocked new tab") ||
             text.includes("blocked a suspicious new tab") ||
             text.includes("blocked a deceptive click")
           );
         },
-        null,
-        { timeout: 3000 }
+        undefined,
+        3000
       );
       await expect(page).toHaveURL(/level3-instant-injection\.html/);
     } finally {
@@ -2132,7 +2134,8 @@ async function assertClickBlocked(
   const popup = await popupPromise;
   let diagnosticMessage: string | null = null;
   if (diagnoseSyntheticClick) {
-    const afterClick = await page.evaluate((expectedToast) => {
+    const toastText = (await readToastText(page)) ?? "";
+    const afterClick = await page.evaluate(({ expectedToast, toastText }) => {
       const state = (window as Window & {
         __navsentinelClickDiagnostics?: {
           sourceUrl: string;
@@ -2155,8 +2158,6 @@ async function assertClickBlocked(
         registration.eventTarget.removeEventListener(registration.type, registration.listener, registration.capture);
       }
       if (state) state.registrations = [];
-      const toastHost = document.querySelector("#__navsentinel_toast_host");
-      const toastText = toastHost?.shadowRoot?.querySelector(".body")?.textContent?.trim() ?? "";
       const result = {
         before: state ?? null,
         currentUrl: location.href,
@@ -2167,7 +2168,7 @@ async function assertClickBlocked(
       };
       delete (window as Window & { __navsentinelClickDiagnostics?: unknown }).__navsentinelClickDiagnostics;
       return result;
-    }, expectedToast);
+    }, { expectedToast, toastText });
     const popupUrls = context.pages().map((contextPage) => contextPage.url());
     const diagnostic = JSON.stringify({
       label: diagnosticLabel,
@@ -2685,17 +2686,18 @@ test("RW-19 repeated tech-support popup burst is blocked @regression", async () 
       // A burst of blocked popups coalesces: the first one or two show the full
       // "Blocked popup" prompt, then NavSentinel collapses the rest into a single
       // count pill instead of nagging once per popup. Accept either surface.
-      await page.waitForFunction(
-        () => {
-          const root = document.querySelector("#__navsentinel_toast_host")?.shadowRoot;
+      await waitForToast(
+        page,
+        (roots) => {
+          const root = roots[0];
           if (!root) return false;
           const pill = root.querySelector(".pill");
           if (pill?.textContent && /blocked/i.test(pill.textContent)) return true;
           const body = root.querySelector(".wrap .body");
           return !!body?.textContent && /blocked popup/i.test(body.textContent);
         },
-        null,
-        { timeout: 4000 }
+        undefined,
+        4000
       );
       // Security property unchanged: not one of the burst popups actually opened.
       await expect.poll(() => context.pages().length, { timeout: 3000 }).toBe(beforePages);

@@ -20,6 +20,7 @@ import {
   clickModalButton,
   clickToastButton,
   CREDENTIAL_MODAL_HOST_ID,
+  evaluateInToast,
   getGymBaseUrl,
   readCredentialModal,
   waitForCredentialModal,
@@ -78,9 +79,8 @@ async function modalVisible(page: Page): Promise<boolean> {
 }
 
 async function fullCardCount(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll("#__navsentinel_toast_host")).reduce((count, host) =>
-      count + (host.shadowRoot?.querySelectorAll(".wrap").length ?? 0), 0),
+  return evaluateInToast(page, (roots) =>
+    roots.reduce((count, root) => count + root.querySelectorAll(".wrap").length, 0),
   );
 }
 
@@ -192,7 +192,8 @@ test("a synthesized toast activation does not fire the action; a trusted one doe
 
     // Positive control: real input on the same control clears the card.
     await clickToastButton(page, "Dismiss");
-    await expect.poll(() => fullCardCount(page)).toBe(0);
+    // Finish before the card's own 4 s expiry, so the removal is the control's doing.
+    await expect.poll(() => fullCardCount(page), { timeout: 1500 }).toBe(0);
   } finally {
     await cleanup();
   }

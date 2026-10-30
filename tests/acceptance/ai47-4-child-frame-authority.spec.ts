@@ -13,6 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { expect, test, type Frame, type Page } from "@playwright/test";
 import { AcceptanceSession, SETTINGS_KEY, installBfcacheProbe, lastPageshowPersisted, repoRoot, trustedClick } from "./acceptance_harness";
+import { evaluateInToast } from "../e2e/extension_test_utils";
 import { startProvingGroundFakeSink, type ProvingGroundFakeSink, type ProvingGroundRole } from "../e2e/proving_ground_fake_sink";
 import { clickToastButton, installPageInputCounter, toastCards } from "./page_ui_helpers";
 
@@ -207,14 +208,20 @@ test("AI-47.4a / former AI-41: deceptive child frame is rolled back with a worki
       await expect.poll(() => armedEntry(armed, "child")?.trusted, { timeout: 3000 }).toBe(true);
       await expectRolledBackWithProceed(armed);
       await armed.page.waitForTimeout(1700);
-      const reach = await armed.page.evaluate(() => {
-        const button = Array.from(document.querySelectorAll("#__navsentinel_toast_host"))
-          .flatMap((host) => Array.from(host.shadowRoot?.querySelectorAll("button") ?? []))
+      // The real root is closed (#1142): page script cannot reach Proceed.
+      // Click it from the main world through DevTools anyway, modelling an
+      // attacker who could; the control's trusted-input gate must still hold.
+      const pageReach = await armed.page.evaluate(() =>
+        Array.from(document.querySelectorAll("#__navsentinel_toast_host")).some((host) => host.shadowRoot !== null));
+      const clicked = await evaluateInToast(armed.page, (roots) => {
+        const button = roots
+          .flatMap((root) => Array.from(root.querySelectorAll("button")))
           .find((candidate) => candidate.textContent?.trim() === "Proceed") as HTMLButtonElement | undefined;
-        if (!button) return "unreachable";
+        if (!button) return "not rendered";
         button.click();
-        return "clicked";
+        return "clicked via DevTools";
       });
+      const reach = `${pageReach ? "root reachable from page" : "closed root unreachable from page"}; ${clicked}`;
       await armed.page.waitForTimeout(OBSERVATION_MS);
       const state = { reach, url: onSink(armed.page) ? "sink" : onFixture(armed) ? "fixture" : armed.page.url().split("?")[0], receipts: armed.sink.snapshot().receipts.length, cards: await toastCards(armed.page).catch(() => []) };
       session.note(`page-script Proceed on rollback notice: ${JSON.stringify(state)}`);

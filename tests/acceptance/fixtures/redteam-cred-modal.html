@@ -72,7 +72,8 @@
     // Attacker capability: UNTRUSTED synthetic click on a toast action by prefix.
     window.__synthClickToast = (prefix) => {
       const host = document.getElementById("__navsentinel_toast_host");
-      if (!host || !host.shadowRoot) return "no-host";
+      if (!host) return "no-host";
+      if (!host.shadowRoot) return "closed-root"; // #1142
       const btn = Array.from(host.shadowRoot.querySelectorAll("button"))
         .find((b) => b.textContent.trim().startsWith(prefix));
       if (!btn) return "no-button";
