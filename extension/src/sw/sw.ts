@@ -395,14 +395,15 @@ function httpRegistrable(url: string | undefined): string {
   } catch { return ""; }
 }
 
-// Called when a known child wrote opener.location. Only a background opener is
-// recorded: the user cannot have watched the swap, and returning fires onActivated.
-function recordTabnab(openerTabId: number, origReg: string | undefined, writeUrl: unknown): void {
+// Called when a known child wrote opener.location. Only an opener the user was not looking
+// at is recorded: a background tab (returning fires onActivated), or a tab in another window
+// than the child, e.g. under a popup window (returning fires windows.onFocusChanged, #1205).
+function recordTabnab(openerTabId: number, origReg: string | undefined, writeUrl: unknown, childWindowId?: number): void {
   // A same-site write (e.g. /sso/start that later 302s to an IdP) is not a swap. An empty
   // or unparseable URL stays conservative and records.
   if (!origReg || httpRegistrable(String(writeUrl ?? "")) === origReg) return;
   chrome.tabs.get(openerTabId).then((tab) => {
-    if (tab.active !== false) return;
+    if (tab.active !== false && tab.windowId === childWindowId) return;
     const now = Date.now();
     for (const [id, e] of tabnabPendingByTab) {
       if (now - e.ts > TABNAB_MAX_AGE_MS) tabnabPendingByTab.delete(id);
@@ -1076,7 +1077,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         );
       }
 
-      recordTabnab(childEntry.openerTabId, childEntry.openerReg, message.url);
+      recordTabnab(childEntry.openerTabId, childEntry.openerReg, message.url, sender.tab?.windowId);
 
       chrome.tabs.sendMessage(
         childEntry.openerTabId,
@@ -1437,6 +1438,13 @@ function onCreatedHandler(tabId: number, openerTabId: number): void {
     swState.persistMap(childWindowByTab, "childWindow");
   }).catch(() => {});
 }
+
+// Returning to an opener's window (closing or leaving a popup) does not fire onActivated.
+chrome.windows?.onFocusChanged.addListener((windowId) => {
+  if (windowId < 0) return;
+  void hydrateReady.then(() => tabnabPendingByTab.size ? chrome.tabs.query({ active: true, windowId }) : [])
+    .then(([tab]) => { if (tab?.id !== undefined) onActivatedHandler(tab.id); }).catch(() => {});
+});
 
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   if (!swState.hydrated) { void hydrateReady.then(() => onActivatedHandler(tabId)); return; }
