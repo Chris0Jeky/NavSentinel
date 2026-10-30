@@ -400,7 +400,11 @@ export function findClosestLookalike(
   for (const t of trustedRegDomains ?? []) {
     const target = normalizeHost(t);
     if (!target || target === self) continue;
-    const distance = levenshtein(cur, target);
+    // Raw and decoded forms both count, so decoding can only add a lookalike hit:
+    // a trusted IDN (example.xn--p1acf) stays close to its raw-form spoofs.
+    const distance = self && self !== cur
+      ? Math.min(levenshtein(cur, target), levenshtein(self, target))
+      : levenshtein(cur, target);
     if (!best || distance < best.distance) {
       best = { target, distance };
     }
@@ -1107,7 +1111,7 @@ export function detectLookalike(
   // Homoglyph-normalized Levenshtein: normalize both sides then compare
   let homoglyphLev: { target: string; distance: number } | null = null;
   if (reg) {
-    const normalizedCur = normalizeHomoglyphs(skelReg);
+    const forms = idnFolded ? [normalizeHomoglyphs(skelReg), normalizeHomoglyphs(reg)] : [normalizeHomoglyphs(skelReg)];
     let best: { target: string; distance: number } | null = null;
     // Null-safe like findClosestLookalike: a nullish trusted list means "no
     // Levenshtein targets", not a TypeError (brand/stuffing checks below still run).
@@ -1115,12 +1119,12 @@ export function detectLookalike(
       const target = normalizeHost(t);
       if (!target || target === reg) continue;
       const normalizedTarget = normalizeHomoglyphs(target);
-      if (normalizedCur === normalizedTarget) {
+      if (forms.includes(normalizedTarget)) {
         // Perfect match after normalization -- distance 0
         best = { target, distance: 0 };
         break;
       }
-      const dist = levenshtein(normalizedCur, normalizedTarget);
+      const dist = Math.min(...forms.map((form) => levenshtein(form, normalizedTarget)));
       if (!best || dist < best.distance) {
         best = { target, distance: dist };
       }

@@ -172,3 +172,9 @@ describe("fix round: scope, stuffing, mixed-script and robustness (#1196)", () =
     expect(idnSkeletonHost(`${long}.com`)).toBe(`${long}.com`);
   });
 });
+
+describe("decoding never removes a raw-form lookalike hit (#1199 verification M1)", () => {
+  it("a trusted IDN still flags its raw-form spoof after both fold to ASCII", () => {
+    expect(codes("examp1e.xn--p1acf", ["example.xn--p1acf"])).toContain("LOOKALIKE_DOMAIN");
+  });
+});
