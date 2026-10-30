@@ -1669,6 +1669,13 @@ if (chrome?.runtime?.onMessage) {
     if (!isTopFrame()) return;
     handleOAuthRuntimeMessage(message);
   });
+
+  // Reverse tabnabbing (#1172): lazy warn-only toast, kept out of the always-on chunk.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "ns-tabnab-warning" || !isTopFrame() || settings.defaultMode === "off") return;
+    void Promise.resolve().then(() => import("./tabnab_warning"))
+      .then((m) => m.showTabnabWarning(message.from)).catch(() => {});
+  });
 }
 
 if (chrome?.runtime?.sendMessage && isTopFrame()) {
