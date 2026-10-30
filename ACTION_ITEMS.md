@@ -254,6 +254,8 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-61 | #1155 main_guard and its bridge in about:blank/srcdoc/blob frames (#1134, MAIN world) | merge commit `e96cc756` (merged 2026-10-30) | OPEN — not run |
 | AI-62 | #1187 credential backstop after `document.open()` (#1113) | merge commit `2f28d476` (merged 2026-10-30) | OPEN — not run |
 | AI-63 | #1152 overlay cleanup: deep and shadow-root foreground traps (#564, opt-in) | merge commit `2b6523af` (merged 2026-10-30) | OPEN — not run |
+| AI-68 | #1199 credential risk decodes punycode labels (homograph lookalikes, #1196) | merge commit `025b9dc2` (merged 2026-10-30) | OPEN — not run |
+| AI-69 | #1204 reverse-tabnabbing warning when another tab swapped a hidden page (#1172) | merge commit `3ff1417e` (merged 2026-10-30) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -277,6 +279,18 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   open `http://localhost:5173/overlay-nesting-lab.html?case=deep-static` and `?case=shadow-static`: the pre-existing deep and shadow-root
   traps are hidden on load with an Undo card. Open `?case=deep-benign`: the slotted dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
   (residual risks are tracked in #1189). A failure gets a revert PR for `2b6523af`.
+
+- **AI-68 (#1199):** on local pages with dummy credentials only, and nothing typed is real: (1) add `paypal.com`
+  to Trusted domains, then submit a password on a page served as `xn--pypal-4ve.com` (map it to 127.0.0.1 with
+  `--host-resolver-rules`, as `tests/e2e/credential-*.spec.ts` do): the credential prompt names a look-alike or
+  mixed-alphabet site. (2) Submit on `xn--mller-kva.de` and `xn--wgv71a.jp` mapped the same way: no look-alike
+  reason appears (a plain untrusted-site prompt is expected). A failure gets a revert PR for `025b9dc2`.
+
+- **AI-69 (#1204):** (1) open any page in tab A, open a second tab from it with `window.open(url)` (a new tab,
+  not a popup window), switch to the new tab and have it run `opener.location = "http://127.0.0.1:<other port>/"`
+  from DevTools; return to tab A: a toast says another tab changed this page and names the first site.
+  (2) Repeat with the opener write pointing at the same site: no toast. (3) Ordinary sign-in popups (a real
+  "Sign in with ..." button) show no toast. A failure gets a revert PR for `3ff1417e`.
 
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
