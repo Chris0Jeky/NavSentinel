@@ -1,6 +1,6 @@
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, getEventLog, getSuiteSettings } from "../shared/storage";
 import { explainJournalReason } from "./evidence_reasons";
-import { countExportOmittedExplanations, eventTitle, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
+import { countExportOmittedExplanations, eventTitle, isHiddenCorrectionReason, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
 import { PROTECTION_CATEGORIES, inProtectionRange, projectProtection, summarizeProtection, type ProtectionEvent, type ProtectionRange } from "./protection_model";
 import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, type EvidenceExportSnapshot } from "./evidence_export";
 
@@ -74,7 +74,7 @@ function createRow(event: ProtectionEvent): HTMLDetailsElement {
     const list = element("ul", "");
     for (const code of event.reasons) {
       // The fixed legacy explanation assumes success; use the recorded result above.
-      if (event.activity === "corrections" && (code === "overlay_cleanup_undo" || code === "overlay_cleanup_setting_off")) continue;
+      if (isHiddenCorrectionReason(event.activity, code)) continue;
       list.append(element("li", explainJournalReason(code)));
     }
     detail.append(list);

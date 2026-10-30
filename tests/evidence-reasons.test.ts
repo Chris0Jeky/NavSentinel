@@ -174,6 +174,8 @@ describe("journal display versus portable export (#867)", () => {
     expect(countExportOmittedExplanations(rows)).toBe(2);
     expect(countExportOmittedExplanations(rows.slice(2))).toBe(0);
     expect(countExportOmittedExplanations([])).toBe(0);
+    // A correction never displays the legacy cleanup explanation, so nothing displayed is omitted.
+    expect(countExportOmittedExplanations([{ ...rows[0]!, activity: "corrections", reasons: ["overlay_cleanup_undo"] }])).toBe(0);
     expect(countExportOmittedExplanations([{ ...rows[0]!, reasons: ["raw_legacy_code"] }])).toBe(0);
   });
 

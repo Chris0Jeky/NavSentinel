@@ -90,9 +90,15 @@ export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (co
   return events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
-/** Count records with readable journal explanations outside the portable vocabulary. */
-export function countExportOmittedExplanations(events: readonly EvidenceEvent[]): number {
-  return events.filter(event => event.reasons.some(code => isJournalReasonCode(code) && !isKnownReasonCode(code))).length;
+/** Corrections show their recorded result instead of the legacy cleanup explanation. */
+export function isHiddenCorrectionReason(activity: string | undefined, code: string): boolean {
+  return activity === "corrections" && (code === "overlay_cleanup_undo" || code === "overlay_cleanup_setting_off");
+}
+
+/** Count records whose displayed journal explanations the portable export omits. */
+export function countExportOmittedExplanations(events: readonly (EvidenceEvent & { activity?: string })[]): number {
+  return events.filter(event => event.reasons.some(code =>
+    isJournalReasonCode(code) && !isKnownReasonCode(code) && !isHiddenCorrectionReason(event.activity, code))).length;
 }
 
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {
