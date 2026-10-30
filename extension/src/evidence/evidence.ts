@@ -1,6 +1,6 @@
 import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, getEventLog, getSuiteSettings } from "../shared/storage";
 import { explainJournalReason } from "./evidence_reasons";
-import { eventTitle, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
+import { countExportOmittedExplanations, eventTitle, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
 import { PROTECTION_CATEGORIES, inProtectionRange, projectProtection, summarizeProtection, type ProtectionEvent, type ProtectionRange } from "./protection_model";
 import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, type EvidenceExportSnapshot } from "./evidence_export";
 
@@ -17,6 +17,7 @@ const next = byId<HTMLButtonElement>("next");
 const showLatest = byId<HTMLButtonElement>("showLatest");
 const exportDialog = byId<HTMLDialogElement>("exportDialog");
 const exportPreview = byId<HTMLTextAreaElement>("exportPreview");
+const exportOmissions = byId("exportOmissions");
 let preparedExport: EvidenceExportSnapshot | null = null;
 let events: ProtectionEvent[] = [];
 let visible: ProtectionEvent[] = [];
@@ -201,6 +202,8 @@ exportButton.addEventListener("click", () => {
   // A failed preparation must not leave an older snapshot downloadable.
   preparedExport = null;
   exportPreview.value = "";
+  exportOmissions.hidden = true;
+  exportOmissions.textContent = "";
   try {
     preparedExport = prepareEvidenceExport(visible.slice().reverse());
   } catch (error) {
@@ -214,12 +217,19 @@ exportButton.addEventListener("click", () => {
   }
   exportPreview.value = preparedExport.text;
   byId("exportSummary").textContent = `${preparedExport.count} recorded observations · ${preparedExport.bytes.toLocaleString()} bytes · Prepared ${new Date(preparedExport.exportedAt).toLocaleString()}`;
+  const omitted = countExportOmittedExplanations(visible);
+  exportOmissions.hidden = omitted === 0;
+  exportOmissions.textContent = omitted
+    ? `${omitted} record${omitted === 1 ? " includes" : "s include"} explanations that are not part of the portable export.`
+    : "";
   exportDialog.showModal();
 });
 byId("cancelExport").addEventListener("click", () => exportDialog.close());
 exportDialog.addEventListener("close", () => {
   preparedExport = null;
   exportPreview.value = "";
+  exportOmissions.hidden = true;
+  exportOmissions.textContent = "";
   exportButton.focus();
 });
 byId("downloadExport").addEventListener("click", () => {

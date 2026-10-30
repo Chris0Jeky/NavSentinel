@@ -90,6 +90,11 @@ export function projectEvidence(log: readonly EventLogEntry[], isReasonCode: (co
   return events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
 
+/** Count records with readable journal explanations outside the portable vocabulary. */
+export function countExportOmittedExplanations(events: readonly EvidenceEvent[]): number {
+  return events.filter(event => event.reasons.some(code => isJournalReasonCode(code) && !isKnownReasonCode(code))).length;
+}
+
 export function createEvidenceExport(events: readonly EvidenceEvent[], now = new Date()): EvidenceExport {
   // Re-project even a caller-supplied view so export cannot inherit extra fields.
   // Only portable registry codes leave the browser: journal-only codes (credential
