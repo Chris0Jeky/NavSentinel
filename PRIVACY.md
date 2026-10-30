@@ -121,6 +121,10 @@ These are read-only. They are never updated at runtime and require no network ca
   during a `copy` event to detect pastejacking; it keeps only the same length
   and boolean and drops the text immediately. Ordinary copies, where the page
   does not replace what you selected, are not read at all.
+  On a high-confidence ClickFix detection (a command-like page write together
+  with fake-verification, Run-dialog or paste-instruction text) in Smart or Strict mode,
+  Heedline overwrites the clipboard with a fixed warning sentence; it never reads the
+  clipboard to do so.
 
 ## Import And Export
 

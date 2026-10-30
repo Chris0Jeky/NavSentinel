@@ -104,7 +104,11 @@ const budgets = [
     // Bumped 25 -> 26 (#1172): reverse-tabnabbing tracking (opener domain at child creation,
     // pending-entry map with its session validator, onActivated handler) adds ~1.26KB:
     // 24,680 -> 25,939 B interaction-only, over the old 25,600 B ceiling by 339 B.
-    maxKB: 26,
+    // Bumped 26 -> 28 (device-code phishing): per-provider device pages with their own
+    // exempt sign-in/docs hosts, the blob: source and the pending-entry hook add ~1.25KB:
+    // 26,460 -> 27,714 B on main's 26,624 B ceiling. The service worker is not per-frame,
+    // so only this ceiling moves.
+    maxKB: 28,
   },
   {
     label: "storage module",
