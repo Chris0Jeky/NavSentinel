@@ -1,16 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import type { SuiteSettings, SuiteSettingsPatch } from "../extension/src/shared/storage";
+import type { PromptOutcomeEntry, SuiteSettings, SuiteSettingsPatch } from "../extension/src/shared/storage";
+import { fmtTime } from "../extension/src/options/options_model";
 const state = vi.hoisted(() => ({
-  get: vi.fn(), update: vi.fn(), import: vi.fn(), refreshProfiles: vi.fn(),
+  get: vi.fn(), update: vi.fn(), import: vi.fn(), refreshProfiles: vi.fn(), outcomes: vi.fn(),
   changed: (_settings: SuiteSettings): void => {},
 }));
 vi.mock("../extension/src/shared/storage", async (original) => ({
   ...await original<typeof import("../extension/src/shared/storage")>(),
   getSuiteSettings: state.get, updateSuiteSettings: state.update, importAll: state.import,
   onSuiteSettingsChange: (fn: typeof state.changed) => { state.changed = fn; },
-  getEventLog: async () => [], getPromptOutcomes: async () => [], getTrustedDomains: async () => [],
+  getEventLog: async () => [], getPromptOutcomes: state.outcomes, getTrustedDomains: async () => [],
   appendEvent: async () => {},
 }));
 vi.mock("../extension/src/shared/allowlist", async original => ({ ...await original<typeof import("../extension/src/shared/allowlist")>(), getAllowlist: async () => ({}) }));
@@ -38,6 +39,7 @@ describe("wired Options import / autosave boundary (#690)", () => {
     persisted = { autoSave: true, nav: { defaultMode: "smart", debug: false, autoDismissOverlays: false }, credential: { mode: "smart", promptOnUntrustedDomain: true, promptOnMediumRisk: false, mediumRiskThreshold: 40, blockHttpPasswordSubmit: true, warnOnPaste: true, similarity: { enabled: true, maxDistance: 2 } }, logLimit: 300 };
     state.get.mockReset().mockImplementation(async () => structuredClone(persisted));
     state.import.mockReset().mockImplementation(async () => {});
+    state.outcomes.mockReset().mockResolvedValue([]);
     state.refreshProfiles.mockReset().mockResolvedValue([]);
     state.update.mockReset().mockImplementation(async (patch: SuiteSettingsPatch) => {
       const next = structuredClone(persisted);
@@ -47,6 +49,31 @@ describe("wired Options import / autosave boundary (#690)", () => {
     await import("../extension/src/options/options"); await flush();
   });
   afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it("labels the retained choices and refreshes their sample after import", async () => {
+    const pane = el("pane-analytics");
+    expect(pane.querySelector("h2")?.textContent).toBe("Recorded choices");
+    expect(pane.querySelector(".pane-sub")?.textContent).toBe("Shares of recorded choices · stored only in this browser");
+    expect(Array.from(pane.querySelectorAll(".stat-label")).slice(0, 5).map(node => node.textContent))
+      .toEqual(["Retained choices", "Allow share", "Block share", "Trust share", "Dismiss share"]);
+    expect(pane.textContent).toContain("Allowing an action does not mean the warning was wrong.");
+    expect(pane.textContent).not.toMatch(/Threat Analytics|Total prompts|Allow rate|Top prompted domains/);
+    expect(el("choiceHistory").textContent).toBe("Retained sample: 0 choices (cap: 500). Retained time span unavailable.");
+    expect(el("choiceHistory").getAttribute("aria-live")).toBe("polite");
+    const promptOutcomes: PromptOutcomeEntry[] = [
+      { id: "cred", ts: 3000, domain: "example.test", type: "cred", outcome: "cancel", score: 80 },
+      { id: "nav", ts: 1000, domain: "example.test", type: "nav", outcome: "allow", score: 20 },
+    ];
+    state.import.mockImplementation(async (payload: { promptOutcomes: PromptOutcomeEntry[] }) => {
+      state.outcomes.mockResolvedValue(payload.promptOutcomes);
+    });
+    chooseFile(async () => JSON.stringify({ promptOutcomes })); await flush();
+    expect(el("statTotal").textContent).toBe("2");
+    expect(el("statAllowRate").textContent).toBe("50.0%");
+    expect(el("statBlockRate").textContent).toBe("50.0%");
+    expect(el("choiceHistory").textContent).toBe(`Retained sample: 2 choices (cap: 500). Retained time span: ${fmtTime(1000)} to ${fmtTime(3000)}.`);
+    expect(el("topDomains").textContent).toContain("2 recorded choices");
+  });
 
   it("failed JSON import re-arms the dirty autosave and preserves its baseline", async () => {
     editLimit("400"); chooseFile(async () => "{"); await flush();

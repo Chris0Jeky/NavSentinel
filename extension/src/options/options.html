@@ -56,7 +56,7 @@
           <nav class="sidebar-nav" id="sidebarNav">
             <a class="nav-btn" href="../evidence/evidence.html">Protection Center ↗</a>
             <button class="nav-btn active" data-section="protect" aria-current="true"><span id="navShieldIcon"></span> Protection</button>
-            <button class="nav-btn" data-section="analytics"><span id="navChartIcon"></span> Analytics</button>
+            <button class="nav-btn" data-section="analytics"><span id="navChartIcon"></span> Recorded choices</button>
             <button class="nav-btn" data-section="log"><span id="navListIcon"></span> Event log</button>
             <button class="nav-btn" data-section="trust"><span id="navLockIcon"></span> Trust</button>
             <button class="nav-btn" data-section="allowlist"><span id="navGlobeIcon"></span> Allowlist</button>
@@ -192,8 +192,8 @@
           <section class="pane" id="pane-analytics" hidden>
             <div class="pane-head">
               <div>
-                <h2>Threat Analytics</h2>
-                <p class="pane-sub">Local-only telemetry · no data leaves the browser</p>
+                <h2>Recorded choices</h2>
+                <p class="pane-sub">Shares of recorded choices · stored only in this browser</p>
               </div>
               <div class="pane-actions">
                 <button id="refreshStats" class="btn btn--ghost">Refresh</button>
@@ -201,25 +201,27 @@
               </div>
             </div>
 
+            <p id="choiceHistory" class="input-hint" role="status" aria-live="polite"></p>
+            <p class="input-hint">History may include imported choices. Shares do not measure prompt frequency or false-positive rates. Allowing an action does not mean the warning was wrong.</p>
             <div class="stat-grid">
               <div class="stat-card">
-                <div class="stat-label ns-uc">Total prompts</div>
+                <div class="stat-label ns-uc">Retained choices</div>
                 <div class="stat-value ns-mono" id="statTotal">--</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label ns-uc">Allow rate</div>
+                <div class="stat-label ns-uc">Allow share</div>
                 <div class="stat-value stat-value--green ns-mono" id="statAllowRate">--</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label ns-uc">Block rate</div>
+                <div class="stat-label ns-uc">Block share</div>
                 <div class="stat-value stat-value--red ns-mono" id="statBlockRate">--</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label ns-uc">Trust rate</div>
+                <div class="stat-label ns-uc">Trust share</div>
                 <div class="stat-value stat-value--amber ns-mono" id="statTrustRate">--</div>
               </div>
               <div class="stat-card">
-                <div class="stat-label ns-uc">Dismiss rate</div>
+                <div class="stat-label ns-uc">Dismiss share</div>
                 <div class="stat-value ns-mono" id="statDismissRate">--</div>
               </div>
               <div class="stat-card">
@@ -262,7 +264,7 @@
             <div class="card-grid card-grid--2col">
               <div class="card">
                 <div class="card-head">
-                  <div class="card-title">Top prompted domains</div>
+                  <div class="card-title">Top domains in recorded choices</div>
                 </div>
                 <div class="card-body" id="topDomains"></div>
               </div>
