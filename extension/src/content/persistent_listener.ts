@@ -10,6 +10,12 @@ type Registration = { target: EventTarget; type: string; listener: EventListener
 
 const registrations: Registration[] = [];
 let observer: MutationObserver | null = null;
+let rewritten = false;
+
+/** #1113: true once a rewrite removed the document's root, after which page listeners can precede ours. */
+export function documentRewritten(): boolean {
+  return rewritten;
+}
 
 function register(r: Registration): void {
   // Adding the same function and capture flag again is a no-op that keeps its place,
@@ -36,6 +42,7 @@ export function addPersistentListener(
     // Any childList record: document.open() on an already childless document
     // erases the listeners but queues only an addedNodes record.
     if (records.length > 0) for (const reg of registrations) register(reg);
+    if (records.some((r) => r.removedNodes.length > 0)) rewritten = true;
   });
   observer.observe(document, { childList: true });
 }

@@ -2156,7 +2156,17 @@ describe("credential_guard", () => {
         expect(mockShowModal).toHaveBeenCalledTimes(2);
       });
 
+      it("before any rewrite, leaves unseen non-password form navigations alone (shadow-root forms)", async () => {
+        const plain = createPlainForm();
+        expect(navigate(plain, "https://example.com/search", true).defaultPrevented).toBe(false);
+      });
+
       it("fails closed when the page hides the password field or moves the submitter after a stopped submit", async () => {
+        // document.open() removes the old root; the shared observer records the rewrite.
+        const root = document.documentElement;
+        document.removeChild(root);
+        document.appendChild(root);
+        await flushMicrotasks();
         const { form, btn } = formWithButton();
         const [guard] = nav.guardSubmit;
         const pw = form.querySelector('input[type="password"]') as HTMLInputElement;
@@ -2184,7 +2194,10 @@ describe("credential_guard", () => {
         const { btn } = formWithButton();
         const plain = createPlainForm();
         expect(navigate(btn, "https://example.com/session", false).defaultPrevented).toBe(false);
-        await dispatchSubmit(plain);
+        // A trusted submit the guard let through (happy-dom events are untrusted, so mark it).
+        const seenSubmit = new SubmitEvent("submit", { bubbles: true, cancelable: true });
+        Object.defineProperty(seenSubmit, "isTrusted", { value: true });
+        plain.dispatchEvent(seenSubmit);
         expect(navigate(plain, "https://evil.com/collect", true).defaultPrevented).toBe(false);
         setCachedCredMode("off");
         expect(navigate(btn, "https://evil.com/collect", true).defaultPrevented).toBe(false);
