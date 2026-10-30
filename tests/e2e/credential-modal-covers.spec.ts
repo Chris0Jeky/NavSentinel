@@ -234,10 +234,11 @@ test("a short blur stays refused when an early page listener stops blur and focu
     await popup.bringToFront();
     await page.bringToFront();
     await page.mouse.click(point.x, point.y);
+    await page.waitForTimeout(1000);
+    // Checked first: an accepted approval navigates away and loses the log.
+    expect(posts(), "a blur the page hid from later listeners must still refuse").toBe(0);
     const log = await page.evaluate(() => (window as unknown as { focusLog: string[] }).focusLog);
     expect(log.map((entry) => entry.split("@")[0]), "the blur happened during the long task").toEqual(["task", "blur", "focus"]);
-    await page.waitForTimeout(1000);
-    expect(posts(), "a blur the page hid from later listeners must still refuse").toBe(0);
 
     await page.waitForTimeout(ARMED_MS);
     await page.mouse.click(point.x, point.y);
