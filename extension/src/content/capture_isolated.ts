@@ -972,20 +972,28 @@ function checkDeviceCodeLure(length: number): void {
 
 // Instructions shown after the copy (#1218): an undetected command write is
 // rescanned at 1.5, 5 and 15 s (inside the 30 s write window), one chain at a time.
-// A late detection may also neutralize the clipboard (#1234), but only while no
-// copy, cut or page write has happened since and the page still has focus, so a
-// newer copy of the user's is never overwritten.
+// A late detection may also neutralize the clipboard (#1234), but only in a chain
+// started by the command write itself, and only while no copy, cut or page write
+// has happened since and the page never lost focus (the user may have copied in
+// another tab or app), so a newer copy of the user's is never overwritten.
 let clickFixRescanPending = false;
 let clipboardGeneration = 0;
 for (const type of ["copy", "cut"]) {
   window.addEventListener(type, (e) => { if (e.isTrusted) clipboardGeneration++; }, true);
 }
-function rescanClickFix(step = 0, generation = clipboardGeneration): void {
+// The window's own blur (element blurs do not bubble to a non-capture listener) and hiding.
+window.addEventListener("blur", () => { clipboardGeneration++; });
+document.addEventListener("visibilitychange", () => { clipboardGeneration++; });
+// A newer command write restarts the chain with its own generation; the older
+// chain's timers then do nothing (a second write must not make it stale for good).
+let clickFixRescanChain = 0;
+function rescanClickFix(step: number, generation: number, chain = ++clickFixRescanChain): void {
   clickFixRescanPending = true;
   setTimeout(() => {
+    if (chain !== clickFixRescanChain) return;
     clickFixRescanPending = false;
     const sameCopy = generation === clipboardGeneration && document.hasFocus();
-    if (!handleClickFixScan(sameCopy, true) && step < 2) rescanClickFix(step + 1, generation);
+    if (!handleClickFixScan(sameCopy, true) && step < 2) rescanClickFix(step + 1, generation, chain);
   }, [1500, 3500, 10000][step]);
 }
 
@@ -1018,7 +1026,10 @@ function handleClickFixScan(command = false, rescan = false): boolean {
   }
 
   if (!result.detected) {
-    if (!rescan && !clickFixRescanPending && hasRecentCommandClipboardWrite()) rescanClickFix();
+    // -1: a chain started by a benign write may warn but never overwrite.
+    if (!rescan && (command || !clickFixRescanPending) && hasRecentCommandClipboardWrite()) {
+      rescanClickFix(0, command ? clipboardGeneration : -1);
+    }
     return false;
   }
 

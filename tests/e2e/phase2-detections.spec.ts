@@ -477,6 +477,32 @@ test.describe("ClickFix", () => {
     }
   });
 
+  test("clickfix-09 a second command write cannot make the late neutralization stale (#1234) @phase2", async () => {
+    test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
+    const { page, context, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
+    try {
+      await context.grantPermissions(["clipboard-write", "clipboard-read"]);
+      await page.click("h1");
+      await page.evaluate(async () => {
+        await navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await navigator.clipboard.writeText("NAVSENTINEL_SENTINEL_DO_NOT_RUN base64 again");
+      });
+      await page.waitForTimeout(400);
+      await page.evaluate(() => {
+        const host = document.createElement("div");
+        host.attachShadow({ mode: "open" }).innerHTML =
+          "<p>Verify you are human: press Win + R, paste with Ctrl + V and press Enter.</p>";
+        document.body.appendChild(host);
+      });
+      await waitForToastMatch(page, /Run-box steps|Do NOT paste/i, 6000);
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5000 })
+        .toBe(CLIPBOARD_WARNING_TEXT);
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("clickfix-08 a late lure never overwrites a copy the user made after the command (#1234) @phase2", async () => {
     test.skip(!fs.existsSync(extensionPath), "Build the extension first.");
     const { page, context, cleanup } = await setupFixtureTest("rw-fullscreen-benign.html");
