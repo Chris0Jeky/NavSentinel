@@ -43,8 +43,8 @@ export const UI_FENCE_STATE = "__navsentinelUiFence";
 // recorded at document_start before any page script can register a capture
 // listener that stops those events. The record lives in an isolated-world
 // global: the page's JS realm cannot read or write it, and capture_isolated
-// has no byte room for another entry export (the research profile sits ~20 B
-// under its cap). ui_action_visibility reads it; only its own window state is
+// (near its cap) does not grow by another entry export, which the minified
+// shared chunk would otherwise need. ui_action_visibility reads it; its own window state is
 // a fallback for frames without this loader. A frame's PiP state is sent from
 // ground truth (pictureInPictureElement, the Document PiP window), so a forged
 // event changes nothing; the service worker relays it, with Chrome's frame id,
