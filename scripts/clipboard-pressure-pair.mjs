@@ -177,6 +177,8 @@ export function loadAndValidatePair(directory, expectedHead) {
     held: ["RETRY-path per-load attribution not natively observed (#954)", "Unchanged release artifact and owner Gate-3 proof"] };
 }
 
+let outputDirectoryCreated = false;
+
 export function runPair(directory, expectedHead) {
   requireEvidence(!fs.existsSync(directory), "pair output already exists; stale evidence cannot be reused");
   requireEvidence(process.env.NAVSENTINEL_EXPECTED_GUARD === undefined, "guard revision overrides are not allowed in this pair");
@@ -184,6 +186,7 @@ export function runPair(directory, expectedHead) {
   const chrome = chromeIdentity();
   fs.mkdirSync(path.dirname(directory), { recursive: true });
   fs.mkdirSync(directory);
+  outputDirectoryCreated = true;
   const fixed = path.join(repoRoot, "extension", "dist");
   const regressed = buildPr599RegressedBundle(fixed, path.join(directory, "regressed-source")).extensionPath;
   const expected = { ...identity, chrome, pairId: randomUUID() };
@@ -227,7 +230,7 @@ if (invokedDirectly) {
     writeJson(path.join(directory, "qualification.json"), result);
     console.log("Qualified the fixed/regressed diagnostic pair; attribution and owner/release proof remain held.");
   } catch (error) {
-    if (fs.existsSync(directory)) writeJson(path.join(directory, "qualification.json"), { qualified: false,
+    if (outputDirectoryCreated) writeJson(path.join(directory, "qualification.json"), { qualified: false,
       error: error instanceof Error ? error.message : String(error) });
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

@@ -135,3 +135,23 @@ describe("Branded Chrome browser-gate trigger", () => {
     expect(source).not.toContain("continue-on-error: true");
   });
 });
+
+describe("Clipboard pressure diagnostic-pair boundary", () => {
+  it("requires a labelled same-repository PR, read-only permissions and bounded artifact uploads", () => {
+    const source = fs.readFileSync(
+      path.join(workflowDirectory, "clipboard-pressure-diagnostic-pair.yml"),
+      "utf8",
+    );
+    const pullRequestBlock = source.match(/\n {2}pull_request:\n([\s\S]*?)\n\npermissions:/u)?.[1] ?? "";
+    expect(pullRequestBlock).toContain("types: [labeled, synchronize, reopened, ready_for_review]");
+    expect(source).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(source).toContain("contains(github.event.pull_request.labels.*.name, 'gate:browser')");
+    expect(source).not.toContain("pull_request_target:");
+    expect(source).toContain("permissions:\n  contents: read");
+    const checkout = source.match(/uses: actions\/checkout@[^\n]+\n([\s\S]*?)(?=\n {6}-|$)/u)?.[1] ?? "";
+    expect(checkout).toContain("persist-credentials: false");
+    const upload = source.match(/uses: actions\/upload-artifact@[^\n]+\n([\s\S]*?)(?=\n {6}-|$)/u)?.[1] ?? "";
+    const uploadPath = upload.match(/\n {10}path: \|\n((?: {12}[^\n]+\n)+)/u)?.[1] ?? "";
+    expect(uploadPath).toContain("            !test-results/clipboard-pressure-pair/regressed-source/\n");
+  });
+});

@@ -19,6 +19,8 @@ type Manifest = {
   host_permissions?: string[];
   optional_host_permissions?: string[];
   content_scripts?: { matches?: string[] }[];
+  web_accessible_resources?: { matches?: string[] }[];
+  externally_connectable?: { matches?: string[] };
   declarative_net_request?: unknown;
 };
 
@@ -29,16 +31,34 @@ function loadManifest(name: string): Manifest {
 }
 
 function findUndisclosedGrants(manifest: Manifest, disclosure: string): string[] {
-  // Only the permission table counts: a backticked token elsewhere (the
-  // certification answers mention `activeTab`) is not a disclosure.
-  const table = disclosure.split(/\r?\n/).filter((line) => line.startsWith("|")).join("\n");
-  const disclosed = new Set(Array.from(table.matchAll(/`([^`\r\n]+)`/g), (match) => match[1]));
+  const disclosed = new Set<string>();
+  let fence: string | undefined;
+  let inPermissionTable = false;
+  for (const line of disclosure.split(/\r?\n/)) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+    if (marker) {
+      if (!fence) { fence = marker; inPermissionTable = false; }
+      else if (marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      continue;
+    }
+    if (fence) continue;
+    if (/^\s*\|\s*Permission\s*\|\s*Justification\s*\|/iu.test(line)) {
+      inPermissionTable = true;
+      continue;
+    }
+    if (!line.trimStart().startsWith("|")) inPermissionTable = false;
+    if (!inPermissionTable) continue;
+    const firstCell = line.split("|")[1] ?? "";
+    for (const match of firstCell.matchAll(/`([^`\r\n]+)`/g)) disclosed.add(match[1]!);
+  }
   const grants = {
     permissions: manifest.permissions ?? [],
     optional_permissions: manifest.optional_permissions ?? [],
     host_permissions: manifest.host_permissions ?? [],
     optional_host_permissions: manifest.optional_host_permissions ?? [],
     "content_scripts.matches": manifest.content_scripts?.flatMap((script) => script.matches ?? []) ?? [],
+    "web_accessible_resources.matches": manifest.web_accessible_resources?.flatMap((resource) => resource.matches ?? []) ?? [],
+    "externally_connectable.matches": manifest.externally_connectable?.matches ?? [],
   };
   return Object.entries(grants).flatMap(([field, values]) =>
     [...new Set(values)].filter((value) => !disclosed.has(value)).map((value) => `${field}: ${value}`),
@@ -52,23 +72,32 @@ describe("manifest permissions", () => {
     expect(findUndisclosedGrants(loadManifest(name), disclosure)).toEqual([]);
   });
 
-  it.each([
-    "permissions",
-    "optional_permissions",
-    "host_permissions",
-    "optional_host_permissions",
-    "content_scripts.matches",
-  ] as const)("reports an undisclosed grant in %s", (field) => {
-    const manifest = loadManifest("manifest.json");
-    const fakeGrant = "undisclosedFakeGrant";
-    const copy: Manifest = field === "content_scripts.matches"
-      ? { ...manifest, content_scripts: [...(manifest.content_scripts ?? []), { matches: [fakeGrant] }] }
-      : { ...manifest, [field]: [...(manifest[field] ?? []), fakeGrant] };
+  const fakeGrant = "undisclosedFakeGrant";
+  const permissionTable = (row: string) => `| Permission | Justification |\n|---|---|\n${row}`;
+
+  it.each<[string, Manifest]>([
+    ["permissions", { permissions: [fakeGrant] }],
+    ["optional_permissions", { optional_permissions: [fakeGrant] }],
+    ["host_permissions", { host_permissions: [fakeGrant] }],
+    ["optional_host_permissions", { optional_host_permissions: [fakeGrant] }],
+    ["content_scripts.matches", { content_scripts: [{ matches: [fakeGrant] }] }],
+    ["web_accessible_resources.matches", { web_accessible_resources: [{ matches: [fakeGrant] }] }],
+    ["externally_connectable.matches", { externally_connectable: { matches: [fakeGrant] } }],
+  ])("reports an undisclosed grant in %s", (field, copy) => {
     expect(findUndisclosedGrants(copy, disclosure)).toEqual([`${field}: ${fakeGrant}`]);
-    expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}Suffix\` | x |`)).toEqual([`${field}: ${fakeGrant}`]);
+    expect(findUndisclosedGrants(copy, permissionTable(`| \`${fakeGrant}Suffix\` | x |`))).toEqual([`${field}: ${fakeGrant}`]);
     // Outside the permission table a backticked mention is not a disclosure.
     expect(findUndisclosedGrants(copy, `${disclosure}\nWe never use \`${fakeGrant}\`.`)).toEqual([`${field}: ${fakeGrant}`]);
-    expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}\` | x |`)).toEqual([]);
+    expect(findUndisclosedGrants(copy, permissionTable(`| \`${fakeGrant}\` | x |`))).toEqual([]);
+  });
+
+  it.each([
+    ["justification cell", permissionTable(`| \`storage\` | Never requests \`${fakeGrant}\`. |`)],
+    ["backtick code fence", `\`\`\`md\n${permissionTable(`| \`${fakeGrant}\` | x |`)}\n\`\`\``],
+    ["tilde code fence", `~~~md\n${permissionTable(`| \`${fakeGrant}\` | x |`)}\n~~~`],
+    ["unrelated table", `| Example | Notes |\n|---|---|\n| \`${fakeGrant}\` | x |`],
+  ])("rejects disclosure only in a %s", (_label, text) => {
+    expect(findUndisclosedGrants({ permissions: [fakeGrant] }, text)).toEqual([`permissions: ${fakeGrant}`]);
   });
 
   it.each(MANIFESTS)("%s requests no declarativeNetRequest permission", (name) => {
