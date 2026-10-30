@@ -66,7 +66,10 @@ minimization sign-off before beta.
   minimized under RI-06
 - Clipboard text/selection is inspected transiently in the page's MAIN world to
   derive length and a command-like boolean. Content is not bridged to the
-  isolated script, stored, or transmitted.
+  isolated script, stored, or transmitted. During a `copy` event the isolated
+  script also reads the copy payload (or selection) in place to detect
+  pastejacking, keeping only the same length and boolean; the text is never
+  stored, bridged, or transmitted.
 - No password values or form-field contents are stored or transmitted. Current
   exact operational URLs can contain OAuth authorization codes, access/ID
   tokens, or other response parameters; RI-06/#455 must redact these before any
