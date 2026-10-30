@@ -131,6 +131,8 @@ export function summarizeEvidence(events: readonly EvidenceEvent[]): { recorded:
   return { recorded: events.length, scored: events.filter(event => event.score !== undefined).length,
     sites: new Set(events.flatMap(event => [event.sourceSite, event.destinationSite].filter((site): site is string => site !== null))).size };
 }
-export function eventTitle(kind: EventKind): string {
+/** The password-focus warning reuses cred_paste_warn (#1170), so its marker reason names it (#1198). */
+export function eventTitle(kind: EventKind, reasons: readonly string[] = []): string {
+  if (kind === "cred_paste_warn" && reasons.includes("PASSWORD_FOCUS_WARNING")) return "credential password focus warning";
   return kind.replace(/^nav_/, "navigation_").replace(/^cred_/, "credential_").replace(/^suite_/, "settings_").replaceAll("_", " ");
 }

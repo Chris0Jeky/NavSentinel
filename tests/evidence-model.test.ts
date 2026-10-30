@@ -155,3 +155,12 @@ describe("filterEvidence guards", () => {
     expect(filterEvidence(long, `${host}zzz`, "all", false)).toHaveLength(1);
   });
 });
+
+describe("eventTitle for the password-focus warning (#1198)", () => {
+  it("names the focus trigger and leaves a real paste warning alone", async () => {
+    const { eventTitle } = await import("../extension/src/evidence/evidence_model");
+    expect(eventTitle("cred_paste_warn", ["UNTRUSTED_DOMAIN", "PASSWORD_FOCUS_WARNING"])).toBe("credential password focus warning");
+    expect(eventTitle("cred_paste_warn", ["UNTRUSTED_DOMAIN"])).toBe("credential paste warn");
+    expect(eventTitle("cred_paste_warn")).toBe("credential paste warn");
+  });
+});
