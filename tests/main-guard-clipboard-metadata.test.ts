@@ -19,7 +19,10 @@ const executable = ts.transpileModule(`${classifier}\n${patch.getText(ast)}\npat
 type Item = { types: string[]; getType(type: string): Promise<{ text(): Promise<string> }> };
 function boot(nativeWrite: () => Promise<void> = () => Promise.resolve()) {
   const rows: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  const clipboard = { write: (_items: Item[]) => nativeWrite(), writeText: (_text: string) => Promise.resolve() };
+  // Inherited, like the browser's Clipboard.prototype methods the guard wraps (#1166).
+  const clipboard = Object.create({
+    write: (_items: Item[]) => nativeWrite(), writeText: (_text: string) => Promise.resolve(),
+  }) as { write(items: Item[]): Promise<void>; writeText(text: string): Promise<void> };
   vm.runInNewContext(executable, {
     exports: {}, navigator: { clipboard }, nativeClipboardWrite: clipboard.write,
     nativeClipboardWriteText: clipboard.writeText, nativeApply: Reflect.apply,

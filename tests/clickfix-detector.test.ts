@@ -122,6 +122,42 @@ describe("looksLikeCommand", () => {
     expect(looksLikeCommand("System.Net.WebClient download")).toBe(true);
   });
 
+  // #1166: shells ignore these characters inside a word, so the payload still runs.
+  // Obfuscated samples are assembled at runtime: literal ones in source trip
+  // host antivirus on this repository's Windows checkouts.
+  const obfuscate = (word: string, mark: string) => word.split("").join(mark);
+  it("sees through cmd caret, quote and PowerShell backtick obfuscation", () => {
+    for (const word of ["powershell", "mshta", "certutil", "curl.exe "]) {
+      for (const mark of ["^", '"', "`"]) {
+        expect(looksLikeCommand(`${obfuscate(word, mark)} -x`), `${word} with ${mark}`).toBe(true);
+      }
+    }
+  });
+
+  it("detects 2025 ClickFix LOLBins and WebDAV payloads", () => {
+    for (const sample of [
+      "curl.exe -k https://x.example/p",
+      "pwsh.exe -c x",
+      "finger load@203.0.113.9",
+      "conhost --headless x",
+      "wmic process x",
+      "msbuild x.proj",
+      "cmstp /au x.inf",
+      "%comspec% /k x",
+      "\\\\files.example@SSL\\dav\\a",
+      "\\\\203.0.113.9@8080\\s\\a",
+    ]) {
+      expect(looksLikeCommand(sample), sample).toBe(true);
+    }
+  });
+
+  it("keeps ordinary prose and verification codes benign", () => {
+    expect(looksLikeCommand("Verification ID: 482-917")).toBe(false);
+    expect(looksLikeCommand('He said "finger food" is fine; 2^10 = 1024.')).toBe(false);
+    expect(looksLikeCommand("Write to support@example.com for help")).toBe(false);
+    expect(looksLikeCommand("Use the \\\\server\\share path")).toBe(false);
+  });
+
   it("does NOT flag plain text", () => {
     expect(looksLikeCommand("Hello world, this is a normal sentence.")).toBe(false);
     expect(looksLikeCommand("Please verify your email")).toBe(false);

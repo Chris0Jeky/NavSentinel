@@ -1588,6 +1588,10 @@ window.addEventListener(
 
 function patchClipboard(): void {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
+  // #1166: wrap the prototype, not the instance. An own-property wrapper is
+  // skipped by `delete navigator.clipboard.writeText` or a direct
+  // Clipboard.prototype call, which leaves ClickFix without its write receipt.
+  const clip = Object.getPrototypeOf(navigator.clipboard) as Clipboard;
 
   // Share the unchanged successful-write receipt across text, item and
   // non-text fallback paths without retaining the clipboard contents.
@@ -1599,7 +1603,7 @@ function patchClipboard(): void {
 
   if (nativeClipboardWriteText) {
     try {
-      navigator.clipboard.writeText = async function (data: string): Promise<void> {
+      clip.writeText = async function (data: string): Promise<void> {
         // WebIDL string conversion is observable and may throw. An async
         // wrapper preserves native Promise rejection, including missing args.
         const text = `${data}`;
@@ -1626,7 +1630,7 @@ function patchClipboard(): void {
 
   if (nativeClipboardWrite) {
     try {
-      navigator.clipboard.write = function (data: ClipboardItem[]): Promise<void> {
+      clip.write = function (data: ClipboardItem[]): Promise<void> {
         // Only send the bridge message after the native write succeeds.
         return nativeClipboardWrite!(data).then((result) => {
           // Try to read text/plain content from ClipboardItems for command detection.
@@ -1936,11 +1940,12 @@ function patchOpenerLocation(): void {
   }
 }
 
-// Also intercept document.execCommand("copy") as an evasion vector
-const nativeExecCommand = document.execCommand.bind(document);
+// Also intercept document.execCommand("copy") as an evasion vector. Wrapped on
+// Document.prototype for the same reason as the clipboard methods (#1166).
+const nativeExecCommand = document.execCommand;
 try {
-  document.execCommand = function (command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
-    const result = nativeExecCommand(command, ...rest);
+  Document.prototype.execCommand = function (this: Document, command: string, ...rest: [showUI?: boolean, value?: string]): boolean {
+    const result = nativeApply(nativeExecCommand, this, [command, ...rest]);
     // Only emit clipboard event when the copy actually succeeded
     if (command.toLowerCase() === "copy" && result && !isOff()) {
       // Read the current selection to detect command-like content
@@ -1963,7 +1968,7 @@ try {
       }
     }
     return result;
-  } as typeof document.execCommand;
+  } as typeof Document.prototype.execCommand;
 } catch {
   // execCommand may not be configurable
 }

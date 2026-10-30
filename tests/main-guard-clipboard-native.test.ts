@@ -32,7 +32,8 @@ function boot(sink?: Sink) {
       return Promise.resolve();
     } catch (error) { return Promise.reject(error); }
   };
-  const clipboard = { writeText: native };
+  // The guard wraps the prototype (#1166), so model an instance that inherits it.
+  const clipboard = Object.create({ writeText: native }) as { writeText: Sink };
   const sandbox = {
     exports: {}, navigator: { clipboard }, nativeClipboardWriteText: native,
     nativeClipboardWrite: undefined, nativeApply: Reflect.apply, debug: false, nowMs: () => 123,
@@ -149,5 +150,15 @@ describe("clipboard.writeText native contract (#1024)", () => {
 
   it("retains the one-required-parameter function length", () => {
     assert.equal(boot().clipboard.writeText.length, 1);
+  });
+
+  it("guards prototype calls and survives deleting an own property (#1166)", async () => {
+    const harness = boot();
+    assert.equal(Object.hasOwn(harness.clipboard, "writeText"), false);
+    delete (harness.clipboard as { writeText?: Sink }).writeText;
+    const proto = Object.getPrototypeOf(harness.clipboard) as { writeText: Sink };
+    await Reflect.apply(proto.writeText, harness.clipboard, ["NS_INERT base64"]);
+    await harness.clipboard.writeText("benign receipt");
+    assert.deepEqual(harness.receipts.map((r) => r.payload.looksLikeCommand), [true, false]);
   });
 });
