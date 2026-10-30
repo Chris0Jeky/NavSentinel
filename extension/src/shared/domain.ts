@@ -1,8 +1,45 @@
 import type { CredentialSettings } from "./storage";
-import pslTrie from "./psl_data.json" with { type: "json" };
+import { PSL_TRIE } from "./psl_trie";
 
 type TrieNode = { [label: string]: TrieNode | 1 };
-const PSL_ROOT: TrieNode = pslTrie as TrieNode;
+
+/**
+ * Decode the text trie written by scripts/update-psl.mjs (encodeTrie): entries are
+ * comma-separated, a leaf is its bare label, a node is label{children}, prefixed
+ * with "+" when the node itself is a public suffix. Nodes have no prototype, so
+ * no label can reach Object.prototype.
+ */
+export function decodePslTrie(text: string): TrieNode {
+  const root: TrieNode = Object.create(null);
+  const stack: TrieNode[] = [root];
+  let top = root;
+  // Labels sit at even indexes, each followed by its delimiter (",", "{" or "}").
+  // Native split keeps the cold decode near JSON.parse speed (~8 ms for the full PSL).
+  const parts = text.split(/([,{}])/);
+  for (let k = 0; k < parts.length; k += 2) {
+    let label = parts[k] as string;
+    const delimiter = parts[k + 1];
+    if (delimiter === "{") {
+      const child: TrieNode = Object.create(null);
+      if (label[0] === "+") {
+        label = label.slice(1);
+        child[""] = 1;
+      }
+      top[label] = child;
+      stack.push(child);
+      top = child;
+    } else {
+      if (label) top[label] = 1;
+      if (delimiter === "}") {
+        stack.pop();
+        top = stack[stack.length - 1] as TrieNode;
+      }
+    }
+  }
+  return root;
+}
+
+let pslRoot: TrieNode | undefined;
 
 export function normalizeHost(host: string): string {
   if (!host) return "";
@@ -117,7 +154,7 @@ function splitLabels(host: string): string[] {
  *     4. Else stop — the trie has no deeper rule.
  */
 function pslSuffixLength(labels: string[]): number {
-  let node: TrieNode = PSL_ROOT;
+  let node: TrieNode = (pslRoot ??= decodePslTrie(PSL_TRIE));
   let depth = 0;
   let confirmedSuffix = 0;
 
