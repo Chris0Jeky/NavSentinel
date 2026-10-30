@@ -254,7 +254,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-61 | #1155 main_guard and its bridge in about:blank/srcdoc/blob frames (#1134, MAIN world) | merge commit `e96cc756` (merged 2026-10-30) | OPEN — not run |
 | AI-62 | #1187 credential backstop after `document.open()` (#1113) | merge commit `2f28d476` (merged 2026-10-30) | OPEN — not run |
 | AI-63 | #1152 overlay cleanup: deep and shadow-root foreground traps (#564, opt-in) | merge commit `2b6523af` (merged 2026-10-30) | OPEN — not run |
-| AI-66 | #1183 tech-support-scam fullscreen locker exit | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1183) (candidate until merged) | OPEN — not run |
+| AI-66 | #1183 tech-support-scam fullscreen locker exit, re-landed by #1210 | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1210) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
