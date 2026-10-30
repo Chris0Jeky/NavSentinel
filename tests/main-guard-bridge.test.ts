@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { installMainWorldNatives } from "./helpers/main-world-natives";
 
 /**
  * Regression coverage for the half-open bridge handshake release.
@@ -124,6 +125,7 @@ function uninstallPortInstanceBridge(): void {
 }
 
 beforeAll(async () => {
+  await installMainWorldNatives();
   if (typeof document.execCommand !== "function") {
     (document as unknown as { execCommand: () => boolean }).execCommand = () => false;
   }

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { installMainWorldNatives } from "./helpers/main-world-natives";
 
 /**
  * Integration suite driving the REAL main_guard bridge listener (#wave2-slice2-B2).
@@ -124,6 +125,7 @@ function uninstallPortInstanceBridge(): void {
 }
 
 beforeAll(async () => {
+  await installMainWorldNatives();
   if (typeof document.execCommand !== "function") {
     (document as unknown as { execCommand: () => boolean }).execCommand = () => false;
   }
@@ -259,5 +261,31 @@ describe("main_guard bridge handshake (real listener)", () => {
     const live = peers[peers.length - 1]!;
     live.send({ source: NS_SOURCE, type: "ns-ping", v: 1, session: S2 });
     await waitFor(() => live.types().includes("ns-pong"), "ns-pong after garbage init");
+  });
+
+  it("does not expose the genuine port/session to a page replacement of postMessage", async () => {
+    const live = peers[peers.length - 1]!;
+    const proto = Object.getPrototypeOf(live.guardPort()) as MessagePort;
+    const post = proto.postMessage;
+    const stolen: unknown[] = [];
+    const start = live.received.length;
+    try {
+      proto.postMessage = function (message: BridgeMessage) {
+        if (this === live.guardPort() && message.source === NS_SOURCE && message.session) {
+          stolen.push(this);
+          Reflect.apply(post, this, [{ source: NS_SOURCE, v: 1, session: message.session,
+            type: "ns-allow-target-nav", url: "https://destination.test/sink", ttlMs: 10000 }]);
+          Reflect.apply(post, this, [{ source: NS_SOURCE, v: 1, session: message.session,
+            type: "ns-pushstate-suspicious", url: "https://destination.test/sink", reason: "attacker-chosen" }]);
+        }
+        Reflect.apply(post, this, [message]);
+      };
+      live.send({ source: NS_SOURCE, type: "ns-ping", v: 1, session: S2 });
+      await waitFor(() => live.received.slice(start).some((m) => m.type === "ns-pong"), "native pong");
+    } finally {
+      proto.postMessage = post;
+    }
+    expect(stolen.length).toBe(0);
+    expect(live.received.slice(start).map((m) => m.type)).toEqual(["ns-pong"]);
   });
 });

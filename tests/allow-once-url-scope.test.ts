@@ -43,7 +43,7 @@ describe("allow-once open allowance is URL-bound (#851)", () => {
     expect(end).toBeGreaterThan(start);
     const region = guard.slice(start, end);
     expect(region).toContain("url?: string | URL");
-    expect(region).toContain("String(url) === allowOnceUrl");
+    expect(region).toContain("`${url}` === allowOnceUrl");
     // The decrement must be gated by the match: a mismatched open neither
     // consumes nor burns the allowance.
     expect(region.indexOf("allowOnceUrl")).toBeLessThan(
