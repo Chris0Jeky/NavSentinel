@@ -280,18 +280,28 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   traps are hidden on load with an Undo card. Open `?case=deep-benign`: the slotted dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
   (residual risks are tracked in #1189). A failure gets a revert PR for `2b6523af`.
 
-- **AI-68 (#1199):** on local pages with dummy credentials only, and nothing typed is real: (1) add `paypal.com`
-  to Trusted domains, then submit a password on a page served as `xn--pypal-4ve.com` (map it to 127.0.0.1 with
-  `--host-resolver-rules`, as `tests/e2e/credential-*.spec.ts` do): the credential prompt names a look-alike or
-  mixed-alphabet site. (2) Submit on `xn--mller-kva.de` and `xn--wgv71a.jp` mapped the same way: no look-alike
-  reason appears (a plain untrusted-site prompt is expected). A failure gets a revert PR for `025b9dc2`.
+- **AI-68 (#1199):** dummy credentials only. (a) Serve the Gym without a host check:
+  `py -m http.server 8080 --directory gym`. (b) Quit Chrome fully (no background processes), relaunch the
+  profile that has the unpacked build with
+  `--host-resolver-rules="MAP xn--pypal-4ve.com 127.0.0.1, MAP xn--mller-kva.de 127.0.0.1, MAP xn--wgv71a.jp 127.0.0.1"`,
+  and confirm Heedline is still loaded. (1) Type the full URL `http://xn--pypal-4ve.com:8080/content-fp-03-legit-login.html`,
+  enter a dummy password and submit: the prompt lists a mixed-alphabet reason ("mixes scripts") and a brand
+  look-alike ("spoofing brand paypal"); with `paypal.com` in Trusted domains it also lists "similar to trusted
+  domain". Cancel. (2) Do the same on `http://xn--mller-kva.de:8080/...` and `http://xn--wgv71a.jp:8080/...`:
+  "Hostname contains punycode (xn--)" and the plain-HTTP and untrusted-site lines are expected for every xn--
+  host and are not a failure; a failure is any "mixes scripts", "similar to trusted domain" or "spoofing brand"
+  line on these two. Afterwards remove `paypal.com` from Trusted domains if you added it and relaunch Chrome
+  normally. A failure gets a revert PR for `025b9dc2`.
 
 - **AI-69 (#1204):** with the Gym served (`npm run gym:serve`): (1) in tab A open `http://localhost:5173/`, run
-  `window.open("http://localhost:5173/")` in its DevTools (a new tab, not a popup window), and in the new tab's
-  DevTools run `opener.location = "http://127.0.0.1:5173/"` (a different hostname; a different port alone is
-  the same site and stays silent by design); return to tab A: a toast says another tab changed this page and
-  names `localhost`. (2) Repeat with `opener.location = "http://localhost:5173/?same-site"`: no toast. (3) Ordinary sign-in popups (a real
-  "Sign in with ..." button) show no toast. A failure gets a revert PR for `3ff1417e`.
+  `window.open("http://localhost:5173/")` in its DevTools (a new tab, not a popup window; tab A must stay in the
+  background), and in the new tab's DevTools run `opener.location = "http://127.0.0.1:5173/"` (a different
+  hostname; a different port alone is the same site and stays silent by design); return to tab A: a toast says
+  another tab changed this page and names `localhost`. (2) Navigate tab A back to `http://localhost:5173/`
+  (step 1 left it on 127.0.0.1), close the old child tab, open a new one the same way and run
+  `opener.location = "http://localhost:5173/?same-site"`; return to tab A: no toast. (3) Open
+  `http://localhost:5173/level8-legit-oauth-popup.html` and complete its sign-in popup: no toast. A failure gets a
+  revert PR for `3ff1417e`.
 
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
