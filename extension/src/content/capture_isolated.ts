@@ -53,7 +53,7 @@ import {
   type DownCapture
 } from "./dom_builder";
 import type { DebugInfo } from "./debug_overlay";
-import { clickFixToastPrefix, hasRecentCommandClipboardWrite, scanForClickFix } from "./clickfix_detector";
+import { clickFixToastPrefix, hasRecentCommandClipboardWrite, scanForClickFix, scannableText } from "./clickfix_detector";
 import { recordClipboardBridgeWrite } from "./clipboard_bridge";
 import { installCopyListener } from "./copy_listener";
 import { OutboundQueue } from "./bridge_outbound";
@@ -636,6 +636,10 @@ function handleBridgeMessage(message: unknown): void {
     }, receivedAtMs);
     if (settings.defaultMode !== "off") {
       handleClickFixScan(data.looksLikeCommand === true);
+      // A short non-command copy may be a device code a lure hands out (#1223).
+      if (!data.looksLikeCommand && (data.contentLength ?? 0) >= 8 && (data.contentLength ?? 0) <= 12) {
+        import("./devicecode_lure").then((m) => m.checkDeviceCodeLure(scannableText), () => {});
+      }
     }
     return;
   }
