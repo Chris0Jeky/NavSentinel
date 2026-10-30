@@ -96,7 +96,7 @@ export function activateOwnedToastControl(eventHost: unknown, path: readonly unk
   // stops at the host. Ask the root where the input landed instead: the
   // focused control for keyboard (detail 0), the hit control for a pointer.
   if (path[0] === host && event) {
-    const press = event.type == "pointerdown";
+    const press = event.type === "pointerdown";
     const control = (press || event.detail
       ? root!.elementFromPoint((event as MouseEvent).clientX, (event as MouseEvent).clientY)
       : root!.activeElement)?.closest("button,.pill");
