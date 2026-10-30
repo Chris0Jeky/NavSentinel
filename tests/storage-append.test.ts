@@ -1337,6 +1337,27 @@ describe("appendEvent", () => {
     );
   });
 
+  it("replies ok:false to a delegated append whose writes never verify (#1147)", async () => {
+    const brokenChrome = {
+      storage: {
+        local: {
+          async get() { return {}; },
+          async set() {},
+        },
+        session: { async get() { return {}; }, async set() {} },
+        onChanged: { addListener() {} },
+      },
+    };
+    vi.stubGlobal("chrome", brokenChrome as unknown as typeof globalThis.chrome);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { handleEventLogAppendMessage } = await import("../extension/src/shared/storage");
+    await expect(handleEventLogAppendMessage({
+      type: "ns-event-log-append",
+      entry: { id: "unverified", ts: Date.now(), kind: "nav_click_block" },
+    })).resolves.toMatchObject({ ok: false });
+  });
+
   it("survives null/undefined items in existing log array", async () => {
     const { chrome, store } = createChromeMock({
       [EVENT_LOG_KEY]: [null, undefined, { id: "valid-1", ts: 1, kind: "nav_click_block" }, { notAnId: true }],
@@ -2492,6 +2513,28 @@ describe("prompt outcome storage — sender authorization", () => {
     expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seedOutcome]);
   });
 
+  it("refuses a non-empty replace that normalizes to nothing, but an explicit [] still clears (#1147)", async () => {
+    const { chrome, store } = createChromeMock({ [PROMPT_OUTCOMES_KEY]: [seedOutcome] });
+    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+    const { handlePromptOutcomeStorageMessage } = await import("../extension/src/shared/storage");
+
+    const refused = await handlePromptOutcomeStorageMessage(
+      {
+        type: "ns-prompt-outcome-replace",
+        outcomes: [{ junk: true }, null] as never,
+      },
+      OPTIONS_SENDER
+    );
+    expect(refused.ok).toBe(false);
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([seedOutcome]);
+
+    expect(await handlePromptOutcomeStorageMessage(
+      { type: "ns-prompt-outcome-replace", outcomes: [] },
+      OPTIONS_SENDER
+    )).toEqual({ ok: true });
+    expect(store[PROMPT_OUTCOMES_KEY]).toEqual([]);
+  });
+
   it("rejects an adaptive reset from a content-script sender", async () => {
     const { chrome, store } = createChromeMock({
       [ADAPTIVE_SCORES_KEY]: { "seed.example": { domain: "seed.example", adjustment: 5 } },
@@ -2957,25 +3000,23 @@ describe("prompt outcome append — non-finite sanitization", () => {
     vi.resetModules();
   });
 
-  it("coerces a non-finite score so the outcome persists instead of being dropped", async () => {
-    const { chrome, store } = createChromeMock();
-    vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
-    const { appendPromptOutcome } = await import("../extension/src/shared/storage");
+  // A NaN score used to be coerced to a measured 0: a low-risk allow that
+  // adaptive scoring weights as full trust, skipping its discount for allows
+  // at or above the block threshold. Drop it like an out-of-range score. (#1147)
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "drops an outcome whose score is %s instead of recording a measured 0",
+    async (score) => {
+      const { chrome, store } = createChromeMock();
+      vi.stubGlobal("chrome", chrome as unknown as typeof globalThis.chrome);
+      const { appendPromptOutcome } = await import("../extension/src/shared/storage");
 
-    await appendPromptOutcome({
-      id: "nan-score",
-      domain: "x.example",
-      type: "nav",
-      score: Number.NaN,
-      outcome: "allow",
-    });
+      await appendPromptOutcome({ id: "bad-score", domain: "x.example", type: "nav", score, outcome: "allow" });
+      await appendPromptOutcome({ id: "good-score", domain: "x.example", type: "nav", score: 12, outcome: "allow" });
 
-    const entries = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string; score: number }>) ?? [];
-    const entry = entries.find((e) => e.id === "nan-score");
-    expect(entry).toBeDefined();
-    expect(Number.isFinite(entry!.score)).toBe(true);
-    expect(entry!.score).toBe(0);
-  });
+      const entries = (store[PROMPT_OUTCOMES_KEY] as Array<{ id: string }>) ?? [];
+      expect(entries.map((e) => e.id)).toEqual(["good-score"]);
+    }
+  );
 
   it("coerces a non-finite ts so the outcome persists with a finite timestamp", async () => {
     const { chrome, store } = createChromeMock();

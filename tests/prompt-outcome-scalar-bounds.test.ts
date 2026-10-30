@@ -131,10 +131,11 @@ describe("prompt outcome scalar bounds", () => {
     expect(outcomes[0]!.thresholdUsed).toBeUndefined();
   });
 
-  it("drops unbounded scalars on the import path", async () => {
-    stubChrome();
+  it("rejects an import containing only unbounded scores without erasing history", async () => {
+    const saved = { id: "saved", ts: 1, domain: "example.com", type: "nav", score: 50, outcome: "allow" };
+    stubChrome({ "sentinelsuite:prompt_outcomes_v1": [saved] });
     const { importAll, getPromptOutcomes } = await import("../extension/src/shared/storage");
-    await importAll({
+    await expect(importAll({
       promptOutcomes: [{
         id: "repro",
         ts: Date.now(),
@@ -145,8 +146,8 @@ describe("prompt outcome scalar bounds", () => {
         cds: 1e308,
         thresholdUsed: -1e12,
       }],
-    });
-    expect(await getPromptOutcomes()).toHaveLength(0);
+    })).rejects.toThrow("no valid prompt outcomes");
+    expect(await getPromptOutcomes()).toEqual([saved]);
   });
 
   it("keeps documented in-range replay values on both paths", async () => {
