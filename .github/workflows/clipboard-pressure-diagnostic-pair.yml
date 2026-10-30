@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify clean exact head
@@ -63,8 +64,10 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: clipboard-pressure-pair-${{ github.run_id }}-${{ github.run_attempt }}
+          # The regressed copy is a loadable build with #599's protection removed; keep it off the artifact.
           path: |
             test-results/clipboard-pressure-pair/
+            !test-results/clipboard-pressure-pair/regressed-source/
             artifacts/acceptance/pressure-pair-*/
           if-no-files-found: warn
           retention-days: 14
