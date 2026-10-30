@@ -13,8 +13,8 @@ export function assertE2eBuild(manifestPath = defaultManifestPath()): void {
   if (process.env.NAVSENTINEL_ALLOW_MISSING_BUILD === "1") return;
   if (!existsSync(manifestPath)) {
     throw new Error(
-      `Extension build missing: ${manifestPath}. Run npm run build before E2E tests, ` +
-      "or set NAVSENTINEL_ALLOW_MISSING_BUILD=1 to intentionally run without a build.",
+      // #1192: no opt-out hint here. A run with every spec skipped exits 0 and proves nothing.
+      `Extension build missing: ${manifestPath}. Run npm run build before E2E tests.`,
     );
   }
 }
