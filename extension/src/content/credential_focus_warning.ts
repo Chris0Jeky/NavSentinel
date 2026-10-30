@@ -55,17 +55,21 @@ function isLocalHost(host: string): boolean {
   return isPrivateIPv4(a, b);
 }
 
-/** The strongest page-only signal that warrants a focus warning, or null. */
+/**
+ * The strongest page-only signal that warrants a focus warning; `null` when no
+ * address signal fires on an eligible page (the content check may still run);
+ * `undefined` when the page is off-limits (mode off, trusted, local).
+ */
 export function focusWarningReason(
   pageUrl: string,
   trustedDomains: string[],
   config: CredentialSettings
-): RiskReason | null {
-  if (config.mode === "off") return null;
+): RiskReason | null | undefined {
+  if (config.mode === "off") return undefined;
   // Page-only: the action is the page itself, so no cross-site signal applies.
   const risk = computeCredentialRisk({ pageUrl, actionUrl: pageUrl, trustedDomains, config });
   const host = risk.page.host;
-  if (!host || risk.page.isTrusted || isLocalHost(host)) return null;
+  if (!host || risk.page.isTrusted || isLocalHost(host)) return undefined;
   for (const code of STRONG_PAGE_SIGNALS) {
     const reason = risk.reasons.find((r) => r.code === code);
     if (reason) return reason;
@@ -78,16 +82,48 @@ export function focusWarningMessage(code: string): string {
   return `Heedline: this page's address looks risky for a password (${why.charAt(0).toLowerCase()}${why.slice(1)}). Check the address before typing.`;
 }
 
-export async function warnOnPasswordFocus(pageUrl: string): Promise<void> {
+// Microsoft's sign-in hosts (incl. sovereign clouds and Entra External ID). Exact
+// labels where the parent domain also hosts customer content (windows.net,
+// chinacloudapi.cn); b2clogin.com is left out: tenants upload their own page HTML there.
+const MS_LOGIN_HOST = /(?:^|\.)(?:microsoftonline\.(?:com|us|cn)|microsoft\.com|live\.com|office\.com|outlook\.com|microsoft365\.com|ciamlogin\.com)$|^login\.(?:windows\.net|chinacloudapi\.cn)$/i;
+
+/**
+ * AiTM proxies (Evilginx, EvilProxy, Tycoon 2FA, Sneaky 2FA) relay Microsoft's
+ * real sign-in page from their own host, and clone kits copy its markup: the
+ * password field is id "i0118", name "passwd". On any other host that form is a
+ * relay or a copy, even when the address itself carries no signal. Keyed on the
+ * focused field itself, so nothing else on the page can stand in for it.
+ */
+export function isRelayedMicrosoftLogin(field: HTMLInputElement, host: string): boolean {
+  return field.id === "i0118" && field.name === "passwd" && !MS_LOGIN_HOST.test(host);
+}
+
+export async function warnOnPasswordFocus(pageUrl: string, field?: HTMLInputElement): Promise<void> {
   const cfg = await getCredentialSettings();
   const reason = focusWarningReason(pageUrl, await getTrustedDomains(), cfg);
-  if (!reason) return;
+  if (reason === undefined) return;
+  const host = normalizeHost(new URL(pageUrl).hostname);
+  if (!reason) {
+    if (!field || !isRelayedMicrosoftLogin(field, host)) return;
+    showToast({
+      message: `Heedline: this is Microsoft's sign-in form, but it is served by ${host}, not by Microsoft. Pages that relay Microsoft's sign-in can take over your account even with MFA. Do not sign in here.`,
+      timeoutMs: 0,
+    });
+    await appendEvent({
+      kind: "cred_paste_warn",
+      site: host,
+      url: pageUrl,
+      reasons: ["RELAYED_MICROSOFT_LOGIN", "PASSWORD_FOCUS_WARNING"],
+      extra: { trigger: "password_focus" }
+    });
+    return;
+  }
   // Warn and dismiss only (RI-01): no trust or allow action on page-injected UI.
   showToast({ message: focusWarningMessage(reason.code), timeoutMs: 12000 });
   // Existing warn-only credential kind; `trigger` tells it apart from a paste.
   await appendEvent({
     kind: "cred_paste_warn",
-    site: normalizeHost(new URL(pageUrl).hostname),
+    site: host,
     url: pageUrl,
     reasons: [reason.code, "PASSWORD_FOCUS_WARNING"],
     extra: { trigger: "password_focus" }
