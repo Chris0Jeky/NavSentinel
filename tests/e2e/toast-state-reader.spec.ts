@@ -13,8 +13,10 @@ test("toast reader sees an idle shadow pill, then the later full card @regressio
   await page.evaluate(() => {
     const host = document.createElement("div");
     host.id = "__navsentinel_toast_host";
-    host.attachShadow({ mode: "open" }).innerHTML =
-      '<div class="body">   </div><div class="pill idle">Heedline blocked 4 navigations</div>';
+    // Closed, as the product's toast root is (#1142); keep the page's own reference.
+    const root = host.attachShadow({ mode: "closed" });
+    root.innerHTML = '<div class="body">   </div><div class="pill idle">Heedline blocked 4 navigations</div>';
+    (window as typeof window & { __toastRoot?: ShadowRoot }).__toastRoot = root;
     document.body.appendChild(host);
   });
   expect(await toastState(page)).toEqual({
@@ -23,7 +25,7 @@ test("toast reader sees an idle shadow pill, then the later full card @regressio
   });
 
   await page.evaluate(() => {
-    const root = document.querySelector("#__navsentinel_toast_host")?.shadowRoot;
+    const root = (window as typeof window & { __toastRoot?: ShadowRoot }).__toastRoot;
     if (!root) throw new Error("missing toast shadow");
     const decoy = document.createElement("button");
     decoy.textContent = "Decoy";

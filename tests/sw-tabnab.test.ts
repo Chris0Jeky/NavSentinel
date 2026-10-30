@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // wrote, then warns on activation when the registrable domain changed.
 
 type Message = { type: string; [key: string]: unknown };
-type TabInfo = { url?: string; active?: boolean; status?: string };
+type TabInfo = { url?: string; active?: boolean; status?: string; windowId?: number };
 
 function createEvent<T extends (...args: never[]) => unknown>() {
   const listeners: T[] = [];
@@ -42,7 +42,7 @@ async function setup(
     runtime: {
       id: "mock-id", lastError: undefined as { message: string } | undefined,
       getURL: (name: string) => `chrome-extension://mock-id/${name}`,
-      onMessage: createEvent<(message: Message, sender: { tab: { id: number } }, respond: () => void) => unknown>(),
+      onMessage: createEvent<(message: Message, sender: { tab: { id: number; windowId?: number | undefined } }, respond: () => void) => unknown>(),
       onInstalled: createEvent(), onStartup: createEvent(),
     },
     storage: { local: storageArea(), session: storageArea(), onChanged: createEvent() },
@@ -65,6 +65,7 @@ async function setup(
       query: vi.fn().mockResolvedValue([]),
       sendMessage: vi.fn((_tabId: number, _message: Message, callback?: () => void) => { callback?.(); }),
     },
+    windows: { onFocusChanged: createEvent<(windowId: number) => void>() },
   };
   vi.stubGlobal("chrome", browser);
   await import("../extension/src/sw/sw");
@@ -73,10 +74,10 @@ async function setup(
   if (lastUrl) swState.lastUrlByTab.set(10, lastUrl);
   browser.tabs.onCreated.emit({ id: 20, openerTabId: 10 });
   await flush();
-  const swap = async (childTabId = 20, writeUrl: string = SWAPPED) => {
+  const swap = async (childTabId = 20, writeUrl: string = SWAPPED, childWindowId?: number) => {
     tabs.get(10)!.url = SWAPPED;
     browser.runtime.onMessage.emit(
-      { type: "ns-dblclick-opener-nav", url: writeUrl, ts: Date.now() }, { tab: { id: childTabId } }, () => {});
+      { type: "ns-dblclick-opener-nav", url: writeUrl, ts: Date.now() }, { tab: { id: childTabId, windowId: childWindowId } }, () => {});
     await flush();
   };
   const activate = async (tabId = 10) => {
@@ -111,6 +112,33 @@ describe("reverse tabnabbing warning (#1172)", () => {
   it("does not record when the opener is the active tab", async () => {
     const { swState, swap } = await setup({ url: ORIGINAL, active: true });
     await swap();
+    expect(swState.tabnabPendingByTab.size).toBe(0);
+  });
+
+  it("records an active opener under a popup window and warns when its window regains focus (#1205)", async () => {
+    const { browser, swState, swap, warnings } = await setup({ url: ORIGINAL, active: true, windowId: 1 });
+    await swap(20, SWAPPED, 2);
+    expect(swState.tabnabPendingByTab.get(10)).toMatchObject({ origReg: "bank.example" });
+    // The swapped opener finishes loading while the user is still in the popup (Codex P2 on #1211).
+    browser.tabs.onUpdated.emit(10, { status: "complete" }, { id: 10, active: true, url: SWAPPED });
+    browser.windows.onFocusChanged.emit(-1);
+    browser.tabs.query.mockImplementation(async ({ windowId }: { windowId: number }) =>
+      windowId === 1 ? [{ id: 10 }] : [{ id: 20 }]);
+    browser.windows.onFocusChanged.emit(2);
+    await flush();
+    await flush();
+    expect(warnings()).toHaveLength(0);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(true);
+    browser.windows.onFocusChanged.emit(1);
+    await flush();
+    await flush();
+    expect(warnings()).toEqual([[10, { type: "ns-tabnab-warning", from: "bank.example" }, expect.any(Function)]]);
+    expect(swState.tabnabPendingByTab.has(10)).toBe(false);
+  });
+
+  it("does not record an active opener in the same window as the child", async () => {
+    const { swState, swap } = await setup({ url: ORIGINAL, active: true, windowId: 1 });
+    await swap(20, SWAPPED, 1);
     expect(swState.tabnabPendingByTab.size).toBe(0);
   });
 

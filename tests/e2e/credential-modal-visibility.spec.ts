@@ -3,8 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SUITE_SETTINGS_KEY } from "../../extension/src/shared/storage";
 import { DBLCLICK_WINDOW_MS } from "../../extension/src/shared/doubleclick_timing";
-import { evaluateInCredentialModal, getServiceWorker, waitForCredentialModal, clickModalButton, waitForNavSentinelBridge, waitForToastText } from "./extension_test_utils";
-import { waitForVisibleAction } from "../helpers/visible-ui-browser";
+import { evaluateInCredentialModal, evaluateInToast, focusToastButton, getServiceWorker, toastButtonPoint, waitForCredentialModal, clickModalButton, waitForNavSentinelBridge, waitForToastText } from "./extension_test_utils";
 
 for (const activation of ["pointer", "Enter", "Space"] as const) {
 test(`page CSS cannot turn an invisible credential prompt into approval; visible ${activation} works (#1139) @regression`, async () => {
@@ -103,22 +102,30 @@ test(`built toast fence refuses immediate approval and permits armed ${activatio
       return started;
     });
     await waitForToastText(page, "Blocked popup");
-    const button = page.locator("#__navsentinel_toast_host").getByRole("button", { name: "Allow once", exact: true });
+    // The toast root is closed (#1142): resolve the button through CDP, then
+    // drive real pointer or keyboard input at it.
     const activate = async () => {
-      if (activation === "pointer") await button.click();
-      else await button.press(activation);
+      if (activation === "pointer") {
+        const point = await toastButtonPoint(page, "Allow once");
+        await page.mouse.click(point.x, point.y);
+      } else {
+        await focusToastButton(page, "Allow once");
+        await page.keyboard.press(activation);
+      }
     };
     await activate();
     expect(await page.evaluate(() => performance.now()) - started, "first trusted input must precede arming").toBeLessThan(DBLCLICK_WINDOW_MS);
     expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank")).toHaveLength(0);
-    await expect(button, "refused approval keeps the original action pending").toBeVisible();
+    expect(await toastButtonPoint(page, "Allow once", 1000), "refused approval keeps the original action pending").toBeTruthy();
 
-    await waitForVisibleAction(button);
+    await page.waitForTimeout(DBLCLICK_WINDOW_MS + 300);
     const popupPromise = context.waitForEvent("page", { timeout: 5000 });
     await activate();
     const popup = await popupPromise;
     await expect(popup).toHaveURL("http://toast.test/approved");
-    await expect(button).toHaveCount(0);
+    await expect.poll(() => evaluateInToast(page, (roots) => roots
+      .flatMap((root) => Array.from(root.querySelectorAll("button")))
+      .filter((button) => button.textContent?.trim() === "Allow once").length)).toBe(0);
     expect(context.pages().filter((candidate) => candidate !== page && candidate.url() !== "about:blank")).toEqual([popup]);
   } finally {
     await context?.close();

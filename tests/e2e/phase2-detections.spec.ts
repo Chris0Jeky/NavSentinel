@@ -21,6 +21,7 @@ import { fileURLToPath } from "url";
 import {
   assertNoToastFor,
   clickToastButton,
+  evaluateInToast,
   getGymBaseUrl,
   getServiceWorker,
   updateNavigationSettings,
@@ -832,8 +833,9 @@ test.describe("DOM Mutation Monitor", () => {
       await page.waitForSelector("#trap-b", { state: "attached", timeout: 8000 });
       await waitForToastMatch(page, /overlay hidden/i, 8000);
 
-      await expect(page.locator("#__navsentinel_toast_host .brief-recovery"))
-        .toHaveCount(0, { timeout: 3000 });
+      await expect.poll(() => evaluateInToast(page, (roots) =>
+        roots.reduce((count, root) => count + root.querySelectorAll(".brief-recovery").length, 0),
+      ), { timeout: 3000, intervals: [100] }).toBe(0);
       await page.evaluate(() => {
         const api = (window as typeof window & {
           __navsentinelMutation05?: { injectNext: (source?: string) => string | null };
