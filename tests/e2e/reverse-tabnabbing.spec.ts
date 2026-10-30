@@ -19,7 +19,7 @@ import {
 const WARNING = /Another tab changed this page from site-a\.test while you were away/;
 
 // Device-code phishing shares this delivery path with `kind: "devicecode"`.
-const DEVICE_CODE = /lure\.test sent you to this device sign-in page\. Only enter a code that your own TV/;
+const DEVICE_CODE = /lure\.test sent you to this device sign-in page\. Only enter a code your own TV/;
 
 async function sendWarning(context: BrowserContext, page: Page, extra: Record<string, unknown> = {}) {
   const worker = await getServiceWorker(context);

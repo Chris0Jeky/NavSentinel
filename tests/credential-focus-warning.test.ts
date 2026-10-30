@@ -195,3 +195,47 @@ describe("credential_guard password-focus hook", () => {
     expect(showToast).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("password-focus warning for a relayed Microsoft sign-in form (AiTM)", () => {
+  const field = (id: string, name: string): HTMLInputElement => {
+    const input = document.createElement("input");
+    input.type = "password";
+    input.id = id;
+    input.name = name;
+    return input;
+  };
+
+  it("flags Microsoft's password field on any host that is not Microsoft's", async () => {
+    const { isRelayedMicrosoftLogin } = await import("../extension/src/content/credential_focus_warning");
+    expect(isRelayedMicrosoftLogin(field("i0118", "passwd"), "login.secure-docs-share.com")).toBe(true);
+    for (const host of ["login.microsoftonline.com", "login.live.com", "login.microsoftonline.us", "login.windows.net", "login.chinacloudapi.cn", "contoso.ciamlogin.com"]) {
+      expect(isRelayedMicrosoftLogin(field("i0118", "passwd"), host), host).toBe(false);
+    }
+    // Label boundaries, and parents that also host anyone's content.
+    for (const host of ["evil-microsoftonline.com", "login.microsoftonline.com.evil.example", "phish.web.core.windows.net", "x.blob.core.chinacloudapi.cn", "tenant.b2clogin.com"]) {
+      expect(isRelayedMicrosoftLogin(field("i0118", "passwd"), host), host).toBe(true);
+    }
+    // Ordinary password fields, and look-alikes of only one attribute, are not Microsoft's form.
+    expect(isRelayedMicrosoftLogin(field("password", "password"), "acme.example")).toBe(false);
+    expect(isRelayedMicrosoftLogin(field("i0118", "password"), "acme.example")).toBe(false);
+    expect(isRelayedMicrosoftLogin(field("pw", "passwd"), "acme.example")).toBe(false);
+  });
+
+  it("warns at focus with no address signal, and never on an off-limits page", async () => {
+    const { focusWarningReason, warnOnPasswordFocus } = await import("../extension/src/content/credential_focus_warning");
+    vi.mocked(getCredentialSettings).mockResolvedValue(smart);
+    vi.mocked(getTrustedDomains).mockResolvedValue([]);
+    expect(focusWarningReason("https://login.secure-docs-share.com/", [], smart)).toBeNull();
+    expect(focusWarningReason("https://login.secure-docs-share.com/", [], off)).toBeUndefined();
+    vi.mocked(showToast).mockClear();
+    vi.mocked(appendEvent).mockClear();
+    await warnOnPasswordFocus("https://login.secure-docs-share.com/", field("i0118", "passwd"));
+    expect(vi.mocked(showToast).mock.calls[0]?.[0].message).toContain("Microsoft's sign-in form, but it is served by login.secure-docs-share.com");
+    expect(vi.mocked(showToast).mock.calls[0]?.[0].timeoutMs).toBe(0);
+    expect(appendEvent).toHaveBeenCalledWith(expect.objectContaining({ reasons: ["RELAYED_MICROSOFT_LOGIN", "PASSWORD_FOCUS_WARNING"] }));
+    vi.mocked(showToast).mockClear();
+    await warnOnPasswordFocus("https://acme.example/login", field("password", "password"));
+    await warnOnPasswordFocus("https://login.secure-docs-share.com/");
+    expect(showToast).not.toHaveBeenCalled();
+  });
+});

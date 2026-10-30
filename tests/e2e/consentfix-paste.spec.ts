@@ -62,7 +62,7 @@ test("ConsentFix: a pasted localhost sign-in URL with a code is stopped @regress
     await waitForNavSentinelBridge(page);
 
     await pasteText(page, "http://localhost:8400/?code=0.AXoA_example&state=abc");
-    await waitForToastMatch(page, /stopped this: it carries a sign-in code/i, 6000);
+    await waitForToastMatch(page, /stopped this: it is a sign-in code/i, 6000);
     expect(await page.inputValue("#box")).toBe("");
     expect(await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen)).toEqual([]);
     // A plain retry (what a coached victim does) is still stopped.

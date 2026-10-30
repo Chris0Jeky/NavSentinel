@@ -813,7 +813,7 @@ function guardConsentFix(e: Event, text: string): void {
   e.preventDefault();
   e.stopImmediatePropagation();
   showToast({
-    message: "Heedline stopped this: it carries a sign-in code for your account. Anyone who asks you to paste or send one (a page, a chat or an email) is almost certainly trying to take over your account. Do not share it.",
+    message: "Heedline stopped this: it is a sign-in code for your account. Whoever asks you to paste or send it is almost certainly trying to take over your account.",
     timeoutMs: 0,
     actions: [{ label: "Allow once (I meant to)", onClick: () => { consentFixAllowed = text; } }],
   });
@@ -839,7 +839,7 @@ addPersistentListener(window, "focusin", (e) => {
     !isPasswordTypeInput(t) || !isVisiblePasswordField(t)) return;
   focusChecked = true;
   void import("./credential_focus_warning")
-    .then((m) => m.warnOnPasswordFocus(pageIdentity().href))
+    .then((m) => m.warnOnPasswordFocus(pageIdentity().href, t))
     .catch((err) => { console.warn("[NavSentinel] password focus check failed:", err); });
 });
 
