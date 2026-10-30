@@ -53,14 +53,16 @@ describe("shouldNeutralizeClipboard", () => {
     expect(shouldNeutralizeClipboard({ ...COMMAND, reasons: ["clipboard_command_with_lure_text"] })).toBe(true);
   });
 
-  it("never acts in Off mode, sticky or not", () => {
+  it("never acts in Off mode", () => {
     expect(shouldNeutralizeClipboard({ ...COMMAND, mode: "off" })).toBe(false);
-    expect(shouldNeutralizeClipboard({ ...COMMAND, mode: "off" }, true)).toBe(false);
   });
 
   it("never acts on a benign current receipt, whatever older receipts said", () => {
     expect(shouldNeutralizeClipboard({ ...COMMAND, command: false })).toBe(false);
-    expect(shouldNeutralizeClipboard({ ...COMMAND, command: false }, true)).toBe(false);
+  });
+
+  it("never acts on a command write behind an overlay alone (an app modal's Copy button)", () => {
+    expect(shouldNeutralizeClipboard({ ...COMMAND, reasons: ["clipboard_command_with_overlay"] })).toBe(false);
   });
 
   it("never acts on captcha text, a non-command write, or no detection", () => {
@@ -69,13 +71,12 @@ describe("shouldNeutralizeClipboard", () => {
     expect(shouldNeutralizeClipboard({ ...COMMAND, detected: false })).toBe(false);
   });
 
-  it("stays on for a page already neutralized once", () => {
+  it("needs a detection on the current scan", () => {
     expect(shouldNeutralizeClipboard(BARE_COMMAND)).toBe(false);
-    expect(shouldNeutralizeClipboard(BARE_COMMAND, true)).toBe(true);
   });
 
   it("honours the product switch", () => {
-    expect(shouldNeutralizeClipboard(COMMAND, true, false)).toBe(false);
+    expect(shouldNeutralizeClipboard(COMMAND, false)).toBe(false);
   });
 });
 
@@ -156,18 +157,12 @@ describe("onClickFixReceipt", () => {
     }
   });
 
-  it("stays sticky after one success: a bare command write later is still replaced", async () => {
+  it("is not sticky: after one success, a later command write with no lure is left alone", async () => {
     const clip = fakeClipboard();
+    await expect(onClickFixReceipt(COMMAND, clip)).resolves.toBe(true);
+    clip.value = "user's install command";
     await expect(onClickFixReceipt(BARE_COMMAND, clip)).resolves.toBe(false);
-    await onClickFixReceipt(COMMAND, clip);
-    clip.value = "page command";
-    await expect(onClickFixReceipt(BARE_COMMAND, clip)).resolves.toBe(true);
-    expect(clip.value).toBe(CLIPBOARD_WARNING_TEXT);
-  });
-
-  it("is not sticky after only failed writes", async () => {
-    await onClickFixReceipt(COMMAND, rejecting());
-    await expect(onClickFixReceipt(BARE_COMMAND, fakeClipboard())).resolves.toBe(false);
+    expect(clip.value).toBe("user's install command");
   });
 
   it("counts only successful writes toward the per-page cap", async () => {

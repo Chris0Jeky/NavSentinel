@@ -38,11 +38,20 @@ const WRITE_TIMEOUT_MS = 1000;
 /** The follow-up toast and journal entry repeat at most this often. */
 const ALERT_INTERVAL_MS = 10_000;
 
-/**
- * Detector reasons that prove a command-like page write behind a lure.
- * The lure-text code arrives with the overlay-free ClickFix branch (#1167).
- */
+/** Detector reasons for a command-like page write (#1167 adds the lure-text one). */
 const COMMAND_WRITE_REASONS = ["clipboard_command_with_overlay", "clipboard_command_with_lure_text"];
+
+/**
+ * Lure evidence that must accompany the write. An overlay alone is not enough:
+ * an ordinary app modal with a Copy button for an install command qualifies as
+ * an overlay, and overwriting what the user deliberately copied is a harm (#1191 review).
+ */
+const LURE_REASONS = [
+  "clipboard_command_with_lure_text",
+  "clickfix_instruction_pattern",
+  "clickfix_paste_instruction",
+  "clickfix_captcha_text_with_overlay",
+];
 
 export interface NeutralizeInput {
   mode: Mode;
@@ -54,18 +63,19 @@ export interface NeutralizeInput {
 }
 
 /**
- * Neutralize only when THIS receipt is command-like, and either the scan found
- * a command write behind a lure or the page was already neutralized once
- * (sticky, so a page cannot drop its overlay and write again unchallenged).
- * Never on a benign write, captcha text alone, or in Off mode.
+ * Neutralize only when THIS receipt is command-like and the scan found a
+ * command write together with lure text (fake verification, Run-dialog or
+ * paste instructions). No stickiness: each write is judged on its own scan, so
+ * one false positive never turns into overwriting every later copy.
+ * Never on a benign write, an overlay alone, captcha text alone, or in Off mode.
  */
 export function shouldNeutralizeClipboard(
   input: NeutralizeInput,
-  sticky = false,
   enabled = CLIPBOARD_NEUTRALIZE_ENABLED,
 ): boolean {
-  if (!enabled || input.mode === "off" || !input.command) return false;
-  return sticky || (input.detected && input.reasons.some((r) => COMMAND_WRITE_REASONS.includes(r)));
+  if (!enabled || input.mode === "off" || !input.command || !input.detected) return false;
+  return input.reasons.some((r) => COMMAND_WRITE_REASONS.includes(r)) &&
+    input.reasons.some((r) => LURE_REASONS.includes(r));
 }
 
 let successes = 0;
@@ -97,7 +107,7 @@ export async function onClickFixReceipt(
   clipboard: Pick<Clipboard, "writeText"> | undefined = globalThis.navigator?.clipboard,
   now: () => number = Date.now,
 ): Promise<boolean> {
-  if (!shouldNeutralizeClipboard(input, successes > 0)) return false;
+  if (!shouldNeutralizeClipboard(input)) return false;
   if (successes >= MAX_NEUTRALIZATIONS_PER_PAGE) return false;
   if (!(await writeWarning(clipboard))) return false;
   successes++;
