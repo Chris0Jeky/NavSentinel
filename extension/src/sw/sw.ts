@@ -436,7 +436,7 @@ const DEVICE_PAGES: ReadonlyArray<readonly [RegExp, RegExp]> = [
   [/^(?:accounts\.google\.com\/(?:o\/oauth2\/device\/usercode|device)|(?:www\.)?google\.com\/device)(?:[/?#]|$)/i,
     /^(?:accounts|myaccount)\.google\.com\//i],
   // Signed out, github.com/login/device redirects to /login?return_to=...%2Flogin%2Fdevice.
-  [/^(?:www\.)?github\.com\/login(?:\/device(?:[/?#]|$)|\?\S*return_to=[^&]*%2Flogin%2Fdevice)/i,
+  [/^(?:www\.)?github\.com\/login(?:\/device(?:[/?#]|$)|\?\S*return_to=[^&]*%2Flogin%2Fdevice(?:%2F|%3F|%23|&|$))/i,
     /^(?:www\.)?github\.com\/(?:login|sessions?|settings)(?:[/?#]|$)/i],
 ];
 
@@ -1514,7 +1514,8 @@ function onActivatedHandler(tabId: number): void {
     // Keep the entry while loading (onUpdated retries) or until delivery succeeds.
     if (tab.status === "loading") return;
     const reg = httpRegistrable(tab.url);
-    if (!reg || reg === pending.origReg) return drop();
+    // A device-code entry's source was already vetted (a provider's own Docs or repo pages warn).
+    if (!reg || (reg === pending.origReg && !pending.k)) return drop();
     chrome.tabs.sendMessage(tabId, { type: "ns-tabnab-warning", from: pending.origReg, ...(pending.k && { kind: "devicecode" }) }, () => {
       // The listener never responds, so a delivered message still reports "message port
       // closed"; only a missing receiver means the toast was not shown.

@@ -175,6 +175,27 @@ describe("device-code phishing warning", () => {
     expect(warnings()).toEqual([[30, { type: "ns-tabnab-warning", from: "docs-share.example", kind: "devicecode" }, expect.any(Function)]]);
   });
 
+  it("warns for a lure on the device page's own provider (Docs to Google, a repo to GitHub)", async () => {
+    for (const [source, target, from] of [
+      ["https://docs.google.com/document/d/x", "https://accounts.google.com/o/oauth2/device/usercode", "google.com"],
+      ["https://github.com/someone/repo", "https://github.com/login/device", "github.com"],
+    ]) {
+      const { commit, complete, warnings, swState } = await setup();
+      swState.lastUrlByTab.set(30, source);
+      await commit(target);
+      await complete();
+      expect(warnings()).toEqual([[30, { type: "ns-tabnab-warning", from, kind: "devicecode" }, expect.any(Function)]]);
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("does not treat look-alike GitHub return_to paths as the device page", async () => {
+    const { commit, swState } = await setup();
+    await commit("https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Flogin%2Fdevices");
+    expect(swState.tabnabPendingByTab.size).toBe(0);
+  });
+
   it("treats a blob: page as the site that made it", async () => {
     const { commit, swState } = await setup();
     swState.lastUrlByTab.set(30, "blob:https://evil.example/6c1c0d2e-0000-4000-8000-000000000000");
