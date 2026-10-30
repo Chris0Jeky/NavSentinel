@@ -83,9 +83,10 @@ export function fmtTime(ts: number): string {
 }
 
 
-/** Display strings for the options Prompt Statistics panel. */
+/** Display strings for the options Recorded choices panel. */
 export interface PromptOutcomeStats {
   total: number;
+  historySummary: string;
   allowRate: string;
   blockRate: string;
   trustRate: string;
@@ -95,19 +96,18 @@ export interface PromptOutcomeStats {
 }
 
 /**
- * Aggregate prompt-outcome entries into the display strings the options Prompt
- * Statistics panel renders. Pure (no DOM) so the aggregation is unit-testable.
+ * Aggregate retained choices into display strings. Pure (no DOM).
  *
  * The buckets partition EVERY PromptOutcome variant:
  *   allows  = allow | allow_once | always_allow   blocks = block | cancel
  *   trusts  = trust                               dismisses = dismiss
- * so the four displayed rates sum to 100%. The bare `allow` variant was
+ * so the four displayed shares sum to 100%. The bare `allow` variant was
  * previously dropped from the allows bucket — it was counted in `total` but in
  * none of the four arrays, understating the allow-rate and excluding those
  * scores from the allow average. (#367)
  */
 export function computePromptOutcomeStats(
-  outcomes: ReadonlyArray<{ outcome: PromptOutcome; score: number }>,
+  outcomes: ReadonlyArray<{ outcome: PromptOutcome; score: number; ts: number }>,
 ): PromptOutcomeStats {
   // Single pass over the (bounded, ~500-entry) outcome list — one bucket per entry,
   // no intermediate filter/map allocations.
@@ -117,7 +117,13 @@ export function computePromptOutcomeStats(
   let dismissCount = 0;
   const allowScores: number[] = [];
   const blockScores: number[] = [];
-  for (const { outcome, score } of outcomes) {
+  let oldest = Infinity;
+  let newest = -Infinity;
+  for (const { outcome, score, ts } of outcomes) {
+    if (Number.isFinite(new Date(ts).getTime())) {
+      oldest = Math.min(oldest, ts);
+      newest = Math.max(newest, ts);
+    }
     if (outcome === "allow" || outcome === "allow_once" || outcome === "always_allow") {
       allowCount++;
       allowScores.push(score);
@@ -133,6 +139,8 @@ export function computePromptOutcomeStats(
   const total = outcomes.length;
   return {
     total,
+    historySummary: `Retained sample: ${total} choice${total === 1 ? "" : "s"} (cap: 500). ` +
+      (Number.isFinite(oldest) ? `Retained time span: ${fmtTime(oldest)} to ${fmtTime(newest)}.` : "Retained time span unavailable."),
     allowRate: pct(allowCount, total),
     blockRate: pct(blockCount, total),
     trustRate: pct(trustCount, total),
