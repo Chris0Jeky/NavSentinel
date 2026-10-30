@@ -85,7 +85,8 @@ describe("manifest permissions", () => {
     expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}Suffix\` | x |`)).toEqual([`${field}: ${fakeGrant}`]);
     // Outside the permission table a backticked mention is not a disclosure.
     expect(findUndisclosedGrants(copy, `${disclosure}\nWe never use \`${fakeGrant}\`.`)).toEqual([`${field}: ${fakeGrant}`]);
-    expect(findUndisclosedGrants(copy, `${disclosure}\n| \`${fakeGrant}\` | x |`)).toEqual([]);
+    const withRow = disclosure.replace("|-----------|---------------|", `|-----------|---------------|\n| \`${fakeGrant}\` | x |`);
+    expect(findUndisclosedGrants(copy, withRow)).toEqual([]);
   });
 
   it("does not count grants in other sections or justification cells", () => {
