@@ -8,7 +8,7 @@ const MIN_CONTROL_PX = 10;
 // never-clicked frame (a cleanup chip in an ad frame) unable to arm before its first
 // click, so subframes require focus once the frame has had it (#1225). A frame that
 // had focus earlier must not arm a later prompt behind a popup that holds it now.
-let hadFocus = window.top === window || document.hasFocus();
+let hadFocus = false;
 // When this frame last lost or regained window focus. A blur shorter than a sample
 // interval (a click on a covering popup or PiP window) still restarts arming.
 let unfocusedAt = -Infinity;
@@ -22,8 +22,12 @@ function focusChange(event: Event): void {
   if (away) unfocusedAt = performance.now();
   if (event.type === "focus") away = false;
 }
-window.addEventListener("blur", focusChange, true);
-window.addEventListener("focus", focusChange, true);
+// Node-environment tests import the toast chain without a DOM.
+if (typeof window === "object") {
+  hadFocus = window.top === window || document.hasFocus();
+  window.addEventListener("blur", focusChange, true);
+  window.addEventListener("focus", focusChange, true);
+}
 
 /** Security controls need a painted, unobscured exposure window, not just trusted input. */
 export function visibleActionGate(host: HTMLElement, root: ShadowRoot, surface: HTMLElement) {
