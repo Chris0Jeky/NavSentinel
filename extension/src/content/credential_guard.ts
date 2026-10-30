@@ -17,13 +17,25 @@ import {
   isCrossSiteCredentialAction,
   shouldPromptCredentialSubmit
 } from "./credential_guard_model";
-import { analyzePageContent } from "./content_analyzer";
 import { checkSRI } from "./sri_checker";
 import { queryPasswordInputs } from "./password_field";
 import { addPersistentListener, documentRewritten } from "./persistent_listener";
 import { domAttribute, domProperty } from "./dom_access";
 
 const allowNextSubmit = new WeakSet<HTMLFormElement>();
+
+// The phishing-content fingerprints are read only after a password submit has
+// been held and the async settings reads are done, so they load lazily and stay
+// out of the always-on credential chunk (perf budget). A failed load is retried
+// on the next submit; meanwhile it drops the signal like a thrown analyzer.
+let contentAnalyzer: Promise<typeof import("./content_analyzer")> | null = null;
+
+function loadContentAnalyzer(): Promise<typeof import("./content_analyzer")> {
+  return contentAnalyzer ??= import("./content_analyzer").catch((err: unknown) => {
+    contentAnalyzer = null;
+    throw err;
+  });
+}
 
 // In this isolated world, self.origin is the browser's inherited security
 // origin, unlike location.origin ("null" in about:blank/about:srcdoc).
@@ -452,6 +464,7 @@ async function handleSubmit(evt: SubmitEvent): Promise<void> {
       try {
         const pageHost = normalizeHost(pageIdentity().hostname);
         const pageDomain = getRegistrableDomain(pageHost) || pageHost;
+        const { analyzePageContent } = await loadContentAnalyzer();
         const contentAnalysis = analyzePageContent(document, pageDomain);
         if (contentAnalysis.score > 0) {
           const boost = Math.min(contentAnalysis.score, 100 - risk.score);

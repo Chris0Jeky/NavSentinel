@@ -91,6 +91,33 @@ describe("independent diagnostic artifact reconstruction", () => {
 });
 
 describe("receipt file/report binding", () => {
+  it.skipIf(Number(process.versions.node.split(".")[0]) < 24).each([true, false])(
+    "preserves an existing output directory (qualification present: %s)", (hasQualification) => fixture((root) => {
+      const output = path.join(root, "existing-output");
+      fs.mkdirSync(output);
+      const qualification = path.join(output, "qualification.json");
+      const original = '{"qualified":true,"evidence":"original"}\n';
+      if (hasQualification) fs.writeFileSync(qualification, original);
+      const result = spawnSync(process.execPath, [entrypoint, "run", output, "a".repeat(40)], { encoding: "utf8" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("pair output already exists");
+      expect(fs.readdirSync(output)).toEqual(hasQualification ? ["qualification.json"] : []);
+      if (hasQualification) expect(fs.readFileSync(qualification, "utf8")).toBe(original);
+    }),
+  );
+
+  it.skipIf(Number(process.versions.node.split(".")[0]) < 24)(
+    "a failed validate replaces a stale qualified verdict", () => fixture((root) => {
+      const output = path.join(root, "stale-output");
+      fs.mkdirSync(output);
+      const qualification = path.join(output, "qualification.json");
+      fs.writeFileSync(qualification, '{"qualified":true}\n');
+      const result = spawnSync(process.execPath, [entrypoint, "validate", output, "a".repeat(40)], { encoding: "utf8" });
+      expect(result.status).toBe(1);
+      expect(JSON.parse(fs.readFileSync(qualification, "utf8")).qualified).toBe(false);
+    }),
+  );
+
   it("binds Playwright's copied attachment and rejects altered/outside/duplicate evidence", () => fixture((root) => {
     const fresh = path.join(root, "fresh-run");
     fs.mkdirSync(path.join(fresh, "playwright", "attachments"), { recursive: true });
