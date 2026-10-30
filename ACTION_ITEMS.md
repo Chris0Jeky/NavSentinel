@@ -254,6 +254,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-61 | #1155 main_guard and its bridge in about:blank/srcdoc/blob frames (#1134, MAIN world) | merge commit `e96cc756` (merged 2026-10-30) | OPEN — not run |
 | AI-62 | #1187 credential backstop after `document.open()` (#1113) | merge commit `2f28d476` (merged 2026-10-30) | OPEN — not run |
 | AI-63 | #1152 overlay cleanup: deep and shadow-root foreground traps (#564, opt-in) | merge commit `2b6523af` (merged 2026-10-30) | OPEN — not run |
+| AI-66 | #1183 tech-support-scam fullscreen locker exit | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1183) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -282,6 +283,11 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
   Export shows "... include explanations that are not part of the portable export." and the downloaded file
   matches the preview. A failure gets a revert PR for the merge commit.
+
+- **AI-66 (#1183):** with the Gym served (`npm run gym:serve`): (1) open `gym/rw-fullscreen-locker.html`, press its
+  button: fullscreen exits almost at once and the toast "Heedline closed a full-screen warning page..." appears;
+  (2) on `gym/rw-fullscreen-benign.html` and a real fullscreen video (any video site, `f` key) or a slide deck in
+  present mode, fullscreen stays. A failure gets a revert PR for the merge commit.
 
 - **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
   (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
