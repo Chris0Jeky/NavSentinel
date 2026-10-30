@@ -104,6 +104,13 @@ describe("document_start focus/PiP fence", () => {
     }
   });
 
+  it("replies to the tab-wide broadcast only while it sees PiP (#1249)", () => {
+    expect(ask({ type: "ns-pip", any: true })).toEqual([]);
+    documentPip.window = {};
+    expect(ask({ type: "ns-pip", any: true })).toEqual([true]);
+    documentPip.window = null;
+  });
+
   it("answers no other message", () => {
     expect(ask({ type: "ns-rollback" })).toEqual([]);
     expect(ask(null)).toEqual([]);

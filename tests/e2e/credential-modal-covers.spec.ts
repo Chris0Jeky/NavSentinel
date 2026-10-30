@@ -357,6 +357,17 @@ for (const [label, blob] of [["src-less", false], ["blob:", true]] as const) {
   });
 }
 
+// #1249 verification: a sandboxed blob: frame has an opaque origin, so getAllFrames
+// omits it and no parent can read it. Only the tab-wide broadcast reaches it.
+test("Proceed once in the top frame refuses while PiP is open in a sandboxed blob: frame (#1249) @regression", async () => {
+  test.setTimeout(90_000);
+  const markup = `<iframe name="player" sandbox="allow-scripts" width="300" height="200"></iframe><script>
+    document.querySelector("iframe[name=player]").src = URL.createObjectURL(new Blob([${
+      JSON.stringify(player(IN_BODY)).replace(/<\//g, "<\\/")}], { type: "text/html" }));
+  </script>`;
+  await refusedUnderFramePip("frame-pip-sandboxed-blob", "", approvesAfterExit, markup);
+});
+
 test("removing a frame with PiP open no longer leaves approvals refused (#1244) @regression", async () => {
   test.setTimeout(90_000);
   await refusedUnderFramePip("frame-pip-removed", player(IN_BODY), async (page, frame, point, posts) => {

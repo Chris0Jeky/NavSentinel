@@ -72,9 +72,20 @@ it("asks every listed frame of the sender's tab and answers closed when all say 
   expect(await ask()).toEqual({ kept: true, reply: false });
   expect(browser.webNavigation.getAllFrames).toHaveBeenCalledWith({ tabId: 7 });
   expect(browser.tabs.sendMessage.mock.calls).toEqual([
+    [7, { type: "ns-pip", any: true }, {}],
     [7, { type: "ns-pip" }, { frameId: 0 }],
     [7, { type: "ns-pip" }, { frameId: 3 }],
   ]);
+});
+
+it("answers open when only the tab-wide broadcast is claimed, by a literal true (#1249)", async () => {
+  // A sandboxed blob: frame is not listed; only it replies to the broadcast.
+  answers.set(-1, async () => true);
+  expect((await ask()).reply).toBe(true);
+  answers.set(-1, async () => "yes");
+  expect((await ask()).reply).toBe(false);
+  answers.set(-1, async () => undefined);
+  expect((await ask()).reply).toBe(false);
 });
 
 it("answers open when any frame says open, counting only a literal true", async () => {
@@ -91,7 +102,7 @@ it("asks a frame created after PiP opened, and forgets a removed one (#1244 item
   expect((await ask()).reply).toBe(true);
   frames = [{ frameId: 0 }];
   expect((await ask()).reply).toBe(false);
-  expect(browser.tabs.sendMessage.mock.calls.map(([, , options]) => options?.frameId)).toEqual([0, 9, 0]);
+  expect(browser.tabs.sendMessage.mock.calls.map(([, , options]) => options?.frameId)).toEqual([undefined, 0, 9, undefined, 0]);
 });
 
 it("counts a frame that cannot answer as closed", async () => {

@@ -710,13 +710,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Each frame's loader answers from ground truth (UI_FOCUS_FENCE). A frame that
   // cannot answer (no content script, gone mid-query) counts as closed; one that
   // never answers holds the reply, and the asking gate stays refused. No frame
-  // list (not even the top frame) counts as open.
+  // list (not even the top frame) counts as open. The tab-wide {any:true}
+  // broadcast also reaches frames the list omits; only a frame that sees PiP replies.
   if (message.type === "ns-pip") {
     const tabId = sender.tab?.id;
     if (tabId === undefined) return;
+    const ask = (message: { type: string; any?: true }, options: chrome.tabs.MessageSendOptions = {}) =>
+      chrome.tabs.sendMessage(tabId, message, options).then((open) => open === true, () => false);
     chrome.webNavigation.getAllFrames({ tabId })
-      .then((frames) => frames?.length ? Promise.all(frames.map(({ frameId }) =>
-        chrome.tabs.sendMessage(tabId, { type: "ns-pip" }, { frameId }).then((open) => open === true, () => false))) : [true])
+      .then((frames) => frames?.length ? Promise.all([ask({ type: "ns-pip", any: true }),
+        ...frames.map(({ frameId }) => ask({ type: "ns-pip" }, { frameId }))]) : [true])
       .then((answers) => sendResponse(answers.includes(true)), () => sendResponse(true));
     return true;
   }
