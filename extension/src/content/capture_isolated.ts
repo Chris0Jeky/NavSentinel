@@ -1019,6 +1019,16 @@ function handleClickFixScan(command = false): void {
   });
 }
 
+// --- Tech-support-scam fullscreen locker (#1171) ---
+// The guard, its toast and its event load on the first fullscreenchange: almost
+// every page never needs them, and the capture chunk has little perf headroom.
+// The module system caches the chunk after the first load, so no promise is kept here.
+document.addEventListener("fullscreenchange", () => {
+  if (settings.defaultMode !== "off" && document.fullscreenElement) {
+    import("./fullscreen_guard").then((guard) => guard.onFullscreenChange(() => sendIconUpdate("red")), () => {});
+  }
+}, true);
+
 // --- Mutation monitor ---
 
 const MUTATION_START_DELAY_MS = 2000;

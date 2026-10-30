@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RW - Fullscreen Benign Contrast (inert)</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto; padding: 34px 18px; background: #f4f4f4; color: #222; }
+      #player { background: #000; }
+      #player canvas { display: block; width: 100%; height: 100%; }
+      #slide { background: #123a63; color: #fff; padding: 48px; box-sizing: border-box; text-align: center; }
+      .status { font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <h1>RW - Fullscreen benign contrast</h1>
+    <p>
+      Inert Gym fixture. Legitimate fullscreen uses that Heedline must leave alone: a canvas standing in
+      for a video or game, and a slide that mentions a virus and a phone number as plain content.
+    </p>
+    <button id="enter-player" type="button">Fullscreen video-like canvas</button>
+    <button id="enter-slide" type="button">Fullscreen slide</button>
+    <p id="player-status" class="status" data-fullscreen="no">Player fullscreen: no</p>
+    <p id="slide-status" class="status" data-fullscreen="no">Slide fullscreen: no</p>
+
+    <div id="player" data-gym="fullscreen-player"><canvas id="screen" width="640" height="360"></canvas></div>
+
+    <div id="slide" data-gym="fullscreen-slide">
+      <h1>Quarterly all-hands</h1>
+      <p>Agenda: roadmap, hiring, and how antivirus software quarantines a virus.</p>
+      <p>Questions afterwards: room 5, ext. 555-0142.</p>
+    </div>
+
+    <script>
+      const player = document.getElementById('player');
+      const slide = document.getElementById('slide');
+      const canvas = document.getElementById('screen');
+      const ctx = canvas.getContext('2d');
+      let frame = 0;
+      const draw = () => {
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#6cf';
+        ctx.fillRect((frame * 4) % canvas.width, 150, 60, 60);
+        frame += 1;
+        requestAnimationFrame(draw);
+      };
+      draw();
+      const mark = (el, id, label) => {
+        const node = document.getElementById(id);
+        const on = document.fullscreenElement === el;
+        node.textContent = label + ' fullscreen: ' + (on ? 'yes' : 'no');
+        node.dataset.fullscreen = on ? 'yes' : 'no';
+      };
+      document.addEventListener('fullscreenchange', () => {
+        mark(player, 'player-status', 'Player');
+        mark(slide, 'slide-status', 'Slide');
+      });
+      document.getElementById('enter-player').addEventListener('click', () => { player.requestFullscreen().catch(() => {}); });
+      document.getElementById('enter-slide').addEventListener('click', () => { slide.requestFullscreen().catch(() => {}); });
+    </script>
+  </body>
+</html>

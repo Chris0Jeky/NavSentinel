@@ -254,6 +254,10 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-61 | #1155 main_guard and its bridge in about:blank/srcdoc/blob frames (#1134, MAIN world) | merge commit `e96cc756` (merged 2026-10-30) | OPEN — not run |
 | AI-62 | #1187 credential backstop after `document.open()` (#1113) | merge commit `2f28d476` (merged 2026-10-30) | OPEN — not run |
 | AI-63 | #1152 overlay cleanup: deep and shadow-root foreground traps (#564, opt-in) | merge commit `2b6523af` (merged 2026-10-30) | OPEN — not run |
+| AI-66 | #1183 tech-support-scam fullscreen locker exit, re-landed by #1210 | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1210) (candidate until merged) | OPEN — not run |
+| AI-68 | #1199 credential risk decodes punycode labels (homograph lookalikes, #1196) | merge commit `025b9dc2` (merged 2026-10-30) | OPEN — not run |
+| AI-69 | #1204 reverse-tabnabbing warning when another tab swapped a hidden page (#1172) | merge commit `3ff1417e` (merged 2026-10-30) | OPEN — not run |
+| AI-70 | #1211 reverse-tabnabbing warning for openers under popup windows (#1205) | merge commit `177b7ace` (merged 2026-10-30) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -278,10 +282,44 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   traps are hidden on load with an Undo card. Open `?case=deep-benign`: the slotted dialog panel stays visible. Then check a fullscreen video and a page with a cookie banner stay usable
   (residual risks are tracked in #1189). A failure gets a revert PR for `2b6523af`.
 
+- **AI-68 (#1199):** dummy credentials only. (a) Serve the Gym without a host check:
+  `py -m http.server 8080 --directory gym`. (b) Quit Chrome fully (no background processes), relaunch the
+  profile that has the unpacked build with
+  `--host-resolver-rules="MAP xn--pypal-4ve.com 127.0.0.1, MAP xn--mller-kva.de 127.0.0.1, MAP xn--wgv71a.jp 127.0.0.1"`,
+  and confirm Heedline is still loaded. (1) Type the full URL `http://xn--pypal-4ve.com:8080/content-fp-03-legit-login.html`,
+  enter a dummy password and submit: the prompt lists a mixed-alphabet reason ("mixes scripts") and a brand
+  look-alike ("spoofing brand paypal"); with `paypal.com` in Trusted domains it also lists "similar to trusted
+  domain". Cancel. (2) Do the same on `http://xn--mller-kva.de:8080/...` and `http://xn--wgv71a.jp:8080/...`:
+  "Hostname contains punycode (xn--)" and the plain-HTTP and untrusted-site lines are expected for every xn--
+  host and are not a failure; a failure is any "mixes scripts", "similar to trusted domain" or "spoofing brand"
+  line on these two. Afterwards remove `paypal.com` from Trusted domains if you added it and relaunch Chrome
+  normally. A failure gets a revert PR for `025b9dc2`.
+
+- **AI-69 (#1204):** with the Gym served (`npm run gym:serve`): (1) in tab A open `http://localhost:5173/`, run
+  `window.open("http://localhost:5173/")` in its DevTools (a new tab, not a popup window; tab A must stay in the
+  background), and in the new tab's DevTools run `opener.location = "http://127.0.0.1:5173/"` (a different
+  hostname; a different port alone is the same site and stays silent by design); return to tab A: a toast says
+  another tab changed this page and names `localhost`. (2) Navigate tab A back to `http://localhost:5173/`
+  (step 1 left it on 127.0.0.1), close the old child tab, open a new one the same way and run
+  `opener.location = "http://localhost:5173/?same-site"`; return to tab A: no toast. (3) Open
+  `http://localhost:5173/level8-legit-oauth-popup.html` and complete its sign-in popup: no toast. A failure gets a
+  revert PR for `3ff1417e`.
+
+- **AI-70 (#1211):** as AI-69 step (1), but open the child as a popup window:
+  `window.open("http://localhost:5173/", "_blank", "popup,width=600,height=500")`. With the popup in front, run
+  `opener.location = "http://127.0.0.1:5173/"` in its DevTools and wait for tab A to finish loading behind it: no
+  toast yet. Click back into tab A's window (or close the popup): the toast appears once. A failure gets a revert PR
+  for `177b7ace`.
+
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
   Export shows "... include explanations that are not part of the portable export." and the downloaded file
   matches the preview. A failure gets a revert PR for the merge commit.
+
+- **AI-66 (#1183):** with the Gym served (`npm run gym:serve`): (1) open `gym/rw-fullscreen-locker.html`, press its
+  button: fullscreen exits almost at once and the toast "Heedline closed a full-screen warning page..." appears;
+  (2) on `gym/rw-fullscreen-benign.html` and a real fullscreen video (any video site, `f` key) or a slide deck in
+  present mode, fullscreen stays. A failure gets a revert PR for the merge commit.
 
 - **AI-59 (#1166):** a behaviour smoke check that ordinary copying still works. With the Gym served
   (`npm run gym:serve`): (1) on any page with a "Copy" button (a code block on a docs site), the button still
