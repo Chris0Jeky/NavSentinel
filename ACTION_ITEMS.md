@@ -256,6 +256,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-63 | #1152 overlay cleanup: deep and shadow-root foreground traps (#564, opt-in) | merge commit `2b6523af` (merged 2026-10-30) | OPEN — not run |
 | AI-68 | #1199 credential risk decodes punycode labels (homograph lookalikes, #1196) | merge commit `025b9dc2` (merged 2026-10-30) | OPEN — not run |
 | AI-69 | #1204 reverse-tabnabbing warning when another tab swapped a hidden page (#1172) | merge commit `3ff1417e` (merged 2026-10-30) | OPEN — not run |
+| AI-70 | #1211 reverse-tabnabbing warning for openers under popup windows (#1205) | merge commit `177b7ace` (merged 2026-10-30) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -302,6 +303,12 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   `opener.location = "http://localhost:5173/?same-site"`; return to tab A: no toast. (3) Open
   `http://localhost:5173/level8-legit-oauth-popup.html` and complete its sign-in popup: no toast. A failure gets a
   revert PR for `3ff1417e`.
+
+- **AI-70 (#1211):** as AI-69 step (1), but open the child as a popup window:
+  `window.open("http://localhost:5173/", "_blank", "popup,width=600,height=500")`. With the popup in front, run
+  `opener.location = "http://127.0.0.1:5173/"` in its DevTools and wait for tab A to finish loading behind it: no
+  toast yet. Click back into tab A's window (or close the popup): the toast appears once. A failure gets a revert PR
+  for `177b7ace`.
 
 - **AI-67 (#1184):** copy-only check. (1) Options > Recorded choices shows the retained sample, cap and time span
   and no "Threat Analytics" wording; (2) in the Protection Center, with a credential warning in fictional history,
