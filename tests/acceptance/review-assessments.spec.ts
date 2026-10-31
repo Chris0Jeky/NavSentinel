@@ -12,12 +12,13 @@ test("Review assessments: local opinions persist without changing facts; reviewe
     const errors: string[] = [];
     center.on("pageerror", error => errors.push(error.message));
     const row = center.locator("details.event");
-    const choice = center.getByLabel("Your assessment", { exact: true });
+    const choice = row.getByLabel("Your assessment");
     await center.setViewportSize({ width: 1280, height: 900 });
     await expect(center.locator("#total")).toHaveText("1");
     await row.locator("summary").focus();
     await center.keyboard.press("Enter");
     const original = await row.elementHandle();
+    await expect(choice).toBeVisible();
     await choice.focus();
     await choice.selectOption("should-allow");
     await expect(center.locator("#status")).toContainText("Assessment saved");
