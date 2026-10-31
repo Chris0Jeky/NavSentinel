@@ -9,15 +9,20 @@ required reading.
 
 PR #1264 now includes a bounded source reduction after preserved head 82aa4dfd.
 The PSL module stores three repeated service fragments once and restores the
-original string before the unchanged domain decoder reads it. Its generated
-source is 3,792 bytes smaller. Literal-marker collisions and small-input growth
-fall back safely; no rules, fetch, parser, cap or gate changed. All 80,262 expanded
-bytes match the prior source and the actual 82aa4dfd hosted production artifact.
-The 54 focused generator/domain tests, typecheck and declared lint pass.
+original string before the unchanged domain decoder reads it. The first candidate
+a5d8efb3 was folded back into the original string by the minifier: hosted research
+remained 543.0 / 540 KiB. One replacement callback now preserves 3,793 bytes of
+savings in the installed production minifier's single-module output. Generated
+source is 3,768 bytes smaller than 82aa4dfd. Literal-marker collisions and
+small-input growth fall back safely; no rules, fetch, parser, cap or gate changed.
+All 80,262 expanded bytes match the prior source and the actual 82aa4dfd hosted
+production artifact. The 55 focused generator/domain tests pass, including a
+minified-output regression that failed against a5d8efb3.
 
 This is a measured source candidate, not a substituted bundle-budget pass.
 The current PR's hosted build/budget and required browser results decide the
-integrated qualification. AI-58, AI-104, #591 and non-blocking #1263 stay open;
+integrated qualification; a5d8efb3's Vision Lab job, including browser smoke,
+passed. AI-58, AI-104, #591 and non-blocking #1263 stay open;
 no local substantial allocation, owner activation or deployment is inherited.
 
 ## 2026-10-31 assessment candidate checkpoint

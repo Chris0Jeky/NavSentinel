@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
+import { minifySync } from "rolldown/experimental";
 import { buildTrie, encodeTrie, parsePSL, renderTrieModule, assertEnoughRules, MIN_PSL_RULES } from "../scripts/update-psl.mjs";
 import { decodePslTrie } from "../extension/src/shared/domain";
 import { PSL_TRIE } from "../extension/src/shared/psl_trie";
@@ -129,6 +130,16 @@ describe("update-psl build script: compact text trie round-trips", () => {
     const module = renderTrieModule(PSL_TRIE);
     expect(runInNewContext(module.replace("export const PSL_TRIE = ", ""))).toBe(PSL_TRIE);
     expect(Buffer.byteLength(module)).toBeLessThan(Buffer.byteLength(JSON.stringify(PSL_TRIE)) - 3584);
+  });
+
+  it("preserves the byte savings and full PSL through the production minifier", () => {
+    const source = renderTrieModule(PSL_TRIE).replace("export const PSL_TRIE = ", "globalThis.PSL_TRIE = ");
+    const emitted = minifySync("psl.js", source);
+    expect(emitted.errors).toEqual([]);
+    const context = { PSL_TRIE: "" };
+    runInNewContext(emitted.code, context);
+    expect(context.PSL_TRIE).toBe(PSL_TRIE);
+    expect(Buffer.byteLength(emitted.code)).toBeLessThan(Buffer.byteLength(JSON.stringify(PSL_TRIE)) - 3584);
   });
 
   it("keeps literal marker characters and escaped text without growing small inputs", () => {
