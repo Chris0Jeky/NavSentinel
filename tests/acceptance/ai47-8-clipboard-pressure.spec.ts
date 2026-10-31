@@ -450,10 +450,12 @@ async function runObservedPressureAcceptance(testInfo: TestInfo, observedExtensi
       }, () => typeof observations.lastPolledOptionsRows === "number" && observations.lastPolledOptionsRows > 0, 5000);
       const rows = await phase.read(() => optionsEventRows(options));
       observations.optionsRows = rows.length;
-      observations.optionsClickfix = rows.some((row) => /clickfix/i.test(row));
+      const badges = await phase.read(() => options.locator("#eventLog .event-badge").allTextContents());
+      observations.optionsClickfix = badges.filter((kind) => kind === "clickfix_detected").length;
       session.note(`Options event-log rows: ${JSON.stringify(rows.slice(0, 6))}`);
-      await phase.check("options.clickfix", () => expect(rows.some((row) => /clickfix/i.test(row)), "Options shows the ClickFix row").toBe(true),
-        () => rows.some((row) => /clickfix/i.test(row)));
+      // Options shows all loads; the selected-load assertion above still proves the attack outcome.
+      await phase.check("options.clickfix", () => expect(observations.optionsClickfix, "Options matches the native ClickFix history").toBe(kindCount(log, "clickfix_detected")),
+        () => observations.optionsClickfix === kindCount(log, "clickfix_detected"));
       const rendered = rows.join("\n");
       observations.renderedRawMatches = RAW_CLIPBOARD_VALUES.filter((value) => rendered.includes(value)).length;
       await phase.check("rendered.private", () => expect(RAW_CLIPBOARD_VALUES.filter((value) => rendered.includes(value)), "rendered rows").toEqual([]),

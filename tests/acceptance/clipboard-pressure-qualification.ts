@@ -9,7 +9,7 @@ export const PRESSURE_CHECKS: Record<PhaseId, readonly string[]> = {
   "attack-log": ["attack.clickfix", "attack.no-overflow", "stored.private", "options.populated", "options.clickfix", "rendered.private"],
   console: ["console.clean"],
 };
-export const REGRESSED_MISMATCHES = ["benign.no-overflow", "attack.warning", "attack.clickfix", "attack.no-overflow", "options.clickfix"];
+export const REGRESSED_MISMATCHES = ["benign.no-overflow", "attack.warning", "attack.clickfix", "attack.no-overflow"];
 export type PhaseRecord = {
   id: PhaseId;
   documentToken: string | null;
@@ -317,8 +317,17 @@ function validateCase(evidence: PairCaseEvidence, expected: PairExpectation, reg
       same(measured.lastPolledClickfix, target, "last successful poll observation");
       same(measured.clickfix, target, "unconditional final log observation");
       same(measured.storedRawMatches, 0, "stored privacy check");
-      requireEvidence(count(measured.lastPolledOptionsRows, "polled Options rows") > 0 && count(measured.optionsRows, "Options rows") > 0, "Options was not populated");
-      same(measured.optionsClickfix, !regressed, "Options ClickFix observation");
+      const optionsRows = count(measured.optionsRows, "Options rows");
+      requireEvidence(count(measured.lastPolledOptionsRows, "polled Options rows") > 0 && optionsRows > 0, "Options was not populated");
+      const snapshots = array(receipt.storage, "native storage snapshots").map((entry) => object(entry, "storage snapshot"))
+        .filter((entry) => entry.label === "event log after the attack arm");
+      same(snapshots.length, 1, "native attack log snapshot count");
+      same(snapshots[0]!.area, "local", "native attack log storage area");
+      const storedClickfix = array(snapshots[0]!.value, "native attack log")
+        .filter((entry) => object(entry, "native event").kind === "clickfix_detected").length;
+      requireEvidence(storedClickfix >= target, "native history omits selected ClickFix rows");
+      same(count(measured.optionsClickfix, "Options ClickFix count"), storedClickfix, "Options ClickFix observation");
+      requireEvidence(storedClickfix <= optionsRows, "Options ClickFix count exceeds rendered rows");
       same(measured.renderedRawMatches, 0, "rendered privacy check");
     } else { fields(measured, ["errors"], "console measurements"); same(measured.errors, 0, "console errors"); }
     if (id === "benign" || id === "attack-log") {
