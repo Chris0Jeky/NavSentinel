@@ -47,7 +47,7 @@ async function withExtension(name: string, run: (context: BrowserContext, posts:
   }
 }
 
-/** Playwright emulates focus for every page; these tests need real window focus. */
+/** Disable after navigation: Chrome can reset emulated focus when the renderer changes. */
 async function realFocus(context: BrowserContext, page: Page): Promise<CDPSession> {
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
@@ -55,7 +55,7 @@ async function realFocus(context: BrowserContext, page: Page): Promise<CDPSessio
 }
 
 /** Another browser window, offset so ours stays partly uncovered, takes focus. */
-async function openCoveringWindow(context: BrowserContext, cdp: CDPSession): Promise<Page> {
+async function openCoveringWindow(context: BrowserContext, cdp: CDPSession, page: Page): Promise<Page> {
   const main = await cdp.send("Browser.getWindowForTarget");
   const opened = context.waitForEvent("page");
   await cdp.send("Target.createTarget", {
@@ -64,6 +64,7 @@ async function openCoveringWindow(context: BrowserContext, cdp: CDPSession): Pro
   });
   const popup = await opened;
   await popup.bringToFront();
+  await expect.poll(() => page.evaluate(() => document.hasFocus()), { message: "covering window takes native focus" }).toBe(false);
   return popup;
 }
 
@@ -94,8 +95,8 @@ test("Proceed once does not arm while a video Picture-in-Picture window is open 
         document.getElementById("go").addEventListener("click", () => { v.requestPictureInPicture(); });
       </script>` }));
     const page = await context.newPage();
-    await realFocus(context, page);
     await page.goto("http://victim.test/login");
+    await realFocus(context, page);
     await page.bringToFront();
     await page.waitForFunction(() => (document.getElementById("v") as HTMLVideoElement).readyState >= 1);
     await page.click("#go", { noWaitAfter: true });
@@ -120,13 +121,13 @@ test("Proceed once is refused right after a short blur, then approves once re-ar
   await withExtension("blur", async (context, posts) => {
     await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html", body: LOGIN }));
     const page = await context.newPage();
-    const cdp = await realFocus(context, page);
     await page.goto("http://victim.test/login");
+    const cdp = await realFocus(context, page);
     await page.bringToFront();
     await page.waitForTimeout(300);
     await page.click("#go", { noWaitAfter: true });
     await expect.poll(() => proceedPoint(page).then(() => true).catch(() => false)).toBe(true);
-    const popup = await openCoveringWindow(context, cdp);
+    const popup = await openCoveringWindow(context, cdp, page);
     await page.bringToFront();
     await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
     await page.evaluate(() => {
@@ -171,8 +172,8 @@ test("an iframe that had focus does not arm a later prompt behind a covering win
         style="position:absolute;left:20px;top:20px;width:900px;height:640px;border:0"></iframe></body>` }));
     await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html", body: LOGIN }));
     const page = await context.newPage();
-    const cdp = await realFocus(context, page);
     await page.goto("http://parent.test/");
+    const cdp = await realFocus(context, page);
     await page.bringToFront();
     const frame = page.frames().find((candidate) => candidate.url().startsWith("http://victim.test"))!;
     await frame.waitForSelector("#user");
@@ -181,7 +182,7 @@ test("an iframe that had focus does not arm a later prompt behind a covering win
     await expect.poll(() => frame.evaluate(() => document.hasFocus())).toBe(true);
 
     // A covering window takes focus, then the frame raises its prompt behind it.
-    const popup = await openCoveringWindow(context, cdp);
+    const popup = await openCoveringWindow(context, cdp, page);
     await expect.poll(() => frame.evaluate(() => document.hasFocus())).toBe(false);
     await frame.evaluate(() => (document.querySelector("form") as HTMLFormElement).requestSubmit());
     await expect.poll(() => proceedPoint(frame).then(() => true).catch(() => false)).toBe(true);
@@ -214,13 +215,13 @@ test("a short blur stays refused when an early page listener stops blur and focu
         }, true);
       </script></head><body>${LOGIN}</body>` }));
     const page = await context.newPage();
-    const cdp = await realFocus(context, page);
     await page.goto("http://victim.test/login");
+    const cdp = await realFocus(context, page);
     await page.bringToFront();
     await page.waitForTimeout(300);
     await page.click("#go", { noWaitAfter: true });
     await expect.poll(() => proceedPoint(page).then(() => true).catch(() => false)).toBe(true);
-    const popup = await openCoveringWindow(context, cdp);
+    const popup = await openCoveringWindow(context, cdp, page);
     await page.bringToFront();
     await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
     await page.evaluate(() => { (window as unknown as { focusLog: string[] }).focusLog = []; });
@@ -262,15 +263,15 @@ test("a short blur stays refused after the page rewrites itself with document.op
         document.open(); document.write(${JSON.stringify(written).replace(/<\//g, "<\\/")}); document.close();
       }));</script></body>` }));
     const page = await context.newPage();
-    const cdp = await realFocus(context, page);
     // The rewrite restarts the document lifecycle, so do not wait for its load event.
     await page.goto("http://victim.test/login", { waitUntil: "commit" });
     await page.waitForSelector("#go");
+    const cdp = await realFocus(context, page);
     await page.bringToFront();
     await page.waitForTimeout(300);
     await page.click("#go", { noWaitAfter: true });
     await expect.poll(() => proceedPoint(page).then(() => true).catch(() => false)).toBe(true);
-    const popup = await openCoveringWindow(context, cdp);
+    const popup = await openCoveringWindow(context, cdp, page);
     await page.bringToFront();
     await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
     await page.evaluate(() => { (window as unknown as { focusLog: string[] }).focusLog = []; });
@@ -328,8 +329,8 @@ async function refusedUnderFramePip(
     await context.route("http://victim.test/**", (route) => route.fulfill({ contentType: "text/html",
       body: route.request().url().endsWith("/player") ? playerBody : `${LOGIN}${frameMarkup}` }));
     const page = await context.newPage();
-    await realFocus(context, page);
     await page.goto("http://victim.test/login");
+    await realFocus(context, page);
     await page.bringToFront();
     await expect.poll(() => page.frames().some((f) => f.name() === "player")).toBe(true);
     const frame = page.frames().find((f) => f.name() === "player")!;
