@@ -282,7 +282,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-101 | #1252 meta-refresh credential signal fails closed on overflowing or cut refresh tags (#1241) | merge commit `bcff72dc` (merged 2026-10-30) | OPEN — not run |
 | AI-102 | #1246 and #1255 built pages without indentation, recompressed icons, compact manifest | merge commits `cc1700bc` and `2053f883` (merged 2026-10-30) | OPEN — not run |
 | AI-103 | #1260 loader re-arms its toast input fence and focus recorder after `document.open()` (#1244 item 2) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1260) (candidate until merged) | OPEN — not run |
-| AI-104 | #591 local journal assessments and minimized review export | Candidate branch `codex/review-assessments-591`; PR receipt pending | OPEN — not run |
+| AI-104 | #591 local journal assessments and minimized review export | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1264) (candidate until merged) | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
