@@ -1,9 +1,40 @@
 # NavSentinel handoff
 
-Updated 2026-10-30 23:10 UTC. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-10-31 01:32 UTC. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
 required reading.
+
+## 2026-10-31 assessment candidate checkpoint
+
+PR #1264 (`codex/review-assessments-591`) is open, ready for review and **blocked
+from merge by #1265**. It adds separate local opinions on retained observations
+and an explicit minimized review export; broader issue #591 remains open.
+Base `78f1bc65` and tested source `52e0bfa3` are recorded in the PR. The subsequent
+source correction synchronizes the three Lab standalone pages and CSP hashes
+from the existing generator's actual hosted diff; it changes no extension code.
+
+At 52e0bfa3, hosted unit tests passed 5,415 with four skips, and Lab tests passed
+327. Production built and passed all 12 unchanged budgets (539.6 KiB total).
+Research built but its total was **543.0 KiB / 540 KiB**, versus 539.7 KiB on the
+exact base. This is introduced aggregate growth. Keep the caps and validation
+unchanged; recover the measured excess in a bounded product reduction before
+rerunning both profiles. The generated-page consistency failure is addressed by
+the output synchronization; its next hosted result must still be checked.
+
+E2E was skipped downstream of the budget failure. Branded Chrome was skipped
+because its existing `gate:browser` label was absent; no new browser acceptance
+or screenshots are proved. Run and inspect those gates once the byte prerequisite
+passes. One independent review found no CRITICAL/HIGH blockers; its non-blocking
+retry/status concern is tracked in #1263. Automatic Codex review found no issues.
+
+No local substantial job, browser or GPU allocation is held. The old build and
+prepared full-proof requests were released without launch. The unstarted short
+generator request was withdrawn when its existing hosted output was reused.
+AI-58 and AI-104 in `ACTION_ITEMS.md` stay owner-open. The managed
+`journal-continuity/NavSentinel` checkout retains its identity and old branch;
+its prior supported archive refusal must not be bypassed or retried. Primary
+`sh.exe.stackdump` and foreign worktrees are preserved.
 
 ## 2026-10-30 flagship builder checkpoint (23:10 UTC)
 
