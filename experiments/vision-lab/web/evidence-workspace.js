@@ -19,6 +19,7 @@ async function action(target){const name=target.dataset.evidenceAction;if(name==
 document.addEventListener('click',event=>{const target=event.target instanceof Element?event.target.closest('[data-evidence-action]'):null;if(target&&!target.disabled)Promise.resolve(action(target)).catch(error=>dialog('Evidence action did not complete.',`<p>${esc(error.message)}</p>`));});
 document.addEventListener('change',async event=>{const target=event.target;if(target.id==='evidence-kind'){filter=target.value;render();}if(target.id==='evidence-file'&&target.files?.[0]){try{const file=target.files[0];if(file.size>E.MAX_BYTES)throw Error('Evidence file exceeds the 8 MiB limit.');importPreview(E.parseImport(await file.text()));}catch(error){pending=null;dialog('Cannot import this file.',`<p>${esc(error.message)}</p><p>No imported history was changed.</p>`);}finally{target.value='';}}});
 document.addEventListener('input',event=>{if(event.target.id==='evidence-search'){search=event.target.value;root.querySelector('#evidence-table').innerHTML=table();root.querySelector('#evidence-count').textContent=rows().length+' shown';}});
-document.getElementById('dialog').addEventListener('close',()=>{pending=null;pendingExport=null;});
+// A queued close event can arrive after the shared dialog has opened a new preview.
+document.getElementById('dialog').addEventListener('close',event=>{if(!event.currentTarget.open){pending=null;pendingExport=null;}});
 globalThis.NSEvidenceWorkspace=Object.freeze({mount(element){root=element;render();}});
 })();
