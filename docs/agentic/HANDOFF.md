@@ -1,9 +1,60 @@
 # NavSentinel handoff
 
-Updated 2026-10-30 23:10 UTC. This is an optional short snapshot; live Git/GitHub state,
+Updated 2026-10-31. This is an optional short snapshot; live Git/GitHub state,
 product tests, `docs/Project_Roadmap.md`, and `ACTION_ITEMS.md` are authoritative.
 Historical cycle detail is linked from `ORCHESTRATOR.md` to its archive and is not
 required reading.
+
+## 2026-10-31 measured headroom candidate (#1265)
+
+PR #1264 now includes a bounded source reduction after preserved head 82aa4dfd.
+The PSL module stores three repeated service fragments once and restores the
+original string before the unchanged domain decoder reads it. The first candidate
+a5d8efb3 was folded back into the original string by the minifier: hosted research
+remained 543.0 / 540 KiB. One replacement callback now preserves 3,793 bytes of
+savings in the installed production minifier's single-module output. Generated
+source is 3,768 bytes smaller than 82aa4dfd. Literal-marker collisions and
+small-input growth fall back safely; no rules, fetch, parser, cap or gate changed.
+All 80,262 expanded bytes match the prior source and the actual 82aa4dfd hosted
+production artifact. The 55 focused generator/domain tests pass, including a
+minified-output regression that failed against a5d8efb3.
+
+This is a measured source candidate, not a substituted bundle-budget pass.
+The current PR's hosted build/budget and required browser results decide the
+integrated qualification; a5d8efb3's Vision Lab job, including browser smoke,
+passed. AI-58, AI-104, #591 and non-blocking #1263 stay open;
+no local substantial allocation, owner activation or deployment is inherited.
+
+## 2026-10-31 assessment candidate checkpoint
+
+PR #1264 (`codex/review-assessments-591`) is open, ready for review and **blocked
+from merge by #1265**. It adds separate local opinions on retained observations
+and an explicit minimized review export; broader issue #591 remains open.
+Base `78f1bc65` and tested source `52e0bfa3` are recorded in the PR. The subsequent
+source correction synchronizes the three Lab standalone pages and CSP hashes
+from the existing generator's actual hosted diff; it changes no extension code.
+
+At 52e0bfa3, hosted unit tests passed 5,415 with four skips, and Lab tests passed
+327. Production built and passed all 12 unchanged budgets (539.6 KiB total).
+Research built but its total was **543.0 KiB / 540 KiB**, versus 539.7 KiB on the
+exact base. This is introduced aggregate growth. Keep the caps and validation
+unchanged; recover the measured excess in a bounded product reduction before
+rerunning both profiles. The generated-page consistency failure is addressed by
+the output synchronization; its next hosted result must still be checked.
+
+E2E was skipped downstream of the budget failure. Branded Chrome was skipped
+because its existing `gate:browser` label was absent; no new browser acceptance
+or screenshots are proved. Run and inspect those gates once the byte prerequisite
+passes. One independent review found no CRITICAL/HIGH blockers; its non-blocking
+retry/status concern is tracked in #1263. Automatic Codex review found no issues.
+
+No local substantial job, browser or GPU allocation is held. The old build and
+prepared full-proof requests were released without launch. The unstarted short
+generator request was withdrawn when its existing hosted output was reused.
+AI-58 and AI-104 in `ACTION_ITEMS.md` stay owner-open. The managed
+`journal-continuity/NavSentinel` checkout retains its identity and old branch;
+its prior supported archive refusal must not be bypassed or retried. Primary
+`sh.exe.stackdump` and foreign worktrees are preserved.
 
 ## 2026-10-30 flagship builder checkpoint (23:10 UTC)
 

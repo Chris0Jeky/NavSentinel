@@ -1,4 +1,5 @@
 import { isEventLogAppendMessage, type EventLogEntry } from "../shared/storage";
+import { eventObservationKey, readEventAssessment, type EventAssessment } from "../shared/event_assessment";
 import { computeOverlayAutoDismissStats } from "../options/options_model";
 import { MAX_EVIDENCE_EVENTS, projectEvidence, type EvidenceEvent } from "./evidence_model";
 
@@ -8,6 +9,8 @@ export type ProtectionRange = "history" | "today";
 export interface ProtectionEvent extends EvidenceEvent {
   activity: ProtectionCategory | "other";
   activityDetail: string;
+  record: string;
+  assessment?: EventAssessment;
 }
 
 /** Priority matters: a cleanup accompanying a held click belongs to one total. */
@@ -60,11 +63,12 @@ export function projectProtection(log: readonly unknown[]): { events: Protection
   for (const entry of unique.values()) {
     // Local identity includes the record, so a reused ID cannot inherit reading state.
     // Never assign this key to the DOM; export independently regenerates its IDs.
-    let id: string;
-    try { id = JSON.stringify(entry); } catch { excluded++; continue; }
+    let id: string, record: string;
+    try { id = eventObservationKey(entry); record = JSON.stringify(entry); } catch { excluded++; continue; }
     const event = projectEvidence([entry])[0];
     if (!event) { excluded++; continue; }
-    events.push({ ...event, id, ...classify(entry) });
+    const assessment = readEventAssessment(entry.assessment);
+    events.push({ ...event, id, record, ...classify(entry), ...(assessment?.kind ? { assessment } : {}) });
   }
   events.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   return { events, excluded, duplicates };

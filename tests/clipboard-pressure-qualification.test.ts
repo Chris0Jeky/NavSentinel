@@ -46,7 +46,7 @@ function caseFixture(regressed: boolean, observer = marker(regressed)): PairCase
     "attack-warning": { warningPresent: !regressed },
     "attack-log": { baselineClickfix: 0, lastPolledClickfix: regressed ? 0 : 1, clickfix: regressed ? 0 : 1,
       overflow: regressed ? 10 : 0, storedRawMatches: 0, lastPolledOptionsRows: 1, optionsRows: 1,
-      optionsClickfix: !regressed, renderedRawMatches: 0 },
+      optionsClickfix: regressed ? 0 : 1, renderedRawMatches: 0 },
     console: { errors: 0 },
   };
   const outcomes: PressureOutcomes = {
@@ -80,6 +80,9 @@ function caseFixture(regressed: boolean, observer = marker(regressed)): PairCase
     ],
     result: regressed ? "FAIL" : "PASS",
     console: [],
+    storage: [{ label: "event log after the attack arm", area: "local", value: regressed ? [] : [
+      { id: "selected", kind: "clickfix_detected", url: "http://localhost:46200/acceptance/pressure-load/load-13/clickfix-06-clipboard-pressure.html" },
+    ] }],
   };
   const report = {
     config: { workers: 1, fullyParallel: false, projects: [{ repeatEach: 1, retries: 0, timeout: 240000 }] },
@@ -114,6 +117,32 @@ function mutateOutcomes(evidence: PairCaseEvidence, route: string, replacement: 
 describe("strict fixed/regressed clipboard qualification", () => {
   it("accepts the complete fixed pass and directly witnessed command-loss regression", () => {
     expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed: caseFixture(true) }, expected, regression)).not.toThrow();
+  });
+  it("accepts Options rendering a discarded load's event while the selected regressed load has none", () => {
+    const regressed = caseFixture(true);
+    set(regressed, "receipt.storage.0.value", [{ id: "discarded", kind: "clickfix_detected",
+      url: "http://localhost:46200/acceptance/pressure-load/load-12/clickfix-06-clipboard-pressure.html" }]);
+    mutateOutcomes(regressed, "phases.2.observations.optionsClickfix", 1);
+    mutateOutcomes(regressed, "phases.2.checks.4.status", "passed");
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected, regression)).not.toThrow();
+  });
+  it("requires both the selected and discarded events to appear in fixed Options history", () => {
+    const fixed = caseFixture(false);
+    set(fixed, "receipt.storage.0.value", [{ id: "discarded", kind: "clickfix_detected" }, { id: "selected", kind: "clickfix_detected" }]);
+    mutateOutcomes(fixed, "phases.2.observations.optionsRows", 2);
+    mutateOutcomes(fixed, "phases.2.observations.optionsClickfix", 2);
+    expect(() => validateClipboardPressurePair({ fixed, regressed: caseFixture(true) }, expected, regression)).not.toThrow();
+    mutateOutcomes(fixed, "phases.2.observations.optionsClickfix", 1);
+    expect(() => validateClipboardPressurePair({ fixed, regressed: caseFixture(true) }, expected, regression)).toThrow(/Options ClickFix observation differs/);
+  });
+  it.each([
+    ["missing", []],
+    ["wrong area", [{ label: "event log after the attack arm", area: "session", value: [] }]],
+    ["duplicated", Array.from({ length: 2 }, () => ({ label: "event log after the attack arm", area: "local", value: [] }))],
+  ])("rejects a %s native log snapshot", (_label, storage) => {
+    const regressed = caseFixture(true);
+    set(regressed, "receipt.storage", storage);
+    expect(() => validateClipboardPressurePair({ fixed: caseFixture(false), regressed }, expected, regression)).toThrow(/QUALIFICATION_INVALID/);
   });
   it("accepts a verified shared-chunk regression with unchanged MAIN bytes", () => {
     const fixedMarker = marker(false);
@@ -156,6 +185,10 @@ describe("strict fixed/regressed clipboard qualification", () => {
     ["missing privacy predicate", "phases.2.checks", [{ id: "attack.clickfix", status: "mismatch" }]],
     ["privacy failure", "phases.2.checks.2.status", "mismatch"],
     ["hidden privacy leak", "phases.2.observations.storedRawMatches", 1],
+    ["selected regressed event survived", "phases.2.observations.clickfix", 1],
+    ["extra rendered ClickFix row", "phases.2.observations.optionsClickfix", 1],
+    ["old boolean Options evidence", "phases.2.observations.optionsClickfix", false],
+    ["Options assertion mismatch", "phases.2.checks.4.status", "mismatch"],
     ["unrelated assertion error", "phases.2.checks.0.status", "error"],
     ["wrong document", "phases.2.documentToken", uuid("9")],
     ["stale pair nonce", "pairId", uuid("9")],

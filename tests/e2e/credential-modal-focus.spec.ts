@@ -40,10 +40,10 @@ test("Proceed once does not arm while another window has focus (#1225) @regressi
       await route.fulfill({ contentType: "text/html", body: "<p>Fixture received</p>" });
     });
     const page = await context.newPage();
-    // Playwright emulates focus for every page; this test needs real window focus.
+    await page.goto("http://victim.test/login");
+    // Navigation can reset focus emulation, so disable it on the settled document.
     const cdp = await context.newCDPSession(page);
     await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false });
-    await page.goto("http://victim.test/login");
     await page.bringToFront();
     await page.waitForTimeout(300);
     await page.click("#go", { noWaitAfter: true });

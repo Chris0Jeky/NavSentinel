@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-const mocks = vi.hoisted(() => ({ getEventLog: vi.fn(), getSuiteSettings: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getEventLog: vi.fn(), getSuiteSettings: vi.fn(), setEventAssessment: vi.fn() }));
 vi.mock("../extension/src/shared/storage", async (importOriginal) => ({
   ...await importOriginal<typeof import("../extension/src/shared/storage")>(),
   ...mocks,
@@ -16,12 +16,46 @@ describe("Protection Center wired UI", () => {
     vi.resetModules();
     document.documentElement.innerHTML = html;
     localStorage.clear();
+    mocks.setEventAssessment.mockReset();
     mocks.getEventLog.mockReset().mockResolvedValue(Array.from({ length: 28 }, (_, i) => ({ id: `private-${i}`, ts: 1700000000000 + i, kind: i === 0 ? "cred_submit_prompt" : "nav_click_block", site: "source.test", destHost: i === 0 ? "credential.test" : "target.test", reasons: ["no_accessible_name"], score: i })));
     mocks.getSuiteSettings.mockReset().mockResolvedValue({ nav: { defaultMode: "off", autoDismissOverlays: false }, credential: { mode: "strict" } });
     await import("../extension/src/evidence/evidence");
     await vi.waitFor(() => expect(get("total").textContent).toBe("28"));
   });
   afterEach(() => { vi.restoreAllMocks(); });
+  it("keeps a local assessment separate from facts and previews a hostname-free review", async () => {
+    const row = document.querySelector<HTMLDetailsElement>("details.event")!;
+    row.open = true;
+    const select = row.querySelector<HTMLSelectElement>(".assessment select");
+    expect(select).not.toBeNull();
+    const original = await mocks.getEventLog();
+    mocks.setEventAssessment.mockImplementationOnce(async () => {
+      mocks.getEventLog.mockResolvedValue(original.map((event: { id: string }) => event.id === "private-27"
+        ? { ...event, assessment: { kind: "should-allow", ts: 1700000001000 } } : event));
+    });
+    select!.focus();
+    select!.value = "should-allow";
+    select!.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(mocks.setEventAssessment).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(get("status").textContent).toContain("Assessment saved"));
+    expect(document.querySelector("details.event")).toBe(row);
+    expect(row.open).toBe(true);
+    expect(document.activeElement).toBe(select);
+    expect(get("clicksCount").textContent).toBe("27");
+    expect(get("correctionsCount").textContent).toBe("0");
+    get("exportReview").click();
+    const reviewed = get<HTMLTextAreaElement>("exportPreview").value;
+    const payload = JSON.parse(reviewed);
+    expect(payload.source).toBe("navsentinel-extension");
+    expect(payload.events).toEqual([{ id: "event-1", timestamp: "2023-11-14T22:13:20.027Z", kind: "nav_click_block",
+      sourceSite: null, destinationSite: null, outcome: "recorded", reasons: ["no_accessible_name"] }]);
+    expect(payload.corrections).toEqual([{ eventId: "event-1", kind: "should-allow", timestamp: "2023-11-14T22:13:21.000Z" }]);
+    expect(reviewed).not.toMatch(/source.test|target.test|private-|score/);
+    get("cancelExport").click();
+    await vi.waitFor(() => expect(document.activeElement).toBe(get("exportReview")));
+    get("export").click();
+    expect(JSON.parse(get<HTMLTextAreaElement>("exportPreview").value).format).toBe("navsentinel-evidence");
+  });
   it("renders real counts, truthful saved modes, readable details and bounded pages", () => {
     expect(get("modes").textContent).toContain("Navigation: off");
     expect(document.querySelectorAll("details.event")).toHaveLength(25);
