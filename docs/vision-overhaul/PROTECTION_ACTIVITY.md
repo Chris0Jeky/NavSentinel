@@ -59,9 +59,31 @@ remove old details and announce the disappearance; removed focus returns to the
 journal. An already-open export preview remains the exact snapshot prepared for
 review. Reading state is local to the page and never stored or exported.
 
-#591 remains open for local Should block / Should allow labels, richer lifecycle
-diagnostics and its redacted bundle. This feature uses the existing safe journal
-and preview; it does not claim that broader dependency complete.
+## Local assessments and review packages
+
+Expand a journal record and choose **Should block**, **Should allow** or **Unsure**
+under **Your assessment**. **Not assessed** removes the opinion. Saving changes no
+event facts, activity totals, trust choices or protection behavior. Opinions stay
+with the retained record: clear, eviction and replacement remove them. The existing
+Options backup round trip includes valid opinions. A small removal marker prevents
+a delayed save from restoring a removed opinion; it clears with the record too.
+
+**Review assessments** previews assessed records matching the current filters.
+Its `navsentinel-evidence-review` schema-1 file separates observations from opinions
+and uses source `navsentinel-extension`. It excludes hostnames, scores, raw values,
+internal IDs and unsupported explanations/event types. The preview names omissions.
+The Lab accepts this explicit review import and its existing `explicit-file-import`
+packages; neither source claim authenticates a file or grants action authority.
+The original **Export visible events** format remains unchanged.
+
+Inspect the exact preview before downloading. A subsequent edit or clear does not
+change that already-prepared file. Cancel and prepare again to update it. Sharing
+is voluntary: attach the reviewed download yourself to a support/GitHub report;
+public issue attachments are public. No endpoint, background upload, screenshot,
+DOM text, form value or additional lifecycle measurement is collected.
+
+#591 remains open for its richer lifecycle diagnostics and remaining diagnostic
+metadata. Missing outcomes, frame relations and geometry are not invented.
 
 ## Browser proof and owner check
 
@@ -78,6 +100,12 @@ widths, then Show latest, filters and page navigation. Replace the same record I
 evict it and clear history: stale details must disappear and focus must return to
 the journal. Reimporting cleared records must not restore their old expansion.
 Check that an open export preview stays frozen while the journal updates.
+
+For #591, save and remove all three opinions with fictional records, reopen the
+page, and verify unchanged observed facts and totals. Clear or replace history;
+opinions must not reappear on reused IDs. Review a filtered package and check the
+exact downloaded bytes, omitted hostnames/scores, labelled controls, keyboard
+focus and narrow/reduced-motion layout. An open preview remains a frozen snapshot.
 
 Automated branded-Chrome receipts are not owner Gate-3. The owner-only check uses
 the merged build and verifies the same journey and screen-reader/physical input

@@ -1,4 +1,5 @@
 import type { Mode } from "./types";
+import { readEventAssessment, type EventAssessment, type EventAssessmentKind } from "./event_assessment";
 import { ALLOWLIST_KEY, applyAllowlistMutationDirect, getAllowlist, normalizeAllowlist, type Allowlist, type AllowlistMutationMessage } from "./allowlist";
 import { getRegistrableDomain, hostForUrl, isIPAddress, normalizeHost, safeUrlParse } from "./domain";
 import {
@@ -786,12 +787,15 @@ export interface EventLogEntry {
   score?: number;
   reasons?: string[];
   extra?: Record<string, unknown>;
+  /** A local user opinion, separate from the recorded event. */
+  assessment?: EventAssessment;
 }
 
 export type EventLogAppendMessage = { type: "ns-event-log-append"; entry: EventLogEntry };
 export type EventLogMigrationMessage = { type: "ns-event-log-migrate" };
 export type EventLogControlMessage =
   | { type: "ns-event-log-clear" }
+  | { type: "ns-event-log-assess"; snapshot: string; kind: EventAssessmentKind | null; ts: number }
   | { type: "ns-event-log-import-core"; writes: Record<string, unknown> };
 
 export type SuiteImportMessage = { type: "ns-suite-import"; payload: unknown };
@@ -919,6 +923,8 @@ export function isEventLogControlMessage(message: unknown): message is EventLogC
   if (!isRecord(message)) return false;
   const candidate = message as Record<string, unknown>;
   if (candidate.type === "ns-event-log-clear") return true;
+  if (candidate.type === "ns-event-log-assess") return typeof candidate.snapshot === "string" && candidate.snapshot.length <= 65536 &&
+    !!readEventAssessment({ kind: candidate.kind === null ? "uncertain" : candidate.kind, ts: candidate.ts });
   return candidate.type === "ns-event-log-import-core" && isEventLogImportCoreWrites(candidate.writes);
 }
 
@@ -1395,6 +1401,22 @@ export function clearEventLogDirect(progressMarker?: Record<string, unknown>): P
   });
 }
 
+function assessEventDirect(message: Extract<EventLogControlMessage, { type: "ns-event-log-assess" }>): Promise<void> {
+  return queueEventLogWrite(async () => {
+    await hydrateEventLogResetCutoff();
+    const before: unknown = JSON.parse(message.snapshot);
+    if (!isEventLogEntry(before) || message.ts <= eventLogResetCutoffTs) throw new Error("Observation changed. Refresh and try again.");
+    const log = await getEventLog();
+    const current = log.slice().reverse().find(entry => entry.id === before.id);
+    // Keep removals versioned so a delayed save cannot resurrect an older opinion.
+    const updated = { ...before, assessment: { kind: message.kind, ts: message.ts } };
+    // A repeated delivery may acknowledge its own write, never overwrite a later opinion.
+    if (current && JSON.stringify(current) === JSON.stringify(updated)) return;
+    if (!current || JSON.stringify(current) !== message.snapshot) throw new Error("Observation changed. Refresh and try again.");
+    await chrome.storage.local.set({ [EVENT_LOG_KEY]: log.map(entry => entry === current ? updated : entry) });
+  });
+}
+
 function importEventLogCoreDirect(writes: Record<string, unknown>): Promise<void> {
   // Keep settings/allowlist/trusted-domains/event-log in the single storage.set
   // built by importAll. Moving this into the service worker must not turn that
@@ -1575,6 +1597,8 @@ export async function handleEventLogControlMessage(
   try {
     if (message.type === "ns-event-log-clear") {
       await clearEventLogDirect();
+    } else if (message.type === "ns-event-log-assess") {
+      await assessEventDirect(message);
     } else {
       await importEventLogCoreDirect(message.writes);
     }
@@ -1589,6 +1613,13 @@ export async function clearEventLog(): Promise<void> {
     return delegateEventLogControl({ type: "ns-event-log-clear" });
   }
   return clearEventLogDirect();
+}
+
+export async function setEventAssessment(snapshot: string, kind: EventAssessmentKind | null): Promise<void> {
+  const message = { type: "ns-event-log-assess" as const, snapshot, kind, ts: Date.now() };
+  if (!isEventLogControlMessage(message)) throw new TypeError("Invalid assessment");
+  if (shouldDelegateEventLogWrite()) return delegateEventLogControl(message);
+  return assessEventDirect(message);
 }
 
 const PROMPT_OUTCOMES_LIMIT = 500;
@@ -1716,6 +1747,8 @@ function sanitizeImportedEventLogEntry(e: EventLogEntry): EventLogEntry {
   // but the stored strings are display-only (no caller parses them via new URL/decodeURIComponent), so
   // a truncated tail is at worst cosmetic. (#299 R2)
   const out: EventLogEntry = { id: capEventString(e.id), ts: e.ts, kind: e.kind };
+  const assessment = readEventAssessment(e.assessment);
+  if (assessment) out.assessment = assessment;
   const pageSite = normalizeEventPageSite(e.pageSite);
   if (pageSite !== undefined) out.pageSite = pageSite;
   if (e.site !== undefined) out.site = capEventString(e.site);

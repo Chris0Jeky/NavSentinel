@@ -282,6 +282,7 @@ earlier red was the #1143 Git-test timeout, fixed by #1146.
 | AI-101 | #1252 meta-refresh credential signal fails closed on overflowing or cut refresh tags (#1241) | merge commit `bcff72dc` (merged 2026-10-30) | OPEN — not run |
 | AI-102 | #1246 and #1255 built pages without indentation, recompressed icons, compact manifest | merge commits `cc1700bc` and `2053f883` (merged 2026-10-30) | OPEN — not run |
 | AI-103 | #1260 loader re-arms its toast input fence and focus recorder after `document.open()` (#1244 item 2) | [PR merge receipt](https://github.com/Chris0Jeky/NavSentinel/pull/1260) (candidate until merged) | OPEN — not run |
+| AI-104 | #591 local journal assessments and minimized review export | Candidate branch `codex/review-assessments-591`; PR receipt pending | OPEN — not run |
 
 Checks, all in branded Chrome on the unpacked build of the merged head:
 
@@ -492,6 +493,7 @@ Checks, all in branded Chrome on the unpacked build of the merged head:
   uncovered about:blank frame remain open under #1134. A failure gets a revert PR for the merge commit.
 
 - **AI-58 (#1165):** follow the [journal continuity checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional history. Check retained expansion, keyboard focus and reading position during arrivals; Show latest and explicit navigation; removal after replacement, eviction and clear; and the unchanged frozen export preview. Confirm screen-reader and physical-input behavior. The linked merge receipt identifies the exact merge commit. Automated evidence does not complete this check; a failed owner check gets a revert PR for that commit.
+- **AI-104 (#591):** follow the [assessment checks](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) with fictional history. Verify save/remove, persistence, clear/replacement, unchanged facts and totals, and preview/download minimization. Check screen-reader announcements and physical keyboard/pointer behavior on desktop and narrow layouts. Automated browser evidence does not complete this owner check; no extension loading/reloading is delegated to the agent.
 
 - **AI-57 (#1163):** follow [Protection Center activity](docs/vision-overhaul/PROTECTION_ACTIVITY.md#browser-proof-and-owner-check) in a disposable profile with fictional records. Review the four categories and separate corrections, keyboard drill-down, Today/history, narrow themes and reduced motion; use existing Options backup/import/clear only on that fictional history. Confirm screen-reader and physical-input behavior. Automated receipts do not complete this check. The PR's merge receipt records the exact merge commit; a failed owner check gets a revert PR for that commit.
 

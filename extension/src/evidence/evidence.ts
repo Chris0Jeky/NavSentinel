@@ -1,8 +1,9 @@
-import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, getEventLog, getSuiteSettings } from "../shared/storage";
+import { EVENT_LOG_KEY, SUITE_SETTINGS_KEY, getEventLog, getSuiteSettings, setEventAssessment } from "../shared/storage";
+import type { EventAssessmentKind } from "../shared/event_assessment";
 import { explainJournalReason } from "./evidence_reasons";
 import { countExportOmittedExplanations, eventTitle, isHiddenCorrectionReason, filterEvidence, summarizeEvidence, type EvidenceCategory } from "./evidence_model";
 import { PROTECTION_CATEGORIES, inProtectionRange, projectProtection, summarizeProtection, type ProtectionEvent, type ProtectionRange } from "./protection_model";
-import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, type EvidenceExportSnapshot } from "./evidence_export";
+import { EVIDENCE_EXPORT_LIMIT_MESSAGE, prepareEvidenceExport, prepareReviewExport, type EvidenceExportSnapshot } from "./evidence_export";
 
 const byId = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const status = byId("status");
@@ -11,6 +12,9 @@ const category = byId<HTMLSelectElement>("category");
 const scoredOnly = byId<HTMLInputElement>("scoredOnly");
 const activityFilter = byId<HTMLSelectElement>("activityFilter");
 const exportButton = byId<HTMLButtonElement>("export");
+const reviewButton = byId<HTMLButtonElement>("exportReview");
+let exportInvoker = exportButton;
+const originalDisclosure = byId("exportDisclosure").textContent;
 const refreshButton = byId<HTMLButtonElement>("refresh");
 const previous = byId<HTMLButtonElement>("previous");
 const next = byId<HTMLButtonElement>("next");
@@ -79,6 +83,28 @@ function createRow(event: ProtectionEvent): HTMLDetailsElement {
     }
     detail.append(list);
   } else detail.append(element("p", "No recognized signal explanation is available for this entry."));
+  const assessment = element("label", "Your assessment", "assessment");
+  const select = element("select", "");
+  for (const [value, label] of [["", "Not assessed"], ["should-block", "Should block"], ["should-allow", "Should allow"], ["uncertain", "Unsure"]]) {
+    const option = element("option", label!);
+    option.value = value!;
+    select.append(option);
+  }
+  select.addEventListener("change", async () => {
+    const current = events.find(item => item.id === event.id);
+    if (!current) return;
+    const choice = select.value as EventAssessmentKind | "";
+    try {
+      await setEventAssessment(current.record, choice || null);
+      await refresh();
+      status.textContent = choice ? "Assessment saved locally. Protection is unchanged." : "Assessment removed.";
+    } catch {
+      await refresh();
+      status.textContent = "Assessment was not saved. The record may have changed; refresh and try again.";
+    }
+  });
+  assessment.append(select);
+  detail.append(assessment);
   row.append(summary, detail);
   return row;
 }
@@ -127,6 +153,7 @@ function render(preserve = false): void {
   previous.disabled = page === 0;
   next.disabled = page >= pages - 1;
   exportButton.disabled = visible.length === 0;
+  reviewButton.disabled = !visible.some(event => event.assessment);
   const wanted = new Set(shown.map(event => event.id));
   if (!preserve) rows.clear();
   for (const [key, node] of rows) if (!wanted.has(key)) { node.remove(); rows.delete(key); }
@@ -135,6 +162,7 @@ function render(preserve = false): void {
   const nextRows = new Map<string, HTMLDetailsElement>();
   for (const [index, event] of shown.entries()) {
     const row = rows.get(event.id) ?? createRow(event);
+    row.querySelector<HTMLSelectElement>(".assessment select")!.value = event.assessment?.kind ?? "";
     row.querySelector(".future")!.toggleAttribute("hidden", inProtectionRange(event, "history", snapshotAt));
     // Moving a focused node also loses focus; leave unchanged nodes attached in place.
     if (container.children[index] !== row) container.insertBefore(row, container.children[index] ?? null);
@@ -197,7 +225,7 @@ previous.addEventListener("click", () => { page--; render(); });
 next.addEventListener("click", () => { page++; render(); });
 showLatest.addEventListener("click", () => { page = 0; render(); byId("journal").focus(); });
 refreshButton.addEventListener("click", () => { void refresh(); });
-exportButton.addEventListener("click", () => {
+function previewExport(review: boolean): void {
   // Undo the newest-first view; the export projection independently orders it.
   // A failed preparation must not leave an older snapshot downloadable.
   preparedExport = null;
@@ -205,7 +233,7 @@ exportButton.addEventListener("click", () => {
   exportOmissions.hidden = true;
   exportOmissions.textContent = "";
   try {
-    preparedExport = prepareEvidenceExport(visible.slice().reverse());
+    preparedExport = (review ? prepareReviewExport : prepareEvidenceExport)(visible.slice().reverse());
   } catch (error) {
     // Only the export-size guard's own RangeError earns the 8 MiB message: any
     // other RangeError (e.g. stack exhaustion while serializing) must not send
@@ -216,21 +244,29 @@ exportButton.addEventListener("click", () => {
     return;
   }
   exportPreview.value = preparedExport.text;
+  exportInvoker = review ? reviewButton : exportButton;
+  byId("exportDisclosure").textContent = review
+    ? "Assessed portable records and your separate opinions only. No hostnames or scores. Timestamps may reveal activity. Nothing is uploaded."
+    : originalDisclosure;
   byId("exportSummary").textContent = `${preparedExport.count} recorded observations · ${preparedExport.bytes.toLocaleString()} bytes · Prepared ${new Date(preparedExport.exportedAt).toLocaleString()}`;
-  const omitted = countExportOmittedExplanations(visible);
-  exportOmissions.hidden = omitted === 0;
-  exportOmissions.textContent = omitted
+  const reviewed = review ? visible.filter(event => event.assessment) : visible;
+  const omitted = countExportOmittedExplanations(reviewed);
+  const unsupported = review ? reviewed.length - preparedExport.count : 0;
+  exportOmissions.hidden = omitted === 0 && unsupported === 0;
+  exportOmissions.textContent = (omitted
     ? `${omitted} record${omitted === 1 ? " includes" : "s include"} explanations that are not part of the portable export.`
-    : "";
+    : "") + (unsupported ? ` ${unsupported} assessed record${unsupported === 1 ? "" : "s"} omitted: unsupported event type.` : "");
   exportDialog.showModal();
-});
+}
+exportButton.addEventListener("click", () => previewExport(false));
+reviewButton.addEventListener("click", () => previewExport(true));
 byId("cancelExport").addEventListener("click", () => exportDialog.close());
 exportDialog.addEventListener("close", () => {
   preparedExport = null;
   exportPreview.value = "";
   exportOmissions.hidden = true;
   exportOmissions.textContent = "";
-  exportButton.focus();
+  (exportInvoker.disabled ? byId("journal") : exportInvoker).focus();
 });
 byId("downloadExport").addEventListener("click", () => {
   if (!preparedExport) return;
