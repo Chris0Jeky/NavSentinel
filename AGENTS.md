@@ -5,13 +5,8 @@ browser-surface release boundary. This file contains only Codex-specific facts.
 
 ## No repository-local harness
 
-Owner decision #499 (2026-07-31) removed `.codex/hooks.json`, the vendored
-floor, lifecycle scripts, agent validation, and Harness CI. It also removed the
-tier declaration, which a 2026-09-27 owner decision restored as a declaration
-only (`.agent-harness/tier.json`, T2, push and merge free). A fresh Heedline Codex session therefore has no project `PreToolUse`
-floor or lifecycle hooks. Do not install, trust, pin, or recreate one without a
-new explicit owner request. A session started before the removal may retain its
-already-loaded hook definition until restart; that is not fresh-session proof.
+No repository-local harness: see `CLAUDE.md` (owner decision #499). A fresh
+Codex session has no project hooks; do not add one without a new owner request.
 
 ## Working map
 
@@ -26,6 +21,6 @@ product command that exercises the changed seam. Preserve unrelated worktrees
 and generated or user-owned outputs.
 
 `ACTION_ITEMS.md` is the durable queue for human decisions and manual browser
-checks. Resume guided queue work by stable `AI-N` identifier; the current cursor
-is AI-19. `.mcp.json` is optional credential-free tooling—claim a server only
-when it is actually exposed and verified in the current runtime.
+checks. Resume guided queue work at the `Resume at:` line of `ACTION_ITEMS.md`.
+`.mcp.json` is optional credential-free tooling—claim a server only when it is
+actually exposed and verified in the current runtime.

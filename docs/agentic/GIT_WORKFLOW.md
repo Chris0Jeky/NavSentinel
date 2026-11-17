@@ -42,12 +42,11 @@ filter is now `branches: ["**"]` (issue #537); do not re-add one.
 
 - **Deleting an unmerged branch that other pull requests are based on closes
   those pull requests.** Do not do this.
-- **Deleting the head branch as part of merging it is different**: GitHub then
-  automatically retargets any open pull request that was based on it onto the
-  merged pull request's own base. That is the *desired* outcome for a stack.
+- **Deleting the head branch as part of merging it is no safer**: do not rely on
+  GitHub to retarget the children. A stacked base's deleted branch closes its
+  children, and they cannot be reopened.
 
-So "never delete a base branch" is wrong as a blanket rule, and following it
-literally causes a worse bug: leave A's branch alive after merging A, and B still
+Leaving A's branch alive after merging A is safe only if B is retargeted: B still
 targets A, so merging B updates **A** rather than `main` and the slice silently
 never reaches the release branch.
 
@@ -58,9 +57,8 @@ before merging B, and confirm it rather than assume it.**
 gh pr view <B> --json baseRefName -q '.baseRefName'   # must be main
 ```
 
-Either let GitHub do it (delete A's head branch when merging A) or retarget
-explicitly (`gh pr edit <B> --base main`). Confirm with the command above either
-way.
+Retarget explicitly (`gh pr edit <B> --base main`) and confirm with the command
+above. Never merge A with `--delete-branch` while B targets it.
 
 #### Re-proving a retargeted child — retargeting alone runs nothing
 

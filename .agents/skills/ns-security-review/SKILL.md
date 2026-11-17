@@ -12,6 +12,6 @@ Checklist: no unapproved runtime network calls, no password value storage, bridg
 
 Verify with the smallest relevant checks: `npm run typecheck`, `npm run test`, `npm run build`, and targeted E2E for browser-only attack paths.
 
-The review pipeline is not restated here: it lives in global law 2 (`~/.claude/CLAUDE.md`) and `AGENTS.md`. This skill supplies the security *lens*; the pipeline decides what is fixed versus tracked.
+The review pipeline is not restated here: it lives in the global laws (`~/.claude/rules/laws.md`; Codex: `~/.codex/AGENTS.md`) and the `review-and-ship` skill. This skill supplies the security *lens*; the pipeline decides what is fixed versus tracked.
 
 Output a short security assessment, threats mitigated or left open, tests run or added, and how findings were triaged.

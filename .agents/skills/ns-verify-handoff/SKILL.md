@@ -14,6 +14,6 @@ Call out manifest/permission changes, injection/world changes, storage migration
 
 ## PR Review Follow-Through
 
-Not restated here — the pipeline lives in global law 2 (`~/.claude/CLAUDE.md`) and `AGENTS.md`. This skill closes out verification and handoff only.
+Not restated here — the pipeline lives in the global laws (`~/.claude/rules/laws.md`; Codex: `~/.codex/AGENTS.md`) and the `review-and-ship` skill. This skill closes out verification and handoff only.
 
 Handoff must include `Review findings: <triage outcome>`.
