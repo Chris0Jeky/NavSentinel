@@ -38,13 +38,14 @@ while `mergeStateStatus` still said `CLEAN`, so the pull request looked mergeabl
 while being entirely unverified. It hid a genuinely broken build in PR #535. The
 filter is now `branches: ["**"]` (issue #537); do not re-add one.
 
-#### Deleting a base branch — the two cases are opposite
+#### Deleting a branch other pull requests are based on
 
 - **Deleting an unmerged branch that other pull requests are based on closes
   those pull requests.** Do not do this.
-- **Deleting the head branch as part of merging it is no safer**: do not rely on
-  GitHub to retarget the children. A stacked base's deleted branch closes its
-  children, and they cannot be reopened.
+- **If another open PR targets it, deleting the head branch as part of merging
+  it is no safer**: do not rely on GitHub to retarget the children. A stacked
+  base's deleted branch closes its children, and they cannot be reopened. A PR
+  with no dependents may delete its head branch normally.
 
 Leaving A's branch alive after merging A is safe only if B is retargeted: B still
 targets A, so merging B updates **A** rather than `main` and the slice silently
@@ -58,7 +59,8 @@ gh pr view <B> --json baseRefName -q '.baseRefName'   # must be main
 ```
 
 Retarget explicitly (`gh pr edit <B> --base main`) and confirm with the command
-above. Never merge A with `--delete-branch` while B targets it.
+above. Never merge A with `--delete-branch` while B targets it. Delete A's
+branch only after B's base is confirmed `main`.
 
 #### Re-proving a retargeted child — retargeting alone runs nothing
 

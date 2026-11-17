@@ -78,7 +78,8 @@ had previously been unreachable under issue #488.
 ## Known pitfalls
 
 - Local e2e under contention gives false toast timeouts: confirm with
-  `--repeat-each=3`; exact-head CI is the authority (`docs/agentic/FAILURE_LEDGER.md`).
+  `CI=1 npm run test:e2e`; exact-head CI is the authority
+  (`docs/agentic/FAILURE_LEDGER.md`).
 - Bundle budgets run close to their limits: re-measure `npm run check:perf-budget`
   after every size-growing merge.
 - Windows Defender flags literal ClickFix payload samples in source and fixtures:
