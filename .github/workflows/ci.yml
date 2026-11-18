@@ -96,7 +96,7 @@ jobs:
 
   e2e:
     name: E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build-and-unit
     # Bound a hung browser/test process while leaving the evidence-upload step
     # time to run after the test-step timeout fires.
