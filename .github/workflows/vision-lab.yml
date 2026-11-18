@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   vision-lab:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Keep a stuck daemon/browser run from consuming an unbounded hosted job.
     # The artifact step remains available after the browser step's timeout.
     timeout-minutes: 30
