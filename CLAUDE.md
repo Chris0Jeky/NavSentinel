@@ -75,6 +75,17 @@ Specs in the other lanes may still skip without a build. The default Playwright 
 regression, and Phase-2 coverage; PR #504 repaired the `@phase2` project that
 had previously been unreachable under issue #488.
 
+## Known pitfalls
+
+- Local e2e under contention gives false toast timeouts: confirm with
+  `CI=1 npm run test:e2e`; exact-head CI is the authority
+  (`docs/agentic/FAILURE_LEDGER.md`).
+- Bundle budgets run close to their limits: re-measure `npm run check:perf-budget`
+  after every size-growing merge.
+- Windows Defender flags literal ClickFix payload samples in source and fixtures:
+  build obfuscated samples at runtime (see `tests/clickfix-detector.test.ts`), and
+  never stage a Defender-quarantine deletion.
+
 ## Browser-surface release check
 
 Human Gate-3 applies only when a change alters shipped browser behavior:
